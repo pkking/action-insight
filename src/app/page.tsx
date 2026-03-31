@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown } from 'lucide-react';
+import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line
@@ -34,7 +34,7 @@ type Run = {
 };
 
 type SortField = 'date' | 'duration' | 'name';
-type SortOrder = 'asc' | 'desc';
+type SortOrder = 'asc' | 'desc' | 'none';
 
 export default function Dashboard() {
   const [repoInput, setRepoInput] = useState('vercel/next.js');
@@ -133,7 +133,9 @@ export default function Dashboard() {
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+      if (sortOrder === 'desc') setSortOrder('asc');
+      else if (sortOrder === 'asc') setSortOrder('none');
+      else setSortOrder('desc');
     } else {
       setSortField(field);
       setSortOrder('desc');
@@ -167,17 +169,19 @@ export default function Dashboard() {
     }
 
     // Sort
-    result.sort((a, b) => {
-      let comparison = 0;
-      if (sortField === 'date') {
-        comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      } else if (sortField === 'duration') {
-        comparison = a.durationInSeconds - b.durationInSeconds;
-      } else if (sortField === 'name') {
-        comparison = a.name.localeCompare(b.name);
-      }
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
+    if (sortOrder !== 'none') {
+      result.sort((a, b) => {
+        let comparison = 0;
+        if (sortField === 'date') {
+          comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        } else if (sortField === 'duration') {
+          comparison = a.durationInSeconds - b.durationInSeconds;
+        } else if (sortField === 'name') {
+          comparison = a.name.localeCompare(b.name);
+        }
+        return sortOrder === 'asc' ? comparison : -comparison;
+      });
+    }
 
     return result;
   }, [runs, filterName, minDuration, maxDuration, sortField, sortOrder]);
@@ -198,6 +202,15 @@ export default function Dashboard() {
   const formatDuration = (seconds: number) => {
     if (seconds < 60) return `${Math.floor(seconds)}s`;
     return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field || sortOrder === 'none') {
+      return <ArrowUpDown className="w-3 h-3 text-neutral-300" />;
+    }
+    return sortOrder === 'desc' 
+      ? <ArrowDown className="w-3 h-3 text-blue-500" />
+      : <ArrowUp className="w-3 h-3 text-blue-500" />;
   };
 
   return (
@@ -355,20 +368,20 @@ export default function Dashboard() {
                 <table className="w-full text-left text-sm">
                   <thead className="bg-neutral-50 text-neutral-500 font-medium">
                     <tr>
-                      <th className="py-3 px-6 cursor-pointer hover:text-neutral-900 select-none" onClick={() => handleSort('name')}>
+                      <th className="py-3 px-6 cursor-pointer hover:text-neutral-900 select-none group" onClick={() => handleSort('name')}>
                         <div className="flex items-center gap-1">
-                          Workflow / Branch {sortField === 'name' && <ArrowUpDown className="w-3 h-3" />}
+                          Workflow / Branch {getSortIcon('name')}
                         </div>
                       </th>
                       <th className="py-3 px-6">Status</th>
-                      <th className="py-3 px-6 cursor-pointer hover:text-neutral-900 select-none" onClick={() => handleSort('duration')}>
+                      <th className="py-3 px-6 cursor-pointer hover:text-neutral-900 select-none group" onClick={() => handleSort('duration')}>
                         <div className="flex items-center gap-1">
-                          Duration {sortField === 'duration' && <ArrowUpDown className="w-3 h-3" />}
+                          Duration {getSortIcon('duration')}
                         </div>
                       </th>
-                      <th className="py-3 px-6 cursor-pointer hover:text-neutral-900 select-none" onClick={() => handleSort('date')}>
+                      <th className="py-3 px-6 cursor-pointer hover:text-neutral-900 select-none group" onClick={() => handleSort('date')}>
                         <div className="flex items-center gap-1">
-                          Date {sortField === 'date' && <ArrowUpDown className="w-3 h-3" />}
+                          Date {getSortIcon('date')}
                         </div>
                       </th>
                       <th className="py-3 px-6 text-right">Details</th>
