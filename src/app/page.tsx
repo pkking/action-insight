@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp, Share2, Info, Settings, ShieldAlert, Key, Trash2, MessageSquare } from 'lucide-react';
+import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp, Share2, Info, Settings, ShieldAlert, Key, Trash2, MessageSquare, Eye, EyeOff } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line
@@ -74,6 +74,7 @@ function DashboardContent() {
   const [showSettings, setShowSettings] = useState(false);
   const [githubToken, setGithubToken] = useState('');
   const [tempToken, setTempToken] = useState('');
+  const [showToken, setShowToken] = useState(false);
 
   // Load token from localStorage
   useEffect(() => {
@@ -475,13 +476,22 @@ function DashboardContent() {
                   <label className="block text-sm font-medium text-neutral-700 mb-1">
                     Personal Access Token (Classic or Fine-grained)
                   </label>
-                  <input 
-                    type="password"
-                    value={tempToken}
-                    onChange={(e) => setTempToken(e.target.value)}
-                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxx"
-                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                  />
+                  <div className="relative">
+                    <input 
+                      type={showToken ? "text" : "password"}
+                      value={tempToken}
+                      onChange={(e) => setTempToken(e.target.value)}
+                      placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxx"
+                      className="w-full pl-4 pr-10 py-2 border border-neutral-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowToken(!showToken)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 focus:outline-none"
+                    >
+                      {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                   <p className="text-xs text-neutral-500 mt-2">
                     Generate one with <code className="bg-neutral-100 px-1 py-0.5 rounded">public_repo</code> access in your <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">GitHub Settings</a>.
                   </p>
