@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp, Share2, Info, Settings, ShieldAlert, Key, Trash2, MessageSquare, Eye, EyeOff } from 'lucide-react';
+import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp, Share2, Info, Settings, ShieldAlert, Key, Trash2, MessageSquare, Eye, EyeOff, LayoutList, AlignLeft } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line
@@ -14,10 +14,12 @@ type Job = {
   name: string;
   status: string;
   conclusion: string;
+  created_at: string;
   started_at: string;
   completed_at: string;
   html_url: string;
   durationInSeconds: number;
+  queueDurationInSeconds: number;
 };
 
 type Run = {
@@ -36,6 +38,153 @@ type Run = {
 
 type SortField = 'date' | 'duration' | 'name';
 type SortOrder = 'asc' | 'desc' | 'none';
+type JobSortField = 'queue' | 'duration' | 'name';
+
+function JobDetailsView({ run }: { run: Run }) {
+  const [viewMode, setViewMode] = useState<'timeline' | 'table'>('timeline');
+  const [sortField, setSortField] = useState<JobSortField>('duration');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  if (run.jobsLoading) {
+    return <div className="p-8 flex justify-center"><Activity className="w-6 h-6 animate-spin text-blue-500" /></div>;
+  }
+  
+  if (!run.jobs || run.jobs.length === 0) {
+    return <div className="p-8 text-neutral-500 text-center text-sm">No jobs found for this run.</div>;
+  }
+
+  const formatDur = (seconds: number) => {
+    if (seconds < 1) return '< 1s';
+    if (seconds < 60) return `${Math.floor(seconds)}s`;
+    return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
+  };
+
+  // Sort logic for table
+  const sortedJobs = [...run.jobs].sort((a, b) => {
+    let comp = 0;
+    if (sortField === 'name') comp = a.name.localeCompare(b.name);
+    else if (sortField === 'duration') comp = a.durationInSeconds - b.durationInSeconds;
+    else if (sortField === 'queue') comp = a.queueDurationInSeconds - b.queueDurationInSeconds;
+    return sortOrder === 'asc' ? comp : -comp;
+  });
+
+  const handleSort = (field: JobSortField) => {
+    if (sortField === field) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    else {
+      setSortField(field);
+      setSortOrder('desc');
+    }
+  };
+
+  // Timeline / Gantt logic
+  const minTime = Math.min(...run.jobs.map(j => new Date(j.created_at || j.started_at || 0).getTime()));
+  const maxTime = Math.max(...run.jobs.map(j => new Date(j.completed_at || j.started_at || new Date().toISOString()).getTime()));
+  const totalMs = Math.max(1000, maxTime - minTime);
+
+  return (
+    <div className="px-6 py-4 border-l-4 border-blue-500 bg-white/50">
+      <div className="flex justify-between items-center mb-4">
+        <h4 className="text-sm font-bold text-neutral-700 flex items-center gap-2">
+          Job Execution Details
+        </h4>
+        <div className="flex bg-neutral-100 p-1 rounded-lg">
+          <button 
+            onClick={() => setViewMode('timeline')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors ${viewMode === 'timeline' ? 'bg-white shadow-sm text-neutral-900' : 'text-neutral-500 hover:text-neutral-700'}`}
+          >
+            <AlignLeft className="w-3.5 h-3.5" /> Timeline
+          </button>
+          <button 
+            onClick={() => setViewMode('table')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors ${viewMode === 'table' ? 'bg-white shadow-sm text-neutral-900' : 'text-neutral-500 hover:text-neutral-700'}`}
+          >
+            <LayoutList className="w-3.5 h-3.5" /> Table
+          </button>
+        </div>
+      </div>
+
+      {viewMode === 'timeline' ? (
+        <div className="space-y-3">
+          <div className="flex text-[10px] text-neutral-400 font-mono justify-between mb-2 px-2">
+            <span>0s</span>
+            <span>{formatDur(totalMs / 1000)}</span>
+          </div>
+          {run.jobs.map(job => {
+            const startMs = new Date(job.created_at || job.started_at || 0).getTime();
+            const queueWidth = (job.queueDurationInSeconds * 1000 / totalMs) * 100;
+            const runWidth = (job.durationInSeconds * 1000 / totalMs) * 100;
+            const leftOffset = ((startMs - minTime) / totalMs) * 100;
+            
+            return (
+              <div key={job.id} className="relative h-8 bg-neutral-100 rounded-md overflow-hidden group flex items-center">
+                <div 
+                  className="absolute h-full bg-amber-200/50 border-y border-l border-amber-300/50" 
+                  style={{ left: `${leftOffset}%`, width: `${Math.max(0.5, queueWidth)}%` }} 
+                  title={`Queued: ${formatDur(job.queueDurationInSeconds)}`}
+                />
+                <div 
+                  className={`absolute h-full border ${job.conclusion === 'success' ? 'bg-green-500 border-green-600' : job.conclusion === 'skipped' ? 'bg-neutral-400 border-neutral-500' : 'bg-red-500 border-red-600'}`} 
+                  style={{ left: `${leftOffset + queueWidth}%`, width: `${Math.max(0.5, runWidth)}%` }}
+                  title={`Ran: ${formatDur(job.durationInSeconds)}`}
+                />
+                <div className="relative z-10 px-3 text-xs font-medium text-neutral-800 drop-shadow-sm flex justify-between w-full truncate">
+                  <a href={job.html_url} target="_blank" rel="noopener noreferrer" className="hover:underline truncate max-w-[60%]">
+                    {job.name}
+                  </a>
+                  <span className="text-neutral-600 font-mono opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 px-1 rounded">
+                    Q: {formatDur(job.queueDurationInSeconds)} | R: {formatDur(job.durationInSeconds)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+          <div className="flex gap-4 mt-4 text-xs text-neutral-500 justify-end">
+            <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-amber-200/50 border border-amber-300/50 rounded-sm"></div> Queue Time</span>
+            <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-green-500 rounded-sm"></div> Run Time (Success)</span>
+            <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-red-500 rounded-sm"></div> Run Time (Failed)</span>
+          </div>
+        </div>
+      ) : (
+        <div className="overflow-hidden border border-neutral-200 rounded-lg">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-neutral-100 text-neutral-600">
+              <tr>
+                <th className="px-4 py-2 cursor-pointer hover:bg-neutral-200 transition-colors" onClick={() => handleSort('name')}>
+                  <div className="flex items-center gap-1">Job Name {sortField === 'name' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}</div>
+                </th>
+                <th className="px-4 py-2">Status</th>
+                <th className="px-4 py-2 cursor-pointer hover:bg-neutral-200 transition-colors" onClick={() => handleSort('queue')}>
+                  <div className="flex items-center gap-1">Queue Time {sortField === 'queue' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}</div>
+                </th>
+                <th className="px-4 py-2 cursor-pointer hover:bg-neutral-200 transition-colors" onClick={() => handleSort('duration')}>
+                  <div className="flex items-center gap-1">Run Time {sortField === 'duration' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}</div>
+                </th>
+                <th className="px-4 py-2 text-right">Links</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100 bg-white">
+              {sortedJobs.map(job => (
+                <tr key={job.id} className="hover:bg-neutral-50">
+                  <td className="px-4 py-2.5 font-medium text-neutral-800">{job.name}</td>
+                  <td className="px-4 py-2.5">
+                    {job.conclusion === 'success' ? <span className="text-green-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Success</span> :
+                     job.conclusion === 'skipped' ? <span className="text-neutral-500 flex items-center gap-1"><Info className="w-3 h-3" /> Skipped</span> :
+                     <span className="text-red-600 flex items-center gap-1"><XCircle className="w-3 h-3" /> {job.conclusion || 'Failed'}</span>}
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-neutral-600">{formatDur(job.queueDurationInSeconds)}</td>
+                  <td className="px-4 py-2.5 font-mono text-neutral-600">{formatDur(job.durationInSeconds)}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    <a href={job.html_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Logs</a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function DashboardContent() {
   const router = useRouter();
@@ -273,18 +422,24 @@ function DashboardContent() {
       if (!res.ok) throw new Error('Failed to fetch jobs (Rate limit or unauthorized)');
       const data = await res.json();
       
-      const jobs = data.jobs.map((j: { id: number; name: string; status: string; conclusion: string; started_at: string; completed_at: string; html_url: string; }) => ({
-        id: j.id,
-        name: j.name,
-        status: j.status,
-        conclusion: j.conclusion,
-        started_at: j.started_at,
-        completed_at: j.completed_at,
-        html_url: j.html_url,
-        durationInSeconds: j.completed_at && j.started_at 
-          ? (new Date(j.completed_at).getTime() - new Date(j.started_at).getTime()) / 1000 
-          : 0
-      }));
+      const jobs = data.jobs.map((j: { id: number; name: string; status: string; conclusion: string; created_at: string; started_at: string; completed_at: string; html_url: string; }) => {
+        const createdMs = j.created_at ? new Date(j.created_at).getTime() : 0;
+        const startedMs = j.started_at ? new Date(j.started_at).getTime() : createdMs;
+        const completedMs = j.completed_at ? new Date(j.completed_at).getTime() : startedMs;
+        
+        return {
+          id: j.id,
+          name: j.name,
+          status: j.status,
+          conclusion: j.conclusion,
+          created_at: j.created_at,
+          started_at: j.started_at,
+          completed_at: j.completed_at,
+          html_url: j.html_url,
+          queueDurationInSeconds: Math.max(0, (startedMs - createdMs) / 1000),
+          durationInSeconds: Math.max(0, (completedMs - startedMs) / 1000)
+        };
+      });
 
       setRuns(prev => prev.map(r => r.id === runId ? { ...r, jobs, jobsLoading: false } : r));
     } catch (err) {
@@ -737,41 +892,7 @@ function DashboardContent() {
                         {expandedRunId === run.id && (
                           <tr className="bg-neutral-50/50">
                             <td colSpan={5} className="p-0">
-                              <div className="px-6 py-4 border-l-4 border-blue-500 bg-blue-50/30">
-                                <h4 className="text-sm font-bold text-neutral-700 mb-3 flex items-center gap-2">
-                                  Job Execution Details
-                                  {run.jobsLoading && <Activity className="w-3 h-3 animate-spin text-blue-500" />}
-                                </h4>
-                                
-                                {run.jobs && run.jobs.length > 0 ? (
-                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    {run.jobs.map(job => (
-                                      <div key={job.id} className="bg-white p-3 rounded-lg border border-neutral-200 shadow-sm flex flex-col gap-2">
-                                        <div className="flex justify-between items-start">
-                                          <span className="font-medium text-neutral-800 text-xs truncate pr-2" title={job.name}>
-                                            {job.name}
-                                          </span>
-                                          {job.conclusion === 'success' ? (
-                                            <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
-                                          ) : (
-                                            <XCircle className="w-4 h-4 text-red-500 shrink-0" />
-                                          )}
-                                        </div>
-                                        <div className="flex justify-between items-center text-xs text-neutral-500">
-                                          <span className="flex items-center gap-1 font-mono">
-                                            <Clock className="w-3 h-3" /> {formatDuration(job.durationInSeconds)}
-                                          </span>
-                                          <a href={job.html_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                                            Logs
-                                          </a>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : !run.jobsLoading ? (
-                                  <p className="text-xs text-neutral-500">No jobs found for this run.</p>
-                                ) : null}
-                              </div>
+                              <JobDetailsView run={run} />
                             </td>
                           </tr>
                         )}
