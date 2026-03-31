@@ -1,12 +1,23 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line
 } from 'recharts';
 import { format, subDays, isAfter } from 'date-fns';
+
+type Job = {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string;
+  started_at: string;
+  completed_at: string;
+  html_url: string;
+  durationInSeconds: number;
+};
 
 type Run = {
   id: number;
@@ -18,7 +29,12 @@ type Run = {
   updated_at: string;
   html_url: string;
   durationInSeconds: number;
+  jobs?: Job[];
+  jobsLoading?: boolean;
 };
+
+type SortField = 'date' | 'duration' | 'name';
+type SortOrder = 'asc' | 'desc';
 
 export default function Dashboard() {
   const [repoInput, setRepoInput] = useState('vercel/next.js');
@@ -27,6 +43,14 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [runs, setRuns] = useState<Run[]>([]);
+  const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
+
+  // Filters and Sorting
+  const [filterName, setFilterName] = useState('');
+  const [minDuration, setMinDuration] = useState('');
+  const [maxDuration, setMaxDuration] = useState('');
+  const [sortField, setSortField] = useState<SortField>('date');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -73,7 +97,92 @@ export default function Dashboard() {
     if (repoInput.trim()) setCurrentRepo(repoInput.trim());
   };
 
-  // Stats calculation
+  const fetchJobsForRun = async (runId: number) => {
+    if (runs.find(r => r.id === runId)?.jobs) {
+      setExpandedRunId(expandedRunId === runId ? null : runId);
+      return;
+    }
+
+    setRuns(prev => prev.map(r => r.id === runId ? { ...r, jobsLoading: true } : r));
+    setExpandedRunId(runId);
+
+    try {
+      const res = await fetch(`https://api.github.com/repos/${currentRepo}/actions/runs/${runId}/jobs`);
+      if (!res.ok) throw new Error('Failed to fetch jobs');
+      const data = await res.json();
+      
+      const jobs = data.jobs.map((j: { id: number; name: string; status: string; conclusion: string; started_at: string; completed_at: string; html_url: string; }) => ({
+        id: j.id,
+        name: j.name,
+        status: j.status,
+        conclusion: j.conclusion,
+        started_at: j.started_at,
+        completed_at: j.completed_at,
+        html_url: j.html_url,
+        durationInSeconds: j.completed_at && j.started_at 
+          ? (new Date(j.completed_at).getTime() - new Date(j.started_at).getTime()) / 1000 
+          : 0
+      }));
+
+      setRuns(prev => prev.map(r => r.id === runId ? { ...r, jobs, jobsLoading: false } : r));
+    } catch (err) {
+      console.error(err);
+      setRuns(prev => prev.map(r => r.id === runId ? { ...r, jobsLoading: false } : r));
+    }
+  };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('desc');
+    }
+  };
+
+  // Filtered and Sorted Runs
+  const filteredAndSortedRuns = useMemo(() => {
+    let result = [...runs];
+
+    // Filter by name
+    if (filterName) {
+      const lowerQuery = filterName.toLowerCase();
+      result = result.filter(r => r.name.toLowerCase().includes(lowerQuery) || r.head_branch.toLowerCase().includes(lowerQuery));
+    }
+
+    // Filter by min duration
+    if (minDuration) {
+      const minSeconds = parseInt(minDuration) * 60;
+      if (!isNaN(minSeconds)) {
+        result = result.filter(r => r.durationInSeconds >= minSeconds);
+      }
+    }
+
+    // Filter by max duration
+    if (maxDuration) {
+      const maxSeconds = parseInt(maxDuration) * 60;
+      if (!isNaN(maxSeconds)) {
+        result = result.filter(r => r.durationInSeconds <= maxSeconds);
+      }
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (sortField === 'date') {
+        comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      } else if (sortField === 'duration') {
+        comparison = a.durationInSeconds - b.durationInSeconds;
+      } else if (sortField === 'name') {
+        comparison = a.name.localeCompare(b.name);
+      }
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [runs, filterName, minDuration, maxDuration, sortField, sortOrder]);
+
+  // Stats calculation (on all runs, not just filtered)
   const totalRuns = runs.length;
   const successfulRuns = runs.filter(r => r.conclusion === 'success').length;
   const successRate = totalRuns ? Math.round((successfulRuns / totalRuns) * 100) : 0;
@@ -85,6 +194,11 @@ export default function Dashboard() {
     duration: Math.round(r.durationInSeconds / 60), // in minutes
     success: r.conclusion === 'success' ? 1 : 0
   }));
+
+  const formatDuration = (seconds: number) => {
+    if (seconds < 60) return `${Math.floor(seconds)}s`;
+    return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
+  };
 
   return (
     <div className="min-h-screen bg-neutral-50 p-4 md:p-8 font-sans text-neutral-900">
@@ -172,7 +286,7 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-neutral-500">Avg Duration</p>
-                  <p className="text-2xl font-bold">{Math.round(avgDuration / 60)}m {avgDuration % 60}s</p>
+                  <p className="text-2xl font-bold">{formatDuration(avgDuration)}</p>
                 </div>
               </div>
             </div>
@@ -199,62 +313,160 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Detailed Runs */}
+            {/* Detailed Runs with Filters */}
             <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
-              <div className="p-6 border-b border-neutral-100">
-                <h2 className="text-lg font-bold">Recent CI Runs</h2>
+              <div className="p-6 border-b border-neutral-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <h2 className="text-lg font-bold">Detailed Runs & Jobs</h2>
+                
+                <div className="flex flex-wrap gap-3 items-center text-sm">
+                  <div className="flex items-center gap-2 bg-neutral-50 px-3 py-1.5 rounded-lg border border-neutral-200">
+                    <Filter className="w-4 h-4 text-neutral-400" />
+                    <input 
+                      type="text"
+                      placeholder="Filter by name..."
+                      value={filterName}
+                      onChange={e => setFilterName(e.target.value)}
+                      className="bg-transparent border-none outline-none w-32 focus:w-40 transition-all"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center gap-2 bg-neutral-50 px-3 py-1.5 rounded-lg border border-neutral-200">
+                    <Clock className="w-4 h-4 text-neutral-400" />
+                    <input 
+                      type="number"
+                      placeholder="Min (m)"
+                      value={minDuration}
+                      onChange={e => setMinDuration(e.target.value)}
+                      className="bg-transparent border-none outline-none w-16"
+                    />
+                    <span className="text-neutral-300">-</span>
+                    <input 
+                      type="number"
+                      placeholder="Max (m)"
+                      value={maxDuration}
+                      onChange={e => setMaxDuration(e.target.value)}
+                      className="bg-transparent border-none outline-none w-16"
+                    />
+                  </div>
+                </div>
               </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-neutral-50 text-neutral-500 font-medium">
                     <tr>
-                      <th className="py-3 px-6">Workflow / Branch</th>
+                      <th className="py-3 px-6 cursor-pointer hover:text-neutral-900 select-none" onClick={() => handleSort('name')}>
+                        <div className="flex items-center gap-1">
+                          Workflow / Branch {sortField === 'name' && <ArrowUpDown className="w-3 h-3" />}
+                        </div>
+                      </th>
                       <th className="py-3 px-6">Status</th>
-                      <th className="py-3 px-6">Duration</th>
-                      <th className="py-3 px-6">Date</th>
-                      <th className="py-3 px-6 text-right">Action</th>
+                      <th className="py-3 px-6 cursor-pointer hover:text-neutral-900 select-none" onClick={() => handleSort('duration')}>
+                        <div className="flex items-center gap-1">
+                          Duration {sortField === 'duration' && <ArrowUpDown className="w-3 h-3" />}
+                        </div>
+                      </th>
+                      <th className="py-3 px-6 cursor-pointer hover:text-neutral-900 select-none" onClick={() => handleSort('date')}>
+                        <div className="flex items-center gap-1">
+                          Date {sortField === 'date' && <ArrowUpDown className="w-3 h-3" />}
+                        </div>
+                      </th>
+                      <th className="py-3 px-6 text-right">Details</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-100">
-                    {runs.map(run => (
-                      <tr key={run.id} className="hover:bg-neutral-50/50 transition-colors">
-                        <td className="py-4 px-6">
-                          <div className="font-medium text-neutral-900">{run.name}</div>
-                          <div className="text-neutral-500 text-xs mt-1 font-mono">{run.head_branch}</div>
-                        </td>
-                        <td className="py-4 px-6">
-                          {run.conclusion === 'success' ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200/50">
-                              <CheckCircle className="w-3.5 h-3.5" /> Success
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200/50">
-                              <XCircle className="w-3.5 h-3.5" /> {run.conclusion || 'Failed'}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-4 px-6 text-neutral-600 font-mono">
-                          {Math.floor(run.durationInSeconds / 60)}m {run.durationInSeconds % 60}s
-                        </td>
-                        <td className="py-4 px-6 text-neutral-500">
-                          {format(new Date(run.created_at), 'MMM dd, HH:mm')}
-                        </td>
-                        <td className="py-4 px-6 text-right">
-                          <a 
-                            href={run.html_url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 text-xs font-medium"
-                          >
-                            View Logs <ExternalLink className="w-3 h-3" />
-                          </a>
-                        </td>
-                      </tr>
+                    {filteredAndSortedRuns.map(run => (
+                      <React.Fragment key={run.id}>
+                        <tr className="hover:bg-neutral-50/50 transition-colors">
+                          <td className="py-4 px-6">
+                            <div className="font-medium text-neutral-900">{run.name}</div>
+                            <div className="text-neutral-500 text-xs mt-1 font-mono">{run.head_branch}</div>
+                          </td>
+                          <td className="py-4 px-6">
+                            {run.conclusion === 'success' ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200/50">
+                                <CheckCircle className="w-3.5 h-3.5" /> Success
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200/50">
+                                <XCircle className="w-3.5 h-3.5" /> {run.conclusion || 'Failed'}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-4 px-6 text-neutral-600 font-mono">
+                            {formatDuration(run.durationInSeconds)}
+                          </td>
+                          <td className="py-4 px-6 text-neutral-500">
+                            {format(new Date(run.created_at), 'MMM dd, HH:mm')}
+                          </td>
+                          <td className="py-4 px-6 text-right">
+                            <button 
+                              onClick={() => fetchJobsForRun(run.id)}
+                              className="inline-flex items-center gap-1 text-neutral-600 hover:text-neutral-900 px-3 py-1.5 rounded-md hover:bg-neutral-100 transition-colors"
+                            >
+                              {expandedRunId === run.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              Jobs
+                            </button>
+                            <a 
+                              href={run.html_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 ml-2 text-blue-600 hover:text-blue-700 p-1.5"
+                              title="View on GitHub"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          </td>
+                        </tr>
+                        
+                        {/* Expandable Jobs Section */}
+                        {expandedRunId === run.id && (
+                          <tr className="bg-neutral-50/50">
+                            <td colSpan={5} className="p-0">
+                              <div className="px-6 py-4 border-l-4 border-blue-500 bg-blue-50/30">
+                                <h4 className="text-sm font-bold text-neutral-700 mb-3 flex items-center gap-2">
+                                  Job Execution Details
+                                  {run.jobsLoading && <Activity className="w-3 h-3 animate-spin text-blue-500" />}
+                                </h4>
+                                
+                                {run.jobs && run.jobs.length > 0 ? (
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {run.jobs.map(job => (
+                                      <div key={job.id} className="bg-white p-3 rounded-lg border border-neutral-200 shadow-sm flex flex-col gap-2">
+                                        <div className="flex justify-between items-start">
+                                          <span className="font-medium text-neutral-800 text-xs truncate pr-2" title={job.name}>
+                                            {job.name}
+                                          </span>
+                                          {job.conclusion === 'success' ? (
+                                            <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+                                          ) : (
+                                            <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                                          )}
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs text-neutral-500">
+                                          <span className="flex items-center gap-1 font-mono">
+                                            <Clock className="w-3 h-3" /> {formatDuration(job.durationInSeconds)}
+                                          </span>
+                                          <a href={job.html_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                            Logs
+                                          </a>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : !run.jobsLoading ? (
+                                  <p className="text-xs text-neutral-500">No jobs found for this run.</p>
+                                ) : null}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
-                    {runs.length === 0 && (
+                    {filteredAndSortedRuns.length === 0 && (
                       <tr>
                         <td colSpan={5} className="py-8 text-center text-neutral-500">
-                          No runs found for the selected period.
+                          No matching runs found. Try adjusting your filters.
                         </td>
                       </tr>
                     )}
