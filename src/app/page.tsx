@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp, Share2 } from 'lucide-react';
+import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp, Share2, Info } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line
@@ -67,6 +67,7 @@ function DashboardContent() {
   const [error, setError] = useState('');
   const [runs, setRuns] = useState<Run[]>([]);
   const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
+  const [hasMoreData, setHasMoreData] = useState(false);
 
   // Sync state changes back to URL
   useEffect(() => {
@@ -91,14 +92,38 @@ function DashboardContent() {
     const fetchData = async () => {
       setLoading(true);
       setError('');
+      setHasMoreData(false);
       try {
-        const res = await fetch(`https://api.github.com/repos/${currentRepo}/actions/runs?per_page=100`);
-        if (!res.ok) throw new Error('Repository not found or API limit reached');
-        const data = await res.json();
-        
         const cutoffDate = subDays(new Date(), days);
+        let allRuns: Record<string, unknown>[] = [];
+        let page = 1;
+        const maxPages = 5; // Fetch up to 500 runs to avoid hitting rate limits instantly
+        let hitCutoff = false;
+
+        while (page <= maxPages) {
+          const res = await fetch(`https://api.github.com/repos/${currentRepo}/actions/runs?per_page=100&page=${page}`);
+          if (!res.ok) throw new Error('Repository not found or API limit reached');
+          const data = await res.json();
+          
+          if (!data.workflow_runs || data.workflow_runs.length === 0) break;
+          
+          allRuns = [...allRuns, ...data.workflow_runs];
+          
+          // Check if the oldest run in this page is older than our cutoff date
+          const oldestRunDate = new Date(data.workflow_runs[data.workflow_runs.length - 1].created_at);
+          if (!isAfter(oldestRunDate, cutoffDate)) {
+            hitCutoff = true;
+            break;
+          }
+          page++;
+        }
         
-        const processedRuns = data.workflow_runs
+        // If we fetched 5 pages and still haven't hit the cutoff date, flag that there's more data
+        if (!hitCutoff && page > maxPages) {
+          setHasMoreData(true);
+        }
+        
+        const processedRuns = allRuns
           .filter((r: { created_at: string | number | Date; }) => isAfter(new Date(r.created_at), cutoffDate))
           .map((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => ({
             id: r.id,
@@ -113,7 +138,11 @@ function DashboardContent() {
           }))
           .filter((r: Run) => r.status === 'completed');
           
-        setRuns(processedRuns);
+        // Deduplicate runs just in case GitHub API shifts during pagination
+        const uniqueRunsMap = new Map();
+        processedRuns.forEach(r => uniqueRunsMap.set(r.id, r));
+        setRuns(Array.from(uniqueRunsMap.values()));
+        
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
@@ -294,7 +323,7 @@ function DashboardContent() {
         </header>
 
         {/* Controls */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center flex-wrap">
           {[7, 30, 90].map(d => (
             <button
               key={d}
@@ -308,6 +337,12 @@ function DashboardContent() {
               Last {d} Days
             </button>
           ))}
+          {hasMoreData && !loading && (
+            <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200 ml-auto">
+              <Info className="w-4 h-4" />
+              Showing latest {runs.length} runs. (GitHub API pagination limit reached for high-traffic repos)
+            </div>
+          )}
         </div>
 
         {error ? (
@@ -315,8 +350,9 @@ function DashboardContent() {
             {error}
           </div>
         ) : loading ? (
-          <div className="flex items-center justify-center h-64 text-neutral-400">
-            <Activity className="w-8 h-8 animate-pulse" />
+          <div className="flex items-center justify-center h-64 text-neutral-400 flex-col gap-4">
+            <Activity className="w-8 h-8 animate-pulse text-blue-500" />
+            <p className="text-sm">Fetching runs (this may take a moment for larger timeframes)...</p>
           </div>
         ) : (
           <>
