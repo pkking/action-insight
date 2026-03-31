@@ -297,7 +297,50 @@ function DashboardContent() {
       
       try {
         const cutoffDate = subDays(new Date(), days);
+        const cacheKey = `action_insight_runs_${currentRepo}`;
+        
         let allRuns: Record<string, unknown>[] = [];
+        let cachedRuns: Record<string, unknown>[] = [];
+        let lastCachedDate = new Date(0);
+        
+        // 1. Try to load from cache first for instant UI response
+        try {
+          const cacheStr = localStorage.getItem(cacheKey);
+          if (cacheStr) {
+            const parsedCache = JSON.parse(cacheStr);
+            if (Array.isArray(parsedCache) && parsedCache.length > 0) {
+              cachedRuns = parsedCache;
+              // Sort to find the newest run date
+              cachedRuns.sort((a: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }, b: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+              lastCachedDate = new Date(cachedRuns[0].created_at);
+              
+              // Instantly show cached runs that fit the current days filter
+              const validCachedRuns = cachedRuns
+                .filter((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => isAfter(new Date(r.created_at), cutoffDate))
+                .map((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => ({
+                  id: r.id,
+                  name: r.name,
+                  head_branch: r.head_branch,
+                  status: r.status,
+                  conclusion: r.conclusion,
+                  created_at: r.created_at,
+                  updated_at: r.updated_at,
+                  html_url: r.html_url,
+                  durationInSeconds: (new Date(r.updated_at).getTime() - new Date(r.created_at).getTime()) / 1000
+                }))
+                .filter((r: Run) => r.status === 'completed');
+                
+              if (!isCancelled && validCachedRuns.length > 0) {
+                const uniqueRunsMap = new Map();
+                validCachedRuns.forEach((r: Run) => uniqueRunsMap.set(r.id, r));
+                setRuns(Array.from(uniqueRunsMap.values()));
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to read from cache:', e);
+        }
+
         let page = 1;
         const maxPages = 5; // Fetch up to 500 runs to avoid hitting rate limits instantly
         let hitCutoff = false;
@@ -340,7 +383,15 @@ function DashboardContent() {
           allRuns = [...allRuns, ...data.workflow_runs];
           
           // Incrementally process and show runs so user doesn't stare at a blank screen
-          const currentProcessedRuns = allRuns
+          // Combine new fetched runs with cached runs
+          const combinedRunsMap = new Map();
+          
+          // First add cached runs
+          cachedRuns.forEach((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => combinedRunsMap.set(r.id, r));
+          // Then overwrite with freshly fetched runs
+          allRuns.forEach((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => combinedRunsMap.set(r.id, r));
+          
+          const currentProcessedRuns = Array.from(combinedRunsMap.values())
             .filter((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => isAfter(new Date(r.created_at), cutoffDate))
             .map((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => ({
               id: r.id,
@@ -362,16 +413,40 @@ function DashboardContent() {
             setRuns(Array.from(uniqueRunsMap.values()));
           }
           
-          // Check if the oldest run in this page is older than our cutoff date
+          // Check if the oldest run in this page is older than our cutoff date OR older than our newest cached run
           const oldestRunDate = new Date(data.workflow_runs[data.workflow_runs.length - 1].created_at);
+          
+          // If we have hit runs that are older than our cutoff, we can stop
           if (!isAfter(oldestRunDate, cutoffDate)) {
             hitCutoff = true;
             break;
           }
+          
+          // Or if we have hit runs that are already in our cache (overlap found), we can stop
+          if (cachedRuns.length > 0 && !isAfter(oldestRunDate, lastCachedDate)) {
+            hitCutoff = true;
+            break;
+          }
+          
           page++;
         }
         
-        // If we fetched max pages and still haven't hit the cutoff date, flag that there's more data
+        // Save the combined unique runs back to cache (limit to 500 to prevent localStorage quota exceeded)
+        try {
+          const combinedRunsMap = new Map();
+          cachedRuns.forEach((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => combinedRunsMap.set(r.id, r));
+          allRuns.forEach((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => combinedRunsMap.set(r.id, r));
+          
+          const sortedToSave = Array.from(combinedRunsMap.values())
+            .sort((a: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }, b: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .slice(0, 500);
+            
+          localStorage.setItem(cacheKey, JSON.stringify(sortedToSave));
+        } catch (e) {
+          console.warn('Failed to save to cache:', e);
+        }
+        
+        // If we fetched max pages and still haven't hit the cutoff date (and didn't overlap cache), flag that there's more data
         if (!hitCutoff && page > maxPages && !isCancelled) {
           setHasMoreData(true);
         }
