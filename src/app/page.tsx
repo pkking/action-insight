@@ -474,14 +474,14 @@ function DashboardContent() {
 
                 <div>
                   <label className="block text-sm font-medium text-neutral-700 mb-1">
-                    Personal Access Token (Classic or Fine-grained)
+                    Fine-grained Personal Access Token
                   </label>
                   <div className="relative">
                     <input 
                       type={showToken ? "text" : "password"}
                       value={tempToken}
                       onChange={(e) => setTempToken(e.target.value)}
-                      placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxx"
+                      placeholder="github_pat_xxxxxxxxxxxxxxxxxxxxxx"
                       className="w-full pl-4 pr-10 py-2 border border-neutral-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                     />
                     <button
@@ -492,9 +492,17 @@ function DashboardContent() {
                       {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  <p className="text-xs text-neutral-500 mt-2">
-                    Generate one with <code className="bg-neutral-100 px-1 py-0.5 rounded">public_repo</code> access in your <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">GitHub Settings</a>.
-                  </p>
+                  
+                  <div className="text-xs text-neutral-600 mt-3 space-y-2 bg-neutral-50 p-3 rounded-lg border border-neutral-100">
+                    <p className="font-semibold text-neutral-800">How to generate a token:</p>
+                    <ol className="list-decimal pl-4 space-y-1.5">
+                      <li>Go to <a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">GitHub Settings → Fine-grained PATs</a></li>
+                      <li>Click <strong>Generate new token</strong></li>
+                      <li>Under <strong>Repository access</strong>, select <strong>Public Repositories (read-only)</strong></li>
+                      <li>Under <strong>Permissions</strong> → <strong>Repository permissions</strong>, select <strong>Actions: Read-only</strong></li>
+                      <li>Generate token and paste it above</li>
+                    </ol>
+                  </div>
                 </div>
 
                 <div className="flex gap-3 justify-end pt-4 border-t border-neutral-100">
