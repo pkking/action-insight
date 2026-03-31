@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp, Share2, Info, Settings, ShieldAlert, Key, Trash2 } from 'lucide-react';
+import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp, Share2, Info, Settings, ShieldAlert, Key, Trash2, MessageSquare } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line
@@ -64,6 +64,7 @@ function DashboardContent() {
 
   // Data fetching state
   const [loading, setLoading] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [error, setError] = useState('');
   const [runs, setRuns] = useState<Run[]>([]);
   const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
@@ -121,10 +122,17 @@ function DashboardContent() {
 
   // Fetch data when repo or days change
   useEffect(() => {
+    let isCancelled = false;
+
     const fetchData = async () => {
       setLoading(true);
+      setLoadingProgress(0);
       setError('');
       setHasMoreData(false);
+      
+      // Start with an empty list for fresh fetch
+      setRuns([]);
+      
       try {
         const cutoffDate = subDays(new Date(), days);
         let allRuns: Record<string, unknown>[] = [];
@@ -141,6 +149,10 @@ function DashboardContent() {
         }
 
         while (page <= maxPages) {
+          if (isCancelled) break;
+          
+          setLoadingProgress(Math.round(((page - 1) / maxPages) * 100));
+          
           const res = await fetch(`https://api.github.com/repos/${currentRepo}/actions/runs?per_page=100&page=${page}`, { headers });
           
           if (!res.ok) {
@@ -165,6 +177,29 @@ function DashboardContent() {
           
           allRuns = [...allRuns, ...data.workflow_runs];
           
+          // Incrementally process and show runs so user doesn't stare at a blank screen
+          const currentProcessedRuns = allRuns
+            .filter((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => isAfter(new Date(r.created_at), cutoffDate))
+            .map((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => ({
+              id: r.id,
+              name: r.name,
+              head_branch: r.head_branch,
+              status: r.status,
+              conclusion: r.conclusion,
+              created_at: r.created_at,
+              updated_at: r.updated_at,
+              html_url: r.html_url,
+              durationInSeconds: (new Date(r.updated_at).getTime() - new Date(r.created_at).getTime()) / 1000
+            }))
+            .filter((r: Run) => r.status === 'completed');
+            
+          const uniqueRunsMap = new Map();
+          currentProcessedRuns.forEach((r: Run) => uniqueRunsMap.set(r.id, r));
+          
+          if (!isCancelled) {
+            setRuns(Array.from(uniqueRunsMap.values()));
+          }
+          
           // Check if the oldest run in this page is older than our cutoff date
           const oldestRunDate = new Date(data.workflow_runs[data.workflow_runs.length - 1].created_at);
           if (!isAfter(oldestRunDate, cutoffDate)) {
@@ -175,42 +210,39 @@ function DashboardContent() {
         }
         
         // If we fetched max pages and still haven't hit the cutoff date, flag that there's more data
-        if (!hitCutoff && page > maxPages) {
+        if (!hitCutoff && page > maxPages && !isCancelled) {
           setHasMoreData(true);
         }
         
-        const processedRuns = allRuns
-          .filter((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => isAfter(new Date(r.created_at), cutoffDate))
-          .map((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => ({
-            id: r.id,
-            name: r.name,
-            head_branch: r.head_branch,
-            status: r.status,
-            conclusion: r.conclusion,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
-            html_url: r.html_url,
-            durationInSeconds: (new Date(r.updated_at).getTime() - new Date(r.created_at).getTime()) / 1000
-          }))
-          .filter((r: Run) => r.status === 'completed');
-          
-        // Deduplicate runs just in case GitHub API shifts during pagination
-        const uniqueRunsMap = new Map();
-        processedRuns.forEach((r: Run) => uniqueRunsMap.set(r.id, r));
-        setRuns(Array.from(uniqueRunsMap.values()));
+        if (!isCancelled) {
+          setLoadingProgress(100);
+        }
         
       } catch (err: unknown) {
-        if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError('An unknown error occurred');
+        if (!isCancelled) {
+          if (err instanceof Error) {
+            setError(err.message);
+          } else {
+            setError('An unknown error occurred');
+          }
         }
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+          // Only reset progress after a tiny delay so the full bar is visible briefly
+          setTimeout(() => {
+            if (!isCancelled) setLoadingProgress(0);
+          }, 500);
+        }
       }
     };
+    
     fetchData();
-  }, [currentRepo, days, githubToken]); // Re-fetch when token changes
+    
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentRepo, days, githubToken]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -348,9 +380,18 @@ function DashboardContent() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-50 p-4 md:p-8 font-sans text-neutral-900">
-      <div className="max-w-6xl mx-auto space-y-6">
-        
+    <div className="min-h-screen bg-neutral-50 p-4 md:p-8 font-sans text-neutral-900 flex flex-col">
+      {/* Top Progress Bar */}
+      {loadingProgress > 0 && loadingProgress < 100 && (
+        <div className="fixed top-0 left-0 w-full h-1 bg-neutral-200 z-50">
+          <div 
+            className="h-full bg-blue-600 transition-all duration-300 ease-out"
+            style={{ width: `${loadingProgress}%` }}
+          />
+        </div>
+      )}
+
+      <div className="max-w-6xl mx-auto space-y-6 flex-1 w-full">
         {/* Header */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-neutral-100">
           <div>
@@ -384,6 +425,15 @@ function DashboardContent() {
             >
               <Share2 className="w-5 h-5" />
             </button>
+            <a 
+              href="https://github.com/pkking/action-insight/issues/new/choose" 
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Give Feedback / Report Bug"
+              className="bg-neutral-100 text-neutral-600 p-2 rounded-lg hover:bg-neutral-200 transition-colors flex items-center justify-center"
+            >
+              <MessageSquare className="w-5 h-5" />
+            </a>
             <button 
               onClick={() => setShowSettings(true)}
               title="Settings (GitHub Token)"
@@ -485,13 +535,19 @@ function DashboardContent() {
               Showing latest {runs.length} runs. (GitHub API pagination limit reached for high-traffic repos)
             </div>
           )}
+          {loading && runs.length > 0 && (
+            <div className="flex items-center gap-2 text-xs text-blue-600 ml-auto">
+              <Activity className="w-4 h-4 animate-spin" />
+              Loading older runs...
+            </div>
+          )}
         </div>
 
         {error ? (
           <div className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-100">
             {error}
           </div>
-        ) : loading ? (
+        ) : loading && runs.length === 0 ? (
           <div className="flex items-center justify-center h-64 text-neutral-400 flex-col gap-4">
             <Activity className="w-8 h-8 animate-pulse text-blue-500" />
             <p className="text-sm">Fetching runs (this may take a moment for larger timeframes)...</p>
@@ -500,7 +556,7 @@ function DashboardContent() {
           <>
             {/* Stats Overview */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-neutral-100 flex items-center gap-4">
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-neutral-100 flex items-center gap-4 transition-all duration-300">
                 <div className="p-3 bg-blue-50 text-blue-600 rounded-full">
                   <Activity className="w-6 h-6" />
                 </div>
@@ -510,7 +566,7 @@ function DashboardContent() {
                 </div>
               </div>
               
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-neutral-100 flex items-center gap-4">
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-neutral-100 flex items-center gap-4 transition-all duration-300">
                 <div className={`p-3 rounded-full ${successRate >= 80 ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
                   {successRate >= 80 ? <CheckCircle className="w-6 h-6" /> : <XCircle className="w-6 h-6" />}
                 </div>
@@ -520,7 +576,7 @@ function DashboardContent() {
                 </div>
               </div>
 
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-neutral-100 flex items-center gap-4">
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-neutral-100 flex items-center gap-4 transition-all duration-300">
                 <div className="p-3 bg-purple-50 text-purple-600 rounded-full">
                   <Clock className="w-6 h-6" />
                 </div>
