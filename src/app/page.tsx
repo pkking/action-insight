@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp, Share2, Info } from 'lucide-react';
+import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp, Share2, Info, Settings, ShieldAlert, Key, Trash2 } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line
@@ -69,6 +69,38 @@ function DashboardContent() {
   const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
   const [hasMoreData, setHasMoreData] = useState(false);
 
+  // Settings State
+  const [showSettings, setShowSettings] = useState(false);
+  const [githubToken, setGithubToken] = useState('');
+  const [tempToken, setTempToken] = useState('');
+
+  // Load token from localStorage
+  useEffect(() => {
+    const savedToken = localStorage.getItem('action_insight_github_token');
+    if (savedToken) {
+      setGithubToken(savedToken);
+      setTempToken(savedToken);
+    }
+  }, []);
+
+  const saveToken = () => {
+    if (tempToken.trim()) {
+      localStorage.setItem('action_insight_github_token', tempToken.trim());
+      setGithubToken(tempToken.trim());
+    } else {
+      localStorage.removeItem('action_insight_github_token');
+      setGithubToken('');
+    }
+    setShowSettings(false);
+  };
+
+  const clearToken = () => {
+    localStorage.removeItem('action_insight_github_token');
+    setGithubToken('');
+    setTempToken('');
+    setShowSettings(false);
+  };
+
   // Sync state changes back to URL
   useEffect(() => {
     const params = new URLSearchParams();
@@ -100,9 +132,33 @@ function DashboardContent() {
         const maxPages = 5; // Fetch up to 500 runs to avoid hitting rate limits instantly
         let hitCutoff = false;
 
+        const headers: HeadersInit = {
+          'Accept': 'application/vnd.github.v3+json'
+        };
+        
+        if (githubToken) {
+          headers['Authorization'] = `token ${githubToken}`;
+        }
+
         while (page <= maxPages) {
-          const res = await fetch(`https://api.github.com/repos/${currentRepo}/actions/runs?per_page=100&page=${page}`);
-          if (!res.ok) throw new Error('Repository not found or API limit reached');
+          const res = await fetch(`https://api.github.com/repos/${currentRepo}/actions/runs?per_page=100&page=${page}`, { headers });
+          
+          if (!res.ok) {
+            if (res.status === 403 || res.status === 401) {
+              const resetHeader = res.headers.get('x-ratelimit-reset');
+              const limit = res.headers.get('x-ratelimit-limit');
+              const resetTime = resetHeader ? format(new Date(parseInt(resetHeader) * 1000), 'HH:mm') : '';
+              const tokenMsg = githubToken 
+                ? "Your provided token is either invalid or exceeded its limit." 
+                : "You hit the unauthenticated GitHub API rate limit (60 requests/hr). Please add a Personal Access Token in Settings to get 5,000 requests/hr.";
+              throw new Error(`API Rate Limit Exceeded or Unauthorized (Limit: ${limit || 'unknown'}). ${tokenMsg} ${resetTime ? `Resets at ${resetTime}.` : ''}`);
+            }
+            if (res.status === 404) {
+              throw new Error(`Repository not found. Check if "${currentRepo}" exists and is public.`);
+            }
+            throw new Error(`GitHub API Error: ${res.statusText}`);
+          }
+          
           const data = await res.json();
           
           if (!data.workflow_runs || data.workflow_runs.length === 0) break;
@@ -118,13 +174,13 @@ function DashboardContent() {
           page++;
         }
         
-        // If we fetched 5 pages and still haven't hit the cutoff date, flag that there's more data
+        // If we fetched max pages and still haven't hit the cutoff date, flag that there's more data
         if (!hitCutoff && page > maxPages) {
           setHasMoreData(true);
         }
         
         const processedRuns = allRuns
-          .filter((r: { created_at: string | number | Date; }) => isAfter(new Date(r.created_at), cutoffDate))
+          .filter((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => isAfter(new Date(r.created_at), cutoffDate))
           .map((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => ({
             id: r.id,
             name: r.name,
@@ -140,7 +196,7 @@ function DashboardContent() {
           
         // Deduplicate runs just in case GitHub API shifts during pagination
         const uniqueRunsMap = new Map();
-        processedRuns.forEach(r => uniqueRunsMap.set(r.id, r));
+        processedRuns.forEach((r: Run) => uniqueRunsMap.set(r.id, r));
         setRuns(Array.from(uniqueRunsMap.values()));
         
       } catch (err: unknown) {
@@ -154,7 +210,7 @@ function DashboardContent() {
       }
     };
     fetchData();
-  }, [currentRepo, days]);
+  }, [currentRepo, days, githubToken]); // Re-fetch when token changes
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -171,8 +227,17 @@ function DashboardContent() {
     setExpandedRunId(runId);
 
     try {
-      const res = await fetch(`https://api.github.com/repos/${currentRepo}/actions/runs/${runId}/jobs`);
-      if (!res.ok) throw new Error('Failed to fetch jobs');
+      const headers: HeadersInit = {
+        'Accept': 'application/vnd.github.v3+json'
+      };
+      
+      if (githubToken) {
+        headers['Authorization'] = `token ${githubToken}`;
+      }
+
+      const res = await fetch(`https://api.github.com/repos/${currentRepo}/actions/runs/${runId}/jobs`, { headers });
+      
+      if (!res.ok) throw new Error('Failed to fetch jobs (Rate limit or unauthorized)');
       const data = await res.json();
       
       const jobs = data.jobs.map((j: { id: number; name: string; status: string; conclusion: string; started_at: string; completed_at: string; html_url: string; }) => ({
@@ -319,8 +384,85 @@ function DashboardContent() {
             >
               <Share2 className="w-5 h-5" />
             </button>
+            <button 
+              onClick={() => setShowSettings(true)}
+              title="Settings (GitHub Token)"
+              className="bg-neutral-100 text-neutral-600 p-2 rounded-lg hover:bg-neutral-200 transition-colors flex items-center justify-center relative"
+            >
+              <Settings className="w-5 h-5" />
+              {githubToken && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-green-500 rounded-full border border-white"></span>}
+            </button>
           </div>
         </header>
+
+        {/* Settings Modal */}
+        {showSettings && (
+          <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl border border-neutral-100 p-6 max-w-lg w-full">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-bold flex items-center gap-2">
+                  <Key className="w-5 h-5 text-neutral-500" />
+                  GitHub API Token
+                </h2>
+                <button onClick={() => setShowSettings(false)} className="text-neutral-400 hover:text-neutral-900">
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="bg-blue-50 text-blue-800 p-4 rounded-lg border border-blue-100 flex gap-3 text-sm">
+                  <ShieldAlert className="w-5 h-5 shrink-0 text-blue-500 mt-0.5" />
+                  <div>
+                    <p className="font-semibold mb-1">100% Client-Side Security</p>
+                    <p>
+                      Your token is saved <strong>only in your browser&apos;s localStorage</strong>. It is never sent to any server other than directly to <code>api.github.com</code>. 
+                      Providing a token boosts your API rate limit from 60 to 5,000 requests per hour.
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                    Personal Access Token (Classic or Fine-grained)
+                  </label>
+                  <input 
+                    type="password"
+                    value={tempToken}
+                    onChange={(e) => setTempToken(e.target.value)}
+                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxx"
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                  <p className="text-xs text-neutral-500 mt-2">
+                    Generate one with <code className="bg-neutral-100 px-1 py-0.5 rounded">public_repo</code> access in your <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">GitHub Settings</a>.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 justify-end pt-4 border-t border-neutral-100">
+                  {githubToken && (
+                    <button 
+                      onClick={clearToken}
+                      className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2 mr-auto"
+                    >
+                      <Trash2 className="w-4 h-4" /> Remove Token
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => setShowSettings(false)}
+                    className="px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={saveToken}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                  >
+                    Save Token
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Controls */}
         <div className="flex gap-2 items-center flex-wrap">
