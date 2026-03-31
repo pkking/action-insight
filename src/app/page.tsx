@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp } from 'lucide-react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp, Share2 } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line
@@ -36,22 +37,56 @@ type Run = {
 type SortField = 'date' | 'duration' | 'name';
 type SortOrder = 'asc' | 'desc' | 'none';
 
-export default function Dashboard() {
-  const [repoInput, setRepoInput] = useState('vercel/next.js');
-  const [currentRepo, setCurrentRepo] = useState('vercel/next.js');
-  const [days, setDays] = useState(7);
+function DashboardContent() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Read initial state from URL parameters
+  const initialRepo = searchParams.get('repo') || 'vercel/next.js';
+  const initialDays = searchParams.get('days') ? parseInt(searchParams.get('days')!) : 7;
+  const initialSortField = (searchParams.get('sortField') as SortField) || 'date';
+  const initialSortOrder = (searchParams.get('sortOrder') as SortOrder) || 'desc';
+  const initialFilterName = searchParams.get('filterName') || '';
+  const initialMinDuration = searchParams.get('minDuration') || '';
+  const initialMaxDuration = searchParams.get('maxDuration') || '';
+
+  const [repoInput, setRepoInput] = useState(initialRepo);
+  const [currentRepo, setCurrentRepo] = useState(initialRepo);
+  const [days, setDays] = useState(initialDays);
+  
+  // Filters and Sorting
+  const [filterName, setFilterName] = useState(initialFilterName);
+  const [minDuration, setMinDuration] = useState(initialMinDuration);
+  const [maxDuration, setMaxDuration] = useState(initialMaxDuration);
+  const [sortField, setSortField] = useState<SortField>(initialSortField);
+  const [sortOrder, setSortOrder] = useState<SortOrder>(initialSortOrder);
+
+  // Data fetching state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [runs, setRuns] = useState<Run[]>([]);
   const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
 
-  // Filters and Sorting
-  const [filterName, setFilterName] = useState('');
-  const [minDuration, setMinDuration] = useState('');
-  const [maxDuration, setMaxDuration] = useState('');
-  const [sortField, setSortField] = useState<SortField>('date');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  // Sync state changes back to URL
+  useEffect(() => {
+    const params = new URLSearchParams();
+    
+    if (currentRepo !== 'vercel/next.js') params.set('repo', currentRepo);
+    if (days !== 7) params.set('days', days.toString());
+    if (filterName) params.set('filterName', filterName);
+    if (minDuration) params.set('minDuration', minDuration);
+    if (maxDuration) params.set('maxDuration', maxDuration);
+    if (sortField !== 'date') params.set('sortField', sortField);
+    if (sortOrder !== 'desc') params.set('sortOrder', sortOrder);
 
+    const query = params.toString();
+    const url = query ? `${pathname}?${query}` : pathname;
+    
+    router.replace(url, { scroll: false });
+  }, [currentRepo, days, filterName, minDuration, maxDuration, sortField, sortOrder, pathname, router]);
+
+  // Fetch data when repo or days change
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -213,6 +248,11 @@ export default function Dashboard() {
       : <ArrowUp className="w-3 h-3 text-blue-500" />;
   };
 
+  const copyShareLink = () => {
+    navigator.clipboard.writeText(window.location.href);
+    alert('Shareable link copied to clipboard!');
+  };
+
   return (
     <div className="min-h-screen bg-neutral-50 p-4 md:p-8 font-sans text-neutral-900">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -227,21 +267,30 @@ export default function Dashboard() {
             <p className="text-neutral-500 text-sm">Monitor GitHub Actions CI/CD metrics</p>
           </div>
           
-          <form onSubmit={handleSearch} className="flex gap-2 w-full md:w-auto">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 w-4 h-4" />
-              <input 
-                type="text" 
-                value={repoInput}
-                onChange={(e) => setRepoInput(e.target.value)}
-                placeholder="owner/repo"
-                className="w-full pl-9 pr-4 py-2 bg-neutral-100 rounded-lg text-sm border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none"
-              />
-            </div>
-            <button type="submit" className="bg-neutral-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-neutral-800 transition-colors">
-              Analyze
+          <div className="flex w-full md:w-auto gap-2">
+            <form onSubmit={handleSearch} className="flex gap-2 flex-1">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 w-4 h-4" />
+                <input 
+                  type="text" 
+                  value={repoInput}
+                  onChange={(e) => setRepoInput(e.target.value)}
+                  placeholder="owner/repo"
+                  className="w-full pl-9 pr-4 py-2 bg-neutral-100 rounded-lg text-sm border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none"
+                />
+              </div>
+              <button type="submit" className="bg-neutral-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-neutral-800 transition-colors">
+                Analyze
+              </button>
+            </form>
+            <button 
+              onClick={copyShareLink}
+              title="Copy link to current view"
+              className="bg-neutral-100 text-neutral-600 p-2 rounded-lg hover:bg-neutral-200 transition-colors flex items-center justify-center"
+            >
+              <Share2 className="w-5 h-5" />
             </button>
-          </form>
+          </div>
         </header>
 
         {/* Controls */}
@@ -491,5 +540,15 @@ export default function Dashboard() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-neutral-50 flex items-center justify-center">
+      <Activity className="w-8 h-8 animate-pulse text-blue-500" />
+    </div>}>
+      <DashboardContent />
+    </Suspense>
   );
 }
