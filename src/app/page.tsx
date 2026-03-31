@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp, Share2, Info, Settings, ShieldAlert, Key, Trash2, MessageSquare, Eye, EyeOff, LayoutList, AlignLeft } from 'lucide-react';
+import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp, Share2, Info, Settings, ShieldAlert, Key, Trash2, MessageSquare, Eye, EyeOff, LayoutList, AlignLeft, RefreshCw } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line
+  LineChart, Line, ReferenceArea
 } from 'recharts';
 import { format, subDays, isAfter } from 'date-fns';
 
@@ -127,11 +127,11 @@ function JobDetailsView({ run }: { run: Run }) {
                   style={{ left: `${leftOffset + queueWidth}%`, width: `${Math.max(0.5, runWidth)}%` }}
                   title={`Ran: ${formatDur(job.durationInSeconds)}`}
                 />
-                <div className="relative z-10 px-3 text-xs font-medium text-neutral-800 drop-shadow-sm flex justify-between w-full truncate">
-                  <a href={job.html_url} target="_blank" rel="noopener noreferrer" className="hover:underline truncate max-w-[60%]">
+                <div className="relative z-10 px-3 text-xs font-medium text-neutral-800 drop-shadow-sm flex justify-between w-full truncate pointer-events-none">
+                  <a href={job.html_url} target="_blank" rel="noopener noreferrer" className="hover:underline truncate max-w-[60%] pointer-events-auto">
                     {job.name}
                   </a>
-                  <span className="text-neutral-600 font-mono opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 px-1 rounded">
+                  <span className="text-neutral-600 font-mono opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 px-1 rounded pointer-events-auto">
                     Q: {formatDur(job.queueDurationInSeconds)} | R: {formatDur(job.durationInSeconds)}
                   </span>
                 </div>
@@ -211,6 +211,12 @@ function DashboardContent() {
   const [sortField, setSortField] = useState<SortField>(initialSortField);
   const [sortOrder, setSortOrder] = useState<SortOrder>(initialSortOrder);
 
+  // Time Zoom (Brush) State
+  const [zoomLeft, setZoomLeft] = useState<string | null>(null);
+  const [zoomRight, setZoomRight] = useState<string | null>(null);
+  const [refAreaLeft, setRefAreaLeft] = useState<string | null>(null);
+  const [refAreaRight, setRefAreaRight] = useState<string | null>(null);
+
   // Data fetching state
   const [loading, setLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -269,6 +275,12 @@ function DashboardContent() {
     
     router.replace(url, { scroll: false });
   }, [currentRepo, days, filterName, minDuration, maxDuration, sortField, sortOrder, pathname, router]);
+
+  // Reset zoom when global days or repo changes
+  useEffect(() => {
+    setZoomLeft(null);
+    setZoomRight(null);
+  }, [currentRepo, days]);
 
   // Fetch data when repo or days change
   useEffect(() => {
@@ -459,17 +471,82 @@ function DashboardContent() {
     }
   };
 
-  // Filtered and Sorted Runs
+  // Base Data for Chart (All loaded runs)
+  const baseChartData = useMemo(() => {
+    return [...runs].reverse().map(r => ({
+      name: format(new Date(r.created_at), 'MMM dd HH:mm'),
+      rawDate: r.created_at,
+      duration: Math.round(r.durationInSeconds / 60), // in minutes
+      success: r.conclusion === 'success' ? 1 : 0
+    }));
+  }, [runs]);
+
+  // Chart Zoom Handler
+  const zoom = () => {
+    if (refAreaLeft === refAreaRight || refAreaRight === null || refAreaLeft === null) {
+      setRefAreaLeft(null);
+      setRefAreaRight(null);
+      return;
+    }
+
+    // Determine left and right based on array index to handle dragging backwards
+    const idxLeft = baseChartData.findIndex(d => d.name === refAreaLeft);
+    const idxRight = baseChartData.findIndex(d => d.name === refAreaRight);
+    
+    if (idxLeft > idxRight) {
+      setZoomLeft(refAreaRight);
+      setZoomRight(refAreaLeft);
+    } else {
+      setZoomLeft(refAreaLeft);
+      setZoomRight(refAreaRight);
+    }
+
+    setRefAreaLeft(null);
+    setRefAreaRight(null);
+  };
+
+  const zoomOut = () => {
+    setZoomLeft(null);
+    setZoomRight(null);
+  };
+
+  // The actual data displayed on the chart based on zoom
+  const currentChartData = useMemo(() => {
+    if (zoomLeft && zoomRight) {
+      const idxLeft = baseChartData.findIndex(d => d.name === zoomLeft);
+      const idxRight = baseChartData.findIndex(d => d.name === zoomRight);
+      if (idxLeft !== -1 && idxRight !== -1) {
+        return baseChartData.slice(idxLeft, idxRight + 1);
+      }
+    }
+    return baseChartData;
+  }, [baseChartData, zoomLeft, zoomRight]);
+
+  // Filtered runs incorporating Chart Zoom time bounds + Search/Sort Filters
   const filteredAndSortedRuns = useMemo(() => {
     let result = [...runs];
 
-    // Filter by name
+    // 1. Time Zoom Filter (If user zoomed the chart, filter table & stats to that exact time span)
+    if (zoomLeft && zoomRight) {
+      const leftData = baseChartData.find(d => d.name === zoomLeft);
+      const rightData = baseChartData.find(d => d.name === zoomRight);
+      if (leftData && rightData) {
+        const leftDate = new Date(leftData.rawDate);
+        const rightDate = new Date(rightData.rawDate);
+        result = result.filter(r => {
+          const d = new Date(r.created_at);
+          return d >= leftDate && d <= rightDate;
+        });
+      }
+    }
+
+    // 2. Filter by name
     if (filterName) {
       const lowerQuery = filterName.toLowerCase();
       result = result.filter(r => r.name.toLowerCase().includes(lowerQuery) || r.head_branch.toLowerCase().includes(lowerQuery));
     }
 
-    // Filter by min duration
+    // 3. Filter by min duration
     if (minDuration) {
       const minSeconds = parseInt(minDuration) * 60;
       if (!isNaN(minSeconds)) {
@@ -477,7 +554,7 @@ function DashboardContent() {
       }
     }
 
-    // Filter by max duration
+    // 4. Filter by max duration
     if (maxDuration) {
       const maxSeconds = parseInt(maxDuration) * 60;
       if (!isNaN(maxSeconds)) {
@@ -485,7 +562,7 @@ function DashboardContent() {
       }
     }
 
-    // Sort
+    // 5. Sort
     if (sortOrder !== 'none') {
       result.sort((a, b) => {
         let comparison = 0;
@@ -501,20 +578,13 @@ function DashboardContent() {
     }
 
     return result;
-  }, [runs, filterName, minDuration, maxDuration, sortField, sortOrder]);
+  }, [runs, filterName, minDuration, maxDuration, sortField, sortOrder, zoomLeft, zoomRight, baseChartData]);
 
-  // Stats calculation (on all runs, not just filtered)
-  const totalRuns = runs.length;
-  const successfulRuns = runs.filter(r => r.conclusion === 'success').length;
+  // Stats calculation (based on Zoomed/Filtered runs!)
+  const totalRuns = filteredAndSortedRuns.length;
+  const successfulRuns = filteredAndSortedRuns.filter(r => r.conclusion === 'success').length;
   const successRate = totalRuns ? Math.round((successfulRuns / totalRuns) * 100) : 0;
-  const avgDuration = totalRuns ? Math.round(runs.reduce((acc, r) => acc + r.durationInSeconds, 0) / totalRuns) : 0;
-
-  // Chart data
-  const chartData = [...runs].reverse().map(r => ({
-    name: format(new Date(r.created_at), 'MMM dd HH:mm'),
-    duration: Math.round(r.durationInSeconds / 60), // in minutes
-    success: r.conclusion === 'success' ? 1 : 0
-  }));
+  const avgDuration = totalRuns ? Math.round(filteredAndSortedRuns.reduce((acc, r) => acc + r.durationInSeconds, 0) / totalRuns) : 0;
 
   const formatDuration = (seconds: number) => {
     if (seconds < 60) return `${Math.floor(seconds)}s`;
@@ -694,7 +764,7 @@ function DashboardContent() {
               key={d}
               onClick={() => setDays(d)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                days === d 
+                days === d && !zoomLeft // Highlighting only if no custom zoom is active
                 ? 'bg-blue-100 text-blue-700 border border-blue-200' 
                 : 'bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50'
               }`}
@@ -762,13 +832,29 @@ function DashboardContent() {
 
             {/* Charts */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-neutral-100">
-              <h2 className="text-lg font-bold mb-6 flex items-center gap-2">
-                <CalendarIcon className="w-5 h-5 text-neutral-400" /> 
-                Duration Trend (Minutes)
-              </h2>
-              <div className="h-72">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-lg font-bold flex items-center gap-2">
+                  <CalendarIcon className="w-5 h-5 text-neutral-400" /> 
+                  Duration Trend (Minutes)
+                  <span className="text-xs font-normal text-neutral-400 ml-2">(Drag to zoom)</span>
+                </h2>
+                {zoomLeft && (
+                  <button 
+                    onClick={zoomOut}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-md transition-colors"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Reset Zoom
+                  </button>
+                )}
+              </div>
+              <div className="h-72 select-none">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
+                  <LineChart 
+                    data={currentChartData}
+                    onMouseDown={(e) => e && setRefAreaLeft(e.activeLabel || null)}
+                    onMouseMove={(e) => refAreaLeft && e && setRefAreaRight(e.activeLabel || null)}
+                    onMouseUp={zoom}
+                  >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                     <XAxis dataKey="name" tick={{fontSize: 12, fill: '#888'}} tickLine={false} axisLine={false} minTickGap={30} />
                     <YAxis tick={{fontSize: 12, fill: '#888'}} tickLine={false} axisLine={false} />
@@ -776,7 +862,11 @@ function DashboardContent() {
                       contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                       cursor={{ stroke: '#f3f4f6', strokeWidth: 2 }}
                     />
-                    <Line type="monotone" dataKey="duration" stroke="#3b82f6" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
+                    <Line type="monotone" dataKey="duration" stroke="#3b82f6" strokeWidth={3} dot={false} activeDot={{ r: 6 }} animationDuration={300} />
+                    
+                    {refAreaLeft && refAreaRight ? (
+                      <ReferenceArea x1={refAreaLeft} x2={refAreaRight} strokeOpacity={0.3} fill="#3b82f6" fillOpacity={0.1} />
+                    ) : null}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
