@@ -146,7 +146,7 @@ function DashboardContent() {
         };
         
         if (githubToken) {
-          headers['Authorization'] = `token ${githubToken}`;
+          headers['Authorization'] = `Bearer ${githubToken}`;
         }
 
         while (page <= maxPages) {
@@ -265,7 +265,7 @@ function DashboardContent() {
       };
       
       if (githubToken) {
-        headers['Authorization'] = `token ${githubToken}`;
+        headers['Authorization'] = `Bearer ${githubToken}`;
       }
 
       const res = await fetch(`https://api.github.com/repos/${currentRepo}/actions/runs/${runId}/jobs`, { headers });
