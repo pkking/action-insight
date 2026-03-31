@@ -46,11 +46,11 @@ function JobDetailsView({ run }: { run: Run }) {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   if (run.jobsLoading) {
-    return <div className="p-8 flex justify-center"><Activity className="w-6 h-6 animate-spin text-blue-500" /></div>;
+    return <div className="p-8 flex justify-center"><Activity className="w-6 h-6 animate-spin text-blue-500 dark:text-blue-400" /></div>;
   }
   
   if (!run.jobs || run.jobs.length === 0) {
-    return <div className="p-8 text-neutral-500 text-center text-sm">No jobs found for this run.</div>;
+    return <div className="p-8 text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 text-center text-sm">No jobs found for this run.</div>;
   }
 
   const formatDur = (seconds: number) => {
@@ -82,21 +82,21 @@ function JobDetailsView({ run }: { run: Run }) {
   const totalMs = Math.max(1000, maxTime - minTime);
 
   return (
-    <div className="px-6 py-4 border-l-4 border-blue-500 bg-white/50">
+    <div className="px-6 py-4 border-l-4 border-blue-500 dark:border-blue-400 bg-white dark:bg-neutral-900 dark:bg-neutral-100/50">
       <div className="flex justify-between items-center mb-4">
-        <h4 className="text-sm font-bold text-neutral-700 flex items-center gap-2">
+        <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300 dark:text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 flex items-center gap-2">
           Job Execution Details
         </h4>
-        <div className="flex bg-neutral-100 p-1 rounded-lg">
+        <div className="flex bg-neutral-100 dark:bg-neutral-800 p-1 rounded-lg">
           <button 
             onClick={() => setViewMode('timeline')}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors ${viewMode === 'timeline' ? 'bg-white shadow-sm text-neutral-900' : 'text-neutral-500 hover:text-neutral-700'}`}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors ${viewMode === 'timeline' ? 'bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 shadow-sm text-neutral-900 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:text-neutral-300 dark:text-neutral-600 dark:text-neutral-400 dark:text-neutral-500'}`}
           >
             <AlignLeft className="w-3.5 h-3.5" /> Timeline
           </button>
           <button 
             onClick={() => setViewMode('table')}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors ${viewMode === 'table' ? 'bg-white shadow-sm text-neutral-900' : 'text-neutral-500 hover:text-neutral-700'}`}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors ${viewMode === 'table' ? 'bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 shadow-sm text-neutral-900 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:text-neutral-300 dark:text-neutral-600 dark:text-neutral-400 dark:text-neutral-500'}`}
           >
             <LayoutList className="w-3.5 h-3.5" /> Table
           </button>
@@ -105,7 +105,7 @@ function JobDetailsView({ run }: { run: Run }) {
 
       {viewMode === 'timeline' ? (
         <div className="space-y-3">
-          <div className="flex text-[10px] text-neutral-400 font-mono justify-between mb-2 px-2">
+          <div className="flex text-[10px] text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 font-mono justify-between mb-2 px-2">
             <span>0s</span>
             <span>{formatDur(totalMs / 1000)}</span>
           </div>
@@ -116,7 +116,7 @@ function JobDetailsView({ run }: { run: Run }) {
             const leftOffset = ((startMs - minTime) / totalMs) * 100;
             
             return (
-              <div key={job.id} className="relative h-8 bg-neutral-100 rounded-md overflow-hidden group flex items-center">
+              <div key={job.id} className="relative h-8 bg-neutral-100 dark:bg-neutral-800 rounded-md overflow-hidden group flex items-center">
                 <div 
                   className="absolute h-full bg-amber-200/50 border-y border-l border-amber-300/50" 
                   style={{ left: `${leftOffset}%`, width: `${Math.max(0.5, queueWidth)}%` }} 
@@ -127,54 +127,54 @@ function JobDetailsView({ run }: { run: Run }) {
                   style={{ left: `${leftOffset + queueWidth}%`, width: `${Math.max(0.5, runWidth)}%` }}
                   title={`Ran: ${formatDur(job.durationInSeconds)}`}
                 />
-                <div className="relative z-10 px-3 text-xs font-medium text-neutral-800 drop-shadow-sm flex justify-between w-full truncate pointer-events-none">
+                <div className="relative z-10 px-3 text-xs font-medium text-neutral-800 dark:text-neutral-200 drop-shadow-sm flex justify-between w-full truncate pointer-events-none">
                   <a href={job.html_url} target="_blank" rel="noopener noreferrer" className="hover:underline truncate max-w-[60%] pointer-events-auto">
                     {job.name}
                   </a>
-                  <span className="text-neutral-600 font-mono opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 px-1 rounded pointer-events-auto">
+                  <span className="text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 font-mono opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-neutral-900 dark:bg-neutral-100/80 px-1 rounded pointer-events-auto">
                     Q: {formatDur(job.queueDurationInSeconds)} | R: {formatDur(job.durationInSeconds)}
                   </span>
                 </div>
               </div>
             );
           })}
-          <div className="flex gap-4 mt-4 text-xs text-neutral-500 justify-end">
+          <div className="flex gap-4 mt-4 text-xs text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 justify-end">
             <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-amber-200/50 border border-amber-300/50 rounded-sm"></div> Queue Time</span>
             <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-green-500 rounded-sm"></div> Run Time (Success)</span>
             <span className="flex items-center gap-1.5"><div className="w-3 h-3 bg-red-500 rounded-sm"></div> Run Time (Failed)</span>
           </div>
         </div>
       ) : (
-        <div className="overflow-hidden border border-neutral-200 rounded-lg">
+        <div className="overflow-hidden border border-neutral-200 dark:border-neutral-700 rounded-lg">
           <table className="w-full text-left text-xs">
-            <thead className="bg-neutral-100 text-neutral-600">
+            <thead className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500">
               <tr>
-                <th className="px-4 py-2 cursor-pointer hover:bg-neutral-200 transition-colors" onClick={() => handleSort('name')}>
+                <th className="px-4 py-2 cursor-pointer hover:bg-neutral-200 dark:bg-neutral-700 transition-colors" onClick={() => handleSort('name')}>
                   <div className="flex items-center gap-1">Job Name {sortField === 'name' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}</div>
                 </th>
                 <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2 cursor-pointer hover:bg-neutral-200 transition-colors" onClick={() => handleSort('queue')}>
+                <th className="px-4 py-2 cursor-pointer hover:bg-neutral-200 dark:bg-neutral-700 transition-colors" onClick={() => handleSort('queue')}>
                   <div className="flex items-center gap-1">Queue Time {sortField === 'queue' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}</div>
                 </th>
-                <th className="px-4 py-2 cursor-pointer hover:bg-neutral-200 transition-colors" onClick={() => handleSort('duration')}>
+                <th className="px-4 py-2 cursor-pointer hover:bg-neutral-200 dark:bg-neutral-700 transition-colors" onClick={() => handleSort('duration')}>
                   <div className="flex items-center gap-1">Run Time {sortField === 'duration' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}</div>
                 </th>
                 <th className="px-4 py-2 text-right">Links</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100 bg-white">
+            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800 bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800">
               {sortedJobs.map(job => (
-                <tr key={job.id} className="hover:bg-neutral-50">
-                  <td className="px-4 py-2.5 font-medium text-neutral-800">{job.name}</td>
+                <tr key={job.id} className="hover:bg-neutral-50 dark:bg-neutral-950">
+                  <td className="px-4 py-2.5 font-medium text-neutral-800 dark:text-neutral-200">{job.name}</td>
                   <td className="px-4 py-2.5">
-                    {job.conclusion === 'success' ? <span className="text-green-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Success</span> :
-                     job.conclusion === 'skipped' ? <span className="text-neutral-500 flex items-center gap-1"><Info className="w-3 h-3" /> Skipped</span> :
-                     <span className="text-red-600 flex items-center gap-1"><XCircle className="w-3 h-3" /> {job.conclusion || 'Failed'}</span>}
+                    {job.conclusion === 'success' ? <span className="text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Success</span> :
+                     job.conclusion === 'skipped' ? <span className="text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 flex items-center gap-1"><Info className="w-3 h-3" /> Skipped</span> :
+                     <span className="text-red-600 dark:text-red-400 flex items-center gap-1"><XCircle className="w-3 h-3" /> {job.conclusion || 'Failed'}</span>}
                   </td>
-                  <td className="px-4 py-2.5 font-mono text-neutral-600">{formatDur(job.queueDurationInSeconds)}</td>
-                  <td className="px-4 py-2.5 font-mono text-neutral-600">{formatDur(job.durationInSeconds)}</td>
+                  <td className="px-4 py-2.5 font-mono text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500">{formatDur(job.queueDurationInSeconds)}</td>
+                  <td className="px-4 py-2.5 font-mono text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500">{formatDur(job.durationInSeconds)}</td>
                   <td className="px-4 py-2.5 text-right">
-                    <a href={job.html_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Logs</a>
+                    <a href={job.html_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">Logs</a>
                   </td>
                 </tr>
               ))}
@@ -593,11 +593,11 @@ function DashboardContent() {
 
   const getSortIcon = (field: SortField) => {
     if (sortField !== field || sortOrder === 'none') {
-      return <ArrowUpDown className="w-3 h-3 text-neutral-300" />;
+      return <ArrowUpDown className="w-3 h-3 text-neutral-300 dark:text-neutral-600 dark:text-neutral-400 dark:text-neutral-500" />;
     }
     return sortOrder === 'desc' 
-      ? <ArrowDown className="w-3 h-3 text-blue-500" />
-      : <ArrowUp className="w-3 h-3 text-blue-500" />;
+      ? <ArrowDown className="w-3 h-3 text-blue-500 dark:text-blue-400" />
+      : <ArrowUp className="w-3 h-3 text-blue-500 dark:text-blue-400" />;
   };
 
   const copyShareLink = () => {
@@ -606,12 +606,12 @@ function DashboardContent() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-50 p-4 md:p-8 font-sans text-neutral-900 flex flex-col">
+    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 p-4 md:p-8 font-sans text-neutral-900 dark:text-neutral-100 flex flex-col">
       {/* Top Progress Bar */}
       {loadingProgress > 0 && loadingProgress < 100 && (
-        <div className="fixed top-0 left-0 w-full h-1 bg-neutral-200 z-50">
+        <div className="fixed top-0 left-0 w-full h-1 bg-neutral-200 dark:bg-neutral-700 z-50">
           <div 
-            className="h-full bg-blue-600 transition-all duration-300 ease-out"
+            className="h-full bg-blue-600 dark:bg-blue-500 transition-all duration-300 ease-out"
             style={{ width: `${loadingProgress}%` }}
           />
         </div>
@@ -619,35 +619,35 @@ function DashboardContent() {
 
       <div className="max-w-6xl mx-auto space-y-6 flex-1 w-full">
         {/* Header */}
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-neutral-100">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 p-6 rounded-xl shadow-sm border border-neutral-100 dark:border-neutral-800">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Activity className="text-blue-500" />
+              <Activity className="text-blue-500 dark:text-blue-400" />
               Action Insight
             </h1>
-            <p className="text-neutral-500 text-sm">Monitor GitHub Actions CI/CD metrics</p>
+            <p className="text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 text-sm">Monitor GitHub Actions CI/CD metrics</p>
           </div>
           
           <div className="flex w-full md:w-auto gap-2">
             <form onSubmit={handleSearch} className="flex gap-2 flex-1">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 w-4 h-4" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 w-4 h-4" />
                 <input 
                   type="text" 
                   value={repoInput}
                   onChange={(e) => setRepoInput(e.target.value)}
                   placeholder="owner/repo"
-                  className="w-full pl-9 pr-4 py-2 bg-neutral-100 rounded-lg text-sm border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none"
+                  className="w-full pl-9 pr-4 py-2 bg-neutral-100 dark:bg-neutral-800 rounded-lg text-sm border-transparent focus:bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 focus:border-blue-500 dark:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all outline-none"
                 />
               </div>
-              <button type="submit" className="bg-neutral-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-neutral-800 transition-colors">
+              <button type="submit" className="bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 text-white dark:text-neutral-900 dark:text-neutral-100 px-4 py-2 rounded-lg text-sm font-medium hover:bg-neutral-800 dark:hover:bg-neutral-200 transition-colors">
                 Analyze
               </button>
             </form>
             <button 
               onClick={copyShareLink}
               title="Copy link to current view"
-              className="bg-neutral-100 text-neutral-600 p-2 rounded-lg hover:bg-neutral-200 transition-colors flex items-center justify-center"
+              className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 p-2 rounded-lg hover:bg-neutral-200 dark:bg-neutral-700 transition-colors flex items-center justify-center"
             >
               <Share2 className="w-5 h-5" />
             </button>
@@ -656,14 +656,14 @@ function DashboardContent() {
               target="_blank"
               rel="noopener noreferrer"
               title="Give Feedback / Report Bug"
-              className="bg-neutral-100 text-neutral-600 p-2 rounded-lg hover:bg-neutral-200 transition-colors flex items-center justify-center"
+              className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 p-2 rounded-lg hover:bg-neutral-200 dark:bg-neutral-700 transition-colors flex items-center justify-center"
             >
               <MessageSquare className="w-5 h-5" />
             </a>
             <button 
               onClick={() => setShowSettings(true)}
               title="Settings (GitHub Token)"
-              className="bg-neutral-100 text-neutral-600 p-2 rounded-lg hover:bg-neutral-200 transition-colors flex items-center justify-center relative"
+              className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 p-2 rounded-lg hover:bg-neutral-200 dark:bg-neutral-700 transition-colors flex items-center justify-center relative"
             >
               <Settings className="w-5 h-5" />
               {githubToken && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-green-500 rounded-full border border-white"></span>}
@@ -673,21 +673,21 @@ function DashboardContent() {
 
         {/* Settings Modal */}
         {showSettings && (
-          <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl border border-neutral-100 p-6 max-w-lg w-full">
+          <div className="fixed inset-0 bg-neutral-900 dark:bg-neutral-100/40 dark:bg-neutral-900 dark:bg-neutral-100/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 rounded-xl shadow-xl border border-neutral-100 dark:border-neutral-800 p-6 max-w-lg w-full">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-bold flex items-center gap-2">
-                  <Key className="w-5 h-5 text-neutral-500" />
+                  <Key className="w-5 h-5 text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500" />
                   GitHub API Token
                 </h2>
-                <button onClick={() => setShowSettings(false)} className="text-neutral-400 hover:text-neutral-900">
+                <button onClick={() => setShowSettings(false)} className="text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 hover:text-neutral-900 dark:text-neutral-100">
                   <XCircle className="w-6 h-6" />
                 </button>
               </div>
 
               <div className="space-y-4">
-                <div className="bg-blue-50 text-blue-800 p-4 rounded-lg border border-blue-100 flex gap-3 text-sm">
-                  <ShieldAlert className="w-5 h-5 shrink-0 text-blue-500 mt-0.5" />
+                <div className="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 p-4 rounded-lg border border-blue-100 dark:border-blue-800 flex gap-3 text-sm">
+                  <ShieldAlert className="w-5 h-5 shrink-0 text-blue-500 dark:text-blue-400 mt-0.5" />
                   <div>
                     <p className="font-semibold mb-1">100% Client-Side Security</p>
                     <p>
@@ -698,7 +698,7 @@ function DashboardContent() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 dark:text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 mb-1">
                     Fine-grained Personal Access Token
                   </label>
                   <div className="relative">
@@ -707,21 +707,21 @@ function DashboardContent() {
                       value={tempToken}
                       onChange={(e) => setTempToken(e.target.value)}
                       placeholder="github_pat_xxxxxxxxxxxxxxxxxxxxxx"
-                      className="w-full pl-4 pr-10 py-2 border border-neutral-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                      className="w-full pl-4 pr-10 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm focus:border-blue-500 dark:border-blue-400 focus:ring-1 focus:ring-blue-500 outline-none"
                     />
                     <button
                       type="button"
                       onClick={() => setShowToken(!showToken)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 focus:outline-none"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 focus:outline-none"
                     >
                       {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                   
-                  <div className="text-xs text-neutral-600 mt-3 space-y-2 bg-neutral-50 p-3 rounded-lg border border-neutral-100">
-                    <p className="font-semibold text-neutral-800">How to generate a token:</p>
+                  <div className="text-xs text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 mt-3 space-y-2 bg-neutral-50 dark:bg-neutral-950 p-3 rounded-lg border border-neutral-100 dark:border-neutral-800">
+                    <p className="font-semibold text-neutral-800 dark:text-neutral-200">How to generate a token:</p>
                     <ol className="list-decimal pl-4 space-y-1.5">
-                      <li>Go to <a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">GitHub Settings → Fine-grained PATs</a></li>
+                      <li>Go to <a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">GitHub Settings → Fine-grained PATs</a></li>
                       <li>Click <strong>Generate new token</strong></li>
                       <li>Under <strong>Repository access</strong>, select <strong>Public Repositories (read-only)</strong></li>
                       <li>Under <strong>Permissions</strong> → <strong>Repository permissions</strong>, select <strong>Actions: Read-only</strong></li>
@@ -730,24 +730,24 @@ function DashboardContent() {
                   </div>
                 </div>
 
-                <div className="flex gap-3 justify-end pt-4 border-t border-neutral-100">
+                <div className="flex gap-3 justify-end pt-4 border-t border-neutral-100 dark:border-neutral-800">
                   {githubToken && (
                     <button 
                       onClick={clearToken}
-                      className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2 mr-auto"
+                      className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-900/30 rounded-lg transition-colors flex items-center gap-2 mr-auto"
                     >
                       <Trash2 className="w-4 h-4" /> Remove Token
                     </button>
                   )}
                   <button 
                     onClick={() => setShowSettings(false)}
-                    className="px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 rounded-lg transition-colors"
+                    className="px-4 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 hover:bg-neutral-100 dark:bg-neutral-800 rounded-lg transition-colors"
                   >
                     Cancel
                   </button>
                   <button 
                     onClick={saveToken}
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                    className="px-4 py-2 text-sm font-medium text-white dark:text-neutral-900 dark:text-neutral-100 bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 dark:bg-blue-500 rounded-lg transition-colors"
                   >
                     Save Token
                   </button>
@@ -765,21 +765,21 @@ function DashboardContent() {
               onClick={() => setDays(d)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 days === d && !zoomLeft // Highlighting only if no custom zoom is active
-                ? 'bg-blue-100 text-blue-700 border border-blue-200' 
-                : 'bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50'
+                ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800' 
+                : 'bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:bg-neutral-950'
               }`}
             >
               Last {d} Days
             </button>
           ))}
           {hasMoreData && !loading && (
-            <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200 ml-auto">
+            <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 ml-auto">
               <Info className="w-4 h-4" />
               Showing latest {runs.length} runs. (GitHub API pagination limit reached for high-traffic repos)
             </div>
           )}
           {loading && runs.length > 0 && (
-            <div className="flex items-center gap-2 text-xs text-blue-600 ml-auto">
+            <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 ml-auto">
               <Activity className="w-4 h-4 animate-spin" />
               Loading older runs...
             </div>
@@ -787,61 +787,61 @@ function DashboardContent() {
         </div>
 
         {error ? (
-          <div className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-100">
+          <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 p-4 rounded-lg border border-red-100 dark:border-red-800">
             {error}
           </div>
         ) : loading && runs.length === 0 ? (
-          <div className="flex items-center justify-center h-64 text-neutral-400 flex-col gap-4">
-            <Activity className="w-8 h-8 animate-pulse text-blue-500" />
+          <div className="flex items-center justify-center h-64 text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 flex-col gap-4">
+            <Activity className="w-8 h-8 animate-pulse text-blue-500 dark:text-blue-400" />
             <p className="text-sm">Fetching runs (this may take a moment for larger timeframes)...</p>
           </div>
         ) : (
           <>
             {/* Stats Overview */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-neutral-100 flex items-center gap-4 transition-all duration-300">
-                <div className="p-3 bg-blue-50 text-blue-600 rounded-full">
+              <div className="bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 p-6 rounded-xl shadow-sm border border-neutral-100 dark:border-neutral-800 flex items-center gap-4 transition-all duration-300">
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">
                   <Activity className="w-6 h-6" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-neutral-500">Total Runs</p>
+                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500">Total Runs</p>
                   <p className="text-2xl font-bold">{totalRuns}</p>
                 </div>
               </div>
               
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-neutral-100 flex items-center gap-4 transition-all duration-300">
-                <div className={`p-3 rounded-full ${successRate >= 80 ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
+              <div className="bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 p-6 rounded-xl shadow-sm border border-neutral-100 dark:border-neutral-800 flex items-center gap-4 transition-all duration-300">
+                <div className={`p-3 rounded-full ${successRate >= 80 ? 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400'}`}>
                   {successRate >= 80 ? <CheckCircle className="w-6 h-6" /> : <XCircle className="w-6 h-6" />}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-neutral-500">Success Rate</p>
+                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500">Success Rate</p>
                   <p className="text-2xl font-bold">{successRate}%</p>
                 </div>
               </div>
 
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-neutral-100 flex items-center gap-4 transition-all duration-300">
-                <div className="p-3 bg-purple-50 text-purple-600 rounded-full">
+              <div className="bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 p-6 rounded-xl shadow-sm border border-neutral-100 dark:border-neutral-800 flex items-center gap-4 transition-all duration-300">
+                <div className="p-3 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-full">
                   <Clock className="w-6 h-6" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-neutral-500">Avg Duration</p>
+                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500">Avg Duration</p>
                   <p className="text-2xl font-bold">{formatDuration(avgDuration)}</p>
                 </div>
               </div>
             </div>
 
             {/* Charts */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-neutral-100">
+            <div className="bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 p-6 rounded-xl shadow-sm border border-neutral-100 dark:border-neutral-800">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-lg font-bold flex items-center gap-2">
-                  <CalendarIcon className="w-5 h-5 text-neutral-400" /> 
+                  <CalendarIcon className="w-5 h-5 text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500" /> 
                   Duration Trend (Minutes)
-                  <span className="text-xs font-normal text-neutral-400 ml-2">(Drag to zoom)</span>
+                  <span className="text-xs font-normal text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 ml-2">(Drag to zoom)</span>
                 </h2>
                 {zoomLeft && (
                   <button 
                     onClick={zoomOut}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-md transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 dark:text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 rounded-md transition-colors"
                   >
                     <RefreshCw className="w-3.5 h-3.5" /> Reset Zoom
                   </button>
@@ -855,7 +855,7 @@ function DashboardContent() {
                     onMouseMove={(e) => refAreaLeft && e && setRefAreaRight(e.activeLabel || null)}
                     onMouseUp={zoom}
                   >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-neutral-200, #e5e5e5)" className="dark:opacity-20" />
                     <XAxis dataKey="name" tick={{fontSize: 12, fill: '#888'}} tickLine={false} axisLine={false} minTickGap={30} />
                     <YAxis tick={{fontSize: 12, fill: '#888'}} tickLine={false} axisLine={false} />
                     <Tooltip 
@@ -873,13 +873,13 @@ function DashboardContent() {
             </div>
 
             {/* Detailed Runs with Filters */}
-            <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
-              <div className="p-6 border-b border-neutral-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 rounded-xl shadow-sm border border-neutral-100 dark:border-neutral-800 overflow-hidden">
+              <div className="p-6 border-b border-neutral-100 dark:border-neutral-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <h2 className="text-lg font-bold">Detailed Runs & Jobs</h2>
                 
                 <div className="flex flex-wrap gap-3 items-center text-sm">
-                  <div className="flex items-center gap-2 bg-neutral-50 px-3 py-1.5 rounded-lg border border-neutral-200">
-                    <Filter className="w-4 h-4 text-neutral-400" />
+                  <div className="flex items-center gap-2 bg-neutral-50 dark:bg-neutral-950 px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                    <Filter className="w-4 h-4 text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500" />
                     <input 
                       type="text"
                       placeholder="Filter by name..."
@@ -889,8 +889,8 @@ function DashboardContent() {
                     />
                   </div>
                   
-                  <div className="flex items-center gap-2 bg-neutral-50 px-3 py-1.5 rounded-lg border border-neutral-200">
-                    <Clock className="w-4 h-4 text-neutral-400" />
+                  <div className="flex items-center gap-2 bg-neutral-50 dark:bg-neutral-950 px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                    <Clock className="w-4 h-4 text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500" />
                     <input 
                       type="number"
                       placeholder="Min (m)"
@@ -898,7 +898,7 @@ function DashboardContent() {
                       onChange={e => setMinDuration(e.target.value)}
                       className="bg-transparent border-none outline-none w-16"
                     />
-                    <span className="text-neutral-300">-</span>
+                    <span className="text-neutral-300 dark:text-neutral-600 dark:text-neutral-400 dark:text-neutral-500">-</span>
                     <input 
                       type="number"
                       placeholder="Max (m)"
@@ -912,20 +912,20 @@ function DashboardContent() {
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-neutral-50 text-neutral-500 font-medium">
+                  <thead className="bg-neutral-50 dark:bg-neutral-950 text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 font-medium">
                     <tr>
-                      <th className="py-3 px-6 cursor-pointer hover:text-neutral-900 select-none group" onClick={() => handleSort('name')}>
+                      <th className="py-3 px-6 cursor-pointer hover:text-neutral-900 dark:text-neutral-100 select-none group" onClick={() => handleSort('name')}>
                         <div className="flex items-center gap-1">
                           Workflow / Branch {getSortIcon('name')}
                         </div>
                       </th>
                       <th className="py-3 px-6">Status</th>
-                      <th className="py-3 px-6 cursor-pointer hover:text-neutral-900 select-none group" onClick={() => handleSort('duration')}>
+                      <th className="py-3 px-6 cursor-pointer hover:text-neutral-900 dark:text-neutral-100 select-none group" onClick={() => handleSort('duration')}>
                         <div className="flex items-center gap-1">
                           Duration {getSortIcon('duration')}
                         </div>
                       </th>
-                      <th className="py-3 px-6 cursor-pointer hover:text-neutral-900 select-none group" onClick={() => handleSort('date')}>
+                      <th className="py-3 px-6 cursor-pointer hover:text-neutral-900 dark:text-neutral-100 select-none group" onClick={() => handleSort('date')}>
                         <div className="flex items-center gap-1">
                           Date {getSortIcon('date')}
                         </div>
@@ -933,35 +933,35 @@ function DashboardContent() {
                       <th className="py-3 px-6 text-right">Details</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-neutral-100">
+                  <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                     {filteredAndSortedRuns.map(run => (
                       <React.Fragment key={run.id}>
-                        <tr className="hover:bg-neutral-50/50 transition-colors">
+                        <tr className="hover:bg-neutral-50 dark:bg-neutral-950/50 transition-colors">
                           <td className="py-4 px-6">
-                            <div className="font-medium text-neutral-900">{run.name}</div>
-                            <div className="text-neutral-500 text-xs mt-1 font-mono">{run.head_branch}</div>
+                            <div className="font-medium text-neutral-900 dark:text-neutral-100">{run.name}</div>
+                            <div className="text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 text-xs mt-1 font-mono">{run.head_branch}</div>
                           </td>
                           <td className="py-4 px-6">
                             {run.conclusion === 'success' ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200/50">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200/50 dark:border-green-800/50">
                                 <CheckCircle className="w-3.5 h-3.5" /> Success
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200/50">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200/50 dark:border-red-800/50">
                                 <XCircle className="w-3.5 h-3.5" /> {run.conclusion || 'Failed'}
                               </span>
                             )}
                           </td>
-                          <td className="py-4 px-6 text-neutral-600 font-mono">
+                          <td className="py-4 px-6 text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 font-mono">
                             {formatDuration(run.durationInSeconds)}
                           </td>
-                          <td className="py-4 px-6 text-neutral-500">
+                          <td className="py-4 px-6 text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500">
                             {format(new Date(run.created_at), 'MMM dd, HH:mm')}
                           </td>
                           <td className="py-4 px-6 text-right">
                             <button 
                               onClick={() => fetchJobsForRun(run.id)}
-                              className="inline-flex items-center gap-1 text-neutral-600 hover:text-neutral-900 px-3 py-1.5 rounded-md hover:bg-neutral-100 transition-colors"
+                              className="inline-flex items-center gap-1 text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 hover:text-neutral-900 dark:text-neutral-100 px-3 py-1.5 rounded-md hover:bg-neutral-100 dark:bg-neutral-800 transition-colors"
                             >
                               {expandedRunId === run.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                               Jobs
@@ -970,7 +970,7 @@ function DashboardContent() {
                               href={run.html_url} 
                               target="_blank" 
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 ml-2 text-blue-600 hover:text-blue-700 p-1.5"
+                              className="inline-flex items-center gap-1 ml-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:text-blue-400 p-1.5"
                               title="View on GitHub"
                             >
                               <ExternalLink className="w-4 h-4" />
@@ -980,7 +980,7 @@ function DashboardContent() {
                         
                         {/* Expandable Jobs Section */}
                         {expandedRunId === run.id && (
-                          <tr className="bg-neutral-50/50">
+                          <tr className="bg-neutral-50 dark:bg-neutral-950/50">
                             <td colSpan={5} className="p-0">
                               <JobDetailsView run={run} />
                             </td>
@@ -990,7 +990,7 @@ function DashboardContent() {
                     ))}
                     {filteredAndSortedRuns.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="py-8 text-center text-neutral-500">
+                        <td colSpan={5} className="py-8 text-center text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500">
                           No matching runs found. Try adjusting your filters.
                         </td>
                       </tr>
@@ -1008,8 +1008,8 @@ function DashboardContent() {
 
 export default function Dashboard() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-      <Activity className="w-8 h-8 animate-pulse text-blue-500" />
+    <Suspense fallback={<div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center">
+      <Activity className="w-8 h-8 animate-pulse text-blue-500 dark:text-blue-400" />
     </div>}>
       <DashboardContent />
     </Suspense>
