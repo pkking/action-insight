@@ -7,7 +7,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, ReferenceArea
 } from 'recharts';
-import { format, subDays, isAfter } from 'date-fns';
+import { format, subDays, isAfter, isBefore, startOfDay, endOfDay, parseISO } from 'date-fns';
 
 type Job = {
   id: number;
@@ -194,6 +194,9 @@ function DashboardContent() {
   // Read initial state from URL parameters
   const initialRepo = searchParams.get('repo') || 'vercel/next.js';
   const initialDays = searchParams.get('days') ? parseInt(searchParams.get('days')!) : 7;
+  const initialStartDate = searchParams.get('startDate') || '';
+  const initialEndDate = searchParams.get('endDate') || '';
+  const initialUseCustomRange = searchParams.get('useCustomRange') === 'true';
   const initialSortField = (searchParams.get('sortField') as SortField) || 'date';
   const initialSortOrder = (searchParams.get('sortOrder') as SortOrder) || 'desc';
   const initialFilterName = searchParams.get('filterName') || '';
@@ -203,6 +206,9 @@ function DashboardContent() {
   const [repoInput, setRepoInput] = useState(initialRepo);
   const [currentRepo, setCurrentRepo] = useState(initialRepo);
   const [days, setDays] = useState(initialDays);
+  const [startDate, setStartDate] = useState(initialStartDate);
+  const [endDate, setEndDate] = useState(initialEndDate);
+  const [useCustomRange, setUseCustomRange] = useState(initialUseCustomRange);
   
   // Filters and Sorting
   const [filterName, setFilterName] = useState(initialFilterName);
@@ -263,7 +269,13 @@ function DashboardContent() {
     const params = new URLSearchParams();
     
     if (currentRepo !== 'vercel/next.js') params.set('repo', currentRepo);
-    if (days !== 7) params.set('days', days.toString());
+    if (useCustomRange) {
+      params.set('useCustomRange', 'true');
+      if (startDate) params.set('startDate', startDate);
+      if (endDate) params.set('endDate', endDate);
+    } else if (days !== 7) {
+      params.set('days', days.toString());
+    }
     if (filterName) params.set('filterName', filterName);
     if (minDuration) params.set('minDuration', minDuration);
     if (maxDuration) params.set('maxDuration', maxDuration);
@@ -274,7 +286,7 @@ function DashboardContent() {
     const url = query ? `${pathname}?${query}` : pathname;
     
     router.replace(url, { scroll: false });
-  }, [currentRepo, days, filterName, minDuration, maxDuration, sortField, sortOrder, pathname, router]);
+  }, [currentRepo, days, useCustomRange, startDate, endDate, filterName, minDuration, maxDuration, sortField, sortOrder, pathname, router]);
 
   // Reset zoom when global days or repo changes
   useEffect(() => {
@@ -296,7 +308,9 @@ function DashboardContent() {
       setRuns([]);
       
       try {
-        const cutoffDate = subDays(new Date(), days);
+        const isCustomValid = useCustomRange && startDate && endDate;
+        const cutoffDate = isCustomValid ? startOfDay(parseISO(startDate)) : subDays(new Date(), days);
+        const endCutoffDate = isCustomValid ? endOfDay(parseISO(endDate)) : new Date();
         const cacheKey = `action_insight_runs_${currentRepo}`;
         
         let allRuns: Record<string, unknown>[] = [];
@@ -316,7 +330,7 @@ function DashboardContent() {
               
               // Instantly show cached runs that fit the current days filter
               const validCachedRuns = cachedRuns
-                .filter((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => isAfter(new Date(r.created_at), cutoffDate))
+                .filter((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => isAfter(new Date(r.created_at), cutoffDate) && isBefore(new Date(r.created_at), endCutoffDate))
                 .map((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => ({
                   id: r.id,
                   name: r.name,
@@ -392,7 +406,7 @@ function DashboardContent() {
           allRuns.forEach((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => combinedRunsMap.set(r.id, r));
           
           const currentProcessedRuns = Array.from(combinedRunsMap.values())
-            .filter((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => isAfter(new Date(r.created_at), cutoffDate))
+            .filter((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => isAfter(new Date(r.created_at), cutoffDate) && isBefore(new Date(r.created_at), endCutoffDate))
             .map((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => ({
               id: r.id,
               name: r.name,
@@ -479,7 +493,7 @@ function DashboardContent() {
     return () => {
       isCancelled = true;
     };
-  }, [currentRepo, days, githubToken]);
+  }, [currentRepo, days, useCustomRange, startDate, endDate, githubToken]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -837,9 +851,9 @@ function DashboardContent() {
           {[7, 30, 90].map(d => (
             <button
               key={d}
-              onClick={() => setDays(d)}
+              onClick={() => { setUseCustomRange(false); setDays(d); }}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                days === d && !zoomLeft // Highlighting only if no custom zoom is active
+                days === d && !useCustomRange && !zoomLeft // Highlighting only if no custom zoom is active
                 ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800' 
                 : 'bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:bg-neutral-950'
               }`}
@@ -847,6 +861,35 @@ function DashboardContent() {
               Last {d} Days
             </button>
           ))}
+          <button
+            onClick={() => setUseCustomRange(true)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+              useCustomRange
+              ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800' 
+              : 'bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:bg-neutral-950'
+            }`}
+          >
+            <CalendarIcon className="w-4 h-4" />
+            Custom
+          </button>
+          
+          {useCustomRange && (
+            <div className="flex items-center gap-2 bg-white dark:bg-neutral-900 p-1 rounded-lg border border-neutral-200 dark:border-neutral-700">
+              <input 
+                type="date" 
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-transparent text-sm border-none focus:ring-0 text-neutral-700 dark:text-neutral-300 px-2 py-1 outline-none"
+              />
+              <span className="text-neutral-400">-</span>
+              <input 
+                type="date" 
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-transparent text-sm border-none focus:ring-0 text-neutral-700 dark:text-neutral-300 px-2 py-1 outline-none"
+              />
+            </div>
+          )}
           {hasMoreData && !loading && (
             <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 ml-auto">
               <Info className="w-4 h-4" />
