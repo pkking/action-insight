@@ -372,7 +372,11 @@ function DashboardContent() {
           
           setLoadingProgress(Math.round(((page - 1) / maxPages) * 100));
           
-          const res = await fetch(`https://api.github.com/repos/${currentRepo}/actions/runs?per_page=100&page=${page}`, { headers });
+          const createdParam = isCustomValid 
+            ? `created=${startDate}..${endDate}` 
+            : `created=%3E%3D${format(cutoffDate, 'yyyy-MM-dd')}`;
+          
+          const res = await fetch(`https://api.github.com/repos/${currentRepo}/actions/runs?per_page=100&page=${page}&${createdParam}`, { headers });
           
           if (!res.ok) {
             if (res.status === 403 || res.status === 401) {
@@ -436,11 +440,7 @@ function DashboardContent() {
             break;
           }
           
-          // Or if we have hit runs that are already in our cache (overlap found), we can stop
-          if (cachedRuns.length > 0 && !isAfter(oldestRunDate, lastCachedDate)) {
-            hitCutoff = true;
-            break;
-          }
+          // Removed broken cache overlap logic that stopped fetches prematurely.
           
           page++;
         }
