@@ -2,39 +2,16 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { Search, Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp, Share2, Info, Settings, ShieldAlert, Key, Trash2, MessageSquare, Eye, EyeOff, LayoutList, AlignLeft, RefreshCw } from 'lucide-react';
+import { Activity, CheckCircle, XCircle, Clock, Calendar as CalendarIcon, ExternalLink, ChevronDown, ChevronUp, Filter, ArrowUpDown, ArrowDown, ArrowUp, Share2, Info, MessageSquare, LayoutList, AlignLeft, RefreshCw } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, ReferenceArea
 } from 'recharts';
 import { format, subDays, isAfter, isBefore, startOfDay, endOfDay, parseISO } from 'date-fns';
+import { fetchRuns } from '@/lib/data-fetcher';
+import type { Run as BaseRun } from '@/lib/types';
 
-type Job = {
-  id: number;
-  name: string;
-  status: string;
-  conclusion: string;
-  created_at: string;
-  started_at: string;
-  completed_at: string;
-  html_url: string;
-  durationInSeconds: number;
-  queueDurationInSeconds: number;
-};
-
-type Run = {
-  id: number;
-  name: string;
-  head_branch: string;
-  status: string;
-  conclusion: string;
-  created_at: string;
-  updated_at: string;
-  html_url: string;
-  durationInSeconds: number;
-  jobs?: Job[];
-  jobsLoading?: boolean;
-};
+type Run = BaseRun & { jobsLoading?: boolean };
 
 type SortField = 'date' | 'duration' | 'name';
 type SortOrder = 'asc' | 'desc' | 'none';
@@ -192,7 +169,6 @@ function DashboardContent() {
   const searchParams = useSearchParams();
 
   // Read initial state from URL parameters
-  const initialRepo = searchParams.get('repo') || 'vercel/next.js';
   const initialDays = searchParams.get('days') ? parseInt(searchParams.get('days')!) : 7;
   const initialStartDate = searchParams.get('startDate') || '';
   const initialEndDate = searchParams.get('endDate') || '';
@@ -203,8 +179,6 @@ function DashboardContent() {
   const initialMinDuration = searchParams.get('minDuration') || '';
   const initialMaxDuration = searchParams.get('maxDuration') || '';
 
-  const [repoInput, setRepoInput] = useState(initialRepo);
-  const [currentRepo, setCurrentRepo] = useState(initialRepo);
   const [days, setDays] = useState(initialDays);
   const [startDate, setStartDate] = useState(initialStartDate);
   const [endDate, setEndDate] = useState(initialEndDate);
@@ -229,46 +203,62 @@ function DashboardContent() {
   const [error, setError] = useState('');
   const [runs, setRuns] = useState<Run[]>([]);
   const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
-  const [hasMoreData, setHasMoreData] = useState(false);
 
-  // Settings State
-  const [showSettings, setShowSettings] = useState(false);
-  const [githubToken, setGithubToken] = useState('');
-  const [tempToken, setTempToken] = useState('');
-  const [showToken, setShowToken] = useState(false);
-
-  // Load token from localStorage
+  // Fetch data from pre-collected JSON files
   useEffect(() => {
-    const savedToken = localStorage.getItem('action_insight_github_token');
-    if (savedToken) {
-      setGithubToken(savedToken);
-      setTempToken(savedToken);
-    }
-  }, []);
+    let isCancelled = false;
 
-  const saveToken = () => {
-    if (tempToken.trim()) {
-      localStorage.setItem('action_insight_github_token', tempToken.trim());
-      setGithubToken(tempToken.trim());
-    } else {
-      localStorage.removeItem('action_insight_github_token');
-      setGithubToken('');
-    }
-    setShowSettings(false);
-  };
-
-  const clearToken = () => {
-    localStorage.removeItem('action_insight_github_token');
-    setGithubToken('');
-    setTempToken('');
-    setShowSettings(false);
-  };
+    const fetchData = async () => {
+      setLoading(true);
+      setLoadingProgress(0);
+      setError('');
+      setRuns([]);
+      
+      try {
+        const runs = await fetchRuns(days);
+        
+        if (!isCancelled) {
+          const isCustomValid = useCustomRange && startDate && endDate;
+          const cutoffDate = isCustomValid ? startOfDay(parseISO(startDate)) : subDays(new Date(), days);
+          const endCutoffDate = isCustomValid ? endOfDay(parseISO(endDate)) : new Date();
+          
+          const filteredRuns = runs.filter(r => 
+            isAfter(new Date(r.created_at), cutoffDate) && 
+            isBefore(new Date(r.created_at), endCutoffDate)
+          );
+          
+          setRuns(filteredRuns);
+          setLoadingProgress(100);
+        }
+      } catch (err: unknown) {
+        if (!isCancelled) {
+          if (err instanceof Error) {
+            setError(err.message);
+          } else {
+            setError('Failed to load data. ETL may not have run yet.');
+          }
+        }
+      } finally {
+        if (!isCancelled) {
+          setLoading(false);
+          setTimeout(() => {
+            if (!isCancelled) setLoadingProgress(0);
+          }, 500);
+        }
+      }
+    };
+    
+    fetchData();
+    
+    return () => {
+      isCancelled = true;
+    };
+  }, [days, useCustomRange, startDate, endDate]);
 
   // Sync state changes back to URL
   useEffect(() => {
     const params = new URLSearchParams();
     
-    if (currentRepo !== 'vercel/next.js') params.set('repo', currentRepo);
     if (useCustomRange) {
       params.set('useCustomRange', 'true');
       if (startDate) params.set('startDate', startDate);
@@ -286,267 +276,15 @@ function DashboardContent() {
     const url = query ? `${pathname}?${query}` : pathname;
     
     router.replace(url, { scroll: false });
-  }, [currentRepo, days, useCustomRange, startDate, endDate, filterName, minDuration, maxDuration, sortField, sortOrder, pathname, router]);
+  }, [days, useCustomRange, startDate, endDate, filterName, minDuration, maxDuration, sortField, sortOrder, pathname, router]);
 
-  // Reset zoom when global days or repo changes
   useEffect(() => {
     setZoomLeft(null);
     setZoomRight(null);
-  }, [currentRepo, days]);
-
-  // Fetch data when repo or days change
-  useEffect(() => {
-    let isCancelled = false;
-
-    const fetchData = async () => {
-      setLoading(true);
-      setLoadingProgress(0);
-      setError('');
-      setHasMoreData(false);
-      
-      // Start with an empty list for fresh fetch
-      setRuns([]);
-      
-      try {
-        const isCustomValid = useCustomRange && startDate && endDate;
-        const cutoffDate = isCustomValid ? startOfDay(parseISO(startDate)) : subDays(new Date(), days);
-        const endCutoffDate = isCustomValid ? endOfDay(parseISO(endDate)) : new Date();
-        const cacheKey = `action_insight_runs_${currentRepo}`;
-        
-        let allRuns: Record<string, unknown>[] = [];
-        let cachedRuns: Record<string, unknown>[] = [];
-        let lastCachedDate = new Date(0);
-        
-        // 1. Try to load from cache first for instant UI response
-        try {
-          const cacheStr = localStorage.getItem(cacheKey);
-          if (cacheStr) {
-            const parsedCache = JSON.parse(cacheStr);
-            if (Array.isArray(parsedCache) && parsedCache.length > 0) {
-              cachedRuns = parsedCache;
-              // Sort to find the newest run date
-              cachedRuns.sort((a: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }, b: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-              lastCachedDate = new Date(cachedRuns[0].created_at);
-              
-              // Instantly show cached runs that fit the current days filter
-              const validCachedRuns = cachedRuns
-                .filter((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => isAfter(new Date(r.created_at), cutoffDate) && isBefore(new Date(r.created_at), endCutoffDate))
-                .map((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => ({
-                  id: r.id,
-                  name: r.name,
-                  head_branch: r.head_branch,
-                  status: r.status,
-                  conclusion: r.conclusion,
-                  created_at: r.created_at,
-                  updated_at: r.updated_at,
-                  html_url: r.html_url,
-                  durationInSeconds: (new Date(r.updated_at).getTime() - new Date(r.created_at).getTime()) / 1000
-                }))
-                .filter((r: Run) => r.status === 'completed');
-                
-              if (!isCancelled && validCachedRuns.length > 0) {
-                const uniqueRunsMap = new Map();
-                validCachedRuns.forEach((r: Run) => uniqueRunsMap.set(r.id, r));
-                setRuns(Array.from(uniqueRunsMap.values()));
-              }
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to read from cache:', e);
-        }
-
-        let page = 1;
-        const maxPages = 5; // Fetch up to 500 runs to avoid hitting rate limits instantly
-        let hitCutoff = false;
-
-        const headers: HeadersInit = {
-          'Accept': 'application/vnd.github.v3+json'
-        };
-        
-        if (githubToken) {
-          headers['Authorization'] = `Bearer ${githubToken}`;
-        }
-
-        while (page <= maxPages) {
-          if (isCancelled) break;
-          
-          setLoadingProgress(Math.round(((page - 1) / maxPages) * 100));
-          
-          const createdParam = isCustomValid 
-            ? `created=${startDate}..${endDate}` 
-            : `created=%3E%3D${format(cutoffDate, 'yyyy-MM-dd')}`;
-          
-          const res = await fetch(`https://api.github.com/repos/${currentRepo}/actions/runs?per_page=100&page=${page}&${createdParam}`, { headers });
-          
-          if (!res.ok) {
-            if (res.status === 403 || res.status === 401) {
-              const resetHeader = res.headers.get('x-ratelimit-reset');
-              const limit = res.headers.get('x-ratelimit-limit');
-              const resetTime = resetHeader ? format(new Date(parseInt(resetHeader) * 1000), 'HH:mm') : '';
-              const tokenMsg = githubToken 
-                ? "Your provided token is either invalid or exceeded its limit." 
-                : "You hit the unauthenticated GitHub API rate limit (60 requests/hr). Please add a Personal Access Token in Settings to get 5,000 requests/hr.";
-              throw new Error(`API Rate Limit Exceeded or Unauthorized (Limit: ${limit || 'unknown'}). ${tokenMsg} ${resetTime ? `Resets at ${resetTime}.` : ''}`);
-            }
-            if (res.status === 404) {
-              throw new Error(`Repository not found. Check if "${currentRepo}" exists and is public.`);
-            }
-            throw new Error(`GitHub API Error: ${res.statusText}`);
-          }
-          
-          const data = await res.json();
-          
-          if (!data.workflow_runs || data.workflow_runs.length === 0) break;
-          
-          allRuns = [...allRuns, ...data.workflow_runs];
-          
-          // Incrementally process and show runs so user doesn't stare at a blank screen
-          // Combine new fetched runs with cached runs
-          const combinedRunsMap = new Map();
-          
-          // First add cached runs
-          cachedRuns.forEach((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => combinedRunsMap.set(r.id, r));
-          // Then overwrite with freshly fetched runs
-          allRuns.forEach((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => combinedRunsMap.set(r.id, r));
-          
-          const currentProcessedRuns = Array.from(combinedRunsMap.values())
-            .filter((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => isAfter(new Date(r.created_at), cutoffDate) && isBefore(new Date(r.created_at), endCutoffDate))
-            .map((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => ({
-              id: r.id,
-              name: r.name,
-              head_branch: r.head_branch,
-              status: r.status,
-              conclusion: r.conclusion,
-              created_at: r.created_at,
-              updated_at: r.updated_at,
-              html_url: r.html_url,
-              durationInSeconds: (new Date(r.updated_at).getTime() - new Date(r.created_at).getTime()) / 1000
-            }))
-            .filter((r: Run) => r.status === 'completed');
-            
-          const uniqueRunsMap = new Map();
-          currentProcessedRuns.forEach((r: Run) => uniqueRunsMap.set(r.id, r));
-          
-          if (!isCancelled) {
-            setRuns(Array.from(uniqueRunsMap.values()));
-          }
-          
-          // Check if the oldest run in this page is older than our cutoff date OR older than our newest cached run
-          const oldestRunDate = new Date(data.workflow_runs[data.workflow_runs.length - 1].created_at);
-          
-          // If we have hit runs that are older than our cutoff, we can stop
-          if (!isAfter(oldestRunDate, cutoffDate)) {
-            hitCutoff = true;
-            break;
-          }
-          
-          // Removed broken cache overlap logic that stopped fetches prematurely.
-          
-          page++;
-        }
-        
-        // Save the combined unique runs back to cache (limit to 500 to prevent localStorage quota exceeded)
-        try {
-          const combinedRunsMap = new Map();
-          cachedRuns.forEach((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => combinedRunsMap.set(r.id, r));
-          allRuns.forEach((r: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => combinedRunsMap.set(r.id, r));
-          
-          const sortedToSave = Array.from(combinedRunsMap.values())
-            .sort((a: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }, b: { id: number; name: string; head_branch: string; status: string; conclusion: string; created_at: string; updated_at: string; html_url: string; }) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-            .slice(0, 500);
-            
-          localStorage.setItem(cacheKey, JSON.stringify(sortedToSave));
-        } catch (e) {
-          console.warn('Failed to save to cache:', e);
-        }
-        
-        // If we fetched max pages and still haven't hit the cutoff date (and didn't overlap cache), flag that there's more data
-        if (!hitCutoff && page > maxPages && !isCancelled) {
-          setHasMoreData(true);
-        }
-        
-        if (!isCancelled) {
-          setLoadingProgress(100);
-        }
-        
-      } catch (err: unknown) {
-        if (!isCancelled) {
-          if (err instanceof Error) {
-            setError(err.message);
-          } else {
-            setError('An unknown error occurred');
-          }
-        }
-      } finally {
-        if (!isCancelled) {
-          setLoading(false);
-          // Only reset progress after a tiny delay so the full bar is visible briefly
-          setTimeout(() => {
-            if (!isCancelled) setLoadingProgress(0);
-          }, 500);
-        }
-      }
-    };
-    
-    fetchData();
-    
-    return () => {
-      isCancelled = true;
-    };
-  }, [currentRepo, days, useCustomRange, startDate, endDate, githubToken]);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (repoInput.trim()) setCurrentRepo(repoInput.trim());
-  };
+  }, [days]);
 
   const fetchJobsForRun = async (runId: number) => {
-    if (runs.find(r => r.id === runId)?.jobs) {
-      setExpandedRunId(expandedRunId === runId ? null : runId);
-      return;
-    }
-
-    setRuns(prev => prev.map(r => r.id === runId ? { ...r, jobsLoading: true } : r));
-    setExpandedRunId(runId);
-
-    try {
-      const headers: HeadersInit = {
-        'Accept': 'application/vnd.github.v3+json'
-      };
-      
-      if (githubToken) {
-        headers['Authorization'] = `Bearer ${githubToken}`;
-      }
-
-      const res = await fetch(`https://api.github.com/repos/${currentRepo}/actions/runs/${runId}/jobs`, { headers });
-      
-      if (!res.ok) throw new Error('Failed to fetch jobs (Rate limit or unauthorized)');
-      const data = await res.json();
-      
-      const jobs = data.jobs.map((j: { id: number; name: string; status: string; conclusion: string; created_at: string; started_at: string; completed_at: string; html_url: string; }) => {
-        const createdMs = j.created_at ? new Date(j.created_at).getTime() : 0;
-        const startedMs = j.started_at ? new Date(j.started_at).getTime() : createdMs;
-        const completedMs = j.completed_at ? new Date(j.completed_at).getTime() : startedMs;
-        
-        return {
-          id: j.id,
-          name: j.name,
-          status: j.status,
-          conclusion: j.conclusion,
-          created_at: j.created_at,
-          started_at: j.started_at,
-          completed_at: j.completed_at,
-          html_url: j.html_url,
-          queueDurationInSeconds: Math.max(0, (startedMs - createdMs) / 1000),
-          durationInSeconds: Math.max(0, (completedMs - startedMs) / 1000)
-        };
-      });
-
-      setRuns(prev => prev.map(r => r.id === runId ? { ...r, jobs, jobsLoading: false } : r));
-    } catch (err) {
-      console.error(err);
-      setRuns(prev => prev.map(r => r.id === runId ? { ...r, jobsLoading: false } : r));
-    }
+    setExpandedRunId(expandedRunId === runId ? null : runId);
   };
 
   const handleSort = (field: SortField) => {
@@ -718,21 +456,6 @@ function DashboardContent() {
           </div>
           
           <div className="flex w-full md:w-auto gap-2">
-            <form onSubmit={handleSearch} className="flex gap-2 flex-1">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 w-4 h-4" />
-                <input 
-                  type="text" 
-                  value={repoInput}
-                  onChange={(e) => setRepoInput(e.target.value)}
-                  placeholder="owner/repo"
-                  className="w-full pl-9 pr-4 py-2 bg-neutral-100 dark:bg-neutral-800 rounded-lg text-sm border-transparent focus:bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 focus:border-blue-500 dark:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all outline-none"
-                />
-              </div>
-              <button type="submit" className="bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 text-white dark:text-neutral-900 dark:text-neutral-100 px-4 py-2 rounded-lg text-sm font-medium hover:bg-neutral-800 dark:hover:bg-neutral-200 transition-colors">
-                Analyze
-              </button>
-            </form>
             <button 
               onClick={copyShareLink}
               title="Copy link to current view"
@@ -749,102 +472,8 @@ function DashboardContent() {
             >
               <MessageSquare className="w-5 h-5" />
             </a>
-            <button 
-              onClick={() => setShowSettings(true)}
-              title="Settings (GitHub Token)"
-              className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 p-2 rounded-lg hover:bg-neutral-200 dark:bg-neutral-700 transition-colors flex items-center justify-center relative"
-            >
-              <Settings className="w-5 h-5" />
-              {githubToken && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-green-500 rounded-full border border-white"></span>}
-            </button>
           </div>
         </header>
-
-        {/* Settings Modal */}
-        {showSettings && (
-          <div className="fixed inset-0 bg-neutral-900 dark:bg-neutral-100/40 dark:bg-neutral-900 dark:bg-neutral-100/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 rounded-xl shadow-xl border border-neutral-100 dark:border-neutral-800 p-6 max-w-lg w-full">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-bold flex items-center gap-2">
-                  <Key className="w-5 h-5 text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500" />
-                  GitHub API Token
-                </h2>
-                <button onClick={() => setShowSettings(false)} className="text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 hover:text-neutral-900 dark:text-neutral-100">
-                  <XCircle className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div className="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 p-4 rounded-lg border border-blue-100 dark:border-blue-800 flex gap-3 text-sm">
-                  <ShieldAlert className="w-5 h-5 shrink-0 text-blue-500 dark:text-blue-400 mt-0.5" />
-                  <div>
-                    <p className="font-semibold mb-1">100% Client-Side Security</p>
-                    <p>
-                      Your token is saved <strong>only in your browser&apos;s localStorage</strong>. It is never sent to any server other than directly to <code>api.github.com</code>. 
-                      Providing a token boosts your API rate limit from 60 to 5,000 requests per hour.
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 dark:text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 mb-1">
-                    Fine-grained Personal Access Token
-                  </label>
-                  <div className="relative">
-                    <input 
-                      type={showToken ? "text" : "password"}
-                      value={tempToken}
-                      onChange={(e) => setTempToken(e.target.value)}
-                      placeholder="github_pat_xxxxxxxxxxxxxxxxxxxxxx"
-                      className="w-full pl-4 pr-10 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm focus:border-blue-500 dark:border-blue-400 focus:ring-1 focus:ring-blue-500 outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowToken(!showToken)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 focus:outline-none"
-                    >
-                      {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  
-                  <div className="text-xs text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 mt-3 space-y-2 bg-neutral-50 dark:bg-neutral-950 p-3 rounded-lg border border-neutral-100 dark:border-neutral-800">
-                    <p className="font-semibold text-neutral-800 dark:text-neutral-200">How to generate a token:</p>
-                    <ol className="list-decimal pl-4 space-y-1.5">
-                      <li>Go to <a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">GitHub Settings → Fine-grained PATs</a></li>
-                      <li>Click <strong>Generate new token</strong></li>
-                      <li>Under <strong>Repository access</strong>, select <strong>Public Repositories (read-only)</strong></li>
-                      <li>Under <strong>Permissions</strong> → <strong>Repository permissions</strong>, select <strong>Actions: Read-only</strong></li>
-                      <li>Generate token and paste it above</li>
-                    </ol>
-                  </div>
-                </div>
-
-                <div className="flex gap-3 justify-end pt-4 border-t border-neutral-100 dark:border-neutral-800">
-                  {githubToken && (
-                    <button 
-                      onClick={clearToken}
-                      className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-900/30 rounded-lg transition-colors flex items-center gap-2 mr-auto"
-                    >
-                      <Trash2 className="w-4 h-4" /> Remove Token
-                    </button>
-                  )}
-                  <button 
-                    onClick={() => setShowSettings(false)}
-                    className="px-4 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 hover:bg-neutral-100 dark:bg-neutral-800 rounded-lg transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    onClick={saveToken}
-                    className="px-4 py-2 text-sm font-medium text-white dark:text-neutral-900 dark:text-neutral-100 bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 dark:bg-blue-500 rounded-lg transition-colors"
-                  >
-                    Save Token
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Controls */}
         <div className="flex gap-2 items-center flex-wrap">
@@ -888,12 +517,6 @@ function DashboardContent() {
                 onChange={(e) => setEndDate(e.target.value)}
                 className="bg-transparent text-sm border-none focus:ring-0 text-neutral-700 dark:text-neutral-300 px-2 py-1 outline-none"
               />
-            </div>
-          )}
-          {hasMoreData && !loading && (
-            <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 ml-auto">
-              <Info className="w-4 h-4" />
-              Showing latest {runs.length} runs. (GitHub API pagination limit reached for high-traffic repos)
             </div>
           )}
           {loading && runs.length > 0 && (
@@ -969,8 +592,8 @@ function DashboardContent() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart 
                     data={currentChartData}
-                    onMouseDown={(e) => e && setRefAreaLeft(e.activeLabel || null)}
-                    onMouseMove={(e) => refAreaLeft && e && setRefAreaRight(e.activeLabel || null)}
+                    onMouseDown={(e) => e && setRefAreaLeft(String(e.activeLabel) || null)}
+                    onMouseMove={(e) => refAreaLeft && e && setRefAreaRight(String(e.activeLabel) || null)}
                     onMouseUp={zoom}
                   >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-neutral-200, #e5e5e5)" className="dark:opacity-20" />
