@@ -135,7 +135,9 @@ jobs:
           ref: data
           fetch-depth: 0
       - uses: actions/setup-node@v4
-      - run: npm install
+        with:
+          node-version: 20
+      - run: npm install tsx
       - run: npx tsx etl/scripts/collect.ts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -148,6 +150,10 @@ jobs:
           git diff --staged --quiet || git commit -m "data: update $(date -u +%Y-%m-%d)"
           git push origin data
 ```
+
+**注意**：ETL 代码（`.github/workflows/` + `scripts/`）存放在 `data` 分支上，与数据文件共存。GitHub Actions 会从 `data` 分支触发并运行 workflow。`tsx` 通过 `npm install tsx` 临时安装，无需 `package.json`。
+
+**注意**：ETL 代码（`.github/workflows/` + `scripts/`）存放在 `data` 分支上，与数据文件共存。GitHub Actions 会从 `data` 分支触发并运行 workflow。`tsx` 通过 `npm install tsx` 临时安装，无需 `package.json`。
 
 ### 4.2 ETL 脚本逻辑 (`etl/scripts/collect.ts`)
 
@@ -175,15 +181,23 @@ jobs:
 `src/lib/data-fetcher.ts`:
 
 ```typescript
+const OWNER = 'pkking';
+const REPO = 'action-insight';
 const DATA_BRANCH = 'data';
 const RAW_BASE = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${DATA_BRANCH}`;
 
 async function fetchIndex(): Promise<Index>;
-async function fetchDay(repo: string, date: string): Promise<DayData>;
-export async function fetchRuns(repo: string, days: number): Promise<Run[]>;
+async function fetchDay(date: string): Promise<DayData>;
+export async function fetchRuns(days: number): Promise<Run[]>;
 ```
 
-### 5.2 `src/app/page.tsx` 改造
+**注意**：前端仓库是 `action-insight`，数据也存储在同一个仓库的 `data` 分支。`OWNER` 和 `REPO` 硬编码或通过环境变量注入。
+
+### 5.2 CORS 处理
+
+GitHub Raw URL (`raw.githubusercontent.com`) 默认返回正确的 CORS headers，浏览器 `fetch()` 可直接访问。无需额外配置。
+
+### 5.3 `src/app/page.tsx` 改造
 
 **删除**：
 - 所有 `fetch('https://api.github.com/...')` 调用
@@ -201,7 +215,7 @@ export async function fetchRuns(repo: string, days: number): Promise<Run[]>;
 - `useEffect` 中的数据获取改为调用 `fetchRuns()`
 - 数据类型从 Record<string, unknown> 改为强类型 Run[]
 
-### 5.3 数据读取策略
+### 5.4 数据读取策略
 
 ```
 页面加载 → fetchIndex() → 确定可用日期范围
@@ -228,7 +242,57 @@ export async function fetchRuns(repo: string, days: number): Promise<Run[]>;
 3. **Phase 3**: 前端改造，切换到 data 分支数据源
 4. **Phase 4**: 验证功能，删除旧的 GitHub API 调用代码
 
-## 8. Open Questions
+## 8. TypeScript Type Definitions
+
+Shared types used by both ETL and Frontend:
+
+```typescript
+interface Index {
+  version: number;
+  repos: Record<string, RepoIndex>;
+  last_updated: string;
+}
+
+interface RepoIndex {
+  latest: string;
+  files: string[];
+  retention_days: number;
+}
+
+interface DayData {
+  date: string;
+  repo: string;
+  runs: Run[];
+}
+
+interface Run {
+  id: number;
+  name: string;
+  head_branch: string;
+  status: string;
+  conclusion: string;
+  created_at: string;
+  updated_at: string;
+  html_url: string;
+  durationInSeconds: number;
+  jobs?: Job[];
+}
+
+interface Job {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string;
+  created_at: string;
+  started_at: string;
+  completed_at: string;
+  html_url: string;
+  queueDurationInSeconds: number;
+  durationInSeconds: number;
+}
+```
+
+## 9. Open Questions
 
 - [ ] 是否需要支持多 repo 同时展示？（当前设计支持，但 UI 可能需要调整）
 - [ ] 数据更新频率是否需要可配置？（当前固定 6 小时）
