@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Action Insight
+
+Monitor GitHub Actions CI/CD metrics with a clean, interactive dashboard.
+
+## Architecture
+
+This project uses a **split architecture**:
+
+- **`main` branch** — Next.js frontend deployed to Vercel, reads pre-collected data from the `data` branch via GitHub Raw URLs
+- **`data` branch** — ETL pipeline (GitHub Actions cron) that collects GitHub Actions runs/jobs data and writes daily JSON files
+
+```
+┌─────────────────────┐         ┌─────────────────────┐
+│  main branch        │         │  data branch         │
+│  (Vercel)           │◄────────│  (GitHub Actions)    │
+│  Next.js Dashboard  │  Raw    │  ETL Pipeline        │
+│  Read-only          │  JSON   │  Writes daily JSON   │
+└─────────────────────┘         └─────────────────────┘
+```
 
 ## Getting Started
 
-First, run the development server:
+### Frontend (main branch)
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+> **Note**: The frontend reads data from the `data` branch. If no data has been collected yet, you'll see an error. Run the ETL pipeline first or manually trigger the workflow.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### ETL Pipeline (data branch)
 
-## Learn More
+The ETL pipeline runs automatically every 6 hours via GitHub Actions. To trigger manually:
 
-To learn more about Next.js, take a look at the following resources:
+1. Go to **Actions** → **Collect CI Data**
+2. Click **Run workflow**
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+To run locally:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+cd etl
+npm install tsx octokit date-fns
+GITHUB_TOKEN=your_token TARGET_REPOS="owner/repo" RETENTION_DAYS=90 npx tsx scripts/collect.ts
+```
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Deploy the `main` branch to Vercel:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Connect your repository to [Vercel](https://vercel.com/new)
+2. Set the deploy branch to `main`
+3. Deploy
+
+## Data Format
+
+Data is stored as daily JSON files in the `data/` directory on the `data` branch:
+
+```
+data/
+├── index.json          # Index of available dates per repo
+├── 2024-01-16.json     # Daily runs + jobs data
+└── 2024-01-15.json
+```
