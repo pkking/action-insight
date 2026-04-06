@@ -3,7 +3,7 @@ import type { Index, DayData, Run } from './types';
 
 const OWNER = 'pkking';
 const REPO = 'action-insight';
-const DATA_BRANCH = 'data';
+const DATA_BRANCH = 'main';
 const RAW_BASE = process.env.NODE_ENV === 'development' ? '' : `https://raw.githubusercontent.com/${OWNER}/${REPO}/${DATA_BRANCH}`;
 
 export async function fetchIndex(owner: string, repo: string): Promise<Index> {
