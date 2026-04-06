@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install tsx octokit date-fns js-yaml
+      - run: npm install tsx @octokit/core date-fns js-yaml
       - run: npx tsx etl/scripts/collect.ts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,5 +1,5 @@
 // ETL script: fetches GitHub Actions runs/jobs and writes daily JSON files
-import { Octokit } from 'octokit';
+import { Octokit } from '@octokit/core';
 import { format, subDays, parseISO, isBefore } from 'date-fns';
 import * as fs from 'fs';
 import * as path from 'path';
