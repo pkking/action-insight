@@ -215,7 +215,7 @@ function DashboardContent() {
       setRuns([]);
       
       try {
-        const runs = await fetchRuns(days);
+        const runs = await fetchRuns('vllm-project', 'vllm-ascend', days);
         
         if (!isCancelled) {
           const isCustomValid = useCustomRange && startDate && endDate;

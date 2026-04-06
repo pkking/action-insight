@@ -33,7 +33,9 @@ interface Job {
 
 interface Index {
   version: number;
-  repos: Record<string, { latest: string; files: string[]; retention_days: number }>;
+  latest: string;
+  files: string[];
+  retention_days: number;
   last_updated: string;
 }
 
@@ -49,19 +51,43 @@ interface ReposConfig {
 
 const ETL_DIR = path.join(__dirname, '..');
 const DATA_DIR = path.join(__dirname, '../../data');
-const INDEX_PATH = path.join(DATA_DIR, 'index.json');
 const REPOS_CONFIG_PATH = path.join(ETL_DIR, 'repos.yaml');
 
-function readIndex(): Index {
+function getRepoDir(repo: string): string {
+  const [owner, name] = repo.split('/');
+  return path.join(DATA_DIR, owner, name);
+}
+
+function getIndexPath(repo: string): string {
+  return path.join(getRepoDir(repo), 'index.json');
+}
+
+function readIndex(repo: string): Index {
+  const indexPath = getIndexPath(repo);
   try {
-    return JSON.parse(fs.readFileSync(INDEX_PATH, 'utf-8'));
+    const content = fs.readFileSync(indexPath, 'utf-8');
+    const data = JSON.parse(content);
+    if (data.repos && data.repos[repo]) {
+      return {
+        version: 1,
+        latest: data.repos[repo].latest,
+        files: data.repos[repo].files,
+        retention_days: data.repos[repo].retention_days,
+        last_updated: data.last_updated
+      };
+    }
+    return data;
   } catch {
-    return { version: 1, repos: {}, last_updated: '' };
+    return { version: 1, latest: '', files: [], retention_days: 90, last_updated: '' };
   }
 }
 
-function writeIndex(index: Index) {
-  fs.writeFileSync(INDEX_PATH, JSON.stringify(index, null, 2));
+function writeIndex(repo: string, index: any) {
+  const repoDir = getRepoDir(repo);
+  if (!fs.existsSync(repoDir)) {
+    fs.mkdirSync(repoDir, { recursive: true });
+  }
+  fs.writeFileSync(getIndexPath(repo), JSON.stringify(index, null, 2));
 }
 
 function readReposConfig(): string[] {
@@ -75,17 +101,21 @@ function readReposConfig(): string[] {
   }
 }
 
-function readDayData(date: string): DayData {
-  const filePath = path.join(DATA_DIR, `${date}.json`);
+function readDayData(repo: string, date: string): DayData {
+  const filePath = path.join(getRepoDir(repo), `${date}.json`);
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
   } catch {
-    return { date, repo: '', runs: [] };
+    return { date, repo, runs: [] };
   }
 }
 
-function writeDayData(data: DayData) {
-  const filePath = path.join(DATA_DIR, `${data.date}.json`);
+function writeDayData(repo: string, data: DayData) {
+  const repoDir = getRepoDir(repo);
+  if (!fs.existsSync(repoDir)) {
+    fs.mkdirSync(repoDir, { recursive: true });
+  }
+  const filePath = path.join(repoDir, `${data.date}.json`);
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
@@ -101,7 +131,6 @@ async function main() {
   }
 
   const octokit = new Octokit({ auth: token });
-  const index = readIndex();
 
   for (const repo of targetRepos) {
     console.log(`Processing ${repo}...`);
@@ -111,9 +140,9 @@ async function main() {
       continue;
     }
 
-    const repoIndex = index.repos[repo];
-    const lastUpdated = repoIndex?.latest 
-      ? parseISO(repoIndex.latest)
+    const index = readIndex(repo);
+    const lastUpdated = index.latest 
+      ? parseISO(index.latest)
       : subDays(new Date(), retentionDays);
 
     const createdParam = `created:>=${format(lastUpdated, 'yyyy-MM-dd')}`;
@@ -185,15 +214,15 @@ async function main() {
     }
 
     const dates = Object.keys(runsByDate).sort().reverse();
-    const files = index.repos[repo]?.files || [];
+    const files = index.files || [];
 
     for (const date of dates) {
       console.log(`  Writing ${date}.json (${runsByDate[date].length} runs)`);
-      const existing = readDayData(date);
+      const existing = readDayData(repo, date);
       const runMap = new Map(existing.runs.map(r => [r.id, r]));
       for (const run of runsByDate[date]) runMap.set(run.id, run);
       
-      writeDayData({ date, repo, runs: Array.from(runMap.values()) });
+      writeDayData(repo, { date, repo, runs: Array.from(runMap.values()) });
       
       if (!files.includes(`${date}.json`)) {
         files.push(`${date}.json`);
@@ -202,12 +231,13 @@ async function main() {
 
     files.sort().reverse();
 
-    index.repos[repo] = {
-      latest: dates[0] || repoIndex?.latest || '',
+    const updatedIndex: Index = {
+      version: 1,
+      latest: dates[0] || index.latest || '',
       files,
       retention_days: retentionDays,
+      last_updated: new Date().toISOString()
     };
-    index.last_updated = new Date().toISOString();
 
     const cutoffDate = subDays(new Date(), retentionDays);
     const filesToRemove = files.filter(f => {
@@ -216,17 +246,17 @@ async function main() {
     });
 
     for (const file of filesToRemove) {
-      const filePath = path.join(DATA_DIR, file);
+      const filePath = path.join(getRepoDir(repo), file);
       if (fs.existsSync(filePath)) {
         console.log(`  Removing old file: ${file}`);
         fs.unlinkSync(filePath);
       }
-      const idx = index.repos[repo].files.indexOf(file);
-      if (idx > -1) index.repos[repo].files.splice(idx, 1);
+      const idx = updatedIndex.files.indexOf(file);
+      if (idx > -1) updatedIndex.files.splice(idx, 1);
     }
-  }
 
-  writeIndex(index);
+    writeIndex(repo, updatedIndex);
+  }
   console.log('Done!');
 }
 
