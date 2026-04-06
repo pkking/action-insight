@@ -4,6 +4,28 @@ import { format, subDays, parseISO, isBefore } from 'date-fns';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const VERBOSE = process.env.VERBOSE === 'true' || process.env.VERBOSE === '1';
+
+function log(...args: unknown[]) {
+  if (VERBOSE) {
+    console.log(`[${new Date().toISOString()}]`, ...args);
+  }
+}
+
+function warn(...args: unknown[]) {
+  if (VERBOSE) {
+    console.warn(`[${new Date().toISOString()}] WARN:`, ...args);
+  }
+}
+
+function error(...args: unknown[]) {
+  console.error(`[${new Date().toISOString()}] ERROR:`, ...args);
+}
 
 interface Run {
   id: number;
@@ -78,6 +100,7 @@ function readIndex(repo: string): Index {
     }
     return data;
   } catch {
+    log('No existing index found, starting fresh');
     return { version: 1, latest: '', files: [], retention_days: 90, last_updated: '' };
   }
 }
@@ -88,16 +111,21 @@ function writeIndex(repo: string, index: any) {
     fs.mkdirSync(repoDir, { recursive: true });
   }
   fs.writeFileSync(getIndexPath(repo), JSON.stringify(index, null, 2));
+  log(`Index written for ${repo}`);
 }
 
 function readReposConfig(): string[] {
   try {
+    log(`Reading repos config from: ${REPOS_CONFIG_PATH}`);
     const content = fs.readFileSync(REPOS_CONFIG_PATH, 'utf-8');
     const config = yaml.load(content) as ReposConfig;
+    log(`Found repos in repos.yaml: ${config.repos?.join(', ')}`);
     return config.repos || [];
   } catch (err) {
-    console.warn('Failed to read repos.yaml, falling back to environment variable');
-    return (process.env.TARGET_REPOS || '').split(',').map(s => s.trim()).filter(Boolean);
+    warn('Failed to read repos.yaml, falling back to environment variable');
+    const envRepos = (process.env.TARGET_REPOS || '').split(',').map(s => s.trim()).filter(Boolean);
+    log(`TARGET_REPOS env var: ${process.env.TARGET_REPOS || '(empty)'}`);
+    return envRepos;
   }
 }
 
@@ -117,12 +145,20 @@ function writeDayData(repo: string, data: DayData) {
   }
   const filePath = path.join(repoDir, `${data.date}.json`);
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+  log(`Day data written: ${filePath}`);
 }
 
 async function main() {
   const token = process.env.GITHUB_TOKEN;
   const targetRepos = readReposConfig();
   const retentionDays = parseInt(process.env.RETENTION_DAYS || '90');
+
+  log(`VERBOSE mode: ${VERBOSE}`);
+  log(`Retention days: ${retentionDays}`);
+  log(`Target repos: ${targetRepos.join(', ') || '(none)'}`);
+  log(`Node version: ${process.version}`);
+  log(`ETL_DIR: ${ETL_DIR}`);
+  log(`DATA_DIR: ${DATA_DIR}`);
 
   if (!token) throw new Error('GITHUB_TOKEN is required');
   if (targetRepos.length === 0) {
@@ -136,20 +172,29 @@ async function main() {
     console.log(`Processing ${repo}...`);
     const [owner, repoName] = repo.split('/');
     if (!owner || !repoName) {
-      console.error(`Invalid repo format: ${repo}. Expected owner/repo`);
+      error(`Invalid repo format: ${repo}. Expected owner/repo`);
       continue;
     }
 
+    log(`Owner: ${owner}, Repo: ${repoName}`);
+
     const index = readIndex(repo);
+    log(`Index state: latest=${index.latest}, files=${index.files.length}`);
+
     const lastUpdated = index.latest 
       ? parseISO(index.latest)
       : subDays(new Date(), retentionDays);
 
     const createdParam = `created:>=${format(lastUpdated, 'yyyy-MM-dd')}`;
+    log(`Fetching runs with filter: ${createdParam}`);
     
     const allRuns: Run[] = [];
     let page = 1;
+    let totalFetched = 0;
+
     while (true) {
+      log(`Fetching page ${page}...`);
+      const startTime = Date.now();
       const { data } = await octokit.request('GET /repos/{owner}/{repo}/actions/runs', {
         owner,
         repo: repoName,
@@ -157,17 +202,34 @@ async function main() {
         page,
         created: createdParam,
       });
+      const elapsed = Date.now() - startTime;
+      log(`Page ${page}: ${data.workflow_runs.length} runs fetched (${elapsed}ms)`);
 
-      if (data.workflow_runs.length === 0) break;
+      if (data.workflow_runs.length === 0) {
+        log('No more runs, breaking pagination');
+        break;
+      }
+
+      let completedCount = 0;
+      let skippedCount = 0;
 
       for (const run of data.workflow_runs) {
-        if (run.status !== 'completed') continue;
+        if (run.status !== 'completed') {
+          skippedCount++;
+          log(`Skipping run #${run.id} (${run.name}) - status: ${run.status}`);
+          continue;
+        }
+        completedCount++;
 
+        log(`Fetching jobs for run #${run.id} (${run.name})...`);
+        const jobsStartTime = Date.now();
         const { data: jobsData } = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
           owner,
           repo: repoName,
           run_id: run.id,
         });
+        const jobsElapsed = Date.now() - jobsStartTime;
+        log(`Jobs for run #${run.id}: ${jobsData.jobs.length} jobs (${jobsElapsed}ms)`);
 
         const jobs: Job[] = jobsData.jobs.map((j: any) => {
           const createdMs = j.created_at ? new Date(j.created_at).getTime() : 0;
@@ -201,10 +263,19 @@ async function main() {
         });
       }
 
-      if (data.workflow_runs.length < 100) break;
+      totalFetched += data.workflow_runs.length;
+      log(`Page ${page} summary: ${completedCount} completed, ${skippedCount} skipped (total fetched: ${totalFetched})`);
+
+      if (data.workflow_runs.length < 100) {
+        log('Last page reached (< 100 runs)');
+        break;
+      }
       page++;
+      log(`Waiting 1s before next page...`);
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
+
+    log(`Total completed runs collected: ${allRuns.length}`);
 
     const runsByDate: Record<string, Run[]> = {};
     for (const run of allRuns) {
@@ -214,6 +285,8 @@ async function main() {
     }
 
     const dates = Object.keys(runsByDate).sort().reverse();
+    log(`Date range: ${dates[dates.length - 1]} to ${dates[0]} (${dates.length} days)`);
+
     const files = index.files || [];
 
     for (const date of dates) {
@@ -245,6 +318,10 @@ async function main() {
       return isBefore(fileDate, cutoffDate);
     });
 
+    if (filesToRemove.length > 0) {
+      log(`Removing ${filesToRemove.length} old files`);
+    }
+
     for (const file of filesToRemove) {
       const filePath = path.join(getRepoDir(repo), file);
       if (fs.existsSync(filePath)) {
@@ -256,11 +333,12 @@ async function main() {
     }
 
     writeIndex(repo, updatedIndex);
+    console.log(`  Index updated: ${updatedIndex.files.length} files, latest: ${updatedIndex.latest}`);
   }
   console.log('Done!');
 }
 
 main().catch(err => {
-  console.error(err);
+  error(err);
   process.exit(1);
 });
