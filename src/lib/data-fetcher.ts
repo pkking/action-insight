@@ -4,7 +4,7 @@ import type { Index, DayData, Run } from './types';
 const OWNER = 'pkking';
 const REPO = 'action-insight';
 const DATA_BRANCH = 'data';
-const RAW_BASE = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${DATA_BRANCH}`;
+const RAW_BASE = process.env.NODE_ENV === 'development' ? '' : `https://raw.githubusercontent.com/${OWNER}/${REPO}/${DATA_BRANCH}`;
 
 export async function fetchIndex(): Promise<Index> {
   const res = await fetch(`${RAW_BASE}/data/index.json`, {
@@ -17,12 +17,12 @@ export async function fetchIndex(): Promise<Index> {
   return res.json();
 }
 
-export async function fetchDay(date: string): Promise<DayData> {
-  const res = await fetch(`${RAW_BASE}/data/${date}.json`, {
+export async function fetchDay(fileName: string): Promise<DayData> {
+  const res = await fetch(`${RAW_BASE}/data/${fileName}`, {
     cache: 'no-store',
   });
   if (!res.ok) {
-    throw new Error(`Failed to fetch data for ${date}: ${res.status}`);
+    throw new Error(`Failed to fetch data for ${fileName}: ${res.status}`);
   }
   return res.json();
 }

@@ -3,6 +3,7 @@ import { Octokit } from 'octokit';
 import { format, subDays, parseISO, isBefore } from 'date-fns';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as yaml from 'js-yaml';
 
 interface Run {
   id: number;
@@ -42,8 +43,14 @@ interface DayData {
   runs: Run[];
 }
 
+interface ReposConfig {
+  repos: string[];
+}
+
+const ETL_DIR = path.join(__dirname, '..');
 const DATA_DIR = path.join(__dirname, '../../data');
 const INDEX_PATH = path.join(DATA_DIR, 'index.json');
+const REPOS_CONFIG_PATH = path.join(ETL_DIR, 'repos.yaml');
 
 function readIndex(): Index {
   try {
@@ -55,6 +62,17 @@ function readIndex(): Index {
 
 function writeIndex(index: Index) {
   fs.writeFileSync(INDEX_PATH, JSON.stringify(index, null, 2));
+}
+
+function readReposConfig(): string[] {
+  try {
+    const content = fs.readFileSync(REPOS_CONFIG_PATH, 'utf-8');
+    const config = yaml.load(content) as ReposConfig;
+    return config.repos || [];
+  } catch (err) {
+    console.warn('Failed to read repos.yaml, falling back to environment variable');
+    return (process.env.TARGET_REPOS || '').split(',').map(s => s.trim()).filter(Boolean);
+  }
 }
 
 function readDayData(date: string): DayData {
@@ -73,11 +91,14 @@ function writeDayData(data: DayData) {
 
 async function main() {
   const token = process.env.GITHUB_TOKEN;
-  const targetRepos = (process.env.TARGET_REPOS || '').split(',').map(s => s.trim()).filter(Boolean);
+  const targetRepos = readReposConfig();
   const retentionDays = parseInt(process.env.RETENTION_DAYS || '90');
 
   if (!token) throw new Error('GITHUB_TOKEN is required');
-  if (targetRepos.length === 0) throw new Error('TARGET_REPOS is required');
+  if (targetRepos.length === 0) {
+    console.log('No repositories configured. Skipping collection.');
+    return;
+  }
 
   const octokit = new Octokit({ auth: token });
   const index = readIndex();
@@ -85,6 +106,10 @@ async function main() {
   for (const repo of targetRepos) {
     console.log(`Processing ${repo}...`);
     const [owner, repoName] = repo.split('/');
+    if (!owner || !repoName) {
+      console.error(`Invalid repo format: ${repo}. Expected owner/repo`);
+      continue;
+    }
 
     const repoIndex = index.repos[repo];
     const lastUpdated = repoIndex?.latest 
@@ -98,7 +123,7 @@ async function main() {
     while (true) {
       const { data } = await octokit.request('GET /repos/{owner}/{repo}/actions/runs', {
         owner,
-        repo,
+        repo: repoName,
         per_page: 100,
         page,
         created: createdParam,
@@ -111,7 +136,7 @@ async function main() {
 
         const { data: jobsData } = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
           owner,
-          repo,
+          repo: repoName,
           run_id: run.id,
         });
 
@@ -123,10 +148,10 @@ async function main() {
             id: j.id,
             name: j.name,
             status: j.status,
-            conclusion: j.conclusion,
-            created_at: j.created_at,
+            conclusion: j.conclusion ?? 'unknown',
+            created_at: j.created_at ?? new Date().toISOString(),
             started_at: j.started_at,
-            completed_at: j.completed_at,
+            completed_at: j.completed_at ?? new Date().toISOString(),
             html_url: j.html_url,
             queueDurationInSeconds: Math.max(0, (startedMs - createdMs) / 1000),
             durationInSeconds: Math.max(0, (completedMs - startedMs) / 1000),
@@ -135,10 +160,10 @@ async function main() {
 
         allRuns.push({
           id: run.id,
-          name: run.name,
-          head_branch: run.head_branch,
-          status: run.status,
-          conclusion: run.conclusion,
+          name: run.name ?? 'unknown',
+          head_branch: run.head_branch ?? 'unknown',
+          status: run.status ?? 'completed',
+          conclusion: run.conclusion ?? 'unknown',
           created_at: run.created_at,
           updated_at: run.updated_at,
           html_url: run.html_url,
