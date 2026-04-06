@@ -31,4 +31,4 @@ jobs:
           git config user.email "bot@action-insight.local"
           git add data/
           git diff --staged --quiet || git commit -m "data: update $(date -u +%Y-%m-%d)"
-          git push origin HEAD:data
+          git push origin HEAD:${{ github.head_ref || github.ref_name }}
