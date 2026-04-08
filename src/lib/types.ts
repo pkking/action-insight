@@ -3,14 +3,10 @@
 
 export interface Index {
   version: number;
-  repos: Record<string, RepoIndex>;
-  last_updated: string;
-}
-
-export interface RepoIndex {
   latest: string;
   files: string[];
   retention_days: number;
+  last_updated: string;
 }
 
 export interface DayData {
