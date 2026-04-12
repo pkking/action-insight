@@ -18,7 +18,7 @@
 2.  **样式规范**：使用 Tailwind CSS 进行样式编写，并确保所有新增 UI 支持 `dark:` 模式适配。
 3.  **容错处理**：在渲染图表和列表时，必须优雅处理数据空状态 (Empty State) 和加载中状态 (`jobsLoading`)。
 4.  **成本意识**：避免无意义地频繁调用 GitHub API 列表，尽可能重用现有的离线/本地缓存策略，对于长链路的数据解析，采用二级查询 + 本地脚本离线筛选方案。
-5.  **Git 规范**：所有修改在得到确认后，应当立即以标准 `feat:` 或 `fix:` 的格式进行 commit 并推送到 origin。
+5.  **Git 规范**：所有修改在得到确认后，应当立即使用 [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#specification) 规范进行 commit 并推送到 origin。提交信息应遵循 `type(scope): description` 或 `type: description` 格式，常用类型包括 `feat`、`fix`、`ci`、`docs`、`test`、`refactor`、`chore`。
 
 ## 相关关联 (Relations)
 此仓库针对 `vllm-project/vllm-ascend` 等带有复杂 CI/CD 标签的仓库进行了专门的适配（例如针对 `npu` 或 `large-disk` 标签）。
