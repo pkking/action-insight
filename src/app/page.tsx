@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { format, subDays, isAfter, isBefore, startOfDay, endOfDay, parseISO } from 'date-fns';
 import { fetchRuns } from '@/lib/data-fetcher';
+import { AVAILABLE_REPOS, DEFAULT_AVAILABLE_REPO, findAvailableRepo } from '@/lib/available-repos';
 import type { Run as BaseRun } from '@/lib/types';
 
 type Run = BaseRun & { jobsLoading?: boolean };
@@ -178,6 +179,9 @@ function DashboardContent() {
   const initialFilterName = searchParams.get('filterName') || '';
   const initialMinDuration = searchParams.get('minDuration') || '';
   const initialMaxDuration = searchParams.get('maxDuration') || '';
+  const urlOwner = searchParams.get('owner');
+  const urlRepo = searchParams.get('repo');
+  const selectedRepo = findAvailableRepo(urlOwner, urlRepo) ?? DEFAULT_AVAILABLE_REPO;
 
   const [days, setDays] = useState(initialDays);
   const [startDate, setStartDate] = useState(initialStartDate);
@@ -215,7 +219,7 @@ function DashboardContent() {
       setRuns([]);
       
       try {
-        const runs = await fetchRuns('vllm-project', 'vllm-ascend', days);
+        const runs = await fetchRuns(selectedRepo.owner, selectedRepo.repo, days);
         
         if (!isCancelled) {
           const isCustomValid = useCustomRange && startDate && endDate;
@@ -253,7 +257,7 @@ function DashboardContent() {
     return () => {
       isCancelled = true;
     };
-  }, [days, useCustomRange, startDate, endDate]);
+  }, [days, useCustomRange, startDate, endDate, selectedRepo.owner, selectedRepo.repo]);
 
   // Sync state changes back to URL
   useEffect(() => {
@@ -266,6 +270,8 @@ function DashboardContent() {
     } else if (days !== 7) {
       params.set('days', days.toString());
     }
+    params.set('owner', selectedRepo.owner);
+    params.set('repo', selectedRepo.repo);
     if (filterName) params.set('filterName', filterName);
     if (minDuration) params.set('minDuration', minDuration);
     if (maxDuration) params.set('maxDuration', maxDuration);
@@ -276,12 +282,16 @@ function DashboardContent() {
     const url = query ? `${pathname}?${query}` : pathname;
     
     router.replace(url, { scroll: false });
-  }, [days, useCustomRange, startDate, endDate, filterName, minDuration, maxDuration, sortField, sortOrder, pathname, router]);
+  }, [days, useCustomRange, startDate, endDate, filterName, minDuration, maxDuration, sortField, sortOrder, pathname, router, selectedRepo.owner, selectedRepo.repo]);
 
   useEffect(() => {
+    setExpandedRunId(null);
     setZoomLeft(null);
     setZoomRight(null);
-  }, [days]);
+    setRefAreaLeft(null);
+    setRefAreaRight(null);
+    setRuns([]);
+  }, [selectedRepo.slug]);
 
   const fetchJobsForRun = async (runId: number) => {
     setExpandedRunId(expandedRunId === runId ? null : runId);
@@ -476,6 +486,38 @@ function DashboardContent() {
         </header>
 
         {/* Controls */}
+        <section className="bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 p-4 rounded-xl shadow-sm border border-neutral-100 dark:border-neutral-800">
+          <div className="flex flex-col gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Tracked Repositories</h2>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400 dark:text-neutral-500">Switch the dashboard between collected repositories.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {AVAILABLE_REPOS.map((repoOption) => {
+                const isActive = repoOption.slug === selectedRepo.slug;
+
+                return (
+                  <button
+                    key={repoOption.slug}
+                    type="button"
+                    onClick={() => {
+                      const params = new URLSearchParams(searchParams.toString());
+                      params.set('owner', repoOption.owner);
+                      params.set('repo', repoOption.repo);
+                      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+                    }}
+                    className={isActive
+                      ? 'rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 dark:border-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
+                      : 'rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:bg-neutral-800'}
+                  >
+                    {repoOption.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
         <div className="flex gap-2 items-center flex-wrap">
           {[7, 30, 90].map(d => (
             <button
@@ -529,12 +571,12 @@ function DashboardContent() {
 
         {error ? (
           <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 p-4 rounded-lg border border-red-100 dark:border-red-800">
-            {error}
+            {error} ({selectedRepo.slug})
           </div>
         ) : loading && runs.length === 0 ? (
           <div className="flex items-center justify-center h-64 text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 flex-col gap-4">
             <Activity className="w-8 h-8 animate-pulse text-blue-500 dark:text-blue-400" />
-            <p className="text-sm">Fetching runs (this may take a moment for larger timeframes)...</p>
+            <p className="text-sm">Fetching runs for {selectedRepo.slug} (this may take a moment for larger timeframes)...</p>
           </div>
         ) : (
           <>
@@ -732,7 +774,7 @@ function DashboardContent() {
                     {filteredAndSortedRuns.length === 0 && (
                       <tr>
                         <td colSpan={5} className="py-8 text-center text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500">
-                          No matching runs found. Try adjusting your filters.
+                          No matching runs found for {selectedRepo.slug}. Try adjusting your filters.
                         </td>
                       </tr>
                     )}

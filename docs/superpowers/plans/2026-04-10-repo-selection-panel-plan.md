@@ -1,351 +1,193 @@
 # Repo Selection Panel Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
-**Goal:** Add a tracked-repository selection panel that lets the dashboard switch action details between configured repos and reflect the selection in the URL.
-
-**Architecture:** Keep the dashboard as a single client page, introduce a small typed tracked-repo config for the frontend, and drive selection from `owner`/`repo` search params. Add a focused unit/integration-style test harness around the page so repo selection and fetch behavior are proven before UI code changes.
-
-**Tech Stack:** Next.js 16, React 19, TypeScript, Tailwind CSS, Vitest, Testing Library
-
----
-
-## File Structure
-
-- Modify: `/home/lcr/action-insight/package.json`
-- Create: `/home/lcr/action-insight/vitest.config.ts`
-- Create: `/home/lcr/action-insight/src/test/setup.ts`
-- Create: `/home/lcr/action-insight/src/lib/tracked-repos.ts`
-- Modify: `/home/lcr/action-insight/src/app/page.tsx`
-- Create: `/home/lcr/action-insight/src/app/page.test.tsx`
-
-### Task 1: Add the test harness
-
-**Files:**
-- Modify: `/home/lcr/action-insight/package.json`
-- Create: `/home/lcr/action-insight/vitest.config.ts`
-- Create: `/home/lcr/action-insight/src/test/setup.ts`
-
-- [ ] **Step 1: Write the failing test command target**
-
-Create `/home/lcr/action-insight/src/app/page.test.tsx` with a placeholder smoke test that will not run yet because the test harness does not exist:
-
-```tsx
-import { describe, expect, it } from 'vitest';
-
-describe('Dashboard', () => {
-  it('has a test harness', () => {
-    expect(true).toBe(true);
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run src/app/page.test.tsx`
-Expected: FAIL because `vitest` is not configured or installed for the app.
-
-- [ ] **Step 3: Write minimal test harness implementation**
-
-Update `/home/lcr/action-insight/package.json` scripts and dev dependencies:
-
-```json
-{
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "test": "vitest run"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@testing-library/jest-dom": "^6.6.3",
-    "@testing-library/react": "^16.1.0",
-    "@testing-library/user-event": "^14.5.2",
-    "@types/js-yaml": "^4.0.9",
-    "@types/node": "^20.19.39",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.1",
-    "jsdom": "^25.0.1",
-    "tailwindcss": "^4",
-    "typescript": "^5.9.3",
-    "vitest": "^2.1.8"
-  }
-}
-```
-
-Create `/home/lcr/action-insight/vitest.config.ts`:
-
-```ts
-import { defineConfig } from 'vitest/config';
-import path from 'node:path';
-
-export default defineConfig({
-  test: {
-    environment: 'jsdom',
-    setupFiles: ['./src/test/setup.ts'],
-  },
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
-});
-```
-
-Create `/home/lcr/action-insight/src/test/setup.ts`:
-
-```ts
-import '@testing-library/jest-dom/vitest';
-```
-
-- [ ] **Step 4: Run test to verify it passes**
+**Status:** active  
+**Date:** 2026-04-12  
+**Origin:** `docs/superpowers/specs/2026-04-10-repo-selection-panel-design.md`
 
-Run: `npm test -- src/app/page.test.tsx`
-Expected: PASS with 1 passing test.
+## Problem Frame
 
-- [ ] **Step 5: Commit**
+The dashboard in `src/app/page.tsx` can already fetch any `owner` / `repo` pair through `src/lib/data-fetcher.ts`, but the page still hardcodes `vllm-project/vllm-ascend`. The requirements doc now narrows the feature to repositories that already have readable data under `data/<owner>/<repo>/index.json`, with the selection panel still visible even when only one repo is available.
 
-```bash
-git add package.json package-lock.json vitest.config.ts src/test/setup.ts src/app/page.test.tsx
-git commit -m "test: add dashboard test harness"
-```
+## Scope
 
-### Task 2: Add failing tests for repo selection behavior
+- Add a visible repository selection panel near the top of the dashboard.
+- Drive the active repository from `owner` and `repo` URL search params.
+- Source selectable repositories from data that is actually available to the frontend.
+- Reset stale repo-specific UI state when the selected repository changes.
+- Add page-level tests covering repo selection behavior.
 
-**Files:**
-- Modify: `/home/lcr/action-insight/src/app/page.test.tsx`
-- Test: `/home/lcr/action-insight/src/app/page.test.tsx`
+## Non-Goals
 
-- [ ] **Step 1: Write the failing tests**
+- Reading selectable repos directly from `etl/repos.yaml`.
+- Showing repos that are tracked but do not yet have data.
+- Adding freeform `owner/repo` input.
+- Refactoring the page into multiple routes or server components.
 
-Replace the placeholder test with behavior tests that mock Next navigation and the data fetcher:
+## Requirements Traceability
 
-```tsx
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import Dashboard from './page';
+- **R1-R2:** The selectable repo list must come from available data, not from ETL tracking config.
+- **R3-R6:** Changing repo must refresh the dashboard, preserve shareable URL state, and clear stale expanded/zoom state.
+- **R7:** The selection panel remains visible even for a single available repo.
 
-const replaceMock = vi.fn();
-const useSearchParamsMock = vi.fn();
-const fetchRunsMock = vi.fn();
+## Planning Context
 
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: replaceMock }),
-  usePathname: () => '/',
-  useSearchParams: () => useSearchParamsMock(),
-}));
+- Current local data only exposes `vllm-project/vllm-ascend`, so the first implementation must still render a one-item panel cleanly.
+- The repository does not currently have a page test harness. `package.json` has no `test` script and no Testing Library / Vitest setup.
+- There is already helper logic in `src/lib/tracked-repos.js`, but it is oriented around parsing YAML. That file is useful as reference for URL param handling, not as the final source of truth for this feature.
+- The codebase already uses a single large client page, URL-backed filters, and a fetcher abstraction. Local patterns are sufficient; no external docs research is needed.
 
-vi.mock('@/lib/data-fetcher', () => ({
-  fetchRuns: (...args: unknown[]) => fetchRunsMock(...args),
-}));
+## Key Decisions
 
-vi.mock('recharts', () => ({
-  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  LineChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Line: () => null,
-  XAxis: () => null,
-  YAxis: () => null,
-  CartesianGrid: () => null,
-  Tooltip: () => null,
-  ReferenceArea: () => null,
-}));
+- **Use an available-repo source, not mirrored YAML config.**  
+  Rationale: mirroring `etl/repos.yaml` into frontend code creates dual maintenance and exposes repos that may 404.
 
-describe('Dashboard repo selection', () => {
-  beforeEach(() => {
-    replaceMock.mockReset();
-    fetchRunsMock.mockReset();
-    useSearchParamsMock.mockReturnValue(new URLSearchParams(''));
-    fetchRunsMock.mockResolvedValue([]);
-  });
+- **Keep repo selection in the existing client page.**  
+  Rationale: this matches current architecture and keeps the change bounded to state, routing, and rendering logic in `src/app/page.tsx`.
 
-  it('defaults to the first tracked repo and fetches it', async () => {
-    render(<Dashboard />);
-
-    await waitFor(() => {
-      expect(fetchRunsMock).toHaveBeenCalledWith('vllm-project', 'vllm-ascend', 7);
-    });
-  });
-
-  it('uses a valid repo from the URL', async () => {
-    useSearchParamsMock.mockReturnValue(new URLSearchParams('owner=vllm-project&repo=vllm-ascend'));
-
-    render(<Dashboard />);
-
-    await waitFor(() => {
-      expect(fetchRunsMock).toHaveBeenCalledWith('vllm-project', 'vllm-ascend', 7);
-    });
-  });
-
-  it('falls back when the URL repo is invalid', async () => {
-    useSearchParamsMock.mockReturnValue(new URLSearchParams('owner=bad&repo=input'));
-
-    render(<Dashboard />);
-
-    await waitFor(() => {
-      expect(fetchRunsMock).toHaveBeenCalledWith('vllm-project', 'vllm-ascend', 7);
-    });
-  });
-
-  it('switches repo from the selection panel', async () => {
-    render(<Dashboard />);
-
-    const button = await screen.findByRole('button', { name: /vllm-project\/vllm-ascend/i });
-    await userEvent.click(button);
-
-    expect(button).toBeInTheDocument();
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npm test -- src/app/page.test.tsx`
-Expected: FAIL because the page does not yet expose tracked repo selection behavior.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add src/app/page.test.tsx
-git commit -m "test: cover repo selection behavior"
-```
-
-### Task 3: Implement tracked repo config and dashboard switching
-
-**Files:**
-- Create: `/home/lcr/action-insight/src/lib/tracked-repos.ts`
-- Modify: `/home/lcr/action-insight/src/app/page.tsx`
-- Test: `/home/lcr/action-insight/src/app/page.test.tsx`
-
-- [ ] **Step 1: Write minimal implementation**
-
-Create `/home/lcr/action-insight/src/lib/tracked-repos.ts`:
-
-```ts
-export type TrackedRepo = {
-  owner: string;
-  repo: string;
-  slug: string;
-  label: string;
-};
+- **Add a small page test harness before feature work.**  
+  Rationale: the repo currently lacks page-level test infrastructure, and the feature is mostly state/routing behavior that benefits from regression tests.
 
-export const TRACKED_REPOS: TrackedRepo[] = [
-  {
-    owner: 'vllm-project',
-    repo: 'vllm-ascend',
-    slug: 'vllm-project/vllm-ascend',
-    label: 'vllm-project/vllm-ascend',
-  },
-];
+- **Treat repo changes like a fetch-context switch.**  
+  Rationale: expanded rows, zoom bounds, and in-memory runs are all repo-specific and must reset together to avoid stale UI.
 
-export function findTrackedRepo(owner: string | null, repo: string | null): TrackedRepo | null {
-  return TRACKED_REPOS.find((item) => item.owner === owner && item.repo === repo) ?? null;
-}
+## Implementation Units
 
-export const DEFAULT_TRACKED_REPO = TRACKED_REPOS[0];
-```
+### Unit 1: Add page test infrastructure
 
-Update `/home/lcr/action-insight/src/app/page.tsx` to:
+**Files**
+- Modify: `package.json`
+- Create: `vitest.config.ts`
+- Create: `src/test/setup.ts`
 
-- derive `selectedRepo` from `owner`/`repo` URL params
-- fall back to `DEFAULT_TRACKED_REPO`
-- pass `selectedRepo.owner` and `selectedRepo.repo` into `fetchRuns`
-- add a `Tracked Repositories` panel with one button per repo
-- update `router.replace` param syncing to include `owner` and `repo`
-- reset `expandedRunId`, `zoomLeft`, `zoomRight`, `refAreaLeft`, and `refAreaRight` when the selected repo changes
-- update empty/error copy to mention `selectedRepo.slug`
+**Plan**
+- Add a `test` script to `package.json`.
+- Add dev dependencies for `vitest`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, and `@testing-library/user-event`.
+- Configure `vitest.config.ts` with `jsdom` and the existing `@` alias for `src/`.
+- Create `src/test/setup.ts` to register `@testing-library/jest-dom/vitest`.
 
-Representative panel markup:
+**Pattern references**
+- `package.json`
+- `tsconfig.json`
 
-```tsx
-<section className="bg-white dark:bg-neutral-900 dark:bg-neutral-800 p-4 rounded-xl shadow-sm border border-neutral-100 dark:border-neutral-800">
-  <div className="flex flex-col gap-3">
-    <div>
-      <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Tracked Repositories</h2>
-      <p className="text-sm text-neutral-500 dark:text-neutral-400">Switch the dashboard between collected repositories.</p>
-    </div>
-    <div className="flex flex-wrap gap-2">
-      {TRACKED_REPOS.map((trackedRepo) => {
-        const isActive = trackedRepo.slug === selectedRepo.slug;
+**Test scenarios**
+- The harness should support plain `npm test`.
+- A minimal `src/app/page.test.tsx` smoke test should execute successfully once the harness exists.
 
-        return (
-          <button
-            key={trackedRepo.slug}
-            type="button"
-            onClick={() => setSelectedRepoSlug(trackedRepo.slug)}
-            className={isActive
-              ? 'rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 dark:border-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
-              : 'rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:bg-neutral-800'}
-          >
-            {trackedRepo.label}
-          </button>
-        );
-      })}
-    </div>
-  </div>
-</section>
-```
+### Unit 2: Introduce an available-repo source for the page
 
-- [ ] **Step 2: Run test to verify it passes**
+**Files**
+- Create or modify: `src/lib/available-repos.ts` or equivalent repo-availability module
+- Reference only: `data/<owner>/<repo>/index.json`
 
-Run: `npm test -- src/app/page.test.tsx`
-Expected: PASS with repo selection tests green.
+**Plan**
+- Add a small frontend-safe module that exports the repositories the UI may select.
+- Represent each item as `{ owner, repo, slug, label }`.
+- Seed the module from the repos that actually have data today, not from `etl/repos.yaml`.
+- Keep the module intentionally small and explicit so the first implementation is stable; do not design a generalized discovery pipeline in this step.
 
-- [ ] **Step 3: Refine tests to cover repo switching URL updates**
+**Pattern references**
+- `src/lib/tracked-repos.js`
+- `data/vllm-project/vllm-ascend/index.json`
 
-Add one more assertion:
+**Test scenarios**
+- The module should expose at least one repo.
+- The default available repo should be the first exported repo.
+- Valid and invalid `owner` / `repo` URL selections should resolve predictably to either a matching repo or the default repo.
 
-```tsx
-await waitFor(() => {
-  expect(replaceMock).toHaveBeenCalled();
-});
-```
+### Unit 3: Update dashboard repo state, routing, and panel UI
 
-- [ ] **Step 4: Run test to verify it passes**
+**Files**
+- Modify: `src/app/page.tsx`
 
-Run: `npm test -- src/app/page.test.tsx`
-Expected: PASS with all repo selection tests green.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/lib/tracked-repos.ts src/app/page.tsx src/app/page.test.tsx
-git commit -m "feat: add tracked repo selection panel"
-```
-
-### Task 4: Verify the integrated app
-
-**Files:**
-- Modify: `/home/lcr/action-insight/src/app/page.tsx` if verification finds issues
-
-- [ ] **Step 1: Run lint**
-
-Run: `npm run lint`
-Expected: PASS with no errors.
-
-- [ ] **Step 2: Run the focused test suite**
-
-Run: `npm test -- src/app/page.test.tsx`
-Expected: PASS.
-
-- [ ] **Step 3: Run production build**
-
-Run: `npm run build`
-Expected: PASS with a successful Next.js production build.
-
-- [ ] **Step 4: Commit verification fixes if needed**
-
-```bash
-git add package.json package-lock.json vitest.config.ts src/test/setup.ts src/lib/tracked-repos.ts src/app/page.tsx src/app/page.test.tsx
-git commit -m "fix: polish repo selection panel"
-```
-
-## Self-Review
-
-- Spec coverage: the plan covers tracked repo sourcing, URL-backed selection, fetch switching, state reset, and repo-aware messaging.
-- Placeholder scan: no `TODO` or undefined implementation steps remain.
-- Type consistency: plan uses `TrackedRepo`, `TRACKED_REPOS`, and `selectedRepo` consistently across config, page logic, and tests.
+**Plan**
+- Read `owner` and `repo` from `useSearchParams()`.
+- Resolve them against the available-repo source and fall back to the default available repo.
+- Replace the hardcoded `fetchRuns('vllm-project', 'vllm-ascend', days)` call with `fetchRuns(selectedRepo.owner, selectedRepo.repo, days)`.
+- Include `owner` and `repo` in the `router.replace(...)` sync logic while preserving the existing filter/sort params.
+- Add a `Tracked Repositories` panel above the date controls, rendered even when only one repo is available.
+- On repo switch, clear `expandedRunId`, `zoomLeft`, `zoomRight`, `refAreaLeft`, and `refAreaRight`.
+- Reset in-memory runs before the new fetch resolves so stale data is not shown under the new repo label.
+- Update empty and error messaging to mention `selectedRepo.slug` where it helps interpret failures.
+
+**Pattern references**
+- `src/app/page.tsx`
+- `src/lib/data-fetcher.ts`
+
+**Test scenarios**
+- Missing URL params fetch the default available repo.
+- Valid URL params fetch the matching available repo.
+- Invalid URL params fall back to the default available repo.
+- Clicking a repo button updates the active repo state and triggers URL replacement.
+- Switching repo clears expanded-row and zoom state before showing new data.
+- The panel renders even when the available repo list has length 1.
+
+### Unit 4: Add focused page tests for repo selection
+
+**Files**
+- Create: `src/app/page.test.tsx`
+
+**Plan**
+- Mock `next/navigation` hooks for pathname, router, and search params.
+- Mock `fetchRuns` from `src/lib/data-fetcher.ts`.
+- Stub `recharts` components so the page can render in jsdom without chart implementation noise.
+- Cover the URL defaulting/fallback logic and the repo panel behavior.
+- Keep the tests focused on state transitions and fetch arguments rather than visual snapshots.
+
+**Pattern references**
+- `src/app/page.tsx`
+- `src/lib/tracked-repos.test.mjs`
+
+**Test scenarios**
+- `Dashboard` fetches the default repo when no repo params are present.
+- `Dashboard` honors valid repo params.
+- `Dashboard` falls back on invalid repo params.
+- Clicking a repo button results in `router.replace(...)` with preserved params plus updated `owner` / `repo`.
+- Repo changes reset stale UI state.
+- The selection panel still renders when the available repo list has length 1.
+
+### Unit 5: Integrated verification
+
+**Files**
+- Verify touched files from Units 1-4
+
+**Plan**
+- Run linting.
+- Run the focused page test file.
+- Run a production build.
+- Fix any integration issues before considering the feature complete.
+
+**Test scenarios**
+- `npm run lint` passes.
+- `npm test -- src/app/page.test.tsx` passes.
+- `npm run build` passes.
+
+## Sequencing
+
+1. Add the page test harness so subsequent behavior tests have a stable base.
+2. Add the available-repo source and its small helper logic.
+3. Update `src/app/page.tsx` to use resolved repo state, render the panel, and reset repo-specific UI state.
+4. Add and stabilize page behavior tests against the new panel and routing logic.
+5. Run integrated verification and fix any fallout.
+
+## Risks and Mitigations
+
+- **Risk: available repo data drifts from the working tree.**  
+  Mitigation: keep the first version intentionally explicit and aligned to current data; avoid pretending dynamic discovery already exists.
+
+- **Risk: repo selection and existing filter URL sync fight each other.**  
+  Mitigation: centralize URL param rewriting in one place and test preservation of existing filter params.
+
+- **Risk: page tests become brittle because of chart rendering and navigation hooks.**  
+  Mitigation: stub chart primitives and limit assertions to fetch arguments, panel presence, and router calls.
+
+## Deferred to Implementation
+
+- Whether the available-repo source should remain a static module or move to a generated artifact once multiple data repos exist.
+- Exact class-name polish for the selection panel so it fits the current visual system without over-expanding the header area.
+
+## Ready Check
+
+- Requirements are fully mapped to implementation units.
+- File paths are repo-relative.
+- Test targets are explicit for each feature-bearing unit.
+- No product blockers remain; the remaining questions are implementation-level.
