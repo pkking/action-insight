@@ -24,14 +24,21 @@ jobs:
         with:
           node-version: 22
       - run: npm install tsx @octokit/core date-fns js-yaml
-      - run: npx tsx etl/scripts/collect.ts
+      - id: collect
+        continue-on-error: true
+        run: npx tsx etl/scripts/collect.ts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RETENTION_DAYS: 90
           VERBOSE: 1
-      - run: |
+      - if: always()
+        run: |
           git config user.name "action-insight-bot"
           git config user.email "bot@action-insight.local"
           git add data/
           git diff --staged --quiet || git commit -m "data: update $(date -u +%Y-%m-%d)"
           git push origin HEAD:${{ github.head_ref || github.ref_name }}
+      - if: always() && steps.collect.outcome == 'failure'
+        run: |
+          echo "Collection completed with partial failures. Successfully collected data has already been pushed."
+          exit 1
