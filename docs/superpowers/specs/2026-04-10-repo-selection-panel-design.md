@@ -2,22 +2,24 @@
 
 ## Goal
 
-Add a repository selection panel to the dashboard so users can switch the action details view between tracked repositories without leaving the page.
+Add a repository selection panel to the dashboard so users can switch the action details view between repositories that already have collected data without leaving the page.
 
 ## Current Context
 
-- The dashboard is implemented in [`/home/lcr/action-insight/src/app/page.tsx`](/home/lcr/action-insight/src/app/page.tsx) as a client component with URL-backed filter state.
-- Data loading already supports arbitrary `owner` and `repo` values through [`/home/lcr/action-insight/src/lib/data-fetcher.ts`](/home/lcr/action-insight/src/lib/data-fetcher.ts), but the page currently hardcodes `vllm-project/vllm-ascend`.
-- The tracked repository list currently exists only in [`/home/lcr/action-insight/etl/repos.yaml`](/home/lcr/action-insight/etl/repos.yaml).
+- The dashboard is implemented in `src/app/page.tsx` as a client component with URL-backed filter state.
+- Data loading already supports arbitrary `owner` and `repo` values through `src/lib/data-fetcher.ts`, but the page currently hardcodes `vllm-project/vllm-ascend`.
+- The ETL tracking list exists in `etl/repos.yaml`, but the frontend cannot assume every tracked repo already has data under `data/<owner>/<repo>/`.
+- The current worktree data only shows `data/vllm-project/vllm-ascend/`, so "tracked repo" and "repo with available data" are not equivalent today.
 
 ## Requirements
 
-1. Show a selection panel sourced from the tracked repositories list.
-2. Limit choices to repositories already listed in `etl/repos.yaml`.
+1. Show a selection panel sourced from repositories that currently have data in `data/`.
+2. Limit choices to repositories with an existing `data/<owner>/<repo>/index.json`.
 3. Switching repositories should refresh the same dashboard views, charts, stats, and run details for the chosen repository.
 4. The active repository should be reflected in the URL so the current view can be shared.
 5. Existing loading, empty, and error states must continue to work and should reflect the selected repository.
 6. Changing repositories should clear stale detail UI state such as expanded rows and chart zoom.
+7. The selection panel should still render when only one repository is available so the current repo remains visible in the UI.
 
 ## Approach
 
@@ -42,28 +44,29 @@ Add a repository selection panel to the dashboard so users can switch the action
 
 Implement Option B.
 
-Add a dedicated repository selection panel near the top of the dashboard. Each tracked repository will render as a selectable button. The page will read and write `owner` and `repo` search params and use them as the fetch key for dashboard data.
+Add a dedicated repository selection panel near the top of the dashboard. Each repository with available data will render as a selectable button. The page will read and write `owner` and `repo` search params and use them as the fetch key for dashboard data.
 
 ## Data Model
 
-Add a small typed frontend config module that exports the tracked repositories:
+Expose a frontend-friendly list of repositories with available data:
 
 - `owner`
 - `repo`
 - `slug` as `owner/repo`
 - `label` for display
 
-This module will mirror the contents of `etl/repos.yaml` for frontend bundling. The ETL file remains the operational source for collection, but the UI uses a static typed list that can be imported directly into the client bundle.
+This list should be derived from the set of repo directories that already have collected data rather than mirroring `etl/repos.yaml` into a second manually maintained frontend config. The ETL file remains the operational source for collection, but the UI should only offer repos that are actually readable by the dashboard.
 
 ## UI Design
 
 Add a panel card above the date-range controls:
 
 - Title: `Tracked Repositories`
-- Body: one button per tracked repo
+- Body: one button per available repo
 - Active state: blue-accented background/border
 - Inactive state: neutral surface with hover affordance
 - Dark mode: use matching `dark:` styles
+- Single repo: still show the panel with the single selected repo button
 
 The panel should remain compact on desktop and stack naturally on small screens.
 
@@ -76,8 +79,8 @@ Use URL search params:
 
 Behavior:
 
-- If params are absent, default to the first configured tracked repo.
-- If params do not match a tracked repo, fall back to the first tracked repo.
+- If params are absent, default to the first available repo.
+- If params do not match a repo with available data, fall back to the first available repo.
 - Repo changes should preserve existing date/filter/sort params when practical.
 - Repo changes should reset:
   - expanded run row
@@ -95,6 +98,7 @@ The existing fetcher API already supports this, so no protocol change is needed.
 - Loading state remains as-is.
 - Empty states should mention the selected repo when useful.
 - Errors should mention the selected repo so failures are easier to interpret.
+- No-data repos should not appear as selectable options in this first iteration.
 
 ## Testing
 
@@ -103,19 +107,21 @@ Use TDD for the selection behavior.
 Focus on:
 
 - default repo selection when URL params are absent
-- URL param selection for a valid tracked repo
-- invalid URL params falling back to the default tracked repo
+- URL param selection for a valid available repo
+- invalid URL params falling back to the default available repo
 - switching repos updates the active panel state and fetch target
 - repo switches clear stale expanded/zoom UI state
+- single available repo still renders the selection panel
 
 ## Files Expected To Change
 
-- Modify: `/home/lcr/action-insight/src/app/page.tsx`
-- Create: `/home/lcr/action-insight/src/lib/tracked-repos.ts`
+- Modify: `src/app/page.tsx`
+- Create or modify: repo availability source used by the page
 - Create or modify tests for repo selection behavior, depending on current test setup
 
 ## Non-Goals
 
 - Editing tracked repositories from the UI
 - Supporting arbitrary manual repository input
+- Showing tracked repos that do not yet have readable data
 - Refactoring the dashboard into multiple pages
