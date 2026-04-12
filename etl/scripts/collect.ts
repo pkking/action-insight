@@ -6,10 +6,19 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { fileURLToPath } from 'url';
 
+import {
+  buildCollectionWindows,
+  mergeCollectedDates,
+  splitCollectionWindow,
+  type CollectionWindow,
+} from '../../src/lib/collection-windows.ts';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const VERBOSE = process.env.VERBOSE === 'true' || process.env.VERBOSE === '1';
+const PER_PAGE = 100;
+const MAX_RESULTS_PER_QUERY = 1000;
 
 function log(...args: unknown[]) {
   if (VERBOSE) {
@@ -160,101 +169,157 @@ async function collectRepo(octokit: Octokit, repo: string, retentionDays: number
   const index = readIndex(repo);
   log(`Index state: latest=${index.latest}, files=${index.files.length}`);
 
-  const lastUpdated = index.latest
-    ? parseISO(index.latest)
-    : subDays(new Date(), retentionDays);
-
-  const createdParam = `created:>=${format(lastUpdated, 'yyyy-MM-dd')}`;
-  log(`Fetching runs with filter: ${createdParam}`);
-
-  const allRuns: Run[] = [];
-  let page = 1;
-  let totalFetched = 0;
-
-  while (true) {
-    log(`Fetching page ${page}...`);
-    const startTime = Date.now();
-    const { data } = await octokit.request('GET /repos/{owner}/{repo}/actions/runs', {
-      owner,
-      repo: repoName,
-      per_page: 100,
-      page,
-      created: createdParam,
-    });
-    const elapsed = Date.now() - startTime;
-    log(`Page ${page}: ${data.workflow_runs.length} runs fetched (${elapsed}ms)`);
-
-    if (data.workflow_runs.length === 0) {
-      log('No more runs, breaking pagination');
-      break;
+  function toCreatedBoundary(value: string, isEnd: boolean): string {
+    if (value.includes('T')) {
+      return value;
     }
-
-    let completedCount = 0;
-    let skippedCount = 0;
-
-    for (const run of data.workflow_runs) {
-      if (run.status !== 'completed') {
-        skippedCount++;
-        log(`Skipping run #${run.id} (${run.name}) - status: ${run.status}`);
-        continue;
-      }
-      completedCount++;
-
-      log(`Fetching jobs for run #${run.id} (${run.name})...`);
-      const jobsStartTime = Date.now();
-      const { data: jobsData } = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
-        owner,
-        repo: repoName,
-        run_id: run.id,
-      });
-      const jobsElapsed = Date.now() - jobsStartTime;
-      log(`Jobs for run #${run.id}: ${jobsData.jobs.length} jobs (${jobsElapsed}ms)`);
-
-      const jobs: Job[] = jobsData.jobs.map((j: any) => {
-        const createdMs = j.created_at ? new Date(j.created_at).getTime() : 0;
-        const startedMs = j.started_at ? new Date(j.started_at).getTime() : createdMs;
-        const completedMs = j.completed_at ? new Date(j.completed_at).getTime() : startedMs;
-        return {
-          id: j.id,
-          name: j.name,
-          status: j.status,
-          conclusion: j.conclusion ?? 'unknown',
-          created_at: j.created_at ?? new Date().toISOString(),
-          started_at: j.started_at,
-          completed_at: j.completed_at ?? new Date().toISOString(),
-          html_url: j.html_url,
-          queueDurationInSeconds: Math.max(0, (startedMs - createdMs) / 1000),
-          durationInSeconds: Math.max(0, (completedMs - startedMs) / 1000),
-        };
-      });
-
-      allRuns.push({
-        id: run.id,
-        name: run.name ?? 'unknown',
-        head_branch: run.head_branch ?? 'unknown',
-        status: run.status ?? 'completed',
-        conclusion: run.conclusion ?? 'unknown',
-        created_at: run.created_at,
-        updated_at: run.updated_at,
-        html_url: run.html_url,
-        durationInSeconds: (new Date(run.updated_at).getTime() - new Date(run.created_at).getTime()) / 1000,
-        jobs,
-      });
-    }
-
-    totalFetched += data.workflow_runs.length;
-    log(`Page ${page} summary: ${completedCount} completed, ${skippedCount} skipped (total fetched: ${totalFetched})`);
-
-    if (data.workflow_runs.length < 100) {
-      log('Last page reached (< 100 runs)');
-      break;
-    }
-
-    page++;
-    log('Waiting 1s before next page...');
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    return `${value}T${isEnd ? '23:59:59' : '00:00:00'}Z`;
   }
 
+  function toCreatedParam(window: CollectionWindow): string {
+    return `created:${toCreatedBoundary(window.start, false)}..${toCreatedBoundary(window.end, true)}`;
+  }
+
+  async function fetchRunsForWindow(window: CollectionWindow): Promise<{ runs: Run[]; saturated: boolean }> {
+    const createdParam = toCreatedParam(window);
+    log(`Fetching runs with filter: ${createdParam}`);
+
+    const allRuns: Run[] = [];
+    let page = 1;
+    let totalFetched = 0;
+
+    while (true) {
+      log(`Fetching page ${page} for ${createdParam}...`);
+      const startTime = Date.now();
+      const { data } = await octokit.request('GET /repos/{owner}/{repo}/actions/runs', {
+        owner,
+        repo: repoName,
+        per_page: PER_PAGE,
+        page,
+        created: createdParam,
+      });
+      const elapsed = Date.now() - startTime;
+      log(`Page ${page}: ${data.workflow_runs.length} runs fetched (${elapsed}ms)`);
+
+      if (data.workflow_runs.length === 0) {
+        log('No more runs, breaking pagination');
+        break;
+      }
+
+      let completedCount = 0;
+      let skippedCount = 0;
+
+      for (const run of data.workflow_runs) {
+        if (run.status !== 'completed') {
+          skippedCount++;
+          log(`Skipping run #${run.id} (${run.name}) - status: ${run.status}`);
+          continue;
+        }
+        completedCount++;
+
+        log(`Fetching jobs for run #${run.id} (${run.name})...`);
+        const jobsStartTime = Date.now();
+        const { data: jobsData } = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
+          owner,
+          repo: repoName,
+          run_id: run.id,
+        });
+        const jobsElapsed = Date.now() - jobsStartTime;
+        log(`Jobs for run #${run.id}: ${jobsData.jobs.length} jobs (${jobsElapsed}ms)`);
+
+        const jobs: Job[] = jobsData.jobs.map((j: any) => {
+          const createdMs = j.created_at ? new Date(j.created_at).getTime() : 0;
+          const startedMs = j.started_at ? new Date(j.started_at).getTime() : createdMs;
+          const completedMs = j.completed_at ? new Date(j.completed_at).getTime() : startedMs;
+          return {
+            id: j.id,
+            name: j.name,
+            status: j.status,
+            conclusion: j.conclusion ?? 'unknown',
+            created_at: j.created_at ?? new Date().toISOString(),
+            started_at: j.started_at,
+            completed_at: j.completed_at ?? new Date().toISOString(),
+            html_url: j.html_url,
+            queueDurationInSeconds: Math.max(0, (startedMs - createdMs) / 1000),
+            durationInSeconds: Math.max(0, (completedMs - startedMs) / 1000),
+          };
+        });
+
+        allRuns.push({
+          id: run.id,
+          name: run.name ?? 'unknown',
+          head_branch: run.head_branch ?? 'unknown',
+          status: run.status ?? 'completed',
+          conclusion: run.conclusion ?? 'unknown',
+          created_at: run.created_at,
+          updated_at: run.updated_at,
+          html_url: run.html_url,
+          durationInSeconds: (new Date(run.updated_at).getTime() - new Date(run.created_at).getTime()) / 1000,
+          jobs,
+        });
+      }
+
+      totalFetched += data.workflow_runs.length;
+      log(`Page ${page} summary: ${completedCount} completed, ${skippedCount} skipped (total fetched: ${totalFetched})`);
+
+      if (data.workflow_runs.length < PER_PAGE) {
+        log('Last page reached (< per_page)');
+        break;
+      }
+
+      if (page >= MAX_RESULTS_PER_QUERY / PER_PAGE) {
+        warn(`Window ${createdParam} appears capped at ${MAX_RESULTS_PER_QUERY} results`);
+        return { runs: allRuns, saturated: true };
+      }
+
+      page++;
+      log('Waiting 1s before next page...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    return { runs: allRuns, saturated: false };
+  }
+
+  async function collectRunsForWindow(window: CollectionWindow): Promise<Run[]> {
+    const { runs, saturated } = await fetchRunsForWindow(window);
+    if (!saturated) {
+      return runs;
+    }
+
+    const childWindows = splitCollectionWindow(window);
+    if (childWindows.length === 0) {
+      warn(`Window ${JSON.stringify(window)} cannot be split further; keeping partial result set`);
+      return runs;
+    }
+
+    log(`Splitting saturated window ${JSON.stringify(window)} into ${childWindows.length} sub-windows`);
+    const mergedRuns = new Map<number, Run>();
+
+    for (const childWindow of childWindows) {
+      const childRuns = await collectRunsForWindow(childWindow);
+      for (const run of childRuns) {
+        mergedRuns.set(run.id, run);
+      }
+    }
+
+    return Array.from(mergedRuns.values());
+  }
+
+  const windows = buildCollectionWindows({
+    latest: index.latest,
+    retentionDays,
+  });
+  log(`Collecting ${windows.length} window(s) for ${repo}`);
+
+  const allRunsMap = new Map<number, Run>();
+  for (const window of windows) {
+    const windowRuns = await collectRunsForWindow(window);
+    for (const run of windowRuns) {
+      allRunsMap.set(run.id, run);
+    }
+  }
+
+  const allRuns = Array.from(allRunsMap.values());
   log(`Total completed runs collected: ${allRuns.length}`);
 
   const runsByDate: Record<string, Run[]> = {};
@@ -271,7 +336,7 @@ async function collectRepo(octokit: Octokit, repo: string, retentionDays: number
     log('No completed runs found for this repo');
   }
 
-  const files = [...index.files];
+  const files = mergeCollectedDates(index.files, dates);
 
   for (const date of dates) {
     console.log(`  Writing ${date}.json (${runsByDate[date].length} runs)`);
@@ -282,13 +347,7 @@ async function collectRepo(octokit: Octokit, repo: string, retentionDays: number
     }
 
     writeDayData(repo, { date, repo, runs: Array.from(runMap.values()) });
-
-    if (!files.includes(`${date}.json`)) {
-      files.push(`${date}.json`);
-    }
   }
-
-  files.sort().reverse();
 
   const updatedIndex: Index = {
     version: 1,
