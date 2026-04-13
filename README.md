@@ -37,6 +37,7 @@ The ETL pipeline runs automatically every 6 hours via GitHub Actions. To trigger
 
 1. Go to **Actions** → **Collect CI Data**
 2. Click **Run workflow**
+3. Optionally fill `repo_name` with `owner/repo` to re-pull only one repository
 
 To run locally:
 
@@ -44,6 +45,18 @@ To run locally:
 cd etl
 npm install tsx octokit date-fns
 GITHUB_TOKEN=your_token TARGET_REPOS="owner/repo" RETENTION_DAYS=90 npx tsx scripts/collect.ts
+```
+
+To re-pull a single repo locally:
+
+```bash
+npx tsx etl/scripts/collect.ts --repo owner/repo
+```
+
+To force a full backfill instead of using the incremental `latest` cursor:
+
+```bash
+npx tsx etl/scripts/collect.ts --force-full-backfill
 ```
 
 ## Deploy on Vercel

@@ -6,6 +6,11 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { fileURLToPath } from 'url';
 
+import {
+  parseCollectCliOptions,
+  resolveTargetRepos,
+  type CollectCliOptions,
+} from '../../src/lib/collect-options.ts';
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
 
 const { buildCollectionWindows, mergeCollectedDates, splitCollectionWindow } = collectionWindows;
@@ -154,7 +159,12 @@ function writeDayData(repo: string, data: DayData) {
   log(`Day data written: ${filePath}`);
 }
 
-async function collectRepo(octokit: Octokit, repo: string, retentionDays: number) {
+async function collectRepo(
+  octokit: Octokit,
+  repo: string,
+  retentionDays: number,
+  options: CollectCliOptions
+) {
   console.log(`Processing ${repo}...`);
   const [owner, repoName] = repo.split('/');
   if (!owner || !repoName) {
@@ -305,6 +315,7 @@ async function collectRepo(octokit: Octokit, repo: string, retentionDays: number
   const windows = buildCollectionWindows({
     latest: index.latest,
     retentionDays,
+    forceFullBackfill: options.forceFullBackfill,
   });
   log(`Collecting ${windows.length} window(s) for ${repo}`);
 
@@ -379,12 +390,16 @@ async function collectRepo(octokit: Octokit, repo: string, retentionDays: number
 }
 
 async function main() {
+  const cliOptions = parseCollectCliOptions(process.argv.slice(2));
   const token = process.env.GITHUB_TOKEN;
-  const targetRepos = readReposConfig();
+  const configuredRepos = readReposConfig();
+  const targetRepos = resolveTargetRepos(configuredRepos, cliOptions.repoName);
   const retentionDays = parseInt(process.env.RETENTION_DAYS || '90');
 
   log(`VERBOSE mode: ${VERBOSE}`);
   log(`Retention days: ${retentionDays}`);
+  log(`Force full backfill: ${cliOptions.forceFullBackfill}`);
+  log(`Requested repo: ${cliOptions.repoName || '(all configured repos)'}`);
   log(`Target repos: ${targetRepos.join(', ') || '(none)'}`);
   log(`Node version: ${process.version}`);
   log(`ETL_DIR: ${ETL_DIR}`);
@@ -399,9 +414,18 @@ async function main() {
   const octokit = new Octokit({ auth: token });
   const failures: string[] = [];
 
+  if (cliOptions.forceFullBackfill) {
+    console.log(
+      `Force full backfill enabled; rebuilding up to ${retentionDays} days for ${cliOptions.repoName || 'all configured repos'}.`
+    );
+  }
+  if (cliOptions.repoName) {
+    console.log(`Single repo mode enabled; collecting only ${cliOptions.repoName}.`);
+  }
+
   for (const repo of targetRepos) {
     try {
-      await collectRepo(octokit, repo, retentionDays);
+      await collectRepo(octokit, repo, retentionDays, cliOptions);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       failures.push(`${repo}: ${message}`);
