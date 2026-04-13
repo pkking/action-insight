@@ -17,6 +17,13 @@ describe('collect option helpers', () => {
     });
   });
 
+  it('does not treat another flag as a repo value', () => {
+    expect(parseCollectCliOptions(['--repo', '--full'])).toEqual({
+      forceFullBackfill: true,
+      repoName: undefined,
+    });
+  });
+
   it('prefers an explicit repo over configured repos', () => {
     expect(resolveTargetRepos(['vllm-project/vllm-ascend', 'openai/action-insight'], 'openai/action-insight')).toEqual([
       'openai/action-insight',

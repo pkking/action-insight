@@ -5,19 +5,23 @@ export interface CollectCliOptions {
 
 export function parseCollectCliOptions(argv: string[]): CollectCliOptions {
   let repoName: string | undefined;
+  let forceFullBackfill = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    if ((arg === '--repo' || arg === '-r') && argv[index + 1]) {
+
+    if ((arg === '--repo' || arg === '-r') && argv[index + 1] && !argv[index + 1].startsWith('-')) {
       repoName = argv[index + 1];
       index += 1;
+      continue;
+    }
+
+    if (arg === '--force-full-backfill' || arg === '--full') {
+      forceFullBackfill = true;
     }
   }
 
-  return {
-    forceFullBackfill: argv.includes('--force-full-backfill') || argv.includes('--full'),
-    repoName,
-  };
+  return { forceFullBackfill, repoName };
 }
 
 export function resolveTargetRepos(configuredRepos: string[], repoName?: string): string[] {

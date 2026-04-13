@@ -10,7 +10,7 @@ import {
   parseCollectCliOptions,
   resolveTargetRepos,
   type CollectCliOptions,
-} from '../../src/lib/collect-options.ts';
+} from './collect-options.ts';
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
 
 const { buildCollectionWindows, mergeCollectedDates, splitCollectionWindow } = collectionWindows;
