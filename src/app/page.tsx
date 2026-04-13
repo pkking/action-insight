@@ -272,7 +272,11 @@ function DashboardContent() {
       setRuns([]);
       
       try {
-        const runs = await fetchRuns(selectedRepo.owner, selectedRepo.repo, days);
+        const runs = await fetchRuns(selectedRepo.owner, selectedRepo.repo, {
+          days,
+          startDate: useCustomRange ? startDate : undefined,
+          endDate: useCustomRange ? endDate : undefined,
+        });
         
         if (!isCancelled) {
           const isCustomValid = useCustomRange && startDate && endDate;
@@ -342,7 +346,7 @@ function DashboardContent() {
     setZoomRight(null);
     setRefAreaLeft(null);
     setRefAreaRight(null);
-  }, [days, selectedRepoKey]);
+  }, [days, selectedRepoKey, useCustomRange, startDate, endDate]);
 
   const fetchJobsForRun = async (runId: number) => {
     setExpandedRunId(expandedRunId === runId ? null : runId);
