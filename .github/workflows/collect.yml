@@ -3,6 +3,17 @@ on:
   schedule:
     - cron: '0 * * * *'
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force a full backfill instead of incremental collection'
+        required: false
+        default: false
+        type: boolean
+      repo_name:
+        description: 'Optional owner/repo to collect'
+        required: false
+        default: ''
+        type: string
   push:
     paths:
       - 'etl/repos.yaml'
@@ -26,11 +37,21 @@ jobs:
       - run: npm install tsx @octokit/core date-fns js-yaml
       - id: collect
         continue-on-error: true
-        run: npx tsx etl/scripts/collect.ts
+        run: |
+          args=()
+          if [ "${WORKFLOW_FORCE}" = "true" ]; then
+            args+=(--force-full-backfill)
+          fi
+          if [ -n "${WORKFLOW_REPO_NAME}" ]; then
+            args+=(--repo "${WORKFLOW_REPO_NAME}")
+          fi
+          npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RETENTION_DAYS: 90
           VERBOSE: 1
+          WORKFLOW_FORCE: ${{ inputs.force }}
+          WORKFLOW_REPO_NAME: ${{ inputs.repo_name || '' }}
       - if: always()
         run: |
           git config user.name "action-insight-bot"

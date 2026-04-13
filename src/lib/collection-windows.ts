@@ -10,6 +10,7 @@ interface BuildCollectionWindowsOptions {
   retentionDays: number;
   now?: Date;
   windowDays?: number;
+  forceFullBackfill?: boolean;
 }
 
 const DEFAULT_WINDOW_DAYS = 7;
@@ -19,8 +20,9 @@ export function buildCollectionWindows({
   retentionDays,
   now = new Date(),
   windowDays = DEFAULT_WINDOW_DAYS,
+  forceFullBackfill = false,
 }: BuildCollectionWindowsOptions): CollectionWindow[] {
-  if (latest) {
+  if (latest && !forceFullBackfill) {
     return [{ start: latest, end: format(now, 'yyyy-MM-dd') }];
   }
 

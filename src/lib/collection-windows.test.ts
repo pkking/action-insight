@@ -31,6 +31,20 @@ describe('collection window helpers', () => {
     expect(windows).toEqual([{ start: '2026-04-12', end: '2026-04-13' }]);
   });
 
+  it('rebuilds the full retention window when forced even if prior data exists', () => {
+    const windows = buildCollectionWindows({
+      latest: '2026-04-12',
+      retentionDays: 90,
+      now: new Date('2026-04-13T00:00:00Z'),
+      windowDays: 7,
+      forceFullBackfill: true,
+    });
+
+    expect(windows).toHaveLength(13);
+    expect(windows[0]).toEqual({ start: '2026-04-06', end: '2026-04-13' });
+    expect(windows.at(-1)).toEqual({ start: '2026-01-13', end: '2026-01-19' });
+  });
+
   it('sorts and de-duplicates collected daily files before retention cleanup', () => {
     expect(
       mergeCollectedDates(['2026-04-12.json', '2026-04-10.json'], ['2026-04-11', '2026-04-10'])
