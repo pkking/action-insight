@@ -9,10 +9,10 @@ import {
 } from 'recharts';
 import { format, subDays, isAfter, isBefore, startOfDay, endOfDay, parseISO } from 'date-fns';
 import { fetchRuns } from '@/lib/data-fetcher';
-import { AVAILABLE_REPOS, DEFAULT_AVAILABLE_REPO, findAvailableRepo } from '@/lib/available-repos';
 import type { Run as BaseRun } from '@/lib/types';
 
 type Run = BaseRun & { jobsLoading?: boolean };
+type RepoOption = { owner: string; repo: string; key: string };
 
 type SortField = 'date' | 'duration' | 'name';
 type SortOrder = 'asc' | 'desc' | 'none';
@@ -179,14 +179,14 @@ function DashboardContent() {
   const initialFilterName = searchParams.get('filterName') || '';
   const initialMinDuration = searchParams.get('minDuration') || '';
   const initialMaxDuration = searchParams.get('maxDuration') || '';
-  const urlOwner = searchParams.get('owner');
-  const urlRepo = searchParams.get('repo');
-  const selectedRepo = findAvailableRepo(urlOwner, urlRepo) ?? DEFAULT_AVAILABLE_REPO;
+  const initialRepoKey = searchParams.get('repo') || '';
 
   const [days, setDays] = useState(initialDays);
   const [startDate, setStartDate] = useState(initialStartDate);
   const [endDate, setEndDate] = useState(initialEndDate);
   const [useCustomRange, setUseCustomRange] = useState(initialUseCustomRange);
+  const [repoOptions, setRepoOptions] = useState<RepoOption[]>([]);
+  const [selectedRepoKey, setSelectedRepoKey] = useState(initialRepoKey);
   
   // Filters and Sorting
   const [filterName, setFilterName] = useState(initialFilterName);
@@ -208,11 +208,64 @@ function DashboardContent() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
 
+  const selectedRepo = useMemo(() => {
+    if (repoOptions.length === 0) {
+      return null;
+    }
+
+    return repoOptions.find((repo) => repo.key === selectedRepoKey) ?? repoOptions[0];
+  }, [repoOptions, selectedRepoKey]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const fetchRepos = async () => {
+      try {
+        const res = await fetch('/api/repos', { cache: 'no-store' });
+        if (!res.ok) {
+          throw new Error(`Failed to load repositories: ${res.status}`);
+        }
+
+        const data = (await res.json()) as { repos?: RepoOption[] };
+        const repos = data.repos ?? [];
+
+        if (isCancelled) {
+          return;
+        }
+
+        setRepoOptions(repos);
+
+        if (repos.length === 0) {
+          setError('No repository data found under data/.');
+          return;
+        }
+
+        if (!initialRepoKey || !repos.some((repo) => repo.key === initialRepoKey)) {
+          setSelectedRepoKey(repos[0].key);
+        }
+      } catch (err: unknown) {
+        if (!isCancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load repository list.');
+        }
+      }
+    };
+
+    fetchRepos();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [initialRepoKey]);
+
   // Fetch data from pre-collected JSON files
   useEffect(() => {
     let isCancelled = false;
 
     const fetchData = async () => {
+      if (!selectedRepo) {
+        return;
+      }
+
       setLoading(true);
       setLoadingProgress(0);
       setError('');
@@ -257,7 +310,7 @@ function DashboardContent() {
     return () => {
       isCancelled = true;
     };
-  }, [days, useCustomRange, startDate, endDate, selectedRepo.owner, selectedRepo.repo]);
+  }, [days, selectedRepo, useCustomRange, startDate, endDate]);
 
   // Sync state changes back to URL
   useEffect(() => {
@@ -270,8 +323,7 @@ function DashboardContent() {
     } else if (days !== 7) {
       params.set('days', days.toString());
     }
-    params.set('owner', selectedRepo.owner);
-    params.set('repo', selectedRepo.repo);
+    if (selectedRepo) params.set('repo', selectedRepo.key);
     if (filterName) params.set('filterName', filterName);
     if (minDuration) params.set('minDuration', minDuration);
     if (maxDuration) params.set('maxDuration', maxDuration);
@@ -282,7 +334,7 @@ function DashboardContent() {
     const url = query ? `${pathname}?${query}` : pathname;
     
     router.replace(url, { scroll: false });
-  }, [days, useCustomRange, startDate, endDate, filterName, minDuration, maxDuration, sortField, sortOrder, pathname, router, selectedRepo.owner, selectedRepo.repo]);
+  }, [days, selectedRepo, useCustomRange, startDate, endDate, filterName, minDuration, maxDuration, sortField, sortOrder, pathname, router]);
 
   useEffect(() => {
     setExpandedRunId(null);
@@ -290,8 +342,7 @@ function DashboardContent() {
     setZoomRight(null);
     setRefAreaLeft(null);
     setRefAreaRight(null);
-    setRuns([]);
-  }, [selectedRepo.slug]);
+  }, [days, selectedRepoKey]);
 
   const fetchJobsForRun = async (runId: number) => {
     setExpandedRunId(expandedRunId === runId ? null : runId);
@@ -442,6 +493,17 @@ function DashboardContent() {
     alert('Shareable link copied to clipboard!');
   };
 
+  if (!selectedRepo) {
+    return (
+      <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-sm text-neutral-500 dark:text-neutral-400">
+          <Activity className="w-8 h-8 animate-pulse text-blue-500 dark:text-blue-400" />
+          <p>{error || 'Loading tracked repositories...'}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 p-4 md:p-8 font-sans text-neutral-900 dark:text-neutral-100 flex flex-col">
       {/* Top Progress Bar */}
@@ -462,7 +524,10 @@ function DashboardContent() {
               <Activity className="text-blue-500 dark:text-blue-400" />
               Action Insight
             </h1>
-            <p className="text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 text-sm">Monitor GitHub Actions CI/CD metrics</p>
+            <p className="text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 text-sm">
+              Monitor GitHub Actions CI/CD metrics
+              {selectedRepo ? ` for ${selectedRepo.key}` : ''}
+            </p>
           </div>
           
           <div className="flex w-full md:w-auto gap-2">
@@ -485,40 +550,26 @@ function DashboardContent() {
           </div>
         </header>
 
-        {/* Controls */}
-        <section className="bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 p-4 rounded-xl shadow-sm border border-neutral-100 dark:border-neutral-800">
-          <div className="flex flex-col gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Tracked Repositories</h2>
-              <p className="text-sm text-neutral-500 dark:text-neutral-400 dark:text-neutral-500">Switch the dashboard between collected repositories.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {AVAILABLE_REPOS.map((repoOption) => {
-                const isActive = repoOption.slug === selectedRepo.slug;
-
-                return (
-                  <button
-                    key={repoOption.slug}
-                    type="button"
-                    onClick={() => {
-                      const params = new URLSearchParams(searchParams.toString());
-                      params.set('owner', repoOption.owner);
-                      params.set('repo', repoOption.repo);
-                      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-                    }}
-                    className={isActive
-                      ? 'rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 dark:border-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
-                      : 'rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:bg-neutral-800'}
-                  >
-                    {repoOption.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
         <div className="flex gap-2 items-center flex-wrap">
+          <div className="flex items-center gap-2 bg-white dark:bg-neutral-900 dark:bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-3 py-2">
+            <label htmlFor="repo-select" className="text-sm text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
+              Repo
+            </label>
+            <select
+              id="repo-select"
+              value={selectedRepo?.key ?? ''}
+              onChange={(e) => setSelectedRepoKey(e.target.value)}
+              className="bg-transparent text-sm text-neutral-700 dark:text-neutral-300 outline-none min-w-56"
+              disabled={repoOptions.length === 0}
+            >
+              {repoOptions.map((repo) => (
+                <option key={repo.key} value={repo.key}>
+                  {repo.key}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {[7, 30, 90].map(d => (
             <button
               key={d}
@@ -571,12 +622,12 @@ function DashboardContent() {
 
         {error ? (
           <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 p-4 rounded-lg border border-red-100 dark:border-red-800">
-            {error} ({selectedRepo.slug})
+            {error} ({selectedRepo.key})
           </div>
         ) : loading && runs.length === 0 ? (
           <div className="flex items-center justify-center h-64 text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 flex-col gap-4">
             <Activity className="w-8 h-8 animate-pulse text-blue-500 dark:text-blue-400" />
-            <p className="text-sm">Fetching runs for {selectedRepo.slug} (this may take a moment for larger timeframes)...</p>
+            <p className="text-sm">Fetching runs for {selectedRepo.key} (this may take a moment for larger timeframes)...</p>
           </div>
         ) : (
           <>
@@ -774,7 +825,7 @@ function DashboardContent() {
                     {filteredAndSortedRuns.length === 0 && (
                       <tr>
                         <td colSpan={5} className="py-8 text-center text-neutral-500 dark:text-neutral-400 dark:text-neutral-500 dark:text-neutral-400 dark:text-neutral-500">
-                          No matching runs found for {selectedRepo.slug}. Try adjusting your filters.
+                          No matching runs found for {selectedRepo.key}. Try adjusting your filters.
                         </td>
                       </tr>
                     )}

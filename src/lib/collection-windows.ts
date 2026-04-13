@@ -80,3 +80,11 @@ export function splitCollectionWindow(window: CollectionWindow): CollectionWindo
     },
   ];
 }
+
+const collectionWindows = {
+  buildCollectionWindows,
+  mergeCollectedDates,
+  splitCollectionWindow,
+};
+
+export default collectionWindows;
