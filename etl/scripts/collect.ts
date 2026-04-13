@@ -6,12 +6,9 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { fileURLToPath } from 'url';
 
-import {
-  buildCollectionWindows,
-  mergeCollectedDates,
-  splitCollectionWindow,
-  type CollectionWindow,
-} from '../../src/lib/collection-windows.ts';
+import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
+
+const { buildCollectionWindows, mergeCollectedDates, splitCollectionWindow } = collectionWindows;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
