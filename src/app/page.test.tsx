@@ -8,6 +8,8 @@ const useSearchParamsMock = vi.fn();
 const fetchRunsMock = vi.fn();
 const fetchMock = vi.fn();
 
+let lastLineChartProps: Record<string, unknown> | null = null;
+
 global.fetch = fetchMock as typeof fetch;
 
 vi.mock('next/navigation', () => ({
@@ -22,7 +24,10 @@ vi.mock('@/lib/data-fetcher', () => ({
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  LineChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  LineChart: (props: { children: React.ReactNode; data?: unknown[] }) => {
+    lastLineChartProps = props;
+    return <div data-testid="line-chart" data-points={props.data?.length ?? 0}>{props.children}</div>;
+  },
   Line: () => null,
   XAxis: () => null,
   YAxis: () => null,
@@ -33,6 +38,7 @@ vi.mock('recharts', () => ({
 
 describe('Dashboard repo selection', () => {
   beforeEach(() => {
+    lastLineChartProps = null;
     replaceMock.mockReset();
     fetchRunsMock.mockReset();
     fetchMock.mockReset();
@@ -53,7 +59,11 @@ describe('Dashboard repo selection', () => {
     render(<Dashboard />);
 
     await waitFor(() => {
-      expect(fetchRunsMock).toHaveBeenCalledWith('vllm-project', 'vllm-ascend', 7);
+      expect(fetchRunsMock).toHaveBeenCalledWith('vllm-project', 'vllm-ascend', {
+        days: 7,
+        startDate: undefined,
+        endDate: undefined,
+      });
     });
   });
 
@@ -63,7 +73,11 @@ describe('Dashboard repo selection', () => {
     render(<Dashboard />);
 
     await waitFor(() => {
-      expect(fetchRunsMock).toHaveBeenCalledWith('openai', 'action-insight', 7);
+      expect(fetchRunsMock).toHaveBeenCalledWith('openai', 'action-insight', {
+        days: 7,
+        startDate: undefined,
+        endDate: undefined,
+      });
     });
   });
 
@@ -73,7 +87,11 @@ describe('Dashboard repo selection', () => {
     render(<Dashboard />);
 
     await waitFor(() => {
-      expect(fetchRunsMock).toHaveBeenCalledWith('vllm-project', 'vllm-ascend', 7);
+      expect(fetchRunsMock).toHaveBeenCalledWith('vllm-project', 'vllm-ascend', {
+        days: 7,
+        startDate: undefined,
+        endDate: undefined,
+      });
     });
   });
 
@@ -92,6 +110,25 @@ describe('Dashboard repo selection', () => {
 
     await waitFor(() => {
       expect(replaceMock).toHaveBeenCalledWith('/?repo=openai%2Faction-insight', { scroll: false });
+    });
+  });
+
+  it('passes the selected custom date range to fetchRuns', async () => {
+    const { container } = render(<Dashboard />);
+
+    const customButton = await screen.findByRole('button', { name: /custom/i });
+    fireEvent.click(customButton);
+
+    const dateInputs = container.querySelectorAll('input[type="date"]');
+    fireEvent.change(dateInputs[0], { target: { value: '2026-04-01' } });
+    fireEvent.change(dateInputs[1], { target: { value: '2026-04-10' } });
+
+    await waitFor(() => {
+      expect(fetchRunsMock).toHaveBeenLastCalledWith('vllm-project', 'vllm-ascend', {
+        days: 7,
+        startDate: '2026-04-01',
+        endDate: '2026-04-10',
+      });
     });
   });
 });
