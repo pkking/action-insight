@@ -4,6 +4,7 @@ import {
   buildCollectionWindows,
   mergeCollectedDates,
   splitCollectionWindow,
+  toCreatedRange,
 } from './collection-windows';
 
 describe('collection window helpers', () => {
@@ -72,5 +73,11 @@ describe('collection window helpers', () => {
       { start: '2026-04-09T00:00:00Z', end: '2026-04-09T12:00:00Z' },
       { start: '2026-04-09T12:00:00Z', end: '2026-04-10T00:00:00Z' },
     ]);
+  });
+
+  it('formats created ranges for the actions runs API without the search prefix', () => {
+    expect(toCreatedRange({ start: '2026-04-07', end: '2026-04-14' })).toBe(
+      '2026-04-07T00:00:00Z..2026-04-14T23:59:59Z'
+    );
   });
 });

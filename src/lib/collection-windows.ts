@@ -59,6 +59,18 @@ export function mergeCollectedDates(existingFiles: string[], collectedDates: str
   return Array.from(fileSet).sort().reverse();
 }
 
+function toCreatedBoundary(value: string, isEnd: boolean): string {
+  if (value.includes('T')) {
+    return value;
+  }
+
+  return `${value}T${isEnd ? '23:59:59' : '00:00:00'}Z`;
+}
+
+export function toCreatedRange(window: CollectionWindow): string {
+  return `${toCreatedBoundary(window.start, false)}..${toCreatedBoundary(window.end, true)}`;
+}
+
 function parseWindowBoundary(value: string): Date {
   return new Date(value.includes('T') ? value : `${value}T00:00:00Z`);
 }
@@ -91,6 +103,7 @@ const collectionWindows = {
   buildCollectionWindows,
   mergeCollectedDates,
   splitCollectionWindow,
+  toCreatedRange,
 };
 
 export default collectionWindows;
