@@ -23,6 +23,7 @@ describe('collection window helpers', () => {
   it('uses a single incremental window when prior data already exists', () => {
     const windows = buildCollectionWindows({
       latest: '2026-04-12',
+      existingFileCount: 3,
       retentionDays: 90,
       now: new Date('2026-04-13T00:00:00Z'),
       windowDays: 7,
@@ -31,9 +32,24 @@ describe('collection window helpers', () => {
     expect(windows).toEqual([{ start: '2026-04-12', end: '2026-04-13' }]);
   });
 
+  it('rebuilds the full retention window when history looks incomplete', () => {
+    const windows = buildCollectionWindows({
+      latest: '2026-04-12',
+      existingFileCount: 1,
+      retentionDays: 90,
+      now: new Date('2026-04-13T00:00:00Z'),
+      windowDays: 7,
+    });
+
+    expect(windows).toHaveLength(13);
+    expect(windows[0]).toEqual({ start: '2026-04-06', end: '2026-04-13' });
+    expect(windows.at(-1)).toEqual({ start: '2026-01-13', end: '2026-01-19' });
+  });
+
   it('rebuilds the full retention window when forced even if prior data exists', () => {
     const windows = buildCollectionWindows({
       latest: '2026-04-12',
+      existingFileCount: 3,
       retentionDays: 90,
       now: new Date('2026-04-13T00:00:00Z'),
       windowDays: 7,
