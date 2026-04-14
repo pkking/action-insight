@@ -314,6 +314,7 @@ async function collectRepo(
 
   const windows = buildCollectionWindows({
     latest: index.latest,
+    existingFileCount: index.files.length,
     retentionDays,
     forceFullBackfill: options.forceFullBackfill,
   });
