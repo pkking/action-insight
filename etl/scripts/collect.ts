@@ -13,7 +13,7 @@ import {
 } from './collect-options.ts';
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
 
-const { buildCollectionWindows, mergeCollectedDates, splitCollectionWindow } = collectionWindows;
+const { buildCollectionWindows, mergeCollectedDates, splitCollectionWindow, toCreatedRange } = collectionWindows;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -326,15 +326,8 @@ export async function collectRepo(
   let index = storage.readIndex(repo);
   log(`Index state: latest=${index.latest}, files=${index.files.length}`);
 
-  function toCreatedBoundary(value: string, isEnd: boolean): string {
-    if (value.includes('T')) {
-      return value;
-    }
-    return `${value}T${isEnd ? '23:59:59' : '00:00:00'}Z`;
-  }
-
   function toCreatedParam(window: CollectionWindow): string {
-    return `created:${toCreatedBoundary(window.start, false)}..${toCreatedBoundary(window.end, true)}`;
+    return `created:${toCreatedRange(window)}`;
   }
 
   async function fetchRunsForWindow(window: CollectionWindow): Promise<{ runs: Run[]; saturated: boolean }> {
