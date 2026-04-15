@@ -7,6 +7,7 @@ export interface Index {
   files: string[];
   retention_days: number;
   last_updated: string;
+  history_complete?: boolean;
 }
 
 export interface DayData {

@@ -33,10 +33,11 @@ describe('collection window helpers', () => {
     expect(windows).toEqual([{ start: '2026-04-12', end: '2026-04-13' }]);
   });
 
-  it('rebuilds the full retention window when history looks incomplete', () => {
+  it('rebuilds the full retention window when history is explicitly marked incomplete', () => {
     const windows = buildCollectionWindows({
       latest: '2026-04-12',
-      existingFileCount: 1,
+      existingFileCount: 3,
+      historyComplete: false,
       retentionDays: 90,
       now: new Date('2026-04-13T00:00:00Z'),
       windowDays: 7,

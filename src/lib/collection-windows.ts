@@ -8,6 +8,7 @@ export interface CollectionWindow {
 interface BuildCollectionWindowsOptions {
   latest: string;
   existingFileCount?: number;
+  historyComplete?: boolean;
   retentionDays: number;
   now?: Date;
   windowDays?: number;
@@ -19,12 +20,14 @@ const DEFAULT_WINDOW_DAYS = 7;
 export function buildCollectionWindows({
   latest,
   existingFileCount = 0,
+  historyComplete,
   retentionDays,
   now = new Date(),
   windowDays = DEFAULT_WINDOW_DAYS,
   forceFullBackfill = false,
 }: BuildCollectionWindowsOptions): CollectionWindow[] {
-  const hasIncompleteHistory = Boolean(latest) && existingFileCount <= 1;
+  const hasIncompleteHistory =
+    historyComplete === false || (historyComplete === undefined && Boolean(latest) && existingFileCount <= 1);
 
   if (latest && !forceFullBackfill && !hasIncompleteHistory) {
     return [{ start: latest, end: format(now, 'yyyy-MM-dd') }];

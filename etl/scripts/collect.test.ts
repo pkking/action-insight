@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 
 import {
   collectRepo,
@@ -42,7 +44,30 @@ describe('collect rate limit handling', () => {
     ).toBe(true);
   });
 
-  it('writes partial results and abort metadata when rate limit is hit mid-collection', async () => {
+  it('recognizes secondary rate limit messages', () => {
+    expect(
+      isGitHubRateLimitError({
+        status: 403,
+        message: 'You have exceeded a secondary rate limit. Please wait a few minutes before you try again.',
+      })
+    ).toBe(true);
+  });
+
+  it('recognizes abuse throttling responses that include a retry-after header', () => {
+    expect(
+      isGitHubRateLimitError({
+        status: 403,
+        message: 'Request blocked by the abuse detection mechanism.',
+        response: {
+          headers: {
+            'retry-after': '60',
+          },
+        },
+      })
+    ).toBe(true);
+  });
+
+  it('writes partial results and incomplete-history metadata when rate limit is hit mid-collection', async () => {
     const repo = 'acme/widgets';
     const writes: Array<{ kind: 'day' | 'index'; payload: unknown }> = [];
 
@@ -61,6 +86,16 @@ describe('collect rate limit handling', () => {
                 created_at: '2026-04-14T10:00:00Z',
                 updated_at: '2026-04-14T10:10:00Z',
                 html_url: 'https://example.com/runs/101',
+              },
+              {
+                id: 102,
+                name: 'CI',
+                head_branch: 'main',
+                status: 'completed',
+                conclusion: 'success',
+                created_at: '2026-04-14T11:00:00Z',
+                updated_at: '2026-04-14T11:10:00Z',
+                html_url: 'https://example.com/runs/102',
               },
             ],
           },
@@ -101,6 +136,7 @@ describe('collect rate limit handling', () => {
           files: ['2026-04-13.json'],
           retention_days: 90,
           last_updated: '2026-04-13T00:00:00Z',
+          history_complete: true,
         }),
         writeIndex: (_repo, index) => {
           writes.push({ kind: 'index', payload: index });
@@ -126,9 +162,85 @@ describe('collect rate limit handling', () => {
         payload: expect.objectContaining({
           latest: '2026-04-14',
           files: ['2026-04-14.json', '2026-04-13.json'],
+          history_complete: false,
         }),
       },
     ]);
+  });
+
+  it('rebuilds the full retention range at the collector call site when history is marked incomplete', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-13T00:00:00Z'));
+
+    try {
+      const repo = 'acme/widgets';
+      const requests: Array<{ route: string; created?: string }> = [];
+      const octokit = {
+        request: vi.fn().mockImplementation((route: string, params: Record<string, unknown>) => {
+          requests.push({ route, created: typeof params.created === 'string' ? params.created : undefined });
+
+          if (route === 'GET /repos/{owner}/{repo}/actions/runs') {
+            return Promise.reject({
+              status: 403,
+              response: {
+                headers: {
+                  'x-ratelimit-limit': '5000',
+                  'x-ratelimit-remaining': '0',
+                  'x-ratelimit-reset': '1712345678',
+                },
+              },
+            });
+          }
+
+          throw new Error(`Unexpected request: ${route}`);
+        }),
+      };
+
+      await expect(
+        collectRepo(octokit as never, repo, 90, { forceFullBackfill: false }, {
+          readIndex: () => ({
+            version: 1,
+            latest: '2026-04-12',
+            files: ['2026-04-12.json', '2026-04-11.json'],
+            retention_days: 90,
+            last_updated: '2026-04-12T00:00:00Z',
+            history_complete: false,
+          }),
+          writeIndex: vi.fn(),
+          readDayData: (_repo, date) => ({ date, repo, runs: [] }),
+          writeDayData: vi.fn(),
+        })
+      ).rejects.toBeInstanceOf(RateLimitAbortError);
+
+      expect(requests[0]).toEqual({
+        route: 'GET /repos/{owner}/{repo}/actions/runs',
+        created: 'created:2026-04-06T00:00:00Z..2026-04-13T23:59:59Z',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails when a later rate limit would otherwise hide an earlier repo failure', async () => {
+    const collectRepoImpl = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('repository config is invalid'))
+      .mockRejectedValueOnce(
+        new RateLimitAbortError('GitHub API rate limit reached (remaining=0, limit=5000, reset=1712345678)')
+      );
+
+    await expect(
+      runCollection({
+        token: 'token',
+        retentionDays: 90,
+        cliOptions: { forceFullBackfill: false },
+        targetRepos: ['acme/widgets', 'acme/other', 'acme/more'],
+        octokit: {} as never,
+        collectRepoImpl,
+      })
+    ).rejects.toThrow('Collection failed for 1 repos');
+
+    expect(collectRepoImpl).toHaveBeenCalledTimes(2);
   });
 
   it('stops immediately and reports a normal completion when a repo hits rate limit', async () => {
@@ -309,5 +421,78 @@ describe('collect rate limit handling', () => {
         }),
       },
     ]);
+  });
+
+  it('removes expired day files through the storage adapter instead of direct fs deletion', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-16T00:00:00Z'));
+
+    const repo = 'adapter-cleanup-test/widgets';
+    const deleteDayData = vi.fn();
+    const expiredDate = '2026-04-13';
+    const expiredFilePath = path.join(process.cwd(), 'data', 'adapter-cleanup-test', 'widgets', `${expiredDate}.json`);
+
+    try {
+      fs.mkdirSync(path.dirname(expiredFilePath), { recursive: true });
+      fs.writeFileSync(expiredFilePath, JSON.stringify({ date: expiredDate, repo, runs: [] }));
+
+      const octokit = {
+        request: vi
+          .fn()
+          .mockResolvedValueOnce({
+            data: {
+              workflow_runs: [
+                {
+                  id: 101,
+                  name: 'CI',
+                  head_branch: 'main',
+                  status: 'completed',
+                  conclusion: 'success',
+                  created_at: '2026-04-16T10:00:00Z',
+                  updated_at: '2026-04-16T10:10:00Z',
+                  html_url: 'https://example.com/runs/101',
+                },
+              ],
+            },
+          })
+          .mockResolvedValueOnce({
+            data: {
+              jobs: [
+                {
+                  id: 201,
+                  name: 'build',
+                  status: 'completed',
+                  conclusion: 'success',
+                  created_at: '2026-04-16T10:00:00Z',
+                  started_at: '2026-04-16T10:01:00Z',
+                  completed_at: '2026-04-16T10:10:00Z',
+                  html_url: 'https://example.com/jobs/201',
+                },
+              ],
+            },
+          }),
+      };
+
+      await collectRepo(octokit as never, repo, 2, { forceFullBackfill: false }, {
+        readIndex: () => ({
+          version: 1,
+          latest: '2026-04-15',
+          files: ['2026-04-15.json', `${expiredDate}.json`],
+          retention_days: 2,
+          last_updated: '2026-04-15T00:00:00Z',
+          history_complete: true,
+        }),
+        writeIndex: vi.fn(),
+        readDayData: (_repo, date) => ({ date, repo, runs: [] }),
+        writeDayData: vi.fn(),
+        deleteDayData,
+      });
+
+      expect(deleteDayData).toHaveBeenCalledWith(repo, expiredDate);
+      expect(fs.existsSync(expiredFilePath)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      fs.rmSync(path.join(process.cwd(), 'data', 'adapter-cleanup-test'), { recursive: true, force: true });
+    }
   });
 });

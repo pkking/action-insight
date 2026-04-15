@@ -81,6 +81,7 @@ interface Index {
   files: string[];
   retention_days: number;
   last_updated: string;
+  history_complete?: boolean;
 }
 
 interface DayData {
@@ -98,6 +99,7 @@ interface StorageAdapter {
   writeIndex: (repo: string, index: Index) => void;
   readDayData: (repo: string, date: string) => DayData;
   writeDayData: (repo: string, data: DayData) => void;
+  deleteDayData: (repo: string, date: string) => void;
 }
 
 interface RunCollectionOptions {
@@ -201,6 +203,16 @@ function writeDayData(repo: string, data: DayData) {
   log(`Day data written: ${filePath}`);
 }
 
+function deleteDayData(repo: string, date: string) {
+  const filePath = path.join(getRepoDir(repo), `${date}.json`);
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+
+  fs.unlinkSync(filePath);
+  log(`Day data removed: ${filePath}`);
+}
+
 function getRateLimitDetails(error: GitHubRequestErrorLike): RateLimitDetails {
   return {
     limit: String(error.response?.headers?.['x-ratelimit-limit'] ?? ''),
@@ -217,8 +229,19 @@ export function isGitHubRateLimitError(error: unknown): error is GitHubRequestEr
   const candidate = error as GitHubRequestErrorLike;
   const message = `${candidate.message ?? ''} ${candidate.response?.data?.message ?? ''}`.toLowerCase();
   const { remaining } = getRateLimitDetails(candidate);
+  const retryAfter = candidate.response?.headers?.['retry-after'];
+  const hasSecondaryRateLimitSignal =
+    message.includes('secondary rate limit') ||
+    message.includes('abuse detection') ||
+    message.includes('abuse rate limit') ||
+    (Boolean(retryAfter) && candidate.status === 403);
 
-  return remaining === '0' || message.includes('rate limit') || message.includes('api rate limit exceeded');
+  return (
+    remaining === '0' ||
+    message.includes('rate limit') ||
+    message.includes('api rate limit exceeded') ||
+    hasSecondaryRateLimitSignal
+  );
 }
 
 export class RateLimitAbortError extends Error {
@@ -238,8 +261,9 @@ function persistCollectedRuns(
   repo: string,
   index: Index,
   runs: Run[],
-  retentionDays: number
-): Index {
+  retentionDays: number,
+  historyComplete: boolean
+): void {
   const runsByDate: Record<string, Run[]> = {};
   for (const run of runs) {
     const date = format(new Date(run.created_at), 'yyyy-MM-dd');
@@ -273,6 +297,7 @@ function persistCollectedRuns(
     files,
     retention_days: retentionDays,
     last_updated: new Date().toISOString(),
+    history_complete: historyComplete,
   };
 
   const cutoffDate = subDays(new Date(), retentionDays);
@@ -286,11 +311,8 @@ function persistCollectedRuns(
   }
 
   for (const file of filesToRemove) {
-    const filePath = path.join(getRepoDir(repo), file);
-    if (fs.existsSync(filePath)) {
-      console.log(`  Removing old file: ${file}`);
-      fs.unlinkSync(filePath);
-    }
+    console.log(`  Removing old file: ${file}`);
+    storage.deleteDayData(repo, file.replace('.json', ''));
     const idx = updatedIndex.files.indexOf(file);
     if (idx > -1) updatedIndex.files.splice(idx, 1);
   }
@@ -299,8 +321,6 @@ function persistCollectedRuns(
 
   storage.writeIndex(repo, updatedIndex);
   console.log(`  Index updated: ${updatedIndex.files.length} files, latest: ${updatedIndex.latest}`);
-
-  return updatedIndex;
 }
 
 export async function collectRepo(
@@ -313,6 +333,7 @@ export async function collectRepo(
     writeIndex,
     readDayData,
     writeDayData,
+    deleteDayData,
   }
 ) {
   console.log(`Processing ${repo}...`);
@@ -323,7 +344,7 @@ export async function collectRepo(
 
   log(`Owner: ${owner}, Repo: ${repoName}`);
 
-  let index = storage.readIndex(repo);
+  const index = storage.readIndex(repo);
   log(`Index state: latest=${index.latest}, files=${index.files.length}`);
 
   function toCreatedParam(window: CollectionWindow): string {
@@ -498,6 +519,7 @@ export async function collectRepo(
   const windows = buildCollectionWindows({
     latest: index.latest,
     existingFileCount: index.files.length,
+    historyComplete: index.history_complete,
     retentionDays,
     forceFullBackfill: options.forceFullBackfill,
   });
@@ -515,7 +537,7 @@ export async function collectRepo(
         for (const run of err.partialRuns) {
           allRunsMap.set(run.id, run);
         }
-        index = persistCollectedRuns(storage, repo, index, Array.from(allRunsMap.values()), retentionDays);
+        persistCollectedRuns(storage, repo, index, Array.from(allRunsMap.values()), retentionDays, false);
       }
       throw err;
     }
@@ -523,7 +545,7 @@ export async function collectRepo(
 
   const allRuns = Array.from(allRunsMap.values());
   log(`Total completed runs collected: ${allRuns.length}`);
-  persistCollectedRuns(storage, repo, index, allRuns, retentionDays);
+  persistCollectedRuns(storage, repo, index, allRuns, retentionDays, true);
 }
 
 export async function runCollection({
@@ -542,6 +564,7 @@ export async function runCollection({
 
   const client = octokit ?? new Octokit({ auth: token });
   const failures: string[] = [];
+  let stoppedEarly: RateLimitAbortError | null = null;
 
   if (cliOptions.forceFullBackfill) {
     console.log(
@@ -557,14 +580,18 @@ export async function runCollection({
       await collectRepoImpl(client, repo, retentionDays, cliOptions);
     } catch (err) {
       if (err instanceof RateLimitAbortError) {
-        console.log(err.message);
-        console.log('Stopping collection early. Partial results were saved and the next run can resume from the updated index.');
-        return;
+        stoppedEarly = err;
+        break;
       }
       const message = err instanceof Error ? err.message : String(err);
       failures.push(`${repo}: ${message}`);
       error(`Failed to collect ${repo}:`, err);
     }
+  }
+
+  if (stoppedEarly) {
+    console.log(stoppedEarly.message);
+    console.log('Stopping collection early. Partial results were saved and the next run can resume from the updated index.');
   }
 
   if (failures.length > 0) {
@@ -573,6 +600,10 @@ export async function runCollection({
       error(`  - ${failure}`);
     }
     throw new Error(`Collection failed for ${failures.length} repos`);
+  }
+
+  if (stoppedEarly) {
+    return;
   }
 
   console.log('Done!');
