@@ -13,8 +13,7 @@ import {
 } from './collect-options.ts';
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
 
-const { buildCollectionWindows, mergeCollectedDates, splitCollectionWindow } = collectionWindows;
-const { toCreatedRange } = collectionWindows;
+const { buildCollectionWindows, mergeCollectedDates, splitCollectionWindow, toCreatedRange } = collectionWindows;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,12 +64,24 @@ interface Job {
   durationInSeconds: number;
 }
 
+interface GitHubJobPayload {
+  id: number;
+  name: string;
+  status: string;
+  conclusion?: string | null;
+  created_at?: string;
+  started_at: string;
+  completed_at?: string;
+  html_url: string;
+}
+
 interface Index {
   version: number;
   latest: string;
   files: string[];
   retention_days: number;
   last_updated: string;
+  history_complete?: boolean;
 }
 
 interface DayData {
@@ -82,6 +93,38 @@ interface DayData {
 interface ReposConfig {
   repos: string[];
 }
+
+interface StorageAdapter {
+  readIndex: (repo: string) => Index;
+  writeIndex: (repo: string, index: Index) => void;
+  readDayData: (repo: string, date: string) => DayData;
+  writeDayData: (repo: string, data: DayData) => void;
+  deleteDayData: (repo: string, date: string) => void;
+}
+
+interface RunCollectionOptions {
+  token?: string;
+  retentionDays: number;
+  cliOptions: CollectCliOptions;
+  targetRepos: string[];
+  octokit?: Octokit;
+  collectRepoImpl?: typeof collectRepo;
+}
+
+interface RateLimitDetails {
+  limit?: string;
+  remaining?: string;
+  reset?: string;
+}
+
+type GitHubRequestErrorLike = {
+  status?: number;
+  message?: string;
+  response?: {
+    headers?: Record<string, string | number | undefined>;
+    data?: { message?: string };
+  };
+};
 
 const ETL_DIR = path.join(__dirname, '..');
 const DATA_DIR = path.join(__dirname, '../../data');
@@ -160,11 +203,138 @@ function writeDayData(repo: string, data: DayData) {
   log(`Day data written: ${filePath}`);
 }
 
-async function collectRepo(
+function deleteDayData(repo: string, date: string) {
+  const filePath = path.join(getRepoDir(repo), `${date}.json`);
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+
+  fs.unlinkSync(filePath);
+  log(`Day data removed: ${filePath}`);
+}
+
+function getRateLimitDetails(error: GitHubRequestErrorLike): RateLimitDetails {
+  return {
+    limit: String(error.response?.headers?.['x-ratelimit-limit'] ?? ''),
+    remaining: String(error.response?.headers?.['x-ratelimit-remaining'] ?? ''),
+    reset: String(error.response?.headers?.['x-ratelimit-reset'] ?? ''),
+  };
+}
+
+export function isGitHubRateLimitError(error: unknown): error is GitHubRequestErrorLike {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const candidate = error as GitHubRequestErrorLike;
+  const message = `${candidate.message ?? ''} ${candidate.response?.data?.message ?? ''}`.toLowerCase();
+  const { remaining } = getRateLimitDetails(candidate);
+  const retryAfter = candidate.response?.headers?.['retry-after'];
+  const hasSecondaryRateLimitSignal =
+    message.includes('secondary rate limit') ||
+    message.includes('abuse detection') ||
+    message.includes('abuse rate limit') ||
+    (Boolean(retryAfter) && candidate.status === 403);
+
+  return (
+    remaining === '0' ||
+    message.includes('rate limit') ||
+    message.includes('api rate limit exceeded') ||
+    hasSecondaryRateLimitSignal
+  );
+}
+
+export class RateLimitAbortError extends Error {
+  partialRuns: Run[];
+  details: RateLimitDetails;
+
+  constructor(message: string, partialRuns: Run[] = [], details: RateLimitDetails = {}) {
+    super(message);
+    this.name = 'RateLimitAbortError';
+    this.partialRuns = partialRuns;
+    this.details = details;
+  }
+}
+
+function persistCollectedRuns(
+  storage: StorageAdapter,
+  repo: string,
+  index: Index,
+  runs: Run[],
+  retentionDays: number,
+  historyComplete: boolean
+): void {
+  const runsByDate: Record<string, Run[]> = {};
+  for (const run of runs) {
+    const date = format(new Date(run.created_at), 'yyyy-MM-dd');
+    if (!runsByDate[date]) runsByDate[date] = [];
+    runsByDate[date].push(run);
+  }
+
+  const dates = Object.keys(runsByDate).sort().reverse();
+  if (dates.length > 0) {
+    log(`Date range: ${dates[dates.length - 1]} to ${dates[0]} (${dates.length} days)`);
+  } else {
+    log('No completed runs found for this repo');
+  }
+
+  const files = mergeCollectedDates(index.files, dates);
+
+  for (const date of dates) {
+    console.log(`  Writing ${date}.json (${runsByDate[date].length} runs)`);
+    const existing = storage.readDayData(repo, date);
+    const runMap = new Map(existing.runs.map(r => [r.id, r]));
+    for (const run of runsByDate[date]) {
+      runMap.set(run.id, run);
+    }
+
+    storage.writeDayData(repo, { date, repo, runs: Array.from(runMap.values()) });
+  }
+
+  const updatedIndex: Index = {
+    version: 1,
+    latest: '',
+    files,
+    retention_days: retentionDays,
+    last_updated: new Date().toISOString(),
+    history_complete: historyComplete,
+  };
+
+  const cutoffDate = subDays(new Date(), retentionDays);
+  const filesToRemove = files.filter(file => {
+    const fileDate = parseISO(file.replace('.json', ''));
+    return isBefore(fileDate, cutoffDate);
+  });
+
+  if (filesToRemove.length > 0) {
+    log(`Removing ${filesToRemove.length} old files`);
+  }
+
+  for (const file of filesToRemove) {
+    console.log(`  Removing old file: ${file}`);
+    storage.deleteDayData(repo, file.replace('.json', ''));
+    const idx = updatedIndex.files.indexOf(file);
+    if (idx > -1) updatedIndex.files.splice(idx, 1);
+  }
+
+  updatedIndex.latest = updatedIndex.files[0]?.replace('.json', '') || index.latest || '';
+
+  storage.writeIndex(repo, updatedIndex);
+  console.log(`  Index updated: ${updatedIndex.files.length} files, latest: ${updatedIndex.latest}`);
+}
+
+export async function collectRepo(
   octokit: Octokit,
   repo: string,
   retentionDays: number,
-  options: CollectCliOptions
+  options: CollectCliOptions,
+  storage: StorageAdapter = {
+    readIndex,
+    writeIndex,
+    readDayData,
+    writeDayData,
+    deleteDayData,
+  }
 ) {
   console.log(`Processing ${repo}...`);
   const [owner, repoName] = repo.split('/');
@@ -174,7 +344,7 @@ async function collectRepo(
 
   log(`Owner: ${owner}, Repo: ${repoName}`);
 
-  const index = readIndex(repo);
+  const index = storage.readIndex(repo);
   log(`Index state: latest=${index.latest}, files=${index.files.length}`);
 
   function toCreatedParam(window: CollectionWindow): string {
@@ -192,13 +362,27 @@ async function collectRepo(
     while (true) {
       log(`Fetching page ${page} for ${createdParam}...`);
       const startTime = Date.now();
-      const { data } = await octokit.request('GET /repos/{owner}/{repo}/actions/runs', {
-        owner,
-        repo: repoName,
-        per_page: PER_PAGE,
-        page,
-        created: createdParam,
-      });
+      let data;
+      try {
+        const response = await octokit.request('GET /repos/{owner}/{repo}/actions/runs', {
+          owner,
+          repo: repoName,
+          per_page: PER_PAGE,
+          page,
+          created: createdParam,
+        });
+        data = response.data;
+      } catch (err) {
+        if (isGitHubRateLimitError(err)) {
+          const details = getRateLimitDetails(err);
+          throw new RateLimitAbortError(
+            `GitHub API rate limit reached (remaining=${details.remaining || 'unknown'}, limit=${details.limit || 'unknown'}, reset=${details.reset || 'unknown'})`,
+            allRuns,
+            details
+          );
+        }
+        throw err;
+      }
       const elapsed = Date.now() - startTime;
       log(`Page ${page}: ${data.workflow_runs.length} runs fetched (${elapsed}ms)`);
 
@@ -220,17 +404,31 @@ async function collectRepo(
 
         log(`Fetching jobs for run #${run.id} (${run.name})...`);
         const jobsStartTime = Date.now();
-        const { data: jobsData } = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
-          owner,
-          repo: repoName,
-          run_id: run.id,
-        });
+        let jobsData;
+        try {
+          const response = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
+            owner,
+            repo: repoName,
+            run_id: run.id,
+          });
+          jobsData = response.data;
+        } catch (err) {
+          if (isGitHubRateLimitError(err)) {
+            const details = getRateLimitDetails(err);
+            throw new RateLimitAbortError(
+              `GitHub API rate limit reached (remaining=${details.remaining || 'unknown'}, limit=${details.limit || 'unknown'}, reset=${details.reset || 'unknown'})`,
+              allRuns,
+              details
+            );
+          }
+          throw err;
+        }
         const jobsElapsed = Date.now() - jobsStartTime;
         log(`Jobs for run #${run.id}: ${jobsData.jobs.length} jobs (${jobsElapsed}ms)`);
 
-        const jobs: Job[] = jobsData.jobs.map((j: any) => {
-          const createdMs = j.created_at ? new Date(j.created_at).getTime() : 0;
-          const startedMs = j.started_at ? new Date(j.started_at).getTime() : createdMs;
+        const jobs: Job[] = (jobsData.jobs as GitHubJobPayload[]).map(j => {
+          const startedMs = new Date(j.started_at).getTime();
+          const createdMs = j.created_at ? new Date(j.created_at).getTime() : startedMs;
           const completedMs = j.completed_at ? new Date(j.completed_at).getTime() : startedMs;
           return {
             id: j.id,
@@ -297,9 +495,21 @@ async function collectRepo(
     const mergedRuns = new Map<number, Run>();
 
     for (const childWindow of childWindows) {
-      const childRuns = await collectRunsForWindow(childWindow);
-      for (const run of childRuns) {
-        mergedRuns.set(run.id, run);
+      try {
+        const childRuns = await collectRunsForWindow(childWindow);
+        for (const run of childRuns) {
+          mergedRuns.set(run.id, run);
+        }
+      } catch (err) {
+        if (err instanceof RateLimitAbortError) {
+          for (const run of err.partialRuns) {
+            mergedRuns.set(run.id, run);
+          }
+
+          throw new RateLimitAbortError(err.message, Array.from(mergedRuns.values()), err.details);
+        }
+
+        throw err;
       }
     }
 
@@ -309,6 +519,7 @@ async function collectRepo(
   const windows = buildCollectionWindows({
     latest: index.latest,
     existingFileCount: index.files.length,
+    historyComplete: index.history_complete,
     retentionDays,
     forceFullBackfill: options.forceFullBackfill,
   });
@@ -316,75 +527,89 @@ async function collectRepo(
 
   const allRunsMap = new Map<number, Run>();
   for (const window of windows) {
-    const windowRuns = await collectRunsForWindow(window);
-    for (const run of windowRuns) {
-      allRunsMap.set(run.id, run);
+    try {
+      const windowRuns = await collectRunsForWindow(window);
+      for (const run of windowRuns) {
+        allRunsMap.set(run.id, run);
+      }
+    } catch (err) {
+      if (err instanceof RateLimitAbortError) {
+        for (const run of err.partialRuns) {
+          allRunsMap.set(run.id, run);
+        }
+        persistCollectedRuns(storage, repo, index, Array.from(allRunsMap.values()), retentionDays, false);
+      }
+      throw err;
     }
   }
 
   const allRuns = Array.from(allRunsMap.values());
   log(`Total completed runs collected: ${allRuns.length}`);
-
-  const runsByDate: Record<string, Run[]> = {};
-  for (const run of allRuns) {
-    const date = format(new Date(run.created_at), 'yyyy-MM-dd');
-    if (!runsByDate[date]) runsByDate[date] = [];
-    runsByDate[date].push(run);
-  }
-
-  const dates = Object.keys(runsByDate).sort().reverse();
-  if (dates.length > 0) {
-    log(`Date range: ${dates[dates.length - 1]} to ${dates[0]} (${dates.length} days)`);
-  } else {
-    log('No completed runs found for this repo');
-  }
-
-  const files = mergeCollectedDates(index.files, dates);
-
-  for (const date of dates) {
-    console.log(`  Writing ${date}.json (${runsByDate[date].length} runs)`);
-    const existing = readDayData(repo, date);
-    const runMap = new Map(existing.runs.map(r => [r.id, r]));
-    for (const run of runsByDate[date]) {
-      runMap.set(run.id, run);
-    }
-
-    writeDayData(repo, { date, repo, runs: Array.from(runMap.values()) });
-  }
-
-  const updatedIndex: Index = {
-    version: 1,
-    latest: dates[0] || index.latest || '',
-    files,
-    retention_days: retentionDays,
-    last_updated: new Date().toISOString(),
-  };
-
-  const cutoffDate = subDays(new Date(), retentionDays);
-  const filesToRemove = files.filter(file => {
-    const fileDate = parseISO(file.replace('.json', ''));
-    return isBefore(fileDate, cutoffDate);
-  });
-
-  if (filesToRemove.length > 0) {
-    log(`Removing ${filesToRemove.length} old files`);
-  }
-
-  for (const file of filesToRemove) {
-    const filePath = path.join(getRepoDir(repo), file);
-    if (fs.existsSync(filePath)) {
-      console.log(`  Removing old file: ${file}`);
-      fs.unlinkSync(filePath);
-    }
-    const idx = updatedIndex.files.indexOf(file);
-    if (idx > -1) updatedIndex.files.splice(idx, 1);
-  }
-
-  writeIndex(repo, updatedIndex);
-  console.log(`  Index updated: ${updatedIndex.files.length} files, latest: ${updatedIndex.latest}`);
+  persistCollectedRuns(storage, repo, index, allRuns, retentionDays, true);
 }
 
-async function main() {
+export async function runCollection({
+  token,
+  retentionDays,
+  cliOptions,
+  targetRepos,
+  octokit,
+  collectRepoImpl = collectRepo,
+}: RunCollectionOptions) {
+  if (!token) throw new Error('GITHUB_TOKEN is required');
+  if (targetRepos.length === 0) {
+    console.log('No repositories configured. Skipping collection.');
+    return;
+  }
+
+  const client = octokit ?? new Octokit({ auth: token });
+  const failures: string[] = [];
+  let stoppedEarly: RateLimitAbortError | null = null;
+
+  if (cliOptions.forceFullBackfill) {
+    console.log(
+      `Force full backfill enabled; rebuilding up to ${retentionDays} days for ${cliOptions.repoName || 'all configured repos'}.`
+    );
+  }
+  if (cliOptions.repoName) {
+    console.log(`Single repo mode enabled; collecting only ${cliOptions.repoName}.`);
+  }
+
+  for (const repo of targetRepos) {
+    try {
+      await collectRepoImpl(client, repo, retentionDays, cliOptions);
+    } catch (err) {
+      if (err instanceof RateLimitAbortError) {
+        stoppedEarly = err;
+        break;
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      failures.push(`${repo}: ${message}`);
+      error(`Failed to collect ${repo}:`, err);
+    }
+  }
+
+  if (stoppedEarly) {
+    console.log(stoppedEarly.message);
+    console.log('Stopping collection early. Partial results were saved and the next run can resume from the updated index.');
+  }
+
+  if (failures.length > 0) {
+    error('Collection completed with failures:');
+    for (const failure of failures) {
+      error(`  - ${failure}`);
+    }
+    throw new Error(`Collection failed for ${failures.length} repos`);
+  }
+
+  if (stoppedEarly) {
+    return;
+  }
+
+  console.log('Done!');
+}
+
+export async function main() {
   const cliOptions = parseCollectCliOptions(process.argv.slice(2));
   const token = process.env.GITHUB_TOKEN;
   const configuredRepos = readReposConfig();
@@ -400,46 +625,17 @@ async function main() {
   log(`ETL_DIR: ${ETL_DIR}`);
   log(`DATA_DIR: ${DATA_DIR}`);
 
-  if (!token) throw new Error('GITHUB_TOKEN is required');
-  if (targetRepos.length === 0) {
-    console.log('No repositories configured. Skipping collection.');
-    return;
-  }
-
-  const octokit = new Octokit({ auth: token });
-  const failures: string[] = [];
-
-  if (cliOptions.forceFullBackfill) {
-    console.log(
-      `Force full backfill enabled; rebuilding up to ${retentionDays} days for ${cliOptions.repoName || 'all configured repos'}.`
-    );
-  }
-  if (cliOptions.repoName) {
-    console.log(`Single repo mode enabled; collecting only ${cliOptions.repoName}.`);
-  }
-
-  for (const repo of targetRepos) {
-    try {
-      await collectRepo(octokit, repo, retentionDays, cliOptions);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      failures.push(`${repo}: ${message}`);
-      error(`Failed to collect ${repo}:`, err);
-    }
-  }
-
-  if (failures.length > 0) {
-    error('Collection completed with failures:');
-    for (const failure of failures) {
-      error(`  - ${failure}`);
-    }
-    throw new Error(`Collection failed for ${failures.length} repos`);
-  }
-
-  console.log('Done!');
+  await runCollection({
+    token,
+    retentionDays,
+    cliOptions,
+    targetRepos,
+  });
 }
 
-main().catch(err => {
-  error(err);
-  process.exit(1);
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  main().catch(err => {
+    error(err);
+    process.exit(1);
+  });
+}
