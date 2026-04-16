@@ -348,7 +348,7 @@ export async function collectRepo(
   log(`Index state: latest=${index.latest}, files=${index.files.length}`);
 
   function toCreatedParam(window: CollectionWindow): string {
-    return `created:${toCreatedRange(window)}`;
+    return toCreatedRange(window);
   }
 
   async function fetchRunsForWindow(window: CollectionWindow): Promise<{ runs: Run[]; saturated: boolean }> {
@@ -427,8 +427,8 @@ export async function collectRepo(
         log(`Jobs for run #${run.id}: ${jobsData.jobs.length} jobs (${jobsElapsed}ms)`);
 
         const jobs: Job[] = (jobsData.jobs as GitHubJobPayload[]).map(j => {
-          const createdMs = j.created_at ? new Date(j.created_at).getTime() : 0;
-          const startedMs = j.started_at ? new Date(j.started_at).getTime() : createdMs;
+          const startedMs = new Date(j.started_at).getTime();
+          const createdMs = j.created_at ? new Date(j.created_at).getTime() : startedMs;
           const completedMs = j.completed_at ? new Date(j.completed_at).getTime() : startedMs;
           return {
             id: j.id,

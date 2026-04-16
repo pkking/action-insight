@@ -214,7 +214,7 @@ describe('collect rate limit handling', () => {
 
       expect(requests[0]).toEqual({
         route: 'GET /repos/{owner}/{repo}/actions/runs',
-        created: 'created:2026-04-06T00:00:00Z..2026-04-13T23:59:59Z',
+        created: '2026-04-06T00:00:00Z..2026-04-13T23:59:59Z',
       });
     } finally {
       vi.useRealTimers();
@@ -305,9 +305,9 @@ describe('collect rate limit handling', () => {
 
     const repo = 'acme/widgets';
     const writes: Array<{ kind: 'day' | 'index'; payload: unknown }> = [];
-    const topWindow = 'created:2026-04-01T00:00:00Z..2026-04-15T23:59:59Z';
-    const childOneWindow = 'created:2026-04-01T00:00:00Z..2026-04-08T23:59:59Z';
-    const childTwoWindow = 'created:2026-04-08T00:00:00Z..2026-04-15T23:59:59Z';
+    const topWindow = '2026-04-01T00:00:00Z..2026-04-15T23:59:59Z';
+    const childOneWindow = '2026-04-01T00:00:00Z..2026-04-08T23:59:59Z';
+    const childTwoWindow = '2026-04-08T00:00:00Z..2026-04-15T23:59:59Z';
 
     const octokit = {
       request: vi.fn().mockImplementation((_route, params: Record<string, unknown>) => {

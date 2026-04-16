@@ -48,6 +48,20 @@ describe('collection window helpers', () => {
     expect(windows.at(-1)).toEqual({ start: '2026-01-13', end: '2026-01-19' });
   });
 
+  it('rebuilds the full retention window when history looks incomplete', () => {
+    const windows = buildCollectionWindows({
+      latest: '2026-04-12',
+      existingFileCount: 1,
+      retentionDays: 90,
+      now: new Date('2026-04-13T00:00:00Z'),
+      windowDays: 7,
+    });
+
+    expect(windows).toHaveLength(13);
+    expect(windows[0]).toEqual({ start: '2026-04-06', end: '2026-04-13' });
+    expect(windows.at(-1)).toEqual({ start: '2026-01-13', end: '2026-01-19' });
+  });
+
   it('rebuilds the full retention window when forced even if prior data exists', () => {
     const windows = buildCollectionWindows({
       latest: '2026-04-12',
@@ -77,8 +91,8 @@ describe('collection window helpers', () => {
   });
 
   it('formats a collection window as a raw created-at range', () => {
-    expect(toCreatedRange({ start: '2026-04-09', end: '2026-04-10' })).toBe(
-      '2026-04-09T00:00:00Z..2026-04-10T23:59:59Z'
+    expect(toCreatedRange({ start: '2026-04-07', end: '2026-04-14' })).toBe(
+      '2026-04-07T00:00:00Z..2026-04-14T23:59:59Z'
     );
   });
 });
