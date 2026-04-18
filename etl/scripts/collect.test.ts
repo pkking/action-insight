@@ -4,10 +4,10 @@ import path from 'path';
 
 import {
   collectRepo,
-  isGitHubRateLimitError,
   RateLimitAbortError,
   runCollection,
 } from './collect';
+import { isGitHubRateLimitError } from './github';
 
 describe('collect rate limit handling', () => {
   beforeEach(() => {
