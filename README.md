@@ -91,6 +91,24 @@ Use **Run workflow** with:
 
 This makes the collector start from today and walk backward. Use it when the immediate goal is to inspect recent failures quickly instead of completing the oldest missing history first.
 
+### Recommended rollout for a newly added high-volume repository
+
+If you are onboarding a repository with very dense GitHub Actions history, use this sequence:
+
+1. Add the repo to `etl/repos.yaml`.
+2. For the first few runs, use **Run workflow** with `repo_name=owner/repo` and leave `reverse=false`.
+3. Let the workflow continue oldest-first until the retained window is mostly filled.
+4. Only use `force=true` if you intentionally want to restart retained backfill for that repo.
+5. Only use `reverse=true` when you temporarily care more about recent runs than historical completeness.
+6. After the repo is mostly caught up, remove the manual `repo_name` focus and let the scheduled workflow maintain it normally.
+
+In practice, this means:
+
+- first access: `repo_name` only
+- rebuild retained history: `repo_name` + `force=true`
+- urgent recent data: `repo_name` + `reverse=true`
+- steady-state maintenance: no manual flags
+
 ### Run locally
 
 Install dependencies and run the collector directly:
