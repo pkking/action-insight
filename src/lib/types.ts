@@ -39,6 +39,7 @@ export interface Run {
   id: number;
   name: string;
   head_branch: string;
+  head_sha?: string;
   status: string;
   conclusion: string;
   event?: string;

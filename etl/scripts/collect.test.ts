@@ -81,6 +81,7 @@ describe('collect rate limit handling', () => {
                 id: 101,
                 name: 'CI',
                 head_branch: 'main',
+                head_sha: 'sha-101',
                 status: 'completed',
                 conclusion: 'success',
                 created_at: '2026-04-14T10:00:00Z',
@@ -91,6 +92,7 @@ describe('collect rate limit handling', () => {
                 id: 102,
                 name: 'CI',
                 head_branch: 'main',
+                head_sha: 'sha-102',
                 status: 'completed',
                 conclusion: 'success',
                 created_at: '2026-04-14T11:00:00Z',
@@ -154,7 +156,7 @@ describe('collect rate limit handling', () => {
         payload: expect.objectContaining({
           date: '2026-04-14',
           repo,
-          runs: expect.arrayContaining([expect.objectContaining({ id: 101 })]),
+          runs: expect.arrayContaining([expect.objectContaining({ id: 101, head_sha: 'sha-101' })]),
         }),
       },
       {
@@ -601,6 +603,72 @@ describe('collect rate limit handling', () => {
     } finally {
       vi.useRealTimers();
       fs.rmSync(path.join(process.cwd(), 'data', 'adapter-cleanup-test'), { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the exact retention-boundary day file when pruning old data', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-18T11:55:15.104Z'));
+
+    const repo = 'boundary-retention-test/widgets';
+    const deleteDayData = vi.fn();
+
+    try {
+      const octokit = {
+        request: vi
+          .fn()
+          .mockResolvedValueOnce({
+            data: {
+              workflow_runs: [
+                {
+                  id: 101,
+                  name: 'CI',
+                  head_branch: 'main',
+                  status: 'completed',
+                  conclusion: 'success',
+                  created_at: '2026-01-18T10:00:00Z',
+                  updated_at: '2026-01-18T10:10:00Z',
+                  html_url: 'https://example.com/runs/101',
+                },
+              ],
+            },
+          })
+          .mockResolvedValueOnce({
+            data: {
+              jobs: [
+                {
+                  id: 201,
+                  name: 'build',
+                  status: 'completed',
+                  conclusion: 'success',
+                  created_at: '2026-01-18T10:00:00Z',
+                  started_at: '2026-01-18T10:01:00Z',
+                  completed_at: '2026-01-18T10:10:00Z',
+                  html_url: 'https://example.com/jobs/201',
+                },
+              ],
+            },
+          }),
+      };
+
+      await collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false }, {
+        readIndex: () => ({
+          version: 1,
+          latest: '2026-04-17',
+          files: ['2026-04-17.json'],
+          retention_days: 90,
+          last_updated: '2026-04-17T00:00:00Z',
+          history_complete: true,
+        }),
+        writeIndex: vi.fn(),
+        readDayData: (_repo, date) => ({ date, repo, runs: [] }),
+        writeDayData: vi.fn(),
+        deleteDayData,
+      });
+
+      expect(deleteDayData).not.toHaveBeenCalledWith(repo, '2026-01-18');
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

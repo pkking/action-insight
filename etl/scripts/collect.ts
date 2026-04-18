@@ -1,6 +1,6 @@
 // ETL script: fetches GitHub Actions runs/jobs and writes daily JSON files
 import { Octokit } from '@octokit/core';
-import { addDays, format, subDays, parseISO, isBefore } from 'date-fns';
+import { addDays, format, subDays, parseISO, isBefore, startOfDay } from 'date-fns';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
@@ -47,6 +47,7 @@ interface Run {
   id: number;
   name: string;
   head_branch: string;
+  head_sha?: string;
   status: string;
   conclusion: string;
   event?: string;
@@ -340,7 +341,7 @@ function persistCollectedRuns(
     history_complete: historyComplete,
   };
 
-  const cutoffDate = subDays(new Date(), retentionDays);
+  const cutoffDate = startOfDay(subDays(new Date(), retentionDays));
   const filesToRemove = files.filter(file => {
     const fileDate = parseISO(file.replace('.json', ''));
     return isBefore(fileDate, cutoffDate);
@@ -490,6 +491,7 @@ export async function collectRepo(
           id: run.id,
           name: run.name ?? 'unknown',
           head_branch: run.head_branch ?? 'unknown',
+          head_sha: typeof run.head_sha === 'string' ? run.head_sha : undefined,
           status: run.status ?? 'completed',
           conclusion: run.conclusion ?? 'unknown',
           event: run.event ?? 'unknown',

@@ -2,7 +2,7 @@ import { readdirSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:
 import path from 'node:path';
 
 import * as prMetricsModule from '../../src/lib/pr-metrics';
-import type { PullRequestSnapshot, Run } from '../../src/lib/types';
+import type { PullRequestRef, PullRequestSnapshot, Run } from '../../src/lib/types';
 
 const prMetricsInterop =
   ('buildPullRequestIndex' in prMetricsModule && typeof prMetricsModule.buildPullRequestIndex === 'function')
@@ -49,6 +49,46 @@ function readRetainedRuns(repoKey: string, files: string[], storage: StorageAdap
   }
 
   return runs;
+}
+
+function isPullRequestLikeEvent(event?: string): boolean {
+  return event === 'pull_request' || event === 'pull_request_target' || event === 'pull_request_review';
+}
+
+async function resolvePullRequestsFromHeadSha(
+  octokit: OctokitLike,
+  owner: string,
+  repo: string,
+  runs: Run[],
+  warn: (...args: unknown[]) => void
+): Promise<Map<string, number>> {
+  const shas = Array.from(
+    new Set(
+      runs
+        .filter((run) => (!run.pull_requests || run.pull_requests.length === 0) && run.head_sha && isPullRequestLikeEvent(run.event))
+        .map((run) => run.head_sha as string)
+    )
+  );
+  const resolved = new Map<string, number>();
+
+  for (const sha of shas) {
+    try {
+      const response = await octokit.request('GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls', {
+        owner,
+        repo,
+        commit_sha: sha,
+      });
+      const data = response.data as Array<{ number?: number }>;
+      const number = data.find((pullRequest) => typeof pullRequest.number === 'number')?.number;
+      if (typeof number === 'number') {
+        resolved.set(sha, number);
+      }
+    } catch (error) {
+      warn(`Failed to resolve PR for commit ${sha} in ${owner}/${repo}:`, error);
+    }
+  }
+
+  return resolved;
 }
 
 async function fetchPullRequestSnapshots(
@@ -106,9 +146,26 @@ export async function rebuildPullRequestArtifacts({
   warn = () => {},
 }: RebuildPullRequestArtifactsOptions): Promise<void> {
   const runs = readRetainedRuns(repoKey, files, storage);
+  const resolvedPullRequestsBySha = await resolvePullRequestsFromHeadSha(octokit, owner, repo, runs, warn);
+  const normalizedRuns = runs.map((run) => {
+    if (run.pull_requests && run.pull_requests.length > 0) {
+      return run;
+    }
+
+    const resolvedNumber = run.head_sha ? resolvedPullRequestsBySha.get(run.head_sha) : undefined;
+    if (typeof resolvedNumber !== 'number') {
+      return run;
+    }
+
+    const pullRequests: PullRequestRef[] = [{ number: resolvedNumber }];
+    return {
+      ...run,
+      pull_requests: pullRequests,
+    };
+  });
   const prNumbers = Array.from(
     new Set(
-      runs
+      normalizedRuns
         .map((run) => run.pull_requests?.[0]?.number)
         .filter((number): number is number => typeof number === 'number')
     )
@@ -139,7 +196,7 @@ export async function rebuildPullRequestArtifacts({
   const retentionStartDate = files.map((file) => file.replace(/\.json$/, '')).sort()[0];
   const result = buildPullRequestIndex({
     repo: repoKey,
-    runs,
+    runs: normalizedRuns,
     pullRequests,
     retentionStartDate,
   });
