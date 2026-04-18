@@ -9,7 +9,6 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronUp,
-  Clock,
   ExternalLink,
   Filter,
   Info,
@@ -18,50 +17,74 @@ import {
   Share2,
   XCircle,
 } from 'lucide-react';
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { endOfDay, format, isAfter, isBefore, parseISO, startOfDay, subDays } from 'date-fns';
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { format, isAfter, isBefore } from 'date-fns';
 
-import { fetchPullRequestDetail, fetchPullRequestIndex } from '@/lib/pr-data-fetcher';
-import type { PullRequestDetailFile, PullRequestMetricsSummary, Run } from '@/lib/types';
+import { buildDailyTrend, buildRepoOverviewRows, createDateRange } from '@/lib/overview-metrics';
+import { fetchPullRequestDetail, fetchPullRequestIndexes } from '@/lib/pr-data-fetcher';
+import type {
+  DailyTrendPoint,
+  PullRequestDetailFile,
+  PullRequestIndexFile,
+  RepoOverviewRow,
+  Run,
+} from '@/lib/types';
 
 type RepoOption = { owner: string; repo: string; key: string };
 
 type JobSortField = 'queue' | 'duration' | 'name';
-
 type WorkflowSortField = 'date' | 'duration' | 'name';
-
 type WorkflowSortOrder = 'asc' | 'desc' | 'none';
+type MetricKey = 'prE2EP90Minutes' | 'ciE2EP90Minutes' | 'reviewP90Minutes' | 'ciE2ESlaRate';
 
-function formatDuration(seconds?: number) {
+const METRIC_OPTIONS: Array<{
+  key: MetricKey;
+  label: string;
+  stroke: string;
+  yAxisId: 'minutes' | 'rate';
+}> = [
+  { key: 'prE2EP90Minutes', label: 'PR E2E P90', stroke: '#2563eb', yAxisId: 'minutes' },
+  { key: 'ciE2EP90Minutes', label: 'CI E2E P90', stroke: '#0f766e', yAxisId: 'minutes' },
+  { key: 'reviewP90Minutes', label: 'PR Review P90', stroke: '#ea580c', yAxisId: 'minutes' },
+  { key: 'ciE2ESlaRate', label: 'CI E2E SLA', stroke: '#7c3aed', yAxisId: 'rate' },
+];
+
+function formatDurationMinutes(seconds?: number) {
   if (seconds === undefined) {
     return 'N/A';
   }
-  if (seconds < 60) {
-    return `${Math.floor(seconds)}s`;
-  }
-  return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
+
+  return `${Math.round(seconds / 60)}m`;
+}
+
+function formatMetricMinutes(value: number | null) {
+  return value === null ? 'Insufficient data' : `${value}m`;
+}
+
+function formatRate(value: number | null) {
+  return value === null ? 'Insufficient data' : `${value}%`;
 }
 
 function StatusBadge({ conclusion }: { conclusion: string }) {
   if (conclusion === 'success') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200/50 dark:border-green-800/50">
-        <CheckCircle className="w-3.5 h-3.5" /> Success
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200/50 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 dark:border-green-800/50 dark:bg-green-900/30 dark:text-green-400">
+        <CheckCircle className="h-3.5 w-3.5" /> Success
       </span>
     );
   }
 
   if (conclusion === 'skipped') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700">
-        <Info className="w-3.5 h-3.5" /> Skipped
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+        <Info className="h-3.5 w-3.5" /> Skipped
       </span>
     );
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200/50 dark:border-red-800/50">
-      <XCircle className="w-3.5 h-3.5" /> {conclusion || 'Failed'}
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200/50 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 dark:border-red-800/50 dark:bg-red-900/30 dark:text-red-400">
+      <XCircle className="h-3.5 w-3.5" /> {conclusion || 'Failed'}
     </span>
   );
 }
@@ -72,7 +95,7 @@ function JobDetailsView({ run }: { run: Run }) {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   if (!run.jobs || run.jobs.length === 0) {
-    return <div className="p-8 text-neutral-500 dark:text-neutral-400 text-center text-sm">No jobs found for this workflow.</div>;
+    return <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">No jobs found for this workflow.</div>;
   }
 
   const sortedJobs = [...run.jobs].sort((a, b) => {
@@ -100,67 +123,67 @@ function JobDetailsView({ run }: { run: Run }) {
   const totalMs = Math.max(1000, maxTime - minTime);
 
   return (
-    <div className="px-6 py-4 border-l-4 border-blue-500 dark:border-blue-400 bg-white dark:bg-neutral-900">
-      <div className="flex justify-between items-center mb-4">
+    <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
+      <div className="mb-4 flex items-center justify-between">
         <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">Job Execution Details</h4>
-        <div className="flex bg-neutral-100 dark:bg-neutral-800 p-1 rounded-lg">
+        <div className="flex rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800">
           <button
             onClick={() => setViewMode('timeline')}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors ${
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               viewMode === 'timeline'
-                ? 'bg-white dark:bg-neutral-900 shadow-sm text-neutral-900 dark:text-neutral-100'
-                : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
+                ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-900 dark:text-neutral-100'
+                : 'text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
             }`}
           >
-            <AlignLeft className="w-3.5 h-3.5" /> Timeline
+            <AlignLeft className="h-3.5 w-3.5" /> Timeline
           </button>
           <button
             onClick={() => setViewMode('table')}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors ${
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               viewMode === 'table'
-                ? 'bg-white dark:bg-neutral-900 shadow-sm text-neutral-900 dark:text-neutral-100'
-                : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
+                ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-900 dark:text-neutral-100'
+                : 'text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
             }`}
           >
-            <LayoutList className="w-3.5 h-3.5" /> Table
+            <LayoutList className="h-3.5 w-3.5" /> Table
           </button>
         </div>
       </div>
 
       {viewMode === 'timeline' ? (
         <div className="space-y-3">
-          <div className="flex text-[10px] text-neutral-400 dark:text-neutral-500 font-mono justify-between mb-2 px-2">
-            <span>0s</span>
-            <span>{formatDuration(totalMs / 1000)}</span>
+          <div className="mb-2 flex justify-between px-2 font-mono text-[10px] text-neutral-400 dark:text-neutral-500">
+            <span>0m</span>
+            <span>{formatDurationMinutes(totalMs / 1000)}</span>
           </div>
           {run.jobs.map((job) => {
             const startMs = new Date(job.created_at || job.started_at || 0).getTime();
-            const queueWidth = (job.queueDurationInSeconds * 1000 / totalMs) * 100;
-            const runWidth = (job.durationInSeconds * 1000 / totalMs) * 100;
+            const queueWidth = ((job.queueDurationInSeconds * 1000) / totalMs) * 100;
+            const runWidth = ((job.durationInSeconds * 1000) / totalMs) * 100;
             const leftOffset = ((startMs - minTime) / totalMs) * 100;
 
             return (
-              <div key={job.id} className="relative h-8 bg-neutral-100 dark:bg-neutral-800 rounded-md overflow-hidden group flex items-center">
+              <div key={job.id} className="group relative flex h-8 items-center overflow-hidden rounded-md bg-neutral-100 dark:bg-neutral-800">
                 <div
-                  className="absolute h-full bg-amber-200/50 border-y border-l border-amber-300/50"
+                  className="absolute h-full border-y border-l border-amber-300/50 bg-amber-200/50"
                   style={{ left: `${leftOffset}%`, width: `${Math.max(0.5, queueWidth)}%` }}
                 />
                 <div
                   className={`absolute h-full border ${
                     job.conclusion === 'success'
-                      ? 'bg-green-500 border-green-600'
+                      ? 'border-green-600 bg-green-500'
                       : job.conclusion === 'skipped'
-                        ? 'bg-neutral-400 border-neutral-500'
-                        : 'bg-red-500 border-red-600'
+                        ? 'border-neutral-500 bg-neutral-400'
+                        : 'border-red-600 bg-red-500'
                   }`}
                   style={{ left: `${leftOffset + queueWidth}%`, width: `${Math.max(0.5, runWidth)}%` }}
                 />
-                <div className="relative z-10 px-3 text-xs font-medium text-neutral-800 dark:text-neutral-200 drop-shadow-sm flex justify-between w-full truncate pointer-events-none">
-                  <a href={job.html_url} target="_blank" rel="noopener noreferrer" className="hover:underline truncate max-w-[60%] pointer-events-auto">
+                <div className="pointer-events-none relative z-10 flex w-full justify-between truncate px-3 text-xs font-medium text-neutral-800 drop-shadow-sm dark:text-neutral-200">
+                  <a href={job.html_url} target="_blank" rel="noopener noreferrer" className="pointer-events-auto max-w-[60%] truncate hover:underline">
                     {job.name}
                   </a>
-                  <span className="text-neutral-600 dark:text-neutral-400 font-mono opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-neutral-900/80 px-1 rounded pointer-events-auto">
-                    Q: {formatDuration(job.queueDurationInSeconds)} | R: {formatDuration(job.durationInSeconds)}
+                  <span className="pointer-events-auto rounded bg-white px-1 font-mono text-neutral-600 opacity-0 transition-opacity group-hover:opacity-100 dark:bg-neutral-900/80 dark:text-neutral-400">
+                    Q: {formatDurationMinutes(job.queueDurationInSeconds)} | R: {formatDurationMinutes(job.durationInSeconds)}
                   </span>
                 </div>
               </div>
@@ -168,26 +191,26 @@ function JobDetailsView({ run }: { run: Run }) {
           })}
         </div>
       ) : (
-        <div className="overflow-hidden border border-neutral-200 dark:border-neutral-700 rounded-lg">
+        <div className="overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700">
           <table className="w-full text-left text-xs">
-            <thead className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400">
+            <thead className="bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
               <tr>
-                <th className="px-4 py-2 cursor-pointer" onClick={() => handleSort('name')}>Job Name</th>
+                <th className="cursor-pointer px-4 py-2" onClick={() => handleSort('name')}>Job Name</th>
                 <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2 cursor-pointer" onClick={() => handleSort('queue')}>Queue Time</th>
-                <th className="px-4 py-2 cursor-pointer" onClick={() => handleSort('duration')}>Run Time</th>
+                <th className="cursor-pointer px-4 py-2" onClick={() => handleSort('queue')}>Queue Time</th>
+                <th className="cursor-pointer px-4 py-2" onClick={() => handleSort('duration')}>Run Time</th>
                 <th className="px-4 py-2 text-right">Links</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800 bg-white dark:bg-neutral-900">
+            <tbody className="divide-y divide-neutral-100 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
               {sortedJobs.map((job) => (
                 <tr key={job.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-950">
                   <td className="px-4 py-2.5 font-medium text-neutral-800 dark:text-neutral-200">{job.name}</td>
                   <td className="px-4 py-2.5"><StatusBadge conclusion={job.conclusion} /></td>
-                  <td className="px-4 py-2.5 font-mono text-neutral-600 dark:text-neutral-400">{formatDuration(job.queueDurationInSeconds)}</td>
-                  <td className="px-4 py-2.5 font-mono text-neutral-600 dark:text-neutral-400">{formatDuration(job.durationInSeconds)}</td>
+                  <td className="px-4 py-2.5 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(job.queueDurationInSeconds)}</td>
+                  <td className="px-4 py-2.5 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(job.durationInSeconds)}</td>
                   <td className="px-4 py-2.5 text-right">
-                    <a href={job.html_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
+                    <a href={job.html_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">
                       Logs
                     </a>
                   </td>
@@ -220,9 +243,11 @@ function DashboardContent() {
   const [filterName, setFilterName] = useState(initialFilterName);
   const [repoOptions, setRepoOptions] = useState<RepoOption[]>([]);
   const [selectedRepoKey, setSelectedRepoKey] = useState(initialRepoKey);
+  const [selectedMetrics, setSelectedMetrics] = useState<MetricKey[]>(METRIC_OPTIONS.map((metric) => metric.key));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [prs, setPrs] = useState<PullRequestMetricsSummary[]>([]);
+  const [repoIndexesByKey, setRepoIndexesByKey] = useState<Record<string, PullRequestIndexFile>>({});
+  const [failedRepoKeys, setFailedRepoKeys] = useState<string[]>([]);
   const [detailsByNumber, setDetailsByNumber] = useState<Record<number, PullRequestDetailFile['pr']>>({});
   const [loadingDetailNumber, setLoadingDetailNumber] = useState<number | null>(null);
   const [expandedPrNumber, setExpandedPrNumber] = useState<number | null>(null);
@@ -237,6 +262,16 @@ function DashboardContent() {
 
     return repoOptions.find((repo) => repo.key === selectedRepoKey) ?? repoOptions[0];
   }, [repoOptions, selectedRepoKey]);
+
+  const dateRange = useMemo(
+    () =>
+      createDateRange({
+        days,
+        startDate: useCustomRange ? startDate : undefined,
+        endDate: useCustomRange ? endDate : undefined,
+      }),
+    [days, endDate, startDate, useCustomRange]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -279,25 +314,29 @@ function DashboardContent() {
     let cancelled = false;
 
     const fetchData = async () => {
-      if (!selectedRepo) {
+      if (repoOptions.length === 0) {
         return;
       }
 
       setLoading(true);
       setError('');
+      setDetailsByNumber({});
       setExpandedPrNumber(null);
       setExpandedWorkflowId(null);
-      setDetailsByNumber({});
 
       try {
-        const data = await fetchPullRequestIndex(selectedRepo.owner, selectedRepo.repo);
-        if (!cancelled) {
-          setPrs(data.prs);
+        const result = await fetchPullRequestIndexes(repoOptions);
+        if (cancelled) {
+          return;
         }
+
+        setRepoIndexesByKey(result.indexesByRepoKey);
+        setFailedRepoKeys(result.failedRepoKeys);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load PR metrics.');
-          setPrs([]);
+          setRepoIndexesByKey({});
+          setFailedRepoKeys([]);
         }
       } finally {
         if (!cancelled) {
@@ -311,7 +350,7 @@ function DashboardContent() {
     return () => {
       cancelled = true;
     };
-  }, [selectedRepo]);
+  }, [repoOptions]);
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -330,16 +369,17 @@ function DashboardContent() {
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }, [days, endDate, filterName, pathname, router, selectedRepo, startDate, useCustomRange]);
 
-  const filteredPrs = useMemo(() => {
-    let result = [...prs];
+  const selectedRepoPrs = useMemo(
+    () => (selectedRepo ? repoIndexesByKey[selectedRepo.key]?.prs ?? [] : []),
+    [repoIndexesByKey, selectedRepo]
+  );
 
-    const hasCustomRange = useCustomRange && startDate && endDate;
-    const rangeStart = hasCustomRange ? startOfDay(parseISO(startDate)) : subDays(new Date(), days);
-    const rangeEnd = hasCustomRange ? endOfDay(parseISO(endDate)) : new Date();
+  const filteredPrs = useMemo(() => {
+    let result = [...selectedRepoPrs];
 
     result = result.filter((pr) => {
       const createdAt = new Date(pr.created_at);
-      return isAfter(createdAt, rangeStart) && isBefore(createdAt, rangeEnd);
+      return !isBefore(createdAt, dateRange.start) && !isAfter(createdAt, dateRange.end);
     });
 
     if (filterName) {
@@ -350,25 +390,26 @@ function DashboardContent() {
     }
 
     return result;
-  }, [days, endDate, filterName, prs, startDate, useCustomRange]);
+  }, [dateRange.end, dateRange.start, filterName, selectedRepoPrs]);
 
-  const totalPrs = filteredPrs.length;
-  const mergedPrs = filteredPrs.filter((pr) => pr.merged_at).length;
-  const successRate = totalPrs ? Math.round((filteredPrs.filter((pr) => pr.conclusion === 'success').length / totalPrs) * 100) : 0;
-  const avgCiDuration = totalPrs
-    ? Math.round(filteredPrs.reduce((sum, pr) => sum + (pr.ciDurationInSeconds ?? 0), 0) / totalPrs)
-    : 0;
-
-  const chartData = useMemo(
+  const overviewRows = useMemo<RepoOverviewRow[]>(
     () =>
-      [...filteredPrs]
-        .sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime())
-        .map((pr) => ({
-          name: `#${pr.number}`,
-          duration: Math.round((pr.ciDurationInSeconds ?? 0) / 60),
+      buildRepoOverviewRows(
+        repoOptions.map((repo) => ({
+          repoKey: repo.key,
+          prs: repoIndexesByKey[repo.key]?.prs ?? [],
         })),
-    [filteredPrs]
+        dateRange
+      ),
+    [dateRange, repoIndexesByKey, repoOptions]
   );
+
+  const dailyTrend = useMemo<DailyTrendPoint[]>(
+    () => buildDailyTrend(selectedRepoPrs, dateRange),
+    [dateRange, selectedRepoPrs]
+  );
+
+  const activeMetricOptions = METRIC_OPTIONS.filter((metric) => selectedMetrics.includes(metric.key));
 
   const copyShareLink = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -428,11 +469,21 @@ function DashboardContent() {
     return result;
   };
 
+  const toggleMetric = (metricKey: MetricKey) => {
+    setSelectedMetrics((current) => {
+      if (current.includes(metricKey)) {
+        return current.length === 1 ? current : current.filter((item) => item !== metricKey);
+      }
+
+      return [...current, metricKey];
+    });
+  };
+
   if (!selectedRepo) {
     return (
-      <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-neutral-50 dark:bg-neutral-950">
         <div className="flex flex-col items-center gap-3 text-sm text-neutral-500 dark:text-neutral-400">
-          <Activity className="w-8 h-8 animate-pulse text-blue-500 dark:text-blue-400" />
+          <Activity className="h-8 w-8 animate-pulse text-blue-500 dark:text-blue-400" />
           <p>{error || 'Loading tracked repositories...'}</p>
         </div>
       </div>
@@ -440,48 +491,50 @@ function DashboardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 p-4 md:p-8 font-sans text-neutral-900 dark:text-neutral-100 flex flex-col">
-      <div className="max-w-6xl mx-auto space-y-6 flex-1 w-full">
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-neutral-900 p-6 rounded-xl shadow-sm border border-neutral-100 dark:border-neutral-800">
+    <div className="flex min-h-screen flex-col bg-neutral-50 p-4 font-sans text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100 md:p-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col space-y-6">
+        <header className="flex flex-col items-start justify-between gap-4 rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900 md:flex-row md:items-center">
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
+            <h1 className="flex items-center gap-2 text-2xl font-bold">
               <Activity className="text-blue-500 dark:text-blue-400" />
               Action Insight
             </h1>
-            <p className="text-neutral-500 dark:text-neutral-400 text-sm">Monitor PR lifecycle metrics for {selectedRepo.key}</p>
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+              Compare repository CI health, then drill into PR lifecycle details for {selectedRepo.key}.
+            </p>
           </div>
 
-          <div className="flex w-full md:w-auto gap-2">
-            <button onClick={copyShareLink} title="Copy link to current view" className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 p-2 rounded-lg hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors flex items-center justify-center">
-              <Share2 className="w-5 h-5" />
+          <div className="flex w-full gap-2 md:w-auto">
+            <button onClick={copyShareLink} title="Copy link to current view" className="flex items-center justify-center rounded-lg bg-neutral-100 p-2 text-neutral-600 transition-colors hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700">
+              <Share2 className="h-5 w-5" />
             </button>
-            <a href="https://github.com/pkking/action-insight/issues/new/choose" target="_blank" rel="noopener noreferrer" title="Give Feedback / Report Bug" className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 p-2 rounded-lg hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors flex items-center justify-center">
-              <MessageSquare className="w-5 h-5" />
+            <a href="https://github.com/pkking/action-insight/issues/new/choose" target="_blank" rel="noopener noreferrer" title="Give Feedback / Report Bug" className="flex items-center justify-center rounded-lg bg-neutral-100 p-2 text-neutral-600 transition-colors hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700">
+              <MessageSquare className="h-5 w-5" />
             </a>
           </div>
         </header>
 
-        <div className="flex gap-2 items-center flex-wrap">
-          <div className="flex items-center gap-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg px-3 py-2">
-            <label htmlFor="repo-select" className="text-sm text-neutral-500 dark:text-neutral-400 whitespace-nowrap">Repo</label>
-            <select id="repo-select" value={selectedRepo.key} onChange={(event) => setSelectedRepoKey(event.target.value)} className="bg-transparent text-sm text-neutral-700 dark:text-neutral-300 outline-none min-w-56">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900">
+            <label htmlFor="repo-select" className="whitespace-nowrap text-sm text-neutral-500 dark:text-neutral-400">Trend Repo</label>
+            <select id="repo-select" value={selectedRepo.key} onChange={(event) => setSelectedRepoKey(event.target.value)} className="min-w-56 bg-transparent text-sm text-neutral-700 outline-none dark:text-neutral-300">
               {repoOptions.map((repo) => (
                 <option key={repo.key} value={repo.key}>{repo.key}</option>
               ))}
             </select>
           </div>
 
-          {[7, 30, 90].map((value) => (
+          {[7, 14, 30, 90].map((value) => (
             <button
               key={value}
               onClick={() => {
                 setUseCustomRange(false);
                 setDays(value);
               }}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
                 days === value && !useCustomRange
-                  ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
-                  : 'bg-white dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-950'
+                  ? 'border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/50 dark:text-blue-400'
+                  : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950'
               }`}
             >
               Last {value} Days
@@ -490,244 +543,296 @@ function DashboardContent() {
 
           <button
             onClick={() => setUseCustomRange(true)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+            className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
               useCustomRange
-                ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
-                : 'bg-white dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-950'
+                ? 'border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/50 dark:text-blue-400'
+                : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950'
             }`}
           >
-            <CalendarIcon className="w-4 h-4" />
+            <CalendarIcon className="h-4 w-4" />
             Custom
           </button>
 
           {useCustomRange && (
-            <div className="flex items-center gap-2 bg-white dark:bg-neutral-900 p-1 rounded-lg border border-neutral-200 dark:border-neutral-700">
-              <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="bg-transparent text-sm border-none focus:ring-0 text-neutral-700 dark:text-neutral-300 px-2 py-1 outline-none" />
+            <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-white p-1 dark:border-neutral-700 dark:bg-neutral-900">
+              <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="bg-transparent px-2 py-1 text-sm text-neutral-700 outline-none dark:text-neutral-300" />
               <span className="text-neutral-400">-</span>
-              <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="bg-transparent text-sm border-none focus:ring-0 text-neutral-700 dark:text-neutral-300 px-2 py-1 outline-none" />
+              <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="bg-transparent px-2 py-1 text-sm text-neutral-700 outline-none dark:text-neutral-300" />
             </div>
           )}
         </div>
 
         {error ? (
-          <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 p-4 rounded-lg border border-red-100 dark:border-red-800">{error}</div>
-        ) : loading ? (
-          <div className="flex items-center justify-center h-64 text-neutral-400 dark:text-neutral-500 flex-col gap-4">
-            <Activity className="w-8 h-8 animate-pulse text-blue-500 dark:text-blue-400" />
-            <p className="text-sm">Fetching PR metrics for {selectedRepo.key}...</p>
+          <div className="rounded-lg border border-red-100 bg-red-50 p-4 text-red-600 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">{error}</div>
+        ) : null}
+
+        {failedRepoKeys.length > 0 ? (
+          <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+            Failed to load metrics for: {failedRepoKeys.join(', ')}
+          </div>
+        ) : null}
+
+        {loading ? (
+          <div className="flex h-64 flex-col items-center justify-center gap-4 text-neutral-400 dark:text-neutral-500">
+            <Activity className="h-8 w-8 animate-pulse text-blue-500 dark:text-blue-400" />
+            <p className="text-sm">Fetching repository metrics...</p>
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white dark:bg-neutral-900 p-6 rounded-xl shadow-sm border border-neutral-100 dark:border-neutral-800 flex items-center gap-4">
-                <div className="p-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full"><Activity className="w-6 h-6" /></div>
-                <div>
-                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">Total PRs</p>
-                  <p className="text-2xl font-bold">{totalPrs}</p>
-                </div>
+            <section className="overflow-hidden rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="border-b border-neutral-100 p-6 dark:border-neutral-800">
+                <h2 className="text-lg font-bold">Repository Overview</h2>
+                <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                  Compare PR E2E, CI E2E, review time, and CI SLA across tracked repositories for the selected time window.
+                </p>
               </div>
-              <div className="bg-white dark:bg-neutral-900 p-6 rounded-xl shadow-sm border border-neutral-100 dark:border-neutral-800 flex items-center gap-4">
-                <div className="p-3 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full"><CheckCircle className="w-6 h-6" /></div>
-                <div>
-                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">Merged PRs</p>
-                  <p className="text-2xl font-bold">{mergedPrs}</p>
-                </div>
-              </div>
-              <div className="bg-white dark:bg-neutral-900 p-6 rounded-xl shadow-sm border border-neutral-100 dark:border-neutral-800 flex items-center gap-4">
-                <div className="p-3 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-full"><Clock className="w-6 h-6" /></div>
-                <div>
-                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">Avg CI Duration</p>
-                  <p className="text-2xl font-bold">{formatDuration(avgCiDuration)}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-neutral-900 p-6 rounded-xl shadow-sm border border-neutral-100 dark:border-neutral-800">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-lg font-bold flex items-center gap-2"><CalendarIcon className="w-5 h-5 text-neutral-400 dark:text-neutral-500" /> PR CI Duration Trend (Minutes)</h2>
-                <div className="text-xs text-neutral-500 dark:text-neutral-400">CI success rate: {successRate}%</div>
-              </div>
-              <div className="h-72 select-none">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
-                    <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#888' }} tickLine={false} axisLine={false} minTickGap={30} />
-                    <YAxis tick={{ fontSize: 12, fill: '#888' }} tickLine={false} axisLine={false} />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="duration" stroke="#3b82f6" strokeWidth={3} dot={false} activeDot={{ r: 6 }} animationDuration={300} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-neutral-100 dark:border-neutral-800 overflow-hidden">
-              <div className="p-6 border-b border-neutral-100 dark:border-neutral-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <h2 className="text-lg font-bold">PR Lifecycle</h2>
-                <div className="flex items-center gap-2 bg-neutral-50 dark:bg-neutral-950 px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 text-sm">
-                  <Filter className="w-4 h-4 text-neutral-400 dark:text-neutral-500" />
-                  <input type="text" placeholder="Filter by PR, title, branch..." value={filterName} onChange={(event) => setFilterName(event.target.value)} className="bg-transparent border-none outline-none w-48" />
-                </div>
-              </div>
-
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-neutral-50 dark:bg-neutral-950 text-neutral-500 dark:text-neutral-400 font-medium">
+                  <thead className="bg-neutral-50 text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
                     <tr>
-                      <th className="py-3 px-6">PR / Branch</th>
-                      <th className="py-3 px-6">Status</th>
-                      <th className="py-3 px-6">T1 PR Created</th>
-                      <th className="py-3 px-6">T2 CI Started</th>
-                      <th className="py-3 px-6">T3 CI Completed</th>
-                      <th className="py-3 px-6">T4 PR Merged</th>
-                      <th className="py-3 px-6">Submit→CI Start</th>
-                      <th className="py-3 px-6">CI Start→CI End</th>
-                      <th className="py-3 px-6">Submit→Merge</th>
-                      <th className="py-3 px-6 text-right">Details</th>
+                      <th className="px-6 py-3">Repo</th>
+                      <th className="px-6 py-3">PR E2E P90</th>
+                      <th className="px-6 py-3">CI E2E P90</th>
+                      <th className="px-6 py-3">PR Review P90</th>
+                      <th className="px-6 py-3">CI E2E SLA</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                    {filteredPrs.map((pr) => {
-                      const detail = detailsByNumber[pr.number];
-                      const workflows = detail ? getSortedWorkflows(detail.workflows) : [];
-
+                    {overviewRows.map((row) => {
+                      const isSelected = row.repoKey === selectedRepo.key;
                       return (
-                        <React.Fragment key={pr.number}>
-                          <tr className="hover:bg-neutral-50 dark:hover:bg-neutral-950/50 transition-colors">
-                            <td className="py-4 px-6">
-                              <div className="font-medium text-neutral-900 dark:text-neutral-100">PR #{pr.number}</div>
-                              <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">{pr.title}</div>
-                              <div className="text-xs mt-1 font-mono text-neutral-500 dark:text-neutral-400">{pr.branch}</div>
-                            </td>
-                            <td className="py-4 px-6"><StatusBadge conclusion={pr.conclusion} /></td>
-                            <td className="py-4 px-6 text-neutral-500 dark:text-neutral-400">{format(new Date(pr.created_at), 'MMM dd, HH:mm')}</td>
-                            <td className="py-4 px-6 text-neutral-500 dark:text-neutral-400">{pr.ci_started_at ? format(new Date(pr.ci_started_at), 'MMM dd, HH:mm') : 'N/A'}</td>
-                            <td className="py-4 px-6 text-neutral-500 dark:text-neutral-400">{pr.ci_completed_at ? format(new Date(pr.ci_completed_at), 'MMM dd, HH:mm') : 'N/A'}</td>
-                            <td className="py-4 px-6 text-neutral-500 dark:text-neutral-400">{pr.merged_at ? format(new Date(pr.merged_at), 'MMM dd, HH:mm') : 'N/A'}</td>
-                            <td className="py-4 px-6 font-mono text-neutral-600 dark:text-neutral-400">{formatDuration(pr.timeToCiStartInSeconds)}</td>
-                            <td className="py-4 px-6 font-mono text-neutral-600 dark:text-neutral-400">{formatDuration(pr.ciDurationInSeconds)}</td>
-                            <td className="py-4 px-6 font-mono text-neutral-600 dark:text-neutral-400">{formatDuration(pr.timeToMergeInSeconds)}</td>
-                            <td className="py-4 px-6 text-right">
-                              <button onClick={() => void loadDetail(pr.number)} className="inline-flex items-center gap-1 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 px-3 py-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
-                                {expandedPrNumber === pr.number ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                {loadingDetailNumber === pr.number ? 'Loading...' : 'Workflows'}
-                              </button>
-                              <a href={pr.html_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 ml-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 p-1.5" title="View PR on GitHub">
-                                <ExternalLink className="w-4 h-4" />
-                              </a>
-                            </td>
-                          </tr>
-
-                          {expandedPrNumber === pr.number && detail && (
-                            <tr className="bg-neutral-50 dark:bg-neutral-950/50">
-                              <td colSpan={10} className="p-0">
-                                <div className="px-6 py-4 border-l-4 border-blue-500 dark:border-blue-400 bg-white dark:bg-neutral-900">
-                                  <div className="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-7 gap-3 mb-5">
-                                    <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 p-3">
-                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">T1 PR Created</div>
-                                      <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{format(new Date(detail.created_at), 'MMM dd, HH:mm')}</div>
-                                    </div>
-                                    <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 p-3">
-                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">T2 CI Started</div>
-                                      <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{detail.ci_started_at ? format(new Date(detail.ci_started_at), 'MMM dd, HH:mm') : 'N/A'}</div>
-                                    </div>
-                                    <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 p-3">
-                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">T3 CI Completed</div>
-                                      <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{detail.ci_completed_at ? format(new Date(detail.ci_completed_at), 'MMM dd, HH:mm') : 'N/A'}</div>
-                                    </div>
-                                    <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 p-3">
-                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">T4 PR Merged</div>
-                                      <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{detail.merged_at ? format(new Date(detail.merged_at), 'MMM dd, HH:mm') : 'N/A'}</div>
-                                    </div>
-                                    <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-900/20 p-3">
-                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Submit→CI Start</div>
-                                      <div className="mt-2 text-sm font-mono font-medium text-neutral-900 dark:text-neutral-100">{formatDuration(detail.timeToCiStartInSeconds)}</div>
-                                    </div>
-                                    <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/80 dark:bg-blue-900/20 p-3">
-                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">CI Start→CI End</div>
-                                      <div className="mt-2 text-sm font-mono font-medium text-neutral-900 dark:text-neutral-100">{formatDuration(detail.ciDurationInSeconds)}</div>
-                                    </div>
-                                    <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-900/20 p-3">
-                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Submit→Merge</div>
-                                      <div className="mt-2 text-sm font-mono font-medium text-neutral-900 dark:text-neutral-100">{formatDuration(detail.timeToMergeInSeconds)}</div>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex items-center justify-between mb-4 gap-4">
-                                    <div>
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <h3 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">Workflows for PR #{pr.number}</h3>
-                                        {detail.partialCiHistory && (
-                                          <span className="inline-flex items-center rounded-full border border-amber-300/60 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-                                            Partial CI history
-                                          </span>
-                                        )}
-                                      </div>
-                                      <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Select a workflow to inspect its jobs.</p>
-                                      <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">{detail.successfulWorkflowCount} / {detail.workflowCount} successful workflows</p>
-                                    </div>
-                                    <div className="flex gap-2 text-xs">
-                                      <button onClick={() => toggleWorkflowSort('name')} className="px-3 py-1.5 rounded-md border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800">Sort: Name</button>
-                                      <button onClick={() => toggleWorkflowSort('duration')} className="px-3 py-1.5 rounded-md border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800">Sort: Duration</button>
-                                      <button onClick={() => toggleWorkflowSort('date')} className="px-3 py-1.5 rounded-md border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800">Sort: Date</button>
-                                    </div>
-                                  </div>
-
-                                  <div className="overflow-hidden border border-neutral-200 dark:border-neutral-700 rounded-lg">
-                                    <table className="w-full text-left text-sm">
-                                      <thead className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400">
-                                        <tr>
-                                          <th className="px-4 py-2">Workflow</th>
-                                          <th className="px-4 py-2">Status</th>
-                                          <th className="px-4 py-2">Duration</th>
-                                          <th className="px-4 py-2">Started</th>
-                                          <th className="px-4 py-2 text-right">Details</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800 bg-white dark:bg-neutral-900">
-                                        {workflows.map((workflow) => (
-                                          <React.Fragment key={workflow.id}>
-                                            <tr className="hover:bg-neutral-50 dark:hover:bg-neutral-950/50">
-                                              <td className="px-4 py-3 font-medium text-neutral-800 dark:text-neutral-200">{workflow.name}</td>
-                                              <td className="px-4 py-3"><StatusBadge conclusion={workflow.conclusion} /></td>
-                                              <td className="px-4 py-3 font-mono text-neutral-600 dark:text-neutral-400">{formatDuration(workflow.durationInSeconds)}</td>
-                                              <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">{format(new Date(workflow.created_at), 'MMM dd, HH:mm')}</td>
-                                              <td className="px-4 py-3 text-right">
-                                                <button onClick={() => setExpandedWorkflowId(expandedWorkflowId === workflow.id ? null : workflow.id)} className="inline-flex items-center gap-1 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 px-3 py-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
-                                                  {expandedWorkflowId === workflow.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                                  Jobs
-                                                </button>
-                                                <a href={workflow.html_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 ml-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 p-1.5" title="View workflow on GitHub">
-                                                  <ExternalLink className="w-4 h-4" />
-                                                </a>
-                                              </td>
-                                            </tr>
-                                            {expandedWorkflowId === workflow.id && (
-                                              <tr className="bg-neutral-50 dark:bg-neutral-950/50">
-                                                <td colSpan={5} className="p-0"><JobDetailsView run={workflow} /></td>
-                                              </tr>
-                                            )}
-                                          </React.Fragment>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
+                        <tr key={row.repoKey} className={isSelected ? 'bg-blue-50/60 dark:bg-blue-900/10' : 'hover:bg-neutral-50 dark:hover:bg-neutral-950/60'}>
+                          <td className="px-6 py-4">
+                            <button
+                              type="button"
+                              aria-label={`Select repo ${row.repoKey}`}
+                              onClick={() => setSelectedRepoKey(row.repoKey)}
+                              className="text-left"
+                            >
+                              <div className="font-medium text-neutral-900 dark:text-neutral-100">{row.repoKey}</div>
+                              <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{row.totalPrs} PRs in range</div>
+                            </button>
+                          </td>
+                          <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatMetricMinutes(row.prE2EP90Minutes)}</td>
+                          <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatMetricMinutes(row.ciE2EP90Minutes)}</td>
+                          <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatMetricMinutes(row.reviewP90Minutes)}</td>
+                          <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatRate(row.ciE2ESlaRate)}</td>
+                        </tr>
                       );
                     })}
-
-                    {filteredPrs.length === 0 && (
-                      <tr>
-                        <td colSpan={10} className="py-8 text-center text-neutral-500 dark:text-neutral-400">No matching PRs found for {selectedRepo.key}. Try adjusting the date range or filter.</td>
-                      </tr>
-                    )}
                   </tbody>
                 </table>
               </div>
-            </div>
+            </section>
+
+            <section className="rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h2 className="flex items-center gap-2 text-lg font-bold">
+                    <CalendarIcon className="h-5 w-5 text-neutral-400 dark:text-neutral-500" />
+                    {selectedRepo.key} Daily Trends
+                  </h2>
+                  <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Daily aggregation for all supported overview metrics. Duration metrics use minutes; SLA uses percentage.</p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {METRIC_OPTIONS.map((metric) => (
+                    <label key={metric.key} className="inline-flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+                      <input
+                        type="checkbox"
+                        checked={selectedMetrics.includes(metric.key)}
+                        onChange={() => toggleMetric(metric.key)}
+                        aria-label={metric.label}
+                      />
+                      {metric.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {dailyTrend.length === 0 ? (
+                <div className="flex h-72 items-center justify-center rounded-lg border border-dashed border-neutral-200 text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+                  No trend data for the selected repository and time range.
+                </div>
+              ) : (
+                <div className="h-72 select-none">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={dailyTrend}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
+                      <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#888' }} tickLine={false} axisLine={false} minTickGap={24} />
+                      <YAxis yAxisId="minutes" tick={{ fontSize: 12, fill: '#888' }} tickLine={false} axisLine={false} />
+                      <YAxis yAxisId="rate" orientation="right" domain={[0, 100]} tick={{ fontSize: 12, fill: '#888' }} tickLine={false} axisLine={false} />
+                      <Tooltip />
+                      <Legend />
+                      {activeMetricOptions.map((metric) => (
+                        <Line
+                          key={metric.key}
+                          type="monotone"
+                          dataKey={metric.key}
+                          name={metric.label}
+                          stroke={metric.stroke}
+                          strokeWidth={3}
+                          dot={false}
+                          activeDot={{ r: 6 }}
+                          animationDuration={300}
+                          connectNulls
+                          yAxisId={metric.yAxisId}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </section>
+
+            <section className="overflow-hidden rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="flex flex-col gap-4 border-b border-neutral-100 p-6 dark:border-neutral-800 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-lg font-bold">PR Lifecycle</h2>
+                  <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Drill into PR and workflow details for {selectedRepo.key}.</p>
+                </div>
+                <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950">
+                  <Filter className="h-4 w-4 text-neutral-400 dark:text-neutral-500" />
+                  <input type="text" placeholder="Filter by PR, title, branch..." value={filterName} onChange={(event) => setFilterName(event.target.value)} className="w-48 bg-transparent outline-none" />
+                </div>
+              </div>
+
+              {filteredPrs.length === 0 ? (
+                <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">No PRs found for the selected repository and time range.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+                      <tr>
+                        <th className="px-6 py-3">PR / Branch</th>
+                        <th className="px-6 py-3">Status</th>
+                        <th className="px-6 py-3">T1 PR Created</th>
+                        <th className="px-6 py-3">T2 CI Started</th>
+                        <th className="px-6 py-3">T3 CI Completed</th>
+                        <th className="px-6 py-3">T4 PR Merged</th>
+                        <th className="px-6 py-3">Submit→CI Start</th>
+                        <th className="px-6 py-3">CI Start→CI End</th>
+                        <th className="px-6 py-3">Submit→Merge</th>
+                        <th className="px-6 py-3 text-right">Details</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                      {filteredPrs.map((pr) => {
+                        const detail = detailsByNumber[pr.number];
+                        const workflows = detail ? getSortedWorkflows(detail.workflows) : [];
+
+                        return (
+                          <React.Fragment key={pr.number}>
+                            <tr className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-950/50">
+                              <td className="px-6 py-4">
+                                <div className="font-medium text-neutral-900 dark:text-neutral-100">PR #{pr.number}</div>
+                                <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{pr.title}</div>
+                                <div className="mt-1 font-mono text-xs text-neutral-500 dark:text-neutral-400">{pr.branch}</div>
+                              </td>
+                              <td className="px-6 py-4"><StatusBadge conclusion={pr.conclusion} /></td>
+                              <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(pr.created_at), 'MMM dd, HH:mm')}</td>
+                              <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{pr.ci_started_at ? format(new Date(pr.ci_started_at), 'MMM dd, HH:mm') : 'N/A'}</td>
+                              <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{pr.ci_completed_at ? format(new Date(pr.ci_completed_at), 'MMM dd, HH:mm') : 'N/A'}</td>
+                              <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{pr.merged_at ? format(new Date(pr.merged_at), 'MMM dd, HH:mm') : 'N/A'}</td>
+                              <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.timeToCiStartInSeconds)}</td>
+                              <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.ciDurationInSeconds)}</td>
+                              <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.timeToMergeInSeconds)}</td>
+                              <td className="px-6 py-4 text-right">
+                                <button onClick={() => void loadDetail(pr.number)} className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100">
+                                  {expandedPrNumber === pr.number ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                  {loadingDetailNumber === pr.number ? 'Loading...' : 'Workflows'}
+                                </button>
+                                <a href={pr.html_url} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300" title="View PR on GitHub">
+                                  <ExternalLink className="h-4 w-4" />
+                                </a>
+                              </td>
+                            </tr>
+
+                            {expandedPrNumber === pr.number && detail && (
+                              <>
+                                <tr className="bg-neutral-50 dark:bg-neutral-950/50">
+                                  <td colSpan={10} className="p-6">
+                                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Workflows</div>
+                                        <div className="mt-2 text-2xl font-bold text-neutral-900 dark:text-neutral-100">{detail.workflowCount}</div>
+                                      </div>
+                                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Successful</div>
+                                        <div className="mt-2 text-2xl font-bold text-neutral-900 dark:text-neutral-100">{detail.successfulWorkflowCount}</div>
+                                        <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">{detail.successfulWorkflowCount} / {detail.workflowCount} successful workflows</div>
+                                      </div>
+                                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">CI Duration</div>
+                                        <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{formatDurationMinutes(detail.ciDurationInSeconds)}</div>
+                                      </div>
+                                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">PR E2E</div>
+                                        <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{formatDurationMinutes(detail.timeToMergeInSeconds)}</div>
+                                        {detail.partialCiHistory ? (
+                                          <div className="mt-2 text-xs text-amber-600 dark:text-amber-400">Partial CI history</div>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td colSpan={10} className="p-0">
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full text-left text-sm">
+                                        <thead className="bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+                                          <tr>
+                                            <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('name')}>Workflow</th>
+                                            <th className="px-6 py-3">Status</th>
+                                            <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('date')}>Created</th>
+                                            <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('duration')}>Duration</th>
+                                            <th className="px-6 py-3 text-right">Details</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                                          {workflows.map((workflow) => (
+                                            <React.Fragment key={workflow.id}>
+                                              <tr className="hover:bg-neutral-50 dark:hover:bg-neutral-950/50">
+                                                <td className="px-6 py-4 font-medium text-neutral-900 dark:text-neutral-100">{workflow.name}</td>
+                                                <td className="px-6 py-4"><StatusBadge conclusion={workflow.conclusion} /></td>
+                                                <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(workflow.created_at), 'MMM dd, HH:mm')}</td>
+                                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(workflow.durationInSeconds)}</td>
+                                                <td className="px-6 py-4 text-right">
+                                                  <button
+                                                    onClick={() => setExpandedWorkflowId((current) => current === workflow.id ? null : workflow.id)}
+                                                    className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                                                  >
+                                                    {expandedWorkflowId === workflow.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                                    Jobs
+                                                  </button>
+                                                  <a href={workflow.html_url} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+                                                    <ExternalLink className="h-4 w-4" />
+                                                  </a>
+                                                </td>
+                                              </tr>
+                                              {expandedWorkflowId === workflow.id ? (
+                                                <tr>
+                                                  <td colSpan={5} className="p-0">
+                                                    <JobDetailsView run={workflow} />
+                                                  </td>
+                                                </tr>
+                                              ) : null}
+                                            </React.Fragment>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </td>
+                                </tr>
+                              </>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
           </>
         )}
       </div>
@@ -737,7 +842,7 @@ function DashboardContent() {
 
 export default function Dashboard() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center"><Activity className="w-8 h-8 animate-pulse text-blue-500 dark:text-blue-400" /></div>}>
+    <Suspense fallback={<div className="p-6 text-sm text-neutral-500 dark:text-neutral-400">Loading dashboard...</div>}>
       <DashboardContent />
     </Suspense>
   );

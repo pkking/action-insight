@@ -1,5 +1,11 @@
 import type { PullRequestDetailFile, PullRequestIndexFile } from './types';
 
+type RepoDescriptor = {
+  owner: string;
+  repo: string;
+  key: string;
+};
+
 const OWNER = 'pkking';
 const REPO = 'action-insight';
 const DATA_BRANCH = 'main';
@@ -27,4 +33,33 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
   }
 
   return res.json();
+}
+
+export async function fetchPullRequestIndexes(repos: RepoDescriptor[]): Promise<{
+  indexesByRepoKey: Record<string, PullRequestIndexFile>;
+  failedRepoKeys: string[];
+}> {
+  const results = await Promise.allSettled(
+    repos.map(async (repo) => ({
+      key: repo.key,
+      index: await fetchPullRequestIndex(repo.owner, repo.repo),
+    }))
+  );
+
+  const indexesByRepoKey: Record<string, PullRequestIndexFile> = {};
+  const failedRepoKeys: string[] = [];
+
+  for (const [index, result] of results.entries()) {
+    if (result.status === 'fulfilled') {
+      indexesByRepoKey[result.value.key] = result.value.index;
+      continue;
+    }
+
+    failedRepoKeys.push(repos[index].key);
+  }
+
+  return {
+    indexesByRepoKey,
+    failedRepoKeys,
+  };
 }

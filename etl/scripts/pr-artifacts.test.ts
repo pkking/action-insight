@@ -18,8 +18,9 @@ afterEach(() => {
 describe('rebuildPullRequestArtifacts', () => {
   it('can be imported through tsx like the scheduled collector', () => {
     const result = spawnSync(
-      'npx',
+      process.execPath,
       [
+        '--import',
         'tsx',
         '-e',
         "import('./etl/scripts/pr-artifacts.ts').then(() => process.exit(0)).catch((error) => { console.error(error); process.exit(1); })",
