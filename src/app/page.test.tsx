@@ -1,14 +1,13 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import Dashboard from './page';
 
 const replaceMock = vi.fn();
 const useSearchParamsMock = vi.fn();
-const fetchRunsMock = vi.fn();
+const fetchPullRequestIndexMock = vi.fn();
+const fetchPullRequestDetailMock = vi.fn();
 const fetchMock = vi.fn();
-
-let lastLineChartProps: Record<string, unknown> | null = null;
 
 global.fetch = fetchMock as typeof fetch;
 
@@ -18,16 +17,14 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => useSearchParamsMock(),
 }));
 
-vi.mock('@/lib/data-fetcher', () => ({
-  fetchRuns: (...args: unknown[]) => fetchRunsMock(...args),
+vi.mock('@/lib/pr-data-fetcher', () => ({
+  fetchPullRequestIndex: (...args: unknown[]) => fetchPullRequestIndexMock(...args),
+  fetchPullRequestDetail: (...args: unknown[]) => fetchPullRequestDetailMock(...args),
 }));
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  LineChart: (props: { children: React.ReactNode; data?: unknown[] }) => {
-    lastLineChartProps = props;
-    return <div data-testid="line-chart" data-points={props.data?.length ?? 0}>{props.children}</div>;
-  },
+  LineChart: (props: { children: React.ReactNode; data?: unknown[] }) => <div data-testid="line-chart" data-points={props.data?.length ?? 0}>{props.children}</div>,
   Line: () => null,
   XAxis: () => null,
   YAxis: () => null,
@@ -36,14 +33,13 @@ vi.mock('recharts', () => ({
   ReferenceArea: () => null,
 }));
 
-describe('Dashboard repo selection', () => {
+describe('Dashboard PR view', () => {
   beforeEach(() => {
-    lastLineChartProps = null;
     replaceMock.mockReset();
-    fetchRunsMock.mockReset();
     fetchMock.mockReset();
+    fetchPullRequestIndexMock.mockReset();
+    fetchPullRequestDetailMock.mockReset();
     useSearchParamsMock.mockReturnValue(new URLSearchParams(''));
-    fetchRunsMock.mockResolvedValue([]);
     fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -53,17 +49,90 @@ describe('Dashboard repo selection', () => {
         ],
       }),
     } as Response);
+    fetchPullRequestIndexMock.mockResolvedValue({
+      repo: 'vllm-project/vllm-ascend',
+      generated_at: '2026-04-18T00:00:00Z',
+      prs: [
+        {
+          number: 42,
+          title: 'Add PR lifecycle dashboard',
+          branch: 'feature/pr-metrics',
+          author: 'octocat',
+          state: 'closed',
+          html_url: 'https://github.com/vllm-project/vllm-ascend/pull/42',
+          created_at: '2026-04-18T01:00:00Z',
+          ci_started_at: '2026-04-18T01:05:00Z',
+          ci_completed_at: '2026-04-18T01:45:00Z',
+          merged_at: '2026-04-18T02:15:00Z',
+          timeToCiStartInSeconds: 300,
+          ciDurationInSeconds: 2400,
+          timeToMergeInSeconds: 4500,
+          mergeLeadTimeInSeconds: 1800,
+          workflowCount: 2,
+          successfulWorkflowCount: 1,
+          conclusion: 'failure',
+        },
+      ],
+    });
+    fetchPullRequestDetailMock.mockResolvedValue({
+      repo: 'vllm-project/vllm-ascend',
+      generated_at: '2026-04-18T00:00:00Z',
+      pr: {
+        number: 42,
+        title: 'Add PR lifecycle dashboard',
+        branch: 'feature/pr-metrics',
+        author: 'octocat',
+        state: 'closed',
+        html_url: 'https://github.com/vllm-project/vllm-ascend/pull/42',
+        created_at: '2026-04-18T01:00:00Z',
+        ci_started_at: '2026-04-18T01:05:00Z',
+        ci_completed_at: '2026-04-18T01:45:00Z',
+        merged_at: '2026-04-18T02:15:00Z',
+        timeToCiStartInSeconds: 300,
+        ciDurationInSeconds: 2400,
+        timeToMergeInSeconds: 4500,
+        mergeLeadTimeInSeconds: 1800,
+        workflowCount: 2,
+        successfulWorkflowCount: 1,
+        conclusion: 'failure',
+        workflows: [
+          {
+            id: 101,
+            name: 'lint',
+            head_branch: 'feature/pr-metrics',
+            status: 'completed',
+            conclusion: 'success',
+            event: 'pull_request',
+            created_at: '2026-04-18T01:05:00Z',
+            updated_at: '2026-04-18T01:15:00Z',
+            html_url: 'https://github.com/vllm-project/vllm-ascend/actions/runs/101',
+            durationInSeconds: 600,
+            pull_requests: [{ number: 42 }],
+            jobs: [
+              {
+                id: 1001,
+                name: 'lint-job',
+                status: 'completed',
+                conclusion: 'success',
+                created_at: '2026-04-18T01:05:00Z',
+                started_at: '2026-04-18T01:06:00Z',
+                completed_at: '2026-04-18T01:15:00Z',
+                html_url: 'https://github.com/vllm-project/vllm-ascend/actions/jobs/1001',
+                queueDurationInSeconds: 60,
+                durationInSeconds: 540,
+              },
+            ],
+          },
+        ],
+      },
+    });
   });
 
-  it('defaults to the first available repo and fetches it', async () => {
+  it('defaults to the first available repo and fetches its PR index', async () => {
     render(<Dashboard />);
 
     await waitFor(() => {
-      expect(fetchRunsMock).toHaveBeenCalledWith('vllm-project', 'vllm-ascend', {
-        days: 7,
-        startDate: undefined,
-        endDate: undefined,
-      });
+      expect(fetchPullRequestIndexMock).toHaveBeenCalledWith('vllm-project', 'vllm-ascend');
     });
   });
 
@@ -73,25 +142,7 @@ describe('Dashboard repo selection', () => {
     render(<Dashboard />);
 
     await waitFor(() => {
-      expect(fetchRunsMock).toHaveBeenCalledWith('openai', 'action-insight', {
-        days: 7,
-        startDate: undefined,
-        endDate: undefined,
-      });
-    });
-  });
-
-  it('falls back when the URL repo is invalid', async () => {
-    useSearchParamsMock.mockReturnValue(new URLSearchParams('repo=bad/input'));
-
-    render(<Dashboard />);
-
-    await waitFor(() => {
-      expect(fetchRunsMock).toHaveBeenCalledWith('vllm-project', 'vllm-ascend', {
-        days: 7,
-        startDate: undefined,
-        endDate: undefined,
-      });
+      expect(fetchPullRequestIndexMock).toHaveBeenCalledWith('openai', 'action-insight');
     });
   });
 
@@ -113,22 +164,30 @@ describe('Dashboard repo selection', () => {
     });
   });
 
-  it('passes the selected custom date range to fetchRuns', async () => {
-    const { container } = render(<Dashboard />);
+  it('loads PR detail on demand and shows workflow rows', async () => {
+    render(<Dashboard />);
 
-    const customButton = await screen.findByRole('button', { name: /custom/i });
-    fireEvent.click(customButton);
+    const prRow = await screen.findByText('PR #42');
+    expect(prRow).toBeInTheDocument();
 
-    const dateInputs = container.querySelectorAll('input[type="date"]');
-    fireEvent.change(dateInputs[0], { target: { value: '2026-04-01' } });
-    fireEvent.change(dateInputs[1], { target: { value: '2026-04-10' } });
+    fireEvent.click(screen.getByRole('button', { name: /workflows/i }));
 
     await waitFor(() => {
-      expect(fetchRunsMock).toHaveBeenLastCalledWith('vllm-project', 'vllm-ascend', {
-        days: 7,
-        startDate: '2026-04-01',
-        endDate: '2026-04-10',
-      });
+      expect(fetchPullRequestDetailMock).toHaveBeenCalledWith('vllm-project', 'vllm-ascend', 42);
     });
+
+    expect(await screen.findByText('lint')).toBeInTheDocument();
+  });
+
+  it('shows job details after selecting a workflow inside a PR', async () => {
+    render(<Dashboard />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /workflows/i }));
+    await screen.findByText('lint');
+
+    const workflowRow = screen.getAllByRole('row').find((row) => within(row).queryByRole('button', { name: /jobs/i }))!;
+    fireEvent.click(within(workflowRow).getByRole('button', { name: /jobs/i }));
+
+    expect(await screen.findByText('lint-job')).toBeInTheDocument();
   });
 });

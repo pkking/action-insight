@@ -12,6 +12,7 @@ import {
   type CollectCliOptions,
 } from './collect-options.ts';
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
+import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
 
 const { buildCollectionWindows, mergeCollectedDates, splitCollectionWindow, toCreatedRange } = collectionWindows;
 
@@ -38,16 +39,22 @@ function error(...args: unknown[]) {
   console.error(`[${new Date().toISOString()}] ERROR:`, ...args);
 }
 
+interface PullRequestRef {
+  number: number;
+}
+
 interface Run {
   id: number;
   name: string;
   head_branch: string;
   status: string;
   conclusion: string;
+  event?: string;
   created_at: string;
   updated_at: string;
   html_url: string;
   durationInSeconds: number;
+  pull_requests?: PullRequestRef[];
   jobs?: Job[];
 }
 
@@ -296,7 +303,7 @@ function persistCollectedRuns(
   runs: Run[],
   retentionDays: number,
   historyComplete: boolean
-): void {
+): Index {
   const runsByDate: Record<string, Run[]> = {};
   for (const run of runs) {
     const date = format(new Date(run.created_at), 'yyyy-MM-dd');
@@ -355,6 +362,7 @@ function persistCollectedRuns(
 
   storage.writeIndex(repo, updatedIndex);
   console.log(`  Index updated: ${updatedIndex.files.length} files, latest: ${updatedIndex.latest}`);
+  return updatedIndex;
 }
 
 export async function collectRepo(
@@ -484,10 +492,18 @@ export async function collectRepo(
           head_branch: run.head_branch ?? 'unknown',
           status: run.status ?? 'completed',
           conclusion: run.conclusion ?? 'unknown',
+          event: run.event ?? 'unknown',
           created_at: run.created_at,
           updated_at: run.updated_at,
           html_url: run.html_url,
           durationInSeconds: (new Date(run.updated_at).getTime() - new Date(run.created_at).getTime()) / 1000,
+          pull_requests: Array.isArray(run.pull_requests)
+            ? run.pull_requests
+                .map((pullRequest: { number?: number }) =>
+                  typeof pullRequest.number === 'number' ? { number: pullRequest.number } : null
+                )
+                .filter((pullRequest: PullRequestRef | null): pullRequest is PullRequestRef => pullRequest !== null)
+            : [],
           jobs,
         });
       }
@@ -573,7 +589,18 @@ export async function collectRepo(
         for (const run of err.partialRuns) {
           allRunsMap.set(run.id, run);
         }
-        persistCollectedRuns(storage, repo, index, Array.from(allRunsMap.values()), retentionDays, false);
+        const persistedIndex = persistCollectedRuns(storage, repo, index, Array.from(allRunsMap.values()), retentionDays, false);
+        await rebuildPullRequestArtifacts({
+          octokit,
+          owner,
+          repo: repoName,
+          repoKey: repo,
+          repoDir: getRepoDir(repo),
+          files: persistedIndex.files,
+          storage,
+          log,
+          warn,
+        });
       }
       throw err;
     }
@@ -581,7 +608,18 @@ export async function collectRepo(
 
   const allRuns = Array.from(allRunsMap.values());
   log(`Total completed runs collected: ${allRuns.length}`);
-  persistCollectedRuns(storage, repo, index, allRuns, retentionDays, true);
+  const persistedIndex = persistCollectedRuns(storage, repo, index, allRuns, retentionDays, true);
+  await rebuildPullRequestArtifacts({
+    octokit,
+    owner,
+    repo: repoName,
+    repoKey: repo,
+    repoDir: getRepoDir(repo),
+    files: persistedIndex.files,
+    storage,
+    log,
+    warn,
+  });
 }
 
 export async function runCollection({

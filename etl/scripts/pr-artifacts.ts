@@ -1,0 +1,146 @@
+import { readdirSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+
+import { buildPullRequestIndex } from '../../src/lib/pr-metrics';
+import type { PullRequestSnapshot, Run } from '../../src/lib/types';
+
+interface StorageAdapter {
+  readDayData: (repo: string, date: string) => { runs: Run[] };
+}
+
+interface OctokitLike {
+  request: (route: string, params: Record<string, unknown>) => Promise<{ data: unknown }>;
+}
+
+interface RebuildPullRequestArtifactsOptions {
+  octokit: OctokitLike;
+  owner: string;
+  repo: string;
+  repoKey: string;
+  repoDir: string;
+  files: string[];
+  storage: StorageAdapter;
+  log?: (...args: unknown[]) => void;
+  warn?: (...args: unknown[]) => void;
+}
+
+function getPrDir(repoDir: string): string {
+  return path.join(repoDir, 'prs');
+}
+
+function readRetainedRuns(repoKey: string, files: string[], storage: StorageAdapter): Run[] {
+  const runs: Run[] = [];
+
+  for (const file of files) {
+    const day = file.replace(/\.json$/, '');
+    const data = storage.readDayData(repoKey, day);
+    runs.push(...data.runs);
+  }
+
+  return runs;
+}
+
+async function fetchPullRequestSnapshots(
+  octokit: OctokitLike,
+  owner: string,
+  repo: string,
+  numbers: number[],
+  warn: (...args: unknown[]) => void
+): Promise<Map<number, PullRequestSnapshot>> {
+  const snapshots = new Map<number, PullRequestSnapshot>();
+
+  for (const number of numbers) {
+    try {
+      const response = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}', {
+        owner,
+        repo,
+        pull_number: number,
+      });
+      const data = response.data as {
+        number: number;
+        title: string;
+        state: string;
+        created_at: string;
+        merged_at: string | null;
+        html_url: string;
+        user?: { login: string };
+      };
+
+      snapshots.set(number, {
+        number: data.number,
+        title: data.title,
+        state: data.state,
+        created_at: data.created_at,
+        merged_at: data.merged_at,
+        html_url: data.html_url,
+        user: data.user,
+      });
+    } catch (error) {
+      warn(`Failed to fetch PR #${number} for ${owner}/${repo}:`, error);
+    }
+  }
+
+  return snapshots;
+}
+
+export async function rebuildPullRequestArtifacts({
+  octokit,
+  owner,
+  repo,
+  repoKey,
+  repoDir,
+  files,
+  storage,
+  log = () => {},
+  warn = () => {},
+}: RebuildPullRequestArtifactsOptions): Promise<void> {
+  const runs = readRetainedRuns(repoKey, files, storage);
+  const prNumbers = Array.from(
+    new Set(
+      runs
+        .map((run) => run.pull_requests?.[0]?.number)
+        .filter((number): number is number => typeof number === 'number')
+    )
+  ).sort((left, right) => right - left);
+
+  const prDir = getPrDir(repoDir);
+  if (!existsSync(prDir)) {
+    mkdirSync(prDir, { recursive: true });
+  }
+
+  if (prNumbers.length === 0) {
+    writeFileSync(
+      path.join(prDir, 'index.json'),
+      JSON.stringify({ repo: repoKey, generated_at: new Date().toISOString(), prs: [] }, null, 2)
+    );
+
+    for (const entry of readdirSync(prDir)) {
+      if (entry !== 'index.json') {
+        rmSync(path.join(prDir, entry), { force: true });
+      }
+    }
+
+    return;
+  }
+
+  log(`Building PR artifacts for ${repoKey}: ${prNumbers.length} PRs`);
+  const pullRequests = await fetchPullRequestSnapshots(octokit, owner, repo, prNumbers, warn);
+  const result = buildPullRequestIndex({
+    repo: repoKey,
+    runs,
+    pullRequests,
+  });
+
+  writeFileSync(path.join(prDir, 'index.json'), JSON.stringify(result.index, null, 2));
+
+  const staleEntries = new Set(readdirSync(prDir).filter((entry) => entry !== 'index.json'));
+  for (const [number, detail] of result.details.entries()) {
+    const fileName = `${number}.json`;
+    staleEntries.delete(fileName);
+    writeFileSync(path.join(prDir, fileName), JSON.stringify(detail, null, 2));
+  }
+
+  for (const entry of staleEntries) {
+    rmSync(path.join(prDir, entry), { force: true });
+  }
+}
