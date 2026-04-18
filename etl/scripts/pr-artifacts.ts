@@ -1,8 +1,19 @@
 import { readdirSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { buildPullRequestIndex } from '../../src/lib/pr-metrics';
+import * as prMetricsModule from '../../src/lib/pr-metrics';
 import type { PullRequestSnapshot, Run } from '../../src/lib/types';
+
+const prMetricsInterop =
+  ('buildPullRequestIndex' in prMetricsModule && typeof prMetricsModule.buildPullRequestIndex === 'function')
+    ? prMetricsModule
+    : ((prMetricsModule as { default?: unknown; 'module.exports'?: unknown }).default ??
+        (prMetricsModule as { default?: unknown; 'module.exports'?: unknown })['module.exports'] ??
+        prMetricsModule);
+
+const { buildPullRequestIndex } = prMetricsInterop as {
+  buildPullRequestIndex: typeof import('../../src/lib/pr-metrics').buildPullRequestIndex;
+};
 
 interface StorageAdapter {
   readDayData: (repo: string, date: string) => { runs: Run[] };

@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,6 +16,24 @@ afterEach(() => {
 });
 
 describe('rebuildPullRequestArtifacts', () => {
+  it('can be imported through tsx like the scheduled collector', () => {
+    const result = spawnSync(
+      'npx',
+      [
+        'tsx',
+        '-e',
+        "import('./etl/scripts/pr-artifacts.ts').then(() => process.exit(0)).catch((error) => { console.error(error); process.exit(1); })",
+      ],
+      {
+        cwd: path.resolve(__dirname, '../..'),
+        encoding: 'utf8',
+      }
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+  });
+
   it('writes a PR index and per-PR detail files from retained runs', async () => {
     const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-insight-pr-artifacts-'));
     tempDirs.push(repoDir);
