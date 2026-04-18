@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts';
 
@@ -86,5 +86,77 @@ describe('rebuildPullRequestArtifacts', () => {
     expect(index.prs).toHaveLength(1);
     expect(index.prs[0]).toMatchObject({ number: 42, title: 'Add PR lifecycle dashboard' });
     expect(detail.pr).toMatchObject({ number: 42, workflows: [expect.objectContaining({ id: 101 })] });
+  });
+
+  it('recovers PR associations from head_sha when workflow runs have no pull_requests refs', async () => {
+    const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-insight-pr-artifacts-'));
+    tempDirs.push(repoDir);
+
+    const request = vi.fn().mockImplementation((route: string) => {
+      if (route === 'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls') {
+        return Promise.resolve({
+          data: [
+            {
+              number: 42,
+            },
+          ],
+        });
+      }
+
+      if (route === 'GET /repos/{owner}/{repo}/pulls/{pull_number}') {
+        return Promise.resolve({
+          data: {
+            number: 42,
+            title: 'Add PR lifecycle dashboard',
+            state: 'closed',
+            created_at: '2026-04-18T01:00:00Z',
+            merged_at: '2026-04-18T02:15:00Z',
+            html_url: 'https://github.com/acme/widgets/pull/42',
+            user: { login: 'octocat' },
+          },
+        });
+      }
+
+      throw new Error(`Unexpected route: ${route}`);
+    });
+
+    await rebuildPullRequestArtifacts({
+      octokit: { request },
+      owner: 'acme',
+      repo: 'widgets',
+      repoKey: 'acme/widgets',
+      repoDir,
+      files: ['2026-04-18.json'],
+      storage: {
+        readDayData: () => ({
+          runs: [
+            {
+              id: 101,
+              name: 'lint',
+              head_branch: 'feature/pr-metrics',
+              head_sha: 'abc123',
+              status: 'completed',
+              conclusion: 'success',
+              event: 'pull_request',
+              created_at: '2026-04-18T01:05:00Z',
+              updated_at: '2026-04-18T01:15:00Z',
+              html_url: 'https://github.com/acme/widgets/actions/runs/101',
+              durationInSeconds: 600,
+              pull_requests: [],
+              jobs: [],
+            },
+          ],
+        }),
+      },
+    });
+
+    const index = JSON.parse(fs.readFileSync(path.join(repoDir, 'prs', 'index.json'), 'utf8'));
+
+    expect(index.prs).toHaveLength(1);
+    expect(index.prs[0]).toMatchObject({ number: 42, title: 'Add PR lifecycle dashboard' });
+    expect(request).toHaveBeenCalledWith(
+      'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
+      expect.objectContaining({ owner: 'acme', repo: 'widgets', commit_sha: 'abc123' })
+    );
   });
 });
