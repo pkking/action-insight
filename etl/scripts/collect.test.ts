@@ -129,7 +129,7 @@ describe('collect rate limit handling', () => {
     };
 
     await expect(
-      collectRepo(octokit as never, repo, 90, { forceFullBackfill: false }, {
+      collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false }, {
         readIndex: () => ({
           version: 1,
           latest: '2026-04-13',
@@ -197,7 +197,7 @@ describe('collect rate limit handling', () => {
       };
 
       await expect(
-        collectRepo(octokit as never, repo, 90, { forceFullBackfill: false }, {
+        collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false }, {
           readIndex: () => ({
             version: 1,
             latest: '2026-04-12',
@@ -205,6 +205,114 @@ describe('collect rate limit handling', () => {
             retention_days: 90,
             last_updated: '2026-04-12T00:00:00Z',
             history_complete: false,
+          }),
+          writeIndex: vi.fn(),
+          readDayData: (_repo, date) => ({ date, repo, runs: [] }),
+          writeDayData: vi.fn(),
+        })
+      ).rejects.toBeInstanceOf(RateLimitAbortError);
+
+      expect(requests[0]).toEqual({
+        route: 'GET /repos/{owner}/{repo}/actions/runs',
+        created: '2026-01-13T00:00:00Z..2026-01-20T23:59:59Z',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resumes history collection from the stored cursor by default', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-13T00:00:00Z'));
+
+    try {
+      const repo = 'acme/widgets';
+      const requests: Array<{ route: string; created?: string }> = [];
+      const octokit = {
+        request: vi.fn().mockImplementation((route: string, params: Record<string, unknown>) => {
+          requests.push({ route, created: typeof params.created === 'string' ? params.created : undefined });
+
+          if (route === 'GET /repos/{owner}/{repo}/actions/runs') {
+            return Promise.reject({
+              status: 403,
+              response: {
+                headers: {
+                  'x-ratelimit-limit': '5000',
+                  'x-ratelimit-remaining': '0',
+                  'x-ratelimit-reset': '1712345678',
+                },
+              },
+            });
+          }
+
+          throw new Error(`Unexpected request: ${route}`);
+        }),
+      };
+
+      await expect(
+        collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false }, {
+          readIndex: () => ({
+            version: 1,
+            latest: '2026-04-12',
+            files: ['2026-04-12.json', '2026-04-11.json'],
+            retention_days: 90,
+            last_updated: '2026-04-12T00:00:00Z',
+            history_complete: false,
+            backfill_cursor: '2026-03-01',
+          }),
+          writeIndex: vi.fn(),
+          readDayData: (_repo, date) => ({ date, repo, runs: [] }),
+          writeDayData: vi.fn(),
+        })
+      ).rejects.toBeInstanceOf(RateLimitAbortError);
+
+      expect(requests[0]).toEqual({
+        route: 'GET /repos/{owner}/{repo}/actions/runs',
+        created: '2026-03-01T00:00:00Z..2026-03-08T23:59:59Z',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('supports reverse collection from today back toward older history', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-13T00:00:00Z'));
+
+    try {
+      const repo = 'acme/widgets';
+      const requests: Array<{ route: string; created?: string }> = [];
+      const octokit = {
+        request: vi.fn().mockImplementation((route: string, params: Record<string, unknown>) => {
+          requests.push({ route, created: typeof params.created === 'string' ? params.created : undefined });
+
+          if (route === 'GET /repos/{owner}/{repo}/actions/runs') {
+            return Promise.reject({
+              status: 403,
+              response: {
+                headers: {
+                  'x-ratelimit-limit': '5000',
+                  'x-ratelimit-remaining': '0',
+                  'x-ratelimit-reset': '1712345678',
+                },
+              },
+            });
+          }
+
+          throw new Error(`Unexpected request: ${route}`);
+        }),
+      };
+
+      await expect(
+        collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: true }, {
+          readIndex: () => ({
+            version: 1,
+            latest: '2026-04-12',
+            files: ['2026-04-12.json', '2026-04-11.json'],
+            retention_days: 90,
+            last_updated: '2026-04-12T00:00:00Z',
+            history_complete: false,
+            backfill_cursor: '2026-03-01',
           }),
           writeIndex: vi.fn(),
           readDayData: (_repo, date) => ({ date, repo, runs: [] }),
@@ -233,7 +341,7 @@ describe('collect rate limit handling', () => {
       runCollection({
         token: 'token',
         retentionDays: 90,
-        cliOptions: { forceFullBackfill: false },
+        cliOptions: { forceFullBackfill: false, reverse: false },
         targetRepos: ['acme/widgets', 'acme/other', 'acme/more'],
         octokit: {} as never,
         collectRepoImpl,
@@ -255,7 +363,7 @@ describe('collect rate limit handling', () => {
       runCollection({
         token: 'token',
         retentionDays: 90,
-        cliOptions: { forceFullBackfill: false },
+        cliOptions: { forceFullBackfill: false, reverse: false },
         targetRepos: ['acme/widgets', 'acme/other'],
         octokit: {} as never,
         collectRepoImpl,
@@ -386,7 +494,7 @@ describe('collect rate limit handling', () => {
     };
 
     await expect(
-      isolatedCollectRepo(octokit as never, repo, 90, { forceFullBackfill: true }, {
+      isolatedCollectRepo(octokit as never, repo, 90, { forceFullBackfill: true, reverse: false }, {
         readIndex: () => ({
           version: 1,
           latest: '2026-04-13',
@@ -473,7 +581,7 @@ describe('collect rate limit handling', () => {
           }),
       };
 
-      await collectRepo(octokit as never, repo, 2, { forceFullBackfill: false }, {
+      await collectRepo(octokit as never, repo, 2, { forceFullBackfill: false, reverse: false }, {
         readIndex: () => ({
           version: 1,
           latest: '2026-04-15',

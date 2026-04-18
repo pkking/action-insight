@@ -1,11 +1,13 @@
 export interface CollectCliOptions {
   forceFullBackfill: boolean;
+  reverse: boolean;
   repoName?: string;
 }
 
 export function parseCollectCliOptions(argv: string[]): CollectCliOptions {
   let repoName: string | undefined;
   let forceFullBackfill = false;
+  let reverse = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -19,9 +21,13 @@ export function parseCollectCliOptions(argv: string[]): CollectCliOptions {
     if (arg === '--force-full-backfill' || arg === '--full') {
       forceFullBackfill = true;
     }
+
+    if (arg === '--reverse') {
+      reverse = true;
+    }
   }
 
-  return { forceFullBackfill, repoName };
+  return { forceFullBackfill, reverse, repoName };
 }
 
 export function resolveTargetRepos(configuredRepos: string[], repoName?: string): string[] {

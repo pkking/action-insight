@@ -1,6 +1,6 @@
 // ETL script: fetches GitHub Actions runs/jobs and writes daily JSON files
 import { Octokit } from '@octokit/core';
-import { format, subDays, parseISO, isBefore } from 'date-fns';
+import { addDays, format, subDays, parseISO, isBefore } from 'date-fns';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
@@ -82,6 +82,7 @@ interface Index {
   retention_days: number;
   last_updated: string;
   history_complete?: boolean;
+  backfill_cursor?: string;
 }
 
 interface DayData {
@@ -151,6 +152,7 @@ function readIndex(repo: string): Index {
         files: data.repos[repo].files,
         retention_days: data.repos[repo].retention_days,
         last_updated: data.last_updated,
+        backfill_cursor: data.repos[repo].backfill_cursor,
       };
     }
     return data;
@@ -158,6 +160,37 @@ function readIndex(repo: string): Index {
     log('No existing index found, starting fresh');
     return { version: 1, latest: '', files: [], retention_days: 90, last_updated: '' };
   }
+}
+
+function getRetentionStartDate(retentionDays: number, now: Date = new Date()): string {
+  return format(subDays(now, retentionDays), 'yyyy-MM-dd');
+}
+
+function computeBackfillCursor(
+  files: string[],
+  retentionDays: number,
+  historyComplete: boolean,
+  now: Date = new Date()
+): string | undefined {
+  if (historyComplete) {
+    return undefined;
+  }
+
+  const availableDates = new Set(files.map(file => file.replace('.json', '')));
+  const today = format(now, 'yyyy-MM-dd');
+  let cursor = parseISO(getRetentionStartDate(retentionDays, now));
+  const todayDate = parseISO(today);
+
+  while (cursor <= todayDate) {
+    const date = format(cursor, 'yyyy-MM-dd');
+    if (!availableDates.has(date)) {
+      return date;
+    }
+
+    cursor = addDays(cursor, 1);
+  }
+
+  return undefined;
 }
 
 function writeIndex(repo: string, index: Index) {
@@ -318,6 +351,7 @@ function persistCollectedRuns(
   }
 
   updatedIndex.latest = updatedIndex.files[0]?.replace('.json', '') || index.latest || '';
+  updatedIndex.backfill_cursor = computeBackfillCursor(updatedIndex.files, retentionDays, historyComplete);
 
   storage.writeIndex(repo, updatedIndex);
   console.log(`  Index updated: ${updatedIndex.files.length} files, latest: ${updatedIndex.latest}`);
@@ -520,8 +554,10 @@ export async function collectRepo(
     latest: index.latest,
     existingFileCount: index.files.length,
     historyComplete: index.history_complete,
+    backfillCursor: index.backfill_cursor,
     retentionDays,
     forceFullBackfill: options.forceFullBackfill,
+    reverse: options.reverse,
   });
   log(`Collecting ${windows.length} window(s) for ${repo}`);
 
@@ -571,6 +607,9 @@ export async function runCollection({
       `Force full backfill enabled; rebuilding up to ${retentionDays} days for ${cliOptions.repoName || 'all configured repos'}.`
     );
   }
+  if (cliOptions.reverse) {
+    console.log('Reverse collection enabled; starting from today and walking backward.');
+  }
   if (cliOptions.repoName) {
     console.log(`Single repo mode enabled; collecting only ${cliOptions.repoName}.`);
   }
@@ -619,6 +658,7 @@ export async function main() {
   log(`VERBOSE mode: ${VERBOSE}`);
   log(`Retention days: ${retentionDays}`);
   log(`Force full backfill: ${cliOptions.forceFullBackfill}`);
+  log(`Reverse collection: ${cliOptions.reverse}`);
   log(`Requested repo: ${cliOptions.repoName || '(all configured repos)'}`);
   log(`Target repos: ${targetRepos.join(', ') || '(none)'}`);
   log(`Node version: ${process.version}`);

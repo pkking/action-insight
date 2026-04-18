@@ -1,4 +1,4 @@
-import { format, subDays } from 'date-fns';
+import { addDays, format, subDays } from 'date-fns';
 
 export interface CollectionWindow {
   start: string;
@@ -9,10 +9,12 @@ interface BuildCollectionWindowsOptions {
   latest: string;
   existingFileCount?: number;
   historyComplete?: boolean;
+  backfillCursor?: string;
   retentionDays: number;
   now?: Date;
   windowDays?: number;
   forceFullBackfill?: boolean;
+  reverse?: boolean;
 }
 
 const DEFAULT_WINDOW_DAYS = 7;
@@ -21,32 +23,63 @@ export function buildCollectionWindows({
   latest,
   existingFileCount = 0,
   historyComplete,
+  backfillCursor,
   retentionDays,
   now = new Date(),
   windowDays = DEFAULT_WINDOW_DAYS,
   forceFullBackfill = false,
+  reverse = false,
 }: BuildCollectionWindowsOptions): CollectionWindow[] {
   const hasIncompleteHistory =
-    historyComplete === false || (historyComplete === undefined && Boolean(latest) && existingFileCount <= 1);
+    historyComplete === false ||
+    Boolean(backfillCursor) ||
+    (historyComplete === undefined && Boolean(latest) && existingFileCount <= 1);
+  const today = format(now, 'yyyy-MM-dd');
+  const oldest = format(subDays(now, retentionDays), 'yyyy-MM-dd');
+  const forwardStart = backfillCursor || oldest;
 
-  if (latest && !forceFullBackfill && !hasIncompleteHistory) {
-    return [{ start: latest, end: format(now, 'yyyy-MM-dd') }];
+  if (reverse) {
+    return buildReverseCollectionWindows(forwardStart, today, windowDays);
   }
 
+  if (latest && !forceFullBackfill && !hasIncompleteHistory) {
+    return [{ start: latest, end: today }];
+  }
+
+  return buildForwardCollectionWindows(forceFullBackfill ? oldest : forwardStart, today, windowDays);
+}
+
+function buildForwardCollectionWindows(startDate: string, endDate: string, windowDays: number): CollectionWindow[] {
   const windows: CollectionWindow[] = [];
-  let end = now;
-  const oldest = subDays(now, retentionDays);
+  let start = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
 
-  while (end > oldest) {
-    const start = subDays(end, windowDays);
-    const boundedStart = start > oldest ? start : oldest;
-
+  while (start <= end) {
+    const windowEnd = addDays(start, windowDays);
     windows.push({
-      start: format(boundedStart, 'yyyy-MM-dd'),
+      start: format(start, 'yyyy-MM-dd'),
+      end: format(windowEnd > end ? end : windowEnd, 'yyyy-MM-dd'),
+    });
+
+    start = addDays(windowEnd, 1);
+  }
+
+  return windows;
+}
+
+function buildReverseCollectionWindows(startDate: string, endDate: string, windowDays: number): CollectionWindow[] {
+  const windows: CollectionWindow[] = [];
+  const oldest = new Date(`${startDate}T00:00:00Z`);
+  let end = new Date(`${endDate}T00:00:00Z`);
+
+  while (end >= oldest) {
+    const windowStart = subDays(end, windowDays);
+    windows.push({
+      start: format(windowStart < oldest ? oldest : windowStart, 'yyyy-MM-dd'),
       end: format(end, 'yyyy-MM-dd'),
     });
 
-    end = boundedStart;
+    end = addDays(windowStart < oldest ? oldest : windowStart, -1);
   }
 
   return windows;

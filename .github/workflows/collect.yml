@@ -5,7 +5,12 @@ on:
   workflow_dispatch:
     inputs:
       force:
-        description: 'Force a full backfill instead of incremental collection'
+        description: 'Restart history backfill from the earliest retained day'
+        required: false
+        default: false
+        type: boolean
+      reverse:
+        description: 'Collect from today backward instead of oldest-first backfill'
         required: false
         default: false
         type: boolean
@@ -42,6 +47,9 @@ jobs:
           if [ "${WORKFLOW_FORCE}" = "true" ]; then
             args+=(--force-full-backfill)
           fi
+          if [ "${WORKFLOW_REVERSE}" = "true" ]; then
+            args+=(--reverse)
+          fi
           if [ -n "${WORKFLOW_REPO_NAME}" ]; then
             args+=(--repo "${WORKFLOW_REPO_NAME}")
           fi
@@ -51,6 +59,7 @@ jobs:
           RETENTION_DAYS: 90
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
+          WORKFLOW_REVERSE: ${{ inputs.reverse }}
           WORKFLOW_REPO_NAME: ${{ inputs.repo_name || '' }}
       - if: always()
         run: |
