@@ -8,6 +8,7 @@ export interface Index {
   retention_days: number;
   last_updated: string;
   history_complete?: boolean;
+  backfill_cursor?: string;
 }
 
 export interface DayData {
