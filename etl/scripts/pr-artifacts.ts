@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import * as prMetricsModule from '../../src/lib/pr-metrics';
 import type { PullRequestRef, PullRequestSnapshot, Run } from '../../src/lib/types';
-import { isGitHubRateLimitError } from './github';
+import { isGitHubRateLimitError, checkRateLimitBudget } from './github';
 
 const prMetricsInterop =
   ('buildPullRequestIndex' in prMetricsModule && typeof prMetricsModule.buildPullRequestIndex === 'function')
@@ -167,6 +167,29 @@ export async function rebuildPullRequestArtifacts({
   warn = () => {},
 }: RebuildPullRequestArtifactsOptions): Promise<void> {
   const runs = readRetainedRuns(repoKey, files, storage);
+  const runsWithoutPr = runs.filter((run) => (!run.pull_requests || run.pull_requests.length === 0) && run.head_sha && isPullRequestLikeEvent(run.event));
+  const uniqueShas = new Set(runsWithoutPr.map((run) => run.head_sha as string));
+  const allPrNumbers = Array.from(
+    new Set(
+      runs
+        .map((run) => run.pull_requests?.[0]?.number)
+        .filter((number): number is number => typeof number === 'number')
+    )
+  );
+  const expectedCalls = uniqueShas.size + allPrNumbers.length;
+
+  if (expectedCalls > 0) {
+    const budget = await checkRateLimitBudget(octokit, expectedCalls);
+    if (!budget.ok) {
+      warn(`Rate limit budget check: ${budget.remaining} remaining, need ${expectedCalls}. Skipping PR artifact resolution.`);
+      if (budget.resetAt) {
+        warn(`Rate limit resets at ${budget.resetAt.toISOString()}.`);
+      }
+      return;
+    }
+    log(`Rate limit budget check: ${budget.remaining} remaining, need ${expectedCalls}. Proceeding.`);
+  }
+
   const resolvedPullRequestsBySha = await resolvePullRequestsFromHeadSha(octokit, owner, repo, runs, warn);
   const normalizedRuns = runs.map((run) => {
     if (run.pull_requests && run.pull_requests.length > 0) {
