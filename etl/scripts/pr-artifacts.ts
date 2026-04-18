@@ -125,10 +125,12 @@ export async function rebuildPullRequestArtifacts({
 
   log(`Building PR artifacts for ${repoKey}: ${prNumbers.length} PRs`);
   const pullRequests = await fetchPullRequestSnapshots(octokit, owner, repo, prNumbers, warn);
+  const retentionStartDate = files.map((file) => file.replace(/\.json$/, '')).sort()[0];
   const result = buildPullRequestIndex({
     repo: repoKey,
     runs,
     pullRequests,
+    retentionStartDate,
   });
 
   writeFileSync(path.join(prDir, 'index.json'), JSON.stringify(result.index, null, 2));

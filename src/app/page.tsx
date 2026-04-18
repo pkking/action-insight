@@ -575,10 +575,13 @@ function DashboardContent() {
                     <tr>
                       <th className="py-3 px-6">PR / Branch</th>
                       <th className="py-3 px-6">Status</th>
-                      <th className="py-3 px-6">T1→T2</th>
-                      <th className="py-3 px-6">T2→T3</th>
-                      <th className="py-3 px-6">T1→T4</th>
-                      <th className="py-3 px-6">Created</th>
+                      <th className="py-3 px-6">T1 PR Created</th>
+                      <th className="py-3 px-6">T2 CI Started</th>
+                      <th className="py-3 px-6">T3 CI Completed</th>
+                      <th className="py-3 px-6">T4 PR Merged</th>
+                      <th className="py-3 px-6">Submit→CI Start</th>
+                      <th className="py-3 px-6">CI Start→CI End</th>
+                      <th className="py-3 px-6">Submit→Merge</th>
                       <th className="py-3 px-6 text-right">Details</th>
                     </tr>
                   </thead>
@@ -596,10 +599,13 @@ function DashboardContent() {
                               <div className="text-xs mt-1 font-mono text-neutral-500 dark:text-neutral-400">{pr.branch}</div>
                             </td>
                             <td className="py-4 px-6"><StatusBadge conclusion={pr.conclusion} /></td>
+                            <td className="py-4 px-6 text-neutral-500 dark:text-neutral-400">{format(new Date(pr.created_at), 'MMM dd, HH:mm')}</td>
+                            <td className="py-4 px-6 text-neutral-500 dark:text-neutral-400">{pr.ci_started_at ? format(new Date(pr.ci_started_at), 'MMM dd, HH:mm') : 'N/A'}</td>
+                            <td className="py-4 px-6 text-neutral-500 dark:text-neutral-400">{pr.ci_completed_at ? format(new Date(pr.ci_completed_at), 'MMM dd, HH:mm') : 'N/A'}</td>
+                            <td className="py-4 px-6 text-neutral-500 dark:text-neutral-400">{pr.merged_at ? format(new Date(pr.merged_at), 'MMM dd, HH:mm') : 'N/A'}</td>
                             <td className="py-4 px-6 font-mono text-neutral-600 dark:text-neutral-400">{formatDuration(pr.timeToCiStartInSeconds)}</td>
                             <td className="py-4 px-6 font-mono text-neutral-600 dark:text-neutral-400">{formatDuration(pr.ciDurationInSeconds)}</td>
                             <td className="py-4 px-6 font-mono text-neutral-600 dark:text-neutral-400">{formatDuration(pr.timeToMergeInSeconds)}</td>
-                            <td className="py-4 px-6 text-neutral-500 dark:text-neutral-400">{format(new Date(pr.created_at), 'MMM dd, HH:mm')}</td>
                             <td className="py-4 px-6 text-right">
                               <button onClick={() => void loadDetail(pr.number)} className="inline-flex items-center gap-1 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 px-3 py-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
                                 {expandedPrNumber === pr.number ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -613,12 +619,51 @@ function DashboardContent() {
 
                           {expandedPrNumber === pr.number && detail && (
                             <tr className="bg-neutral-50 dark:bg-neutral-950/50">
-                              <td colSpan={7} className="p-0">
+                              <td colSpan={10} className="p-0">
                                 <div className="px-6 py-4 border-l-4 border-blue-500 dark:border-blue-400 bg-white dark:bg-neutral-900">
+                                  <div className="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-7 gap-3 mb-5">
+                                    <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 p-3">
+                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">T1 PR Created</div>
+                                      <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{format(new Date(detail.created_at), 'MMM dd, HH:mm')}</div>
+                                    </div>
+                                    <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 p-3">
+                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">T2 CI Started</div>
+                                      <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{detail.ci_started_at ? format(new Date(detail.ci_started_at), 'MMM dd, HH:mm') : 'N/A'}</div>
+                                    </div>
+                                    <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 p-3">
+                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">T3 CI Completed</div>
+                                      <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{detail.ci_completed_at ? format(new Date(detail.ci_completed_at), 'MMM dd, HH:mm') : 'N/A'}</div>
+                                    </div>
+                                    <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 p-3">
+                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">T4 PR Merged</div>
+                                      <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{detail.merged_at ? format(new Date(detail.merged_at), 'MMM dd, HH:mm') : 'N/A'}</div>
+                                    </div>
+                                    <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-900/20 p-3">
+                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Submit→CI Start</div>
+                                      <div className="mt-2 text-sm font-mono font-medium text-neutral-900 dark:text-neutral-100">{formatDuration(detail.timeToCiStartInSeconds)}</div>
+                                    </div>
+                                    <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/80 dark:bg-blue-900/20 p-3">
+                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">CI Start→CI End</div>
+                                      <div className="mt-2 text-sm font-mono font-medium text-neutral-900 dark:text-neutral-100">{formatDuration(detail.ciDurationInSeconds)}</div>
+                                    </div>
+                                    <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-900/20 p-3">
+                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Submit→Merge</div>
+                                      <div className="mt-2 text-sm font-mono font-medium text-neutral-900 dark:text-neutral-100">{formatDuration(detail.timeToMergeInSeconds)}</div>
+                                    </div>
+                                  </div>
+
                                   <div className="flex items-center justify-between mb-4 gap-4">
                                     <div>
-                                      <h3 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">Workflows for PR #{pr.number}</h3>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <h3 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">Workflows for PR #{pr.number}</h3>
+                                        {detail.partialCiHistory && (
+                                          <span className="inline-flex items-center rounded-full border border-amber-300/60 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                                            Partial CI history
+                                          </span>
+                                        )}
+                                      </div>
                                       <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Select a workflow to inspect its jobs.</p>
+                                      <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">{detail.successfulWorkflowCount} / {detail.workflowCount} successful workflows</p>
                                     </div>
                                     <div className="flex gap-2 text-xs">
                                       <button onClick={() => toggleWorkflowSort('name')} className="px-3 py-1.5 rounded-md border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800">Sort: Name</button>
@@ -676,7 +721,7 @@ function DashboardContent() {
 
                     {filteredPrs.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="py-8 text-center text-neutral-500 dark:text-neutral-400">No matching PRs found for {selectedRepo.key}. Try adjusting the date range or filter.</td>
+                        <td colSpan={10} className="py-8 text-center text-neutral-500 dark:text-neutral-400">No matching PRs found for {selectedRepo.key}. Try adjusting the date range or filter.</td>
                       </tr>
                     )}
                   </tbody>

@@ -70,6 +70,7 @@ describe('buildPullRequestIndex', () => {
         ],
       ]),
       generatedAt: '2026-04-18T03:00:00Z',
+      retentionStartDate: '2026-04-18',
     });
 
     expect(result.index.prs).toHaveLength(1);
@@ -89,6 +90,7 @@ describe('buildPullRequestIndex', () => {
       ciDurationInSeconds: 2400,
       timeToMergeInSeconds: 4500,
       mergeLeadTimeInSeconds: 1800,
+      partialCiHistory: false,
     });
 
     expect(result.details.get(42)).toMatchObject({
@@ -132,7 +134,7 @@ describe('buildPullRequestIndex', () => {
             number: 77,
             title: 'Open PR',
             state: 'open',
-            created_at: '2026-04-18T05:00:00Z',
+            created_at: '2026-04-10T05:00:00Z',
             merged_at: null,
             html_url: 'https://github.com/acme/widgets/pull/77',
             user: {
@@ -142,15 +144,16 @@ describe('buildPullRequestIndex', () => {
         ],
       ]),
       generatedAt: '2026-04-18T06:00:00Z',
+      retentionStartDate: '2026-04-18',
     });
 
     expect(result.index.prs[0]).toMatchObject({
       number: 77,
       state: 'open',
-      timeToCiStartInSeconds: 120,
       ciDurationInSeconds: 600,
       timeToMergeInSeconds: undefined,
       mergeLeadTimeInSeconds: undefined,
+      partialCiHistory: true,
     });
   });
 });

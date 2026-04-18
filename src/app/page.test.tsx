@@ -64,6 +64,7 @@ describe('Dashboard PR view', () => {
           ci_started_at: '2026-04-18T01:05:00Z',
           ci_completed_at: '2026-04-18T01:45:00Z',
           merged_at: '2026-04-18T02:15:00Z',
+          partialCiHistory: true,
           timeToCiStartInSeconds: 300,
           ciDurationInSeconds: 2400,
           timeToMergeInSeconds: 4500,
@@ -88,6 +89,7 @@ describe('Dashboard PR view', () => {
         ci_started_at: '2026-04-18T01:05:00Z',
         ci_completed_at: '2026-04-18T01:45:00Z',
         merged_at: '2026-04-18T02:15:00Z',
+        partialCiHistory: true,
         timeToCiStartInSeconds: 300,
         ciDurationInSeconds: 2400,
         timeToMergeInSeconds: 4500,
@@ -177,6 +179,8 @@ describe('Dashboard PR view', () => {
     });
 
     expect(await screen.findByText('lint')).toBeInTheDocument();
+    expect(screen.getByText('Partial CI history')).toBeInTheDocument();
+    expect(screen.getByText('1 / 2 successful workflows')).toBeInTheDocument();
   });
 
   it('shows job details after selecting a workflow inside a PR', async () => {

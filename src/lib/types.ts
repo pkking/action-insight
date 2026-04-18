@@ -74,6 +74,7 @@ export interface PullRequestMetricsSummary {
   ci_started_at?: string;
   ci_completed_at?: string;
   merged_at?: string;
+  partialCiHistory: boolean;
   timeToCiStartInSeconds?: number;
   ciDurationInSeconds?: number;
   timeToMergeInSeconds?: number;

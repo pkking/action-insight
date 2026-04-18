@@ -11,6 +11,7 @@ interface BuildPullRequestIndexOptions {
   runs: Run[];
   pullRequests: Map<number, PullRequestSnapshot>;
   generatedAt?: string;
+  retentionStartDate?: string;
 }
 
 interface BuildPullRequestIndexResult {
@@ -52,6 +53,7 @@ export function buildPullRequestIndex({
   runs,
   pullRequests,
   generatedAt = new Date().toISOString(),
+  retentionStartDate,
 }: BuildPullRequestIndexOptions): BuildPullRequestIndexResult {
   const groupedRuns = new Map<number, Run[]>();
 
@@ -82,6 +84,8 @@ export function buildPullRequestIndex({
       .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0];
     const successfulWorkflowCount = prRuns.filter((run) => run.conclusion === 'success').length;
 
+    const partialCiHistory = Boolean(metadata?.created_at && retentionStartDate && metadata.created_at < `${retentionStartDate}T00:00:00Z`);
+
     const summary: PullRequestMetricsSummary = {
       number,
       title: metadata?.title ?? `PR #${number}`,
@@ -93,6 +97,7 @@ export function buildPullRequestIndex({
       ci_started_at: ciStartedAt,
       ci_completed_at: ciCompletedAt,
       merged_at: metadata?.merged_at ?? undefined,
+      partialCiHistory,
       timeToCiStartInSeconds: diffSeconds(metadata?.created_at, ciStartedAt),
       ciDurationInSeconds: diffSeconds(ciStartedAt, ciCompletedAt),
       timeToMergeInSeconds: diffSeconds(metadata?.created_at, metadata?.merged_at),
