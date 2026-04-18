@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import {
   parseCollectCliOptions,
   resolveTargetRepos,
+  CLI_HELP,
   type CollectCliOptions,
 } from './collect-options.ts';
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
@@ -260,7 +261,7 @@ function persistCollectedRuns(
   index: Index,
   runs: Run[],
   retentionDays: number,
-  historyComplete: boolean
+  queriedWindows: CollectionWindow[] = [],
 ): Index {
   const runsByDate: Record<string, Run[]> = {};
   for (const run of runs) {
@@ -276,7 +277,23 @@ function persistCollectedRuns(
     log('No completed runs found for this repo');
   }
 
-  const files = mergeCollectedDates(index.files, dates);
+  // Create empty files for dates that were queried but had no runs
+  // This prevents computeBackfillCursor from treating empty days as unscanned gaps
+  const queriedDates = new Set<string>();
+  for (const window of queriedWindows) {
+    let d = parseISO(window.start);
+    const end = parseISO(window.end);
+    while (d <= end) {
+      queriedDates.add(format(d, 'yyyy-MM-dd'));
+      d = addDays(d, 1);
+    }
+  }
+  const emptyDates = Array.from(queriedDates).filter(date => !runsByDate[date] && !index.files.includes(`${date}.json`)).sort();
+  for (const date of emptyDates) {
+    storage.writeDayData(repo, { date, repo, runs: [] });
+  }
+
+  const files = mergeCollectedDates(index.files, [...dates, ...emptyDates]);
 
   for (const date of dates) {
     console.log(`  Writing ${date}.json (${runsByDate[date].length} runs)`);
@@ -289,34 +306,37 @@ function persistCollectedRuns(
     storage.writeDayData(repo, { date, repo, runs: Array.from(runMap.values()) });
   }
 
+  const cutoffDate = startOfDay(subDays(new Date(), retentionDays));
+  const filesAfterRetention = files.filter(file => {
+    const fileDate = parseISO(file.replace('.json', ''));
+    return !isBefore(fileDate, cutoffDate);
+  });
+
+  if (files.length - filesAfterRetention.length > 0) {
+    log(`Removing ${files.length - filesAfterRetention.length} old files`);
+  }
+
+  for (const file of files) {
+    if (!filesAfterRetention.includes(file)) {
+      console.log(`  Removing old file: ${file}`);
+      storage.deleteDayData(repo, file.replace('.json', ''));
+    }
+  }
+
+  // Derive history_complete from actual file gaps, not from the caller's parameter
+  const backfillCursor = computeBackfillCursor(filesAfterRetention, retentionDays, false);
+
   const updatedIndex: Index = {
     version: 1,
     latest: '',
-    files,
+    files: filesAfterRetention,
     retention_days: retentionDays,
     last_updated: new Date().toISOString(),
-    history_complete: historyComplete,
+    history_complete: !backfillCursor,
+    backfill_cursor: backfillCursor,
   };
 
-  const cutoffDate = startOfDay(subDays(new Date(), retentionDays));
-  const filesToRemove = files.filter(file => {
-    const fileDate = parseISO(file.replace('.json', ''));
-    return isBefore(fileDate, cutoffDate);
-  });
-
-  if (filesToRemove.length > 0) {
-    log(`Removing ${filesToRemove.length} old files`);
-  }
-
-  for (const file of filesToRemove) {
-    console.log(`  Removing old file: ${file}`);
-    storage.deleteDayData(repo, file.replace('.json', ''));
-    const idx = updatedIndex.files.indexOf(file);
-    if (idx > -1) updatedIndex.files.splice(idx, 1);
-  }
-
   updatedIndex.latest = updatedIndex.files[0]?.replace('.json', '') || index.latest || '';
-  updatedIndex.backfill_cursor = computeBackfillCursor(updatedIndex.files, retentionDays, historyComplete);
 
   storage.writeIndex(repo, updatedIndex);
   console.log(`  Index updated: ${updatedIndex.files.length} files, latest: ${updatedIndex.latest}`);
@@ -558,18 +578,20 @@ export async function collectRepo(
   log(`Collecting ${windows.length} window(s) for ${repo}`);
 
   const allRunsMap = new Map<number, Run>();
+  const completedWindows: CollectionWindow[] = [];
   for (const window of windows) {
     try {
       const windowRuns = await collectRunsForWindow(window);
       for (const run of windowRuns) {
         allRunsMap.set(run.id, run);
       }
+      completedWindows.push(window);
     } catch (err) {
       if (err instanceof RateLimitAbortError) {
         for (const run of err.partialRuns) {
           allRunsMap.set(run.id, run);
         }
-        const persistedIndex = persistCollectedRuns(storage, repo, index, Array.from(allRunsMap.values()), retentionDays, false);
+        const persistedIndex = persistCollectedRuns(storage, repo, index, Array.from(allRunsMap.values()), retentionDays, completedWindows);
         await rebuildPullRequestArtifacts({
           octokit,
           owner,
@@ -588,7 +610,7 @@ export async function collectRepo(
 
   const allRuns = Array.from(allRunsMap.values());
   log(`Total completed runs collected: ${allRuns.length}`);
-  const persistedIndex = persistCollectedRuns(storage, repo, index, allRuns, retentionDays, true);
+  const persistedIndex = persistCollectedRuns(storage, repo, index, allRuns, retentionDays, completedWindows);
   await rebuildPullRequestArtifacts({
     octokit,
     owner,
@@ -668,6 +690,12 @@ export async function runCollection({
 
 export async function main() {
   const cliOptions = parseCollectCliOptions(process.argv.slice(2));
+
+  if (cliOptions.help) {
+    console.log(CLI_HELP);
+    return;
+  }
+
   const token = process.env.GITHUB_TOKEN;
   const configuredRepos = readReposConfig();
   const targetRepos = resolveTargetRepos(configuredRepos, cliOptions.repoName);
