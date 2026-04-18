@@ -13,6 +13,7 @@ import {
 } from './collect-options.ts';
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
+import { isGitHubRateLimitError, getRateLimitDetails, type GitHubRequestErrorLike, type RateLimitDetails } from './github.ts';
 
 const { buildCollectionWindows, mergeCollectedDates, splitCollectionWindow, toCreatedRange } = collectionWindows;
 
@@ -120,20 +121,6 @@ interface RunCollectionOptions {
   collectRepoImpl?: typeof collectRepo;
 }
 
-interface RateLimitDetails {
-  limit?: string;
-  remaining?: string;
-  reset?: string;
-}
-
-type GitHubRequestErrorLike = {
-  status?: number;
-  message?: string;
-  response?: {
-    headers?: Record<string, string | number | undefined>;
-    data?: { message?: string };
-  };
-};
 
 const ETL_DIR = path.join(__dirname, '..');
 const DATA_DIR = path.join(__dirname, '../../data');
@@ -254,36 +241,6 @@ function deleteDayData(repo: string, date: string) {
   log(`Day data removed: ${filePath}`);
 }
 
-function getRateLimitDetails(error: GitHubRequestErrorLike): RateLimitDetails {
-  return {
-    limit: String(error.response?.headers?.['x-ratelimit-limit'] ?? ''),
-    remaining: String(error.response?.headers?.['x-ratelimit-remaining'] ?? ''),
-    reset: String(error.response?.headers?.['x-ratelimit-reset'] ?? ''),
-  };
-}
-
-export function isGitHubRateLimitError(error: unknown): error is GitHubRequestErrorLike {
-  if (!error || typeof error !== 'object') {
-    return false;
-  }
-
-  const candidate = error as GitHubRequestErrorLike;
-  const message = `${candidate.message ?? ''} ${candidate.response?.data?.message ?? ''}`.toLowerCase();
-  const { remaining } = getRateLimitDetails(candidate);
-  const retryAfter = candidate.response?.headers?.['retry-after'];
-  const hasSecondaryRateLimitSignal =
-    message.includes('secondary rate limit') ||
-    message.includes('abuse detection') ||
-    message.includes('abuse rate limit') ||
-    (Boolean(retryAfter) && candidate.status === 403);
-
-  return (
-    remaining === '0' ||
-    message.includes('rate limit') ||
-    message.includes('api rate limit exceeded') ||
-    hasSecondaryRateLimitSignal
-  );
-}
 
 export class RateLimitAbortError extends Error {
   partialRuns: Run[];

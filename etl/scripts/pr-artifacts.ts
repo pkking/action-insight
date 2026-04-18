@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import * as prMetricsModule from '../../src/lib/pr-metrics';
 import type { PullRequestRef, PullRequestSnapshot, Run } from '../../src/lib/types';
+import { isGitHubRateLimitError } from './github';
 
 const prMetricsInterop =
   ('buildPullRequestIndex' in prMetricsModule && typeof prMetricsModule.buildPullRequestIndex === 'function')
@@ -70,8 +71,13 @@ async function resolvePullRequestsFromHeadSha(
     )
   );
   const resolved = new Map<string, number>();
+  let rateLimited = false;
 
   for (const sha of shas) {
+    if (rateLimited) {
+      warn(`Skipping PR resolution for commit ${sha}: rate limit reached`);
+      continue;
+    }
     try {
       const response = await octokit.request('GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls', {
         owner,
@@ -84,6 +90,11 @@ async function resolvePullRequestsFromHeadSha(
         resolved.set(sha, number);
       }
     } catch (error) {
+      if (isGitHubRateLimitError(error)) {
+        rateLimited = true;
+        warn(`Rate limit reached while resolving PRs for ${owner}/${repo}. ${resolved.size} PRs resolved so far.`);
+        continue;
+      }
       warn(`Failed to resolve PR for commit ${sha} in ${owner}/${repo}:`, error);
     }
   }
@@ -99,8 +110,13 @@ async function fetchPullRequestSnapshots(
   warn: (...args: unknown[]) => void
 ): Promise<Map<number, PullRequestSnapshot>> {
   const snapshots = new Map<number, PullRequestSnapshot>();
+  let rateLimited = false;
 
   for (const number of numbers) {
+    if (rateLimited) {
+      warn(`Skipping PR #${number} fetch: rate limit reached`);
+      continue;
+    }
     try {
       const response = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}', {
         owner,
@@ -127,6 +143,11 @@ async function fetchPullRequestSnapshots(
         user: data.user,
       });
     } catch (error) {
+      if (isGitHubRateLimitError(error)) {
+        rateLimited = true;
+        warn(`Rate limit reached while fetching PR snapshots for ${owner}/${repo}. ${snapshots.size} snapshots fetched so far.`);
+        continue;
+      }
       warn(`Failed to fetch PR #${number} for ${owner}/${repo}:`, error);
     }
   }
