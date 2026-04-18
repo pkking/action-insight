@@ -2,7 +2,7 @@ export interface GitHubRequestErrorLike {
   status: number;
   message: string;
   response?: {
-    headers?: Record<string, string | undefined>;
+    headers?: Record<string, string | number | undefined>;
     data?: { message?: string };
   };
 }
