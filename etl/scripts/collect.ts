@@ -13,7 +13,7 @@ import {
 } from './collect-options.ts';
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
-import { isGitHubRateLimitError, getRateLimitDetails, type GitHubRequestErrorLike, type RateLimitDetails } from './github.ts';
+import { isGitHubRateLimitError, getRateLimitDetails, checkRateLimitBudget, type GitHubRequestErrorLike, type RateLimitDetails } from './github.ts';
 
 const { buildCollectionWindows, mergeCollectedDates, splitCollectionWindow, toCreatedRange } = collectionWindows;
 
@@ -347,6 +347,18 @@ export async function collectRepo(
   const index = storage.readIndex(repo);
   log(`Index state: latest=${index.latest}, files=${index.files.length}`);
 
+  const existingRunIds = new Set<number>();
+  for (const file of index.files) {
+    const date = file.replace('.json', '');
+    const dayData = storage.readDayData(repo, date);
+    for (const run of dayData.runs) {
+      if (run.jobs && run.jobs.length > 0) {
+        existingRunIds.add(run.id);
+      }
+    }
+  }
+  log(`Existing runs with jobs: ${existingRunIds.size}`);
+
   function toCreatedParam(window: CollectionWindow): string {
     return toCreatedRange(window);
   }
@@ -358,6 +370,7 @@ export async function collectRepo(
     const allRuns: Run[] = [];
     let page = 1;
     let totalFetched = 0;
+    let skippedJobsCount = 0;
 
     while (true) {
       log(`Fetching page ${page} for ${createdParam}...`);
@@ -402,47 +415,55 @@ export async function collectRepo(
         }
         completedCount++;
 
-        log(`Fetching jobs for run #${run.id} (${run.name})...`);
-        const jobsStartTime = Date.now();
-        let jobsData;
-        try {
-          const response = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
-            owner,
-            repo: repoName,
-            run_id: run.id,
-          });
-          jobsData = response.data;
-        } catch (err) {
-          if (isGitHubRateLimitError(err)) {
-            const details = getRateLimitDetails(err);
-            throw new RateLimitAbortError(
-              `GitHub API rate limit reached (remaining=${details.remaining || 'unknown'}, limit=${details.limit || 'unknown'}, reset=${details.reset || 'unknown'})`,
-              allRuns,
-              details
-            );
-          }
-          throw err;
-        }
-        const jobsElapsed = Date.now() - jobsStartTime;
-        log(`Jobs for run #${run.id}: ${jobsData.jobs.length} jobs (${jobsElapsed}ms)`);
+        const runId = run.id;
+        let jobs: Job[] = [];
 
-        const jobs: Job[] = (jobsData.jobs as GitHubJobPayload[]).map(j => {
-          const startedMs = new Date(j.started_at).getTime();
-          const createdMs = j.created_at ? new Date(j.created_at).getTime() : startedMs;
-          const completedMs = j.completed_at ? new Date(j.completed_at).getTime() : startedMs;
-          return {
-            id: j.id,
-            name: j.name,
-            status: j.status,
-            conclusion: j.conclusion ?? 'unknown',
-            created_at: j.created_at ?? new Date().toISOString(),
-            started_at: j.started_at,
-            completed_at: j.completed_at ?? new Date().toISOString(),
-            html_url: j.html_url,
-            queueDurationInSeconds: Math.max(0, (startedMs - createdMs) / 1000),
-            durationInSeconds: Math.max(0, (completedMs - startedMs) / 1000),
-          };
-        });
+        if (existingRunIds.has(runId)) {
+          skippedJobsCount++;
+          log(`Skipping jobs for run #${runId} - already cached`);
+        } else {
+          log(`Fetching jobs for run #${runId} (${run.name})...`);
+          const jobsStartTime = Date.now();
+          let jobsData;
+          try {
+            const response = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
+              owner,
+              repo: repoName,
+              run_id: runId,
+            });
+            jobsData = response.data;
+          } catch (err) {
+            if (isGitHubRateLimitError(err)) {
+              const details = getRateLimitDetails(err);
+              throw new RateLimitAbortError(
+                `GitHub API rate limit reached (remaining=${details.remaining || 'unknown'}, limit=${details.limit || 'unknown'}, reset=${details.reset || 'unknown'})`,
+                allRuns,
+                details
+              );
+            }
+            throw err;
+          }
+          const jobsElapsed = Date.now() - jobsStartTime;
+          log(`Jobs for run #${runId}: ${jobsData.jobs.length} jobs (${jobsElapsed}ms)`);
+
+          jobs = (jobsData.jobs as GitHubJobPayload[]).map(j => {
+            const startedMs = new Date(j.started_at).getTime();
+            const createdMs = j.created_at ? new Date(j.created_at).getTime() : startedMs;
+            const completedMs = j.completed_at ? new Date(j.completed_at).getTime() : startedMs;
+            return {
+              id: j.id,
+              name: j.name,
+              status: j.status,
+              conclusion: j.conclusion ?? 'unknown',
+              created_at: j.created_at ?? new Date().toISOString(),
+              started_at: j.started_at,
+              completed_at: j.completed_at ?? new Date().toISOString(),
+              html_url: j.html_url,
+              queueDurationInSeconds: Math.max(0, (startedMs - createdMs) / 1000),
+              durationInSeconds: Math.max(0, (completedMs - startedMs) / 1000),
+            };
+          });
+        }
 
         allRuns.push({
           id: run.id,
@@ -468,7 +489,7 @@ export async function collectRepo(
       }
 
       totalFetched += data.workflow_runs.length;
-      log(`Page ${page} summary: ${completedCount} completed, ${skippedCount} skipped (total fetched: ${totalFetched})`);
+      log(`Page ${page} summary: ${completedCount} completed, ${skippedCount} skipped, ${skippedJobsCount} jobs cached (total fetched: ${totalFetched})`);
 
       if (data.workflow_runs.length < PER_PAGE) {
         log('Last page reached (< per_page)');

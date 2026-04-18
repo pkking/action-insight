@@ -43,3 +43,24 @@ export function isGitHubRateLimitError(error: unknown): error is GitHubRequestEr
     hasSecondaryRateLimitSignal
   );
 }
+
+export async function checkRateLimitBudget(
+  octokit: { request: (route: string, params?: Record<string, unknown>) => Promise<{ data: unknown }> },
+  requiredCalls: number
+): Promise<{ ok: boolean; remaining: number; resetAt?: Date }> {
+  try {
+    const response = await octokit.request('GET /rate_limit');
+    const data = response.data as { resources?: { core?: { remaining?: number; reset?: number } } };
+    const remaining = data.resources?.core?.remaining ?? 0;
+    const resetTimestamp = data.resources?.core?.reset;
+    const resetAt = resetTimestamp ? new Date(resetTimestamp * 1000) : undefined;
+
+    return {
+      ok: remaining >= requiredCalls,
+      remaining,
+      resetAt,
+    };
+  } catch {
+    return { ok: false, remaining: 0 };
+  }
+}
