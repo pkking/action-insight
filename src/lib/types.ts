@@ -99,3 +99,30 @@ export interface PullRequestIndexFile {
   generated_at: string;
   prs: PullRequestMetricsSummary[];
 }
+
+export type OverviewMetricKey = 'prE2EP90Minutes' | 'ciE2EP90Minutes' | 'reviewP90Minutes' | 'ciE2ESlaRate';
+
+export interface DateRange {
+  start: Date;
+  end: Date;
+}
+
+export interface RepoOverviewRow {
+  repoKey: string;
+  totalPrs: number;
+  sampleCount: number;
+  prE2EP90Minutes: number | null;
+  ciE2EP90Minutes: number | null;
+  reviewP90Minutes: number | null;
+  ciE2ESlaRate: number | null;
+}
+
+export interface DailyTrendPoint {
+  date: string;
+  label: string;
+  sampleCount: number;
+  prE2EP90Minutes: number | null;
+  ciE2EP90Minutes: number | null;
+  reviewP90Minutes: number | null;
+  ciE2ESlaRate: number | null;
+}
