@@ -35,6 +35,9 @@ APPENDIX_SHEET = "Diagnostic Appendix"
 CURRENT_PROBLEMS_SHEET = "Current Problems"
 DAILY_DRILLDOWN_SHEET = "Daily Drill-down"
 LEGACY_SHEET = "CI效率报告"
+WORKFLOW_RAW_SHEET = "Workflow Raw"
+JOB_RAW_SHEET = "Job Raw"
+STEP_RAW_SHEET = "Step Raw"
 
 
 @dataclass
@@ -276,6 +279,120 @@ def classify_issue_status(run_count: int, drag_type: str) -> str:
     return "current_issue"
 
 
+def aggregate_workflows_from_raw_rows(workflow_raw_rows: list[dict]) -> list[dict]:
+    grouped: dict[str, dict[str, Any]] = {}
+
+    for row in workflow_raw_rows:
+        workflow_name = row.get("workflow_name") or "Unknown Workflow"
+        entry = grouped.setdefault(workflow_name, {
+            "workflow_name": workflow_name,
+            "run_count": 0,
+            "total_runtime_minutes": 0.0,
+            "max_runtime_minutes": 0.0,
+            "queue_samples": [],
+            "execution_samples": [],
+            "affected_prs": set(),
+        })
+        runtime = row.get("run_e2e_minutes") or 0.0
+        entry["run_count"] += 1
+        entry["total_runtime_minutes"] += runtime
+        entry["max_runtime_minutes"] = max(entry["max_runtime_minutes"], runtime)
+        if row.get("pr_number") is not None:
+            entry["affected_prs"].add(row["pr_number"])
+        if row.get("queue_minutes") is not None:
+            entry["queue_samples"].append(row["queue_minutes"])
+        if row.get("execution_minutes") is not None:
+            entry["execution_samples"].append(row["execution_minutes"])
+
+    rows = []
+    for entry in grouped.values():
+        avg_runtime = entry["total_runtime_minutes"] / entry["run_count"] if entry["run_count"] else 0.0
+        rows.append({
+            "workflow_name": entry["workflow_name"],
+            "run_count": entry["run_count"],
+            "affected_pr_count": len(entry["affected_prs"]),
+            "total_runtime_minutes": round(entry["total_runtime_minutes"], 1),
+            "avg_runtime_minutes": round(avg_runtime, 1),
+            "max_runtime_minutes": round(entry["max_runtime_minutes"], 1),
+            "queue_p90_minutes": round(percentile(entry["queue_samples"], 0.9), 1) if entry["queue_samples"] else 0.0,
+            "execution_p90_minutes": round(percentile(entry["execution_samples"], 0.9), 1) if entry["execution_samples"] else 0.0,
+        })
+    return sorted(rows, key=lambda item: (item["total_runtime_minutes"], item["max_runtime_minutes"]), reverse=True)
+
+
+def aggregate_jobs_from_raw_rows(job_raw_rows: list[dict]) -> list[dict]:
+    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+
+    for row in job_raw_rows:
+        workflow_name = row.get("workflow_name") or "Unknown Workflow"
+        job_name = row.get("job_name") or "Unknown Job"
+        key = (workflow_name, job_name)
+        entry = grouped.setdefault(key, {
+            "workflow_name": workflow_name,
+            "job_name": job_name,
+            "run_count": 0,
+            "queue_samples": [],
+            "execution_samples": [],
+        })
+        entry["run_count"] += 1
+        if row.get("queue_minutes") is not None:
+            entry["queue_samples"].append(row["queue_minutes"])
+        if row.get("execution_minutes") is not None:
+            entry["execution_samples"].append(row["execution_minutes"])
+
+    rows = []
+    for entry in grouped.values():
+        max_runtime = max(entry["execution_samples"], default=0.0)
+        avg_runtime = average(entry["execution_samples"])
+        total_runtime = sum(entry["execution_samples"])
+        rows.append({
+            "workflow_name": entry["workflow_name"],
+            "job_name": entry["job_name"],
+            "run_count": entry["run_count"],
+            "max_runtime_minutes": round(max_runtime, 1),
+            "avg_runtime_minutes": round(avg_runtime, 1),
+            "total_runtime_minutes": round(total_runtime, 1),
+            "queue_p90_minutes": round(percentile(entry["queue_samples"], 0.9), 1) if entry["queue_samples"] else 0.0,
+            "drag_type": classify_job_drag(entry["run_count"], max_runtime, avg_runtime),
+        })
+    return sorted(rows, key=lambda item: (item["total_runtime_minutes"], item["max_runtime_minutes"]), reverse=True)
+
+
+def aggregate_steps_from_raw_rows(step_raw_rows: list[dict]) -> tuple[list[dict], bool]:
+    grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
+    has_partial_coverage = any(row.get("step_timing_missing") for row in step_raw_rows)
+
+    for row in step_raw_rows:
+        if row.get("execution_minutes") is None:
+            continue
+        workflow_name = row.get("workflow_name") or "Unknown Workflow"
+        job_name = row.get("job_name") or "Unknown Job"
+        step_name = row.get("step_name") or "Unknown Step"
+        key = (workflow_name, job_name, step_name)
+        entry = grouped.setdefault(key, {
+            "workflow_name": workflow_name,
+            "job_name": job_name,
+            "step_name": step_name,
+            "run_count": 0,
+            "samples": [],
+        })
+        entry["run_count"] += 1
+        entry["samples"].append(row["execution_minutes"])
+
+    rows = []
+    for entry in grouped.values():
+        rows.append({
+            "workflow_name": entry["workflow_name"],
+            "job_name": entry["job_name"],
+            "step_name": entry["step_name"],
+            "run_count": entry["run_count"],
+            "max_runtime_minutes": round(max(entry["samples"]), 1),
+            "avg_runtime_minutes": round(average(entry["samples"]), 1),
+            "total_runtime_minutes": round(sum(entry["samples"]), 1),
+        })
+    return sorted(rows, key=lambda item: (item["total_runtime_minutes"], item["max_runtime_minutes"]), reverse=True), has_partial_coverage
+
+
 def aggregate_workflows(pr_rows: list[dict]) -> list[dict]:
     grouped: dict[str, dict[str, Any]] = {}
 
@@ -464,6 +581,135 @@ def build_daily_problem_list(workflow_rows: list[dict], job_rows: list[dict], st
     )
 
 
+def build_workflow_raw_rows(report: dict) -> list[dict]:
+    rows = []
+    for pr_row in report.get("pr_rows", []):
+        for workflow in pr_row.get("workflows", []):
+            rows.append({
+                "repository": report["repo"],
+                "pr_number": pr_row.get("number"),
+                "pr_title": pr_row.get("title"),
+                "pr_url": pr_row.get("html_url"),
+                "pr_created_at": pr_row.get("created_at"),
+                "pr_merged_at": pr_row.get("merged_at"),
+                "pr_e2e_minutes": pr_row.get("pr_e2e_minutes"),
+                "ci_e2e_minutes": pr_row.get("ci_e2e_minutes"),
+                "workflow_run_id": workflow.get("run_id"),
+                "workflow_run_number": workflow.get("run_number"),
+                "workflow_run_attempt": workflow.get("run_attempt"),
+                "workflow_name": workflow.get("name"),
+                "workflow_status": workflow.get("status"),
+                "workflow_conclusion": workflow.get("conclusion"),
+                "branch": workflow.get("branch"),
+                "head_sha": workflow.get("head_sha"),
+                "event": workflow.get("event"),
+                "actor": workflow.get("actor"),
+                "created_at": workflow.get("created_at"),
+                "started_at": workflow.get("started_at"),
+                "completed_at": workflow.get("completed_at"),
+                "queue_minutes": workflow.get("queue_minutes"),
+                "execution_minutes": workflow.get("execution_minutes"),
+                "run_e2e_minutes": workflow.get("run_e2e_minutes"),
+                "workflow_url": workflow.get("html_url"),
+            })
+    return rows
+
+
+def build_job_raw_rows(report: dict) -> list[dict]:
+    rows = []
+    for pr_row in report.get("pr_rows", []):
+        for workflow in pr_row.get("workflows", []):
+            for job in workflow.get("jobs", []):
+                rows.append({
+                    "repository": report["repo"],
+                    "pr_number": pr_row.get("number"),
+                    "pr_title": pr_row.get("title"),
+                    "pr_url": pr_row.get("html_url"),
+                    "pr_created_at": pr_row.get("created_at"),
+                    "pr_merged_at": pr_row.get("merged_at"),
+                    "workflow_run_id": workflow.get("run_id"),
+                    "workflow_run_number": workflow.get("run_number"),
+                    "workflow_run_attempt": workflow.get("run_attempt"),
+                    "workflow_name": workflow.get("name"),
+                    "branch": workflow.get("branch"),
+                    "head_sha": workflow.get("head_sha"),
+                    "event": workflow.get("event"),
+                    "actor": workflow.get("actor"),
+                    "job_id": job.get("job_id"),
+                    "job_name": job.get("name"),
+                    "check_run_url": job.get("check_run_url"),
+                    "runner_id": job.get("runner_id"),
+                    "runner_name": job.get("runner_name"),
+                    "runner_os": job.get("runner_os"),
+                    "runner_arch": job.get("runner_arch"),
+                    "runner_group": job.get("runner_group"),
+                    "runner_labels": ", ".join(job.get("runner_labels", [])),
+                    "job_matrix": job.get("job_matrix"),
+                    "job_status": job.get("status"),
+                    "job_conclusion": job.get("conclusion"),
+                    "created_at": job.get("created_at"),
+                    "started_at": job.get("started_at"),
+                    "completed_at": job.get("completed_at"),
+                    "queue_minutes": job.get("queue_minutes"),
+                    "execution_minutes": job.get("execution_minutes"),
+                    "html_url": job.get("html_url"),
+                })
+    return rows
+
+
+def build_step_raw_rows(report: dict) -> list[dict]:
+    rows = []
+    for pr_row in report.get("pr_rows", []):
+        for workflow in pr_row.get("workflows", []):
+            for job in workflow.get("jobs", []):
+                for step in job.get("steps", []):
+                    rows.append({
+                    "repository": report["repo"],
+                    "pr_number": pr_row.get("number"),
+                    "pr_title": pr_row.get("title"),
+                    "pr_url": pr_row.get("html_url"),
+                    "pr_created_at": pr_row.get("created_at"),
+                    "pr_merged_at": pr_row.get("merged_at"),
+                    "workflow_run_id": workflow.get("run_id"),
+                    "workflow_run_number": workflow.get("run_number"),
+                    "workflow_run_attempt": workflow.get("run_attempt"),
+                    "workflow_name": workflow.get("name"),
+                    "job_id": job.get("job_id"),
+                    "job_name": job.get("name"),
+                    "step_number": step.get("number"),
+                    "step_name": step.get("name"),
+                        "step_status": step.get("status"),
+                        "step_conclusion": step.get("conclusion"),
+                    "started_at": step.get("started_at"),
+                    "completed_at": step.get("completed_at"),
+                    "execution_minutes": step.get("duration_minutes"),
+                    "raw_step_index": step.get("raw_step_index"),
+                    "step_timing_missing": step.get("duration_minutes") is None,
+                })
+    return rows
+
+
+def get_report_views(report: dict) -> tuple[list[dict], list[dict], list[dict]]:
+    workflow_raw_rows = report.get("workflow_raw_rows")
+    job_raw_rows = report.get("job_raw_rows")
+    step_raw_rows = report.get("step_raw_rows")
+
+    if workflow_raw_rows is None and "pr_rows" in report:
+        workflow_raw_rows = build_workflow_raw_rows(report)
+    if job_raw_rows is None and "pr_rows" in report:
+        job_raw_rows = build_job_raw_rows(report)
+    if step_raw_rows is None and "pr_rows" in report:
+        step_raw_rows = build_step_raw_rows(report)
+
+    if workflow_raw_rows is not None and job_raw_rows is not None and step_raw_rows is not None:
+        workflow_rows = aggregate_workflows_from_raw_rows(workflow_raw_rows)
+        job_rows = aggregate_jobs_from_raw_rows(job_raw_rows)
+        step_rows, _ = aggregate_steps_from_raw_rows(step_raw_rows)
+        return workflow_rows, job_rows, step_rows
+
+    return report.get("workflow_rows", []), report.get("job_rows", []), report.get("step_rows", [])
+
+
 def build_management_metrics(repo: str, window: Window, pr_rows: list[dict], review_reliable: bool) -> dict:
     pr_e2e = [row["pr_e2e_minutes"] for row in pr_rows if row["pr_e2e_minutes"] is not None]
     ci_e2e = [row["ci_e2e_minutes"] for row in pr_rows if row["ci_e2e_minutes"] is not None]
@@ -512,6 +758,10 @@ def compute_repo_report(token: str, owner: str, repo: str, window: Window, max_p
             "repo": full_repo,
             "window": window,
             "metrics": empty_metrics,
+            "pr_rows": [],
+            "workflow_raw_rows": [],
+            "job_raw_rows": [],
+            "step_raw_rows": [],
             "distribution": [],
             "workflow_rows": [],
             "job_rows": [],
@@ -561,44 +811,84 @@ def compute_repo_report(token: str, owner: str, repo: str, window: Window, max_p
         for run in runs:
             jobs = fetch_all_pages_dict(token, f"/repos/{owner}/{repo}/actions/runs/{run['id']}/jobs", {"filter": "latest"}, "jobs")
             job_rows = []
+            workflow_queue_samples = []
+            workflow_execution_samples = []
 
             for job in jobs:
                 queue_minutes = diff_minutes(job.get("created_at"), job.get("started_at"))
                 execution_minutes = diff_minutes(job.get("started_at"), job.get("completed_at"))
                 if queue_minutes is not None:
                     max_queue = queue_minutes if max_queue is None else max(max_queue, queue_minutes)
+                    workflow_queue_samples.append(queue_minutes)
                 if execution_minutes is not None:
                     max_execution = execution_minutes if max_execution is None else max(max_execution, execution_minutes)
+                    workflow_execution_samples.append(execution_minutes)
 
                 steps_partial = False
                 steps = []
-                for step in job.get("steps", []) or []:
+                for step_index, step in enumerate(job.get("steps", []) or [], start=1):
                     duration_minutes = diff_minutes(step.get("started_at"), step.get("completed_at"))
                     if duration_minutes is None:
                         steps_partial = True
                     steps.append({
+                        "number": step.get("number"),
                         "name": step.get("name") or f"step-{step.get('number', 'unknown')}",
+                        "status": step.get("status"),
+                        "conclusion": step.get("conclusion"),
+                        "started_at": step.get("started_at"),
+                        "completed_at": step.get("completed_at"),
                         "duration_minutes": round1(duration_minutes),
+                        "raw_step_index": step_index,
                     })
 
                 job_rows.append({
+                    "job_id": job.get("id"),
                     "name": job.get("name", f"job-{job.get('id')}"),
                     "workflow_name": job.get("workflow_name") or run.get("name") or "Unknown Workflow",
+                    "check_run_url": job.get("check_run_url"),
+                    "runner_id": job.get("runner_id"),
+                    "runner_name": job.get("runner_name"),
+                    "runner_os": job.get("runner_os"),
+                    "runner_arch": job.get("runner_arch"),
+                    "runner_group": job.get("runner_group_name"),
+                    "runner_labels": job.get("labels") or [],
+                    "job_matrix": "",
+                    "status": job.get("status"),
+                    "conclusion": job.get("conclusion"),
+                    "created_at": job.get("created_at"),
+                    "started_at": job.get("started_at"),
+                    "completed_at": job.get("completed_at"),
                     "queue_minutes": round1(queue_minutes),
                     "execution_minutes": round1(execution_minutes),
+                    "html_url": job.get("html_url"),
                     "steps": steps,
                     "steps_partial": steps_partial,
                 })
 
-            run_complete = parse_ts(run.get("updated_at"))
+            run_complete_ts = run.get("updated_at") or run.get("completed_at")
+            run_complete = parse_ts(run_complete_ts)
             if run_complete and (latest_ci_complete is None or run_complete > latest_ci_complete):
                 latest_ci_complete = run_complete
 
             workflow_name = run.get("name") or next((job["workflow_name"] for job in job_rows if job["workflow_name"]), "Unknown Workflow")
             workflows.append({
+                "run_id": run.get("id"),
+                "run_number": run.get("run_number"),
+                "run_attempt": run.get("run_attempt"),
                 "name": workflow_name,
-                "run_e2e_minutes": round1(diff_minutes(run.get("created_at"), run.get("updated_at"))),
+                "status": run.get("status"),
                 "conclusion": run.get("conclusion"),
+                "branch": run.get("head_branch"),
+                "head_sha": run.get("head_sha"),
+                "event": run.get("event"),
+                "actor": (run.get("actor") or {}).get("login"),
+                "created_at": run.get("created_at"),
+                "started_at": run.get("run_started_at") or run.get("started_at"),
+                "completed_at": run_complete_ts,
+                "queue_minutes": round1(max(workflow_queue_samples)) if workflow_queue_samples else None,
+                "execution_minutes": round1(max(workflow_execution_samples)) if workflow_execution_samples else None,
+                "run_e2e_minutes": round1(diff_minutes(run.get("created_at"), run_complete_ts)),
+                "html_url": run.get("html_url"),
                 "jobs": job_rows,
             })
 
@@ -635,9 +925,12 @@ def compute_repo_report(token: str, owner: str, repo: str, window: Window, max_p
     if review_samples == 0:
         review_reliable = False
 
-    workflow_rows = aggregate_workflows(pr_rows)
-    job_rows = aggregate_jobs(pr_rows)
-    step_rows, has_partial_step_coverage = aggregate_steps(pr_rows)
+    workflow_raw_rows = build_workflow_raw_rows({"repo": full_repo, "pr_rows": pr_rows})
+    job_raw_rows = build_job_raw_rows({"repo": full_repo, "pr_rows": pr_rows})
+    step_raw_rows = build_step_raw_rows({"repo": full_repo, "pr_rows": pr_rows})
+    workflow_rows = aggregate_workflows_from_raw_rows(workflow_raw_rows)
+    job_rows = aggregate_jobs_from_raw_rows(job_raw_rows)
+    step_rows, has_partial_step_coverage = aggregate_steps_from_raw_rows(step_raw_rows)
     longest_jobs = build_longest_job_ranking(job_rows)[:20]
     distribution = build_bucket_distribution(pr_rows)
     metrics = build_management_metrics(full_repo, window, pr_rows, review_reliable)
@@ -665,6 +958,10 @@ def compute_repo_report(token: str, owner: str, repo: str, window: Window, max_p
         "repo": full_repo,
         "window": window,
         "metrics": metrics,
+        "pr_rows": pr_rows,
+        "workflow_raw_rows": workflow_raw_rows,
+        "job_raw_rows": job_raw_rows,
+        "step_raw_rows": step_raw_rows,
         "distribution": distribution,
         "workflow_rows": workflow_rows,
         "job_rows": job_rows,
@@ -757,6 +1054,7 @@ def write_legacy_summary_sheet(wb: openpyxl.Workbook, reports: list[dict]) -> No
 def write_management_summary_sheet(wb: openpyxl.Workbook, report: dict) -> None:
     ws = wb.create_sheet(title=SUMMARY_SHEET)
     metrics = report["metrics"]
+    workflow_rows, job_rows, _ = get_report_views(report)
 
     ws["A1"] = "Monthly CI Experience Report"
     ws["A1"].font = Font(name="Microsoft YaHei", bold=True, size=14)
@@ -795,7 +1093,7 @@ def write_management_summary_sheet(wb: openpyxl.Workbook, report: dict) -> None:
             "Total Runtime(min)": row["total_runtime_minutes"],
             "Execution P90(min)": row["execution_p90_minutes"],
         }
-        for row in report["workflow_rows"][:10]
+        for row in workflow_rows[:10]
     ]
     next_row = write_table(ws, next_row, "Top Workflows", ["Workflow", "Run Count", "Total Runtime(min)", "Execution P90(min)"], top_workflows)
 
@@ -807,7 +1105,7 @@ def write_management_summary_sheet(wb: openpyxl.Workbook, report: dict) -> None:
             "Total Runtime(min)": row["total_runtime_minutes"],
             "Drag Type": row["drag_type"],
         }
-        for row in report["longest_jobs"][:10]
+        for row in build_longest_job_ranking(job_rows)[:10]
     ]
     next_row = write_table(ws, next_row, "Top Jobs", ["Workflow", "Job", "Run Count", "Total Runtime(min)", "Drag Type"], top_jobs)
 
@@ -821,6 +1119,7 @@ def write_management_summary_sheet(wb: openpyxl.Workbook, report: dict) -> None:
 
 def write_diagnostic_appendix_sheet(wb: openpyxl.Workbook, report: dict) -> None:
     ws = wb.create_sheet(title=APPENDIX_SHEET)
+    workflow_rows_view, job_rows_view, step_rows_view = get_report_views(report)
     ws["A1"] = "Diagnostic Appendix"
     ws["A1"].font = Font(name="Microsoft YaHei", bold=True, size=14)
     ws["A2"] = f"Repository: {report['repo']}"
@@ -838,7 +1137,7 @@ def write_diagnostic_appendix_sheet(wb: openpyxl.Workbook, report: dict) -> None
             "Queue P90(min)": row["queue_p90_minutes"],
             "Execution P90(min)": row["execution_p90_minutes"],
         }
-        for row in report["workflow_rows"][:50]
+        for row in workflow_rows_view[:50]
     ]
     next_row = write_table(
         ws,
@@ -859,7 +1158,7 @@ def write_diagnostic_appendix_sheet(wb: openpyxl.Workbook, report: dict) -> None
             "Queue P90(min)": row["queue_p90_minutes"],
             "Drag Type": row["drag_type"],
         }
-        for row in report["job_rows"][:100]
+        for row in job_rows_view[:100]
     ]
     next_row = write_table(
         ws,
@@ -879,7 +1178,7 @@ def write_diagnostic_appendix_sheet(wb: openpyxl.Workbook, report: dict) -> None
             "Avg Runtime(min)": row["avg_runtime_minutes"],
             "Total Runtime(min)": row["total_runtime_minutes"],
         }
-        for row in report["step_rows"][:100]
+        for row in step_rows_view[:100]
     ]
     next_row = write_table(
         ws,
@@ -899,7 +1198,7 @@ def write_diagnostic_appendix_sheet(wb: openpyxl.Workbook, report: dict) -> None
             "Total Runtime(min)": row["total_runtime_minutes"],
             "Drag Type": row["drag_type"],
         }
-        for row in report["longest_jobs"][:50]
+        for row in build_longest_job_ranking(job_rows_view)[:50]
     ]
     next_row = write_table(
         ws,
@@ -919,17 +1218,19 @@ def write_diagnostic_appendix_sheet(wb: openpyxl.Workbook, report: dict) -> None
 
 def write_daily_current_problems_sheet(wb: openpyxl.Workbook, report: dict) -> None:
     ws = wb.create_sheet(title=CURRENT_PROBLEMS_SHEET)
+    workflow_rows, job_rows, step_rows = get_report_views(report)
+    daily_problems = report.get("daily_problems") or build_daily_problem_list(workflow_rows, job_rows, step_rows, report.get("anomalies", []))
     ws["A1"] = "Daily CI Diagnostic"
     ws["A1"].font = Font(name="Microsoft YaHei", bold=True, size=14)
     ws["A2"] = f"Repository: {report['repo']}"
     ws["A3"] = f"Window: {report['window'].start_date} to {report['window'].end_date}"
     ws["A4"] = (
         "Current issues detected in the selected window."
-        if report["daily_problems"]
+        if daily_problems
         else "No major CI problems detected in the selected window."
     )
 
-    problem_rows = report["daily_problems"][:20] or [{
+    problem_rows = daily_problems[:20] or [{
         "Type": "signal",
         "Name": "No major issues detected",
         "Scope": "window",
@@ -958,13 +1259,15 @@ def write_daily_current_problems_sheet(wb: openpyxl.Workbook, report: dict) -> N
 
 def write_daily_drilldown_sheet(wb: openpyxl.Workbook, report: dict) -> None:
     ws = wb.create_sheet(title=DAILY_DRILLDOWN_SHEET)
+    workflow_rows_view, job_rows_view, step_rows_view = get_report_views(report)
+    daily_problems = report.get("daily_problems") or build_daily_problem_list(workflow_rows_view, job_rows_view, step_rows_view, report.get("anomalies", []))
     ws["A1"] = "Daily Drill-down"
     ws["A1"].font = Font(name="Microsoft YaHei", bold=True, size=14)
     ws["A2"] = f"Repository: {report['repo']}"
     ws["A3"] = f"Window: {report['window'].start_date} to {report['window'].end_date}"
 
     next_row = 5
-    problem_rows = report["daily_problems"][:20]
+    problem_rows = daily_problems[:20]
     if problem_rows:
         next_row = write_table(
             ws,
@@ -983,7 +1286,7 @@ def write_daily_drilldown_sheet(wb: openpyxl.Workbook, report: dict) -> None:
             "Max Runtime(min)": row["max_runtime_minutes"],
             "Execution P90(min)": row["execution_p90_minutes"],
         }
-        for row in report["workflow_rows"][:30]
+        for row in workflow_rows_view[:30]
     ]
     next_row = write_table(
         ws,
@@ -1003,7 +1306,7 @@ def write_daily_drilldown_sheet(wb: openpyxl.Workbook, report: dict) -> None:
             "Total Runtime(min)": row["total_runtime_minutes"],
             "Drag Type": row["drag_type"],
         }
-        for row in report["job_rows"][:50]
+        for row in job_rows_view[:50]
     ]
     next_row = write_table(
         ws,
@@ -1023,7 +1326,7 @@ def write_daily_drilldown_sheet(wb: openpyxl.Workbook, report: dict) -> None:
             "Avg Runtime(min)": row["avg_runtime_minutes"],
             "Total Runtime(min)": row["total_runtime_minutes"],
         }
-        for row in report["step_rows"][:50]
+        for row in step_rows_view[:50]
     ]
     next_row = write_table(
         ws,
@@ -1041,6 +1344,142 @@ def write_daily_drilldown_sheet(wb: openpyxl.Workbook, report: dict) -> None:
     autofit_columns(ws)
 
 
+def write_raw_data_sheet(wb: openpyxl.Workbook, title: str, columns: list[str], rows: list[dict], empty_message: str) -> None:
+    ws = wb.create_sheet(title=title)
+    for idx, column in enumerate(columns, 1):
+        set_header(ws.cell(row=1, column=idx))
+        ws.cell(row=1, column=idx, value=column)
+
+    if rows:
+        for row_index, row in enumerate(rows, start=2):
+            for col_index, column in enumerate(columns, start=1):
+                set_cell(ws.cell(row=row_index, column=col_index), row.get(column, ""))
+    else:
+        set_cell(ws.cell(row=2, column=1), empty_message)
+
+    ws.freeze_panes = "A2"
+    autofit_columns(ws)
+
+
+def write_raw_data_sheets(wb: openpyxl.Workbook, report: dict) -> None:
+    workflow_columns = [
+        "repository",
+        "pr_number",
+        "pr_title",
+        "pr_url",
+        "pr_created_at",
+        "pr_merged_at",
+        "pr_e2e_minutes",
+        "ci_e2e_minutes",
+        "workflow_run_id",
+        "workflow_run_number",
+        "workflow_run_attempt",
+        "workflow_name",
+        "workflow_status",
+        "workflow_conclusion",
+        "branch",
+        "head_sha",
+        "event",
+        "actor",
+        "created_at",
+        "started_at",
+        "completed_at",
+        "queue_minutes",
+        "execution_minutes",
+        "run_e2e_minutes",
+        "workflow_url",
+    ]
+    job_columns = [
+        "repository",
+        "pr_number",
+        "pr_title",
+        "pr_url",
+        "pr_created_at",
+        "pr_merged_at",
+        "workflow_run_id",
+        "workflow_run_number",
+        "workflow_run_attempt",
+        "workflow_name",
+        "branch",
+        "head_sha",
+        "event",
+        "actor",
+        "job_id",
+        "job_name",
+        "check_run_url",
+        "runner_id",
+        "runner_name",
+        "runner_os",
+        "runner_arch",
+        "runner_group",
+        "runner_labels",
+        "job_matrix",
+        "job_status",
+        "job_conclusion",
+        "created_at",
+        "started_at",
+        "completed_at",
+        "queue_minutes",
+        "execution_minutes",
+        "html_url",
+    ]
+    step_columns = [
+        "repository",
+        "pr_number",
+        "pr_title",
+        "pr_url",
+        "pr_created_at",
+        "pr_merged_at",
+        "workflow_run_id",
+        "workflow_run_number",
+        "workflow_run_attempt",
+        "workflow_name",
+        "job_id",
+        "job_name",
+        "step_number",
+        "step_name",
+        "step_status",
+        "step_conclusion",
+        "started_at",
+        "completed_at",
+        "execution_minutes",
+        "raw_step_index",
+        "step_timing_missing",
+    ]
+    workflow_raw_rows = report.get("workflow_raw_rows")
+    job_raw_rows = report.get("job_raw_rows")
+    step_raw_rows = report.get("step_raw_rows")
+
+    if workflow_raw_rows is None:
+        workflow_raw_rows = build_workflow_raw_rows(report)
+    if job_raw_rows is None:
+        job_raw_rows = build_job_raw_rows(report)
+    if step_raw_rows is None:
+        step_raw_rows = build_step_raw_rows(report)
+
+    write_raw_data_sheet(
+        wb,
+        WORKFLOW_RAW_SHEET,
+        workflow_columns,
+        workflow_raw_rows,
+        "No workflow raw rows available",
+    )
+    write_raw_data_sheet(
+        wb,
+        JOB_RAW_SHEET,
+        job_columns,
+        job_raw_rows,
+        "No job raw rows available",
+    )
+    write_raw_data_sheet(
+        wb,
+        STEP_RAW_SHEET,
+        step_columns,
+        step_raw_rows,
+        "No step raw rows available",
+    )
+
+
 def write_excel(reports: list[dict], output_path: str, report_mode: str) -> None:
     wb = openpyxl.Workbook()
     write_legacy_summary_sheet(wb, reports)
@@ -1054,6 +1493,7 @@ def write_excel(reports: list[dict], output_path: str, report_mode: str) -> None
             write_daily_drilldown_sheet(wb, reports[0])
         else:
             raise ValueError(f"Unsupported report mode: {report_mode}")
+        write_raw_data_sheets(wb, reports[0])
 
     wb.save(output_path)
     print(f"\nReport saved to: {output_path}")
