@@ -49,9 +49,63 @@ pip install openpyxl
 
 A GitHub Personal Access Token (PAT) with `repo` scope is required. Set it as `GITHUB_TOKEN` or pass via `--token`.
 
+## Data source policy
+
+This skill must **not** rely only on local data.
+
+When fulfilling a report request, use this decision order:
+
+1. **Check local repository data first**
+   - Inspect `data/<owner>/<repo>/` and related local report artifacts if they exist.
+   - Confirm the local files actually cover the user-requested time window.
+   - Confirm the local files contain the fields needed for the requested report depth.
+     Examples:
+     - PR-oriented monthly summary needs reliable PR mapping and merged PR timing fields.
+     - workflow/job/step drill-down needs corresponding run/job/step timing fields.
+2. **Use local data only when coverage is sufficient**
+   - If local data fully covers the requested window and required metrics, generate the report directly from local data.
+   - In the final answer, state the actual local coverage window used.
+3. **Do not silently downgrade when local data is incomplete**
+   - If local data is missing entirely, partially covers the requested dates, or lacks required fields for the requested metrics, do not pretend the report is complete.
+   - Explicitly tell the user what is missing:
+     - missing repo data
+     - missing dates in the requested window
+     - missing PR mapping
+     - missing step timing data
+     - other metric-specific gaps
+4. **Prompt for GitHub token when API backfill is needed**
+   - If local data is insufficient and fresh or missing data must be fetched from GitHub, explicitly ask the user to provide a GitHub token.
+   - Accept either:
+     - `GITHUB_TOKEN` in the environment
+     - a `--token` value passed to the script
+   - The prompt should be short and direct. Example:
+     - `本地数据不足以覆盖 2026-04-01 到 2026-04-30。请提供具有 repo scope 的 GITHUB_TOKEN，我再通过 GitHub API 补齐并生成完整报告。`
+5. **Only use API collection after token is available**
+   - Once the user provides a valid token, fetch the missing data via GitHub API and then generate the report.
+   - Prefer local data + API backfill for the uncovered portion rather than discarding usable local data.
+
+If the requested report can only be partially answered from local data and the user does not provide a token, the response must clearly label the result as a **partial report** and enumerate the missing parts.
+
+## Required execution behavior
+
+Before generating the report, always perform and communicate these checks:
+
+1. Normalize repository names to `owner/repo` format.
+2. Resolve the exact requested time window.
+   - For relative requests like "4月", use explicit dates in the response.
+   - If today is mid-month, treat a monthly request as month-to-date unless the user explicitly asks for a full historical month that has already completed.
+3. Check local data coverage per repository.
+4. Decide whether each repository is:
+   - `local_complete`
+   - `local_partial_requires_token`
+   - `local_missing_requires_token`
+5. If any repository needs API backfill, stop and ask the user for a token before claiming a complete report.
+
+Do not hide this decision behind generic wording like "data unavailable". Be concrete about which repository and which dates or metrics are missing.
+
 ## How it works
 
-The script (`scripts/ci_efficiency_report.py`) does the following for each repository:
+The script (`scripts/ci_efficiency_report.py`) does the following for each repository after data-source resolution is complete:
 
 1. **Fetches merged PRs** within the lookback window (default 90 days) via `GET /repos/{owner}/{repo}/pulls`
 2. **For each PR**, finds associated workflow runs via `GET /repos/{owner}/{repo}/actions/runs`
@@ -154,6 +208,8 @@ The script handles GitHub API rate limits automatically:
 
 For large repos with thousands of PRs, consider narrowing `--days` to reduce API calls.
 
+When local data already covers part of the requested window, prefer fetching only the missing portion instead of re-fetching everything.
+
 ## Output format
 
 The Excel file should preserve repo-level compatibility while supporting report-mode-specific outputs:
@@ -177,6 +233,10 @@ When the user asks for a monthly report, the final answer should also include:
 - Run-count columns at each layer so the reader can see both cost and frequency
 - A dedicated longest-job summary for the selected period, combining runtime and occurrence count
 - A short interpretation of whether the bottleneck is primarily queueing, execution time, or a small set of heavyweight workflows
+- A note stating whether the report is based on:
+  - fully local data
+  - local data plus GitHub API backfill
+  - partial local-only data because token-backed backfill was not provided
 
 When the user asks for a daily technical analysis, the final answer should instead prioritize:
 
@@ -184,3 +244,4 @@ When the user asks for a daily technical analysis, the final answer should inste
 - The slowest workflows, jobs, and steps in that window
 - Run-count-aware ranking so the team can distinguish frequent drag from one-off outliers
 - A short interpretation of what should be fixed first vs what should keep being tracked
+- A clear data-completeness note when local coverage is partial or token-backed backfill was not available
