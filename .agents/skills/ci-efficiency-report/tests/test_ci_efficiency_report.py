@@ -117,9 +117,13 @@ class CiEfficiencyReportTests(unittest.TestCase):
             },
         ]
 
-        workflow_rows = MODULE.aggregate_workflows(pr_rows)
-        job_rows = MODULE.aggregate_jobs(pr_rows)
-        step_rows, has_partial = MODULE.aggregate_steps(pr_rows)
+        report = {"repo": "owner/repo", "pr_rows": pr_rows}
+        workflow_raw_rows = MODULE.build_workflow_raw_rows(report)
+        job_raw_rows = MODULE.build_job_raw_rows(report)
+        step_raw_rows = MODULE.build_step_raw_rows(report)
+        workflow_rows = MODULE.aggregate_workflows_from_raw_rows(workflow_raw_rows)
+        job_rows = MODULE.aggregate_jobs_from_raw_rows(job_raw_rows)
+        step_rows, has_partial = MODULE.aggregate_steps_from_raw_rows(step_raw_rows)
         longest_jobs = MODULE.build_longest_job_ranking(job_rows)
 
         self.assertFalse(has_partial)
@@ -190,56 +194,16 @@ class CiEfficiencyReportTests(unittest.TestCase):
         self.assertEqual(rows[0]["Status"], "likely_recurring")
         self.assertIn(rows[0]["Type"], {"workflow", "job", "step"})
 
-    def test_get_report_views_rebuilds_aggregates_from_raw_rows(self):
+    def test_get_report_views_returns_precomputed_views(self):
         report = {
-            "workflow_rows": [],
-            "job_rows": [],
-            "step_rows": [],
-            "workflow_raw_rows": [
-                {
-                    "pr_number": 101,
-                    "workflow_name": "E2E-Full",
-                    "queue_minutes": 10.0,
-                    "execution_minutes": 120.0,
-                    "run_e2e_minutes": 180.0,
-                },
-                {
-                    "pr_number": 102,
-                    "workflow_name": "E2E-Full",
-                    "queue_minutes": 12.0,
-                    "execution_minutes": 130.0,
-                    "run_e2e_minutes": 200.0,
-                },
+            "workflow_rows": [
+                {"workflow_name": "E2E-Full", "run_count": 2, "total_runtime_minutes": 380.0},
             ],
-            "job_raw_rows": [
-                {
-                    "workflow_name": "E2E-Full",
-                    "job_name": "integration-tests",
-                    "queue_minutes": 10.0,
-                    "execution_minutes": 120.0,
-                },
-                {
-                    "workflow_name": "E2E-Full",
-                    "job_name": "integration-tests",
-                    "queue_minutes": 12.0,
-                    "execution_minutes": 130.0,
-                },
+            "job_rows": [
+                {"workflow_name": "E2E-Full", "job_name": "integration-tests", "run_count": 2},
             ],
-            "step_raw_rows": [
-                {
-                    "workflow_name": "E2E-Full",
-                    "job_name": "integration-tests",
-                    "step_name": "run tests",
-                    "execution_minutes": 80.0,
-                    "step_timing_missing": False,
-                },
-                {
-                    "workflow_name": "E2E-Full",
-                    "job_name": "integration-tests",
-                    "step_name": "run tests",
-                    "execution_minutes": 90.0,
-                    "step_timing_missing": False,
-                },
+            "step_rows": [
+                {"workflow_name": "E2E-Full", "job_name": "integration-tests", "step_name": "run tests", "run_count": 2},
             ],
         }
 
