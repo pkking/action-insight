@@ -47,11 +47,11 @@ The bundled Python script requires `openpyxl`. Install it first if not present:
 pip install openpyxl
 ```
 
-A GitHub Personal Access Token (PAT) with `repo` scope is required. Set it as `GITHUB_TOKEN` or pass via `--token`.
+A GitHub Personal Access Token (PAT) with `repo` scope is required only when GitHub API backfill is needed. Provide it as `GITHUB_TOKEN` or pass via `--token`.
 
 ## Data source policy
 
-This skill must **not** rely only on local data.
+This skill must **not assume** local data is sufficient by default.
 
 When fulfilling a report request, use this decision order:
 
@@ -191,7 +191,7 @@ python scripts/ci_efficiency_report.py \
 | Argument | Required | Default | Description |
 |---|---|---|---|
 | `--repos` | Yes | - | Space-separated list of org/repo |
-| `--token` | Yes | - | GitHub PAT with repo scope |
+| `--token` | No | - | GitHub PAT with repo scope; required when local data is missing or incomplete and API backfill is needed |
 | `--output` | No | `ci_efficiency_report.xlsx` | Output file path |
 | `--report-mode` | No | `monthly_summary` | Report mode: `monthly_summary` or `daily_diagnostic` |
 | `--days` | No | `90` | Lookback window in days |
