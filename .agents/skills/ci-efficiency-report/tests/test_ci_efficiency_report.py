@@ -190,6 +190,67 @@ class CiEfficiencyReportTests(unittest.TestCase):
         self.assertEqual(rows[0]["Status"], "likely_recurring")
         self.assertIn(rows[0]["Type"], {"workflow", "job", "step"})
 
+    def test_get_report_views_rebuilds_aggregates_from_raw_rows(self):
+        report = {
+            "workflow_rows": [],
+            "job_rows": [],
+            "step_rows": [],
+            "workflow_raw_rows": [
+                {
+                    "pr_number": 101,
+                    "workflow_name": "E2E-Full",
+                    "queue_minutes": 10.0,
+                    "execution_minutes": 120.0,
+                    "run_e2e_minutes": 180.0,
+                },
+                {
+                    "pr_number": 102,
+                    "workflow_name": "E2E-Full",
+                    "queue_minutes": 12.0,
+                    "execution_minutes": 130.0,
+                    "run_e2e_minutes": 200.0,
+                },
+            ],
+            "job_raw_rows": [
+                {
+                    "workflow_name": "E2E-Full",
+                    "job_name": "integration-tests",
+                    "queue_minutes": 10.0,
+                    "execution_minutes": 120.0,
+                },
+                {
+                    "workflow_name": "E2E-Full",
+                    "job_name": "integration-tests",
+                    "queue_minutes": 12.0,
+                    "execution_minutes": 130.0,
+                },
+            ],
+            "step_raw_rows": [
+                {
+                    "workflow_name": "E2E-Full",
+                    "job_name": "integration-tests",
+                    "step_name": "run tests",
+                    "execution_minutes": 80.0,
+                    "step_timing_missing": False,
+                },
+                {
+                    "workflow_name": "E2E-Full",
+                    "job_name": "integration-tests",
+                    "step_name": "run tests",
+                    "execution_minutes": 90.0,
+                    "step_timing_missing": False,
+                },
+            ],
+        }
+
+        workflow_rows, job_rows, step_rows = MODULE.get_report_views(report)
+
+        self.assertEqual(workflow_rows[0]["workflow_name"], "E2E-Full")
+        self.assertEqual(workflow_rows[0]["run_count"], 2)
+        self.assertEqual(job_rows[0]["job_name"], "integration-tests")
+        self.assertEqual(job_rows[0]["run_count"], 2)
+        self.assertEqual(step_rows[0]["step_name"], "run tests")
+
     def test_write_excel_daily_mode_creates_daily_sheets(self):
         report = {
             "legacy_row": {
@@ -229,7 +290,11 @@ class CiEfficiencyReportTests(unittest.TestCase):
                                 {
                                     "job_id": 321,
                                     "name": "test",
+                                    "check_run_url": "https://example.com/check-runs/1",
+                                    "runner_id": 7,
                                     "runner_name": "runner-1",
+                                    "runner_os": "Linux",
+                                    "runner_arch": "X64",
                                     "runner_group": "default",
                                     "runner_labels": ["ubuntu-latest", "x64"],
                                     "status": "completed",
@@ -297,6 +362,8 @@ class CiEfficiencyReportTests(unittest.TestCase):
             job_values = [cell.value for cell in next(job_sheet.iter_rows(min_row=2, max_row=2))]
             self.assertIn("test", job_values)
             self.assertIn("ubuntu-latest, x64", job_values)
+            self.assertIn("Linux", job_values)
+            self.assertIn("https://example.com/check-runs/1", job_values)
 
             step_sheet = workbook["Step Raw"]
             step_values = [cell.value for cell in next(step_sheet.iter_rows(min_row=2, max_row=2))]

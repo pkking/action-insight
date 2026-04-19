@@ -170,7 +170,13 @@ Recommended minimum columns:
 - pr_number
 - pr_title
 - pr_url
+- pr_created_at
+- pr_merged_at
+- pr_e2e_minutes
+- ci_e2e_minutes
 - workflow_run_id
+- workflow_run_number
+- workflow_run_attempt
 - workflow_name
 - workflow_status
 - workflow_conclusion
@@ -183,19 +189,35 @@ Recommended minimum columns:
 - completed_at
 - queue_minutes
 - execution_minutes
+- run_e2e_minutes
 - workflow_url
 
 ### `Job Raw`
 
 - repository
 - pr_number
+- pr_title
+- pr_url
+- pr_created_at
+- pr_merged_at
 - workflow_run_id
+- workflow_run_number
+- workflow_run_attempt
 - workflow_name
+- branch
+- head_sha
+- event
+- actor
 - job_id
 - job_name
+- check_run_url
+- runner_id
 - runner_name
+- runner_os
+- runner_arch
 - runner_group
 - runner_labels
+- job_matrix
 - job_status
 - job_conclusion
 - created_at
@@ -209,7 +231,13 @@ Recommended minimum columns:
 
 - repository
 - pr_number
+- pr_title
+- pr_url
+- pr_created_at
+- pr_merged_at
 - workflow_run_id
+- workflow_run_number
+- workflow_run_attempt
 - workflow_name
 - job_id
 - job_name
@@ -221,6 +249,7 @@ Recommended minimum columns:
 - completed_at
 - execution_minutes
 - raw_step_index
+- step_timing_missing
 
 If some fields are unavailable from the source data, keep the worksheet and include the rows anyway, leaving missing values blank rather than omitting the table.
 
