@@ -30,6 +30,11 @@ For single-repo deep dives, do not stop at the top-line P90 table. Also produce:
    - finally: within the slowest jobs, which steps are the most time-consuming
    - every layer must include both duration metrics and run-count metrics
 4. A **longest-job summary** that identifies which job is the slowest in the selected period after combining both runtime length and run frequency.
+5. A **raw-data appendix** that includes the detailed records used to build the aggregates:
+   - one dedicated worksheet for workflow-level raw rows
+   - one dedicated worksheet for job-level raw rows
+   - one dedicated worksheet for step-level raw rows
+   - these raw tables must preserve enough identifiers and timestamps for a reader to trace any aggregate back to the original workflow/job/step execution records
 
 For `daily_diagnostic`, the report should additionally start with a **current problem list** instead of a broad management summary. That problem list should prioritize:
 
@@ -137,6 +142,87 @@ For single-repo analysis, add these post-processing passes:
    - ranks the most actionable problems in the selected short time window
    - prioritizes current hotspots over broad monthly summary statistics
    - distinguishes between current issue, likely recurring issue, and probable outlier when enough evidence exists
+12. **Write raw detail tables into Excel as first-class outputs, not hidden scratch data**:
+   - a workflow raw table with one row per workflow run in scope
+   - a job raw table with one row per job run in scope
+   - a step raw table with one row per step record in scope
+   - if step-level coverage is partial, still output the available step raw rows and clearly mark coverage limitations in both the workbook and final response
+
+## Raw data requirements
+
+In addition to summary and ranking tables, the generated workbook must contain the original detail rows used for analysis so the user can inspect every workflow, job, and step in the selected window.
+
+Minimum workbook structure for a single-repo deep dive:
+
+1. A summary-oriented sheet for management or diagnostics
+2. A statistics/drill-down sheet with aggregated workflow/job/step rankings
+3. A `Workflow Raw` sheet
+4. A `Job Raw` sheet
+5. A `Step Raw` sheet
+
+The raw worksheets should not be reduced to only top-N rows. They should contain **all available rows in scope** for the selected repository and time window, subject only to source-data availability.
+
+Recommended minimum columns:
+
+### `Workflow Raw`
+
+- repository
+- pr_number
+- pr_title
+- pr_url
+- workflow_run_id
+- workflow_name
+- workflow_status
+- workflow_conclusion
+- branch
+- head_sha
+- event
+- actor
+- created_at
+- started_at
+- completed_at
+- queue_minutes
+- execution_minutes
+- workflow_url
+
+### `Job Raw`
+
+- repository
+- pr_number
+- workflow_run_id
+- workflow_name
+- job_id
+- job_name
+- runner_name
+- runner_group
+- runner_labels
+- job_status
+- job_conclusion
+- created_at
+- started_at
+- completed_at
+- queue_minutes
+- execution_minutes
+- html_url
+
+### `Step Raw`
+
+- repository
+- pr_number
+- workflow_run_id
+- workflow_name
+- job_id
+- job_name
+- step_number
+- step_name
+- step_status
+- step_conclusion
+- started_at
+- completed_at
+- execution_minutes
+- raw_step_index
+
+If some fields are unavailable from the source data, keep the worksheet and include the rows anyway, leaving missing values blank rather than omitting the table.
 
 ## Metric definitions
 
@@ -217,12 +303,20 @@ The Excel file should preserve repo-level compatibility while supporting report-
 - For `monthly_summary`:
   - a `Management Summary` sheet
   - a `Diagnostic Appendix` sheet
+  - a `Workflow Raw` sheet
+  - a `Job Raw` sheet
+  - a `Step Raw` sheet
 - For `daily_diagnostic`:
   - a daily current-problems sheet
   - a technical drill-down sheet
+  - a `Workflow Raw` sheet
+  - a `Job Raw` sheet
+  - a `Step Raw` sheet
 - Frozen header rows
 - Color-coded达标率 cells (green ≥80%, yellow ≥50%, red <50%)
 - Auto-sized columns
+
+The raw-data sheets are mandatory whenever the underlying data exists. They are intended to let the reader inspect every workflow/job/step row behind the summary metrics, not just the ranked aggregates.
 
 When the user asks for a monthly report, the final answer should also include:
 
@@ -232,6 +326,7 @@ When the user asks for a monthly report, the final answer should also include:
 - A layered CI breakdown table from the PR perspective: `workflow -> job -> step`
 - Run-count columns at each layer so the reader can see both cost and frequency
 - A dedicated longest-job summary for the selected period, combining runtime and occurrence count
+- Three separate raw-data tables or sheets containing all available workflow, job, and step records in the selected window
 - A short interpretation of whether the bottleneck is primarily queueing, execution time, or a small set of heavyweight workflows
 - A note stating whether the report is based on:
   - fully local data

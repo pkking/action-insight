@@ -204,6 +204,61 @@ class CiEfficiencyReportTests(unittest.TestCase):
             },
             "repo": "owner/repo",
             "window": MODULE.Window("2026-04-19", "2026-04-19"),
+            "pr_rows": [
+                {
+                    "number": 123,
+                    "title": "Raw row demo",
+                    "html_url": "https://example.com/pr/123",
+                    "workflows": [
+                        {
+                            "run_id": 999,
+                            "name": "CI",
+                            "status": "completed",
+                            "conclusion": "success",
+                            "branch": "main",
+                            "head_sha": "abc123",
+                            "event": "pull_request",
+                            "actor": "octocat",
+                            "created_at": "2026-04-19T01:00:00Z",
+                            "started_at": "2026-04-19T01:02:00Z",
+                            "completed_at": "2026-04-19T01:20:00Z",
+                            "queue_minutes": 2.0,
+                            "execution_minutes": 18.0,
+                            "html_url": "https://example.com/runs/999",
+                            "jobs": [
+                                {
+                                    "job_id": 321,
+                                    "name": "test",
+                                    "runner_name": "runner-1",
+                                    "runner_group": "default",
+                                    "runner_labels": ["ubuntu-latest", "x64"],
+                                    "status": "completed",
+                                    "conclusion": "success",
+                                    "created_at": "2026-04-19T01:00:00Z",
+                                    "started_at": "2026-04-19T01:02:00Z",
+                                    "completed_at": "2026-04-19T01:20:00Z",
+                                    "queue_minutes": 2.0,
+                                    "execution_minutes": 18.0,
+                                    "html_url": "https://example.com/jobs/321",
+                                    "steps": [
+                                        {
+                                            "number": 1,
+                                            "name": "checkout",
+                                            "status": "completed",
+                                            "conclusion": "success",
+                                            "started_at": "2026-04-19T01:02:00Z",
+                                            "completed_at": "2026-04-19T01:03:00Z",
+                                            "duration_minutes": 1.0,
+                                            "raw_step_index": 1,
+                                        }
+                                    ],
+                                    "steps_partial": False,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
             "daily_problems": [{
                 "Type": "job",
                 "Name": "wf / job",
@@ -227,6 +282,25 @@ class CiEfficiencyReportTests(unittest.TestCase):
             self.assertIn("CI效率报告", workbook.sheetnames)
             self.assertIn("Current Problems", workbook.sheetnames)
             self.assertIn("Daily Drill-down", workbook.sheetnames)
+            self.assertIn("Workflow Raw", workbook.sheetnames)
+            self.assertIn("Job Raw", workbook.sheetnames)
+            self.assertIn("Step Raw", workbook.sheetnames)
+
+            workflow_sheet = workbook["Workflow Raw"]
+            workflow_headers = [cell.value for cell in next(workflow_sheet.iter_rows(min_row=1, max_row=1))]
+            self.assertIn("workflow_run_id", workflow_headers)
+            self.assertIn("workflow_name", workflow_headers)
+            workflow_values = [cell.value for cell in next(workflow_sheet.iter_rows(min_row=2, max_row=2))]
+            self.assertIn("CI", workflow_values)
+
+            job_sheet = workbook["Job Raw"]
+            job_values = [cell.value for cell in next(job_sheet.iter_rows(min_row=2, max_row=2))]
+            self.assertIn("test", job_values)
+            self.assertIn("ubuntu-latest, x64", job_values)
+
+            step_sheet = workbook["Step Raw"]
+            step_values = [cell.value for cell in next(step_sheet.iter_rows(min_row=2, max_row=2))]
+            self.assertIn("checkout", step_values)
 
 
 if __name__ == "__main__":
