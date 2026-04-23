@@ -1,4 +1,4 @@
-import { readdirSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { readdirSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import * as prMetricsModule from '../../src/lib/pr-metrics';
@@ -36,8 +36,57 @@ interface RebuildPullRequestArtifactsOptions {
   warn?: (...args: unknown[]) => void;
 }
 
+interface ShaMapFile {
+  version: 1;
+  generated_at: string;
+  mappings: Record<string, number>;
+}
+
+const DEFAULT_SHA_RESOLUTION_LIMIT = 250;
+const RATE_LIMIT_RESERVE = 100;
+
 function getPrDir(repoDir: string): string {
   return path.join(repoDir, 'prs');
+}
+
+function getShaMapPath(repoDir: string): string {
+  return path.join(getPrDir(repoDir), 'sha-map.json');
+}
+
+function readShaMap(repoDir: string): Map<string, number> {
+  const shaMapPath = getShaMapPath(repoDir);
+  if (!existsSync(shaMapPath)) {
+    return new Map();
+  }
+
+  try {
+    const data = JSON.parse(readFileSync(shaMapPath, 'utf8')) as Partial<ShaMapFile>;
+    return new Map(
+      Object.entries(data.mappings ?? {}).filter((entry): entry is [string, number] => typeof entry[1] === 'number')
+    );
+  } catch {
+    return new Map();
+  }
+}
+
+function writeShaMap(repoDir: string, mappings: Map<string, number>): void {
+  writeFileSync(
+    getShaMapPath(repoDir),
+    JSON.stringify(
+      {
+        version: 1,
+        generated_at: new Date().toISOString(),
+        mappings: Object.fromEntries([...mappings.entries()].sort(([left], [right]) => left.localeCompare(right))),
+      } satisfies ShaMapFile,
+      null,
+      2
+    )
+  );
+}
+
+function getShaResolutionLimit(): number {
+  const value = Number.parseInt(process.env.PR_ARTIFACT_SHA_RESOLUTION_LIMIT ?? '', 10);
+  return Number.isFinite(value) && value >= 0 ? value : DEFAULT_SHA_RESOLUTION_LIMIT;
 }
 
 function readRetainedRuns(repoKey: string, files: string[], storage: StorageAdapter): Run[] {
@@ -60,16 +109,9 @@ async function resolvePullRequestsFromHeadSha(
   octokit: OctokitLike,
   owner: string,
   repo: string,
-  runs: Run[],
+  shas: string[],
   warn: (...args: unknown[]) => void
 ): Promise<Map<string, number>> {
-  const shas = Array.from(
-    new Set(
-      runs
-        .filter((run) => (!run.pull_requests || run.pull_requests.length === 0) && run.head_sha && isPullRequestLikeEvent(run.event))
-        .map((run) => run.head_sha as string)
-    )
-  );
   const resolved = new Map<string, number>();
   let rateLimited = false;
 
@@ -167,8 +209,15 @@ export async function rebuildPullRequestArtifacts({
   warn = () => {},
 }: RebuildPullRequestArtifactsOptions): Promise<void> {
   const runs = readRetainedRuns(repoKey, files, storage);
+  const prDir = getPrDir(repoDir);
+  if (!existsSync(prDir)) {
+    mkdirSync(prDir, { recursive: true });
+  }
+
   const runsWithoutPr = runs.filter((run) => (!run.pull_requests || run.pull_requests.length === 0) && run.head_sha && isPullRequestLikeEvent(run.event));
   const uniqueShas = new Set(runsWithoutPr.map((run) => run.head_sha as string));
+  const cachedPullRequestsBySha = readShaMap(repoDir);
+  const unresolvedShas = [...uniqueShas].filter((sha) => !cachedPullRequestsBySha.has(sha));
   const allPrNumbers = Array.from(
     new Set(
       runs
@@ -176,27 +225,40 @@ export async function rebuildPullRequestArtifacts({
         .filter((number): number is number => typeof number === 'number')
     )
   );
-  const expectedCalls = uniqueShas.size + allPrNumbers.length;
+  const expectedCalls = unresolvedShas.length + allPrNumbers.length;
+  let shaResolutionBudget = Math.min(unresolvedShas.length, getShaResolutionLimit());
+  let skippedPrShaCount = Math.max(0, unresolvedShas.length - shaResolutionBudget);
 
   if (expectedCalls > 0) {
     const budget = await checkRateLimitBudget(octokit, expectedCalls);
     if (!budget.ok) {
-      warn(`Rate limit budget check: ${budget.remaining} remaining, need ${expectedCalls}. Skipping PR artifact resolution.`);
+      const availableForShaResolution = Math.max(0, budget.remaining - allPrNumbers.length - RATE_LIMIT_RESERVE);
+      shaResolutionBudget = Math.min(shaResolutionBudget, availableForShaResolution);
+      skippedPrShaCount = unresolvedShas.length - shaResolutionBudget;
+      warn(
+        `Rate limit budget check: ${budget.remaining} remaining, need ${expectedCalls}. Building partial PR artifacts with ${shaResolutionBudget} SHA lookup(s).`
+      );
       if (budget.resetAt) {
         warn(`Rate limit resets at ${budget.resetAt.toISOString()}.`);
       }
-      return;
+    } else {
+      log(`Rate limit budget check: ${budget.remaining} remaining, need ${expectedCalls}. Proceeding.`);
     }
-    log(`Rate limit budget check: ${budget.remaining} remaining, need ${expectedCalls}. Proceeding.`);
   }
 
-  const resolvedPullRequestsBySha = await resolvePullRequestsFromHeadSha(octokit, owner, repo, runs, warn);
+  const shasToResolve = unresolvedShas.slice(0, shaResolutionBudget);
+  const newlyResolvedPullRequestsBySha = await resolvePullRequestsFromHeadSha(octokit, owner, repo, shasToResolve, warn);
+  for (const [sha, number] of newlyResolvedPullRequestsBySha.entries()) {
+    cachedPullRequestsBySha.set(sha, number);
+  }
+  writeShaMap(repoDir, cachedPullRequestsBySha);
+
   const normalizedRuns = runs.map((run) => {
     if (run.pull_requests && run.pull_requests.length > 0) {
       return run;
     }
 
-    const resolvedNumber = run.head_sha ? resolvedPullRequestsBySha.get(run.head_sha) : undefined;
+    const resolvedNumber = run.head_sha ? cachedPullRequestsBySha.get(run.head_sha) : undefined;
     if (typeof resolvedNumber !== 'number') {
       return run;
     }
@@ -215,19 +277,29 @@ export async function rebuildPullRequestArtifacts({
     )
   ).sort((left, right) => right - left);
 
-  const prDir = getPrDir(repoDir);
-  if (!existsSync(prDir)) {
-    mkdirSync(prDir, { recursive: true });
-  }
+  const resolvedRelevantShaCount = [...uniqueShas].filter((sha) => cachedPullRequestsBySha.has(sha)).length;
+  const partialPrResolution = skippedPrShaCount > 0 || newlyResolvedPullRequestsBySha.size < shasToResolve.length;
 
   if (prNumbers.length === 0) {
     writeFileSync(
       path.join(prDir, 'index.json'),
-      JSON.stringify({ repo: repoKey, generated_at: new Date().toISOString(), prs: [] }, null, 2)
+      JSON.stringify(
+        {
+          repo: repoKey,
+          generated_at: new Date().toISOString(),
+          prs: [],
+          partialPrResolution,
+          resolvedPrShaCount: resolvedRelevantShaCount,
+          unresolvedPrShaCount: uniqueShas.size - resolvedRelevantShaCount,
+          skippedPrShaCount,
+        },
+        null,
+        2
+      )
     );
 
     for (const entry of readdirSync(prDir)) {
-      if (entry !== 'index.json') {
+      if (entry !== 'index.json' && entry !== 'sha-map.json') {
         rmSync(path.join(prDir, entry), { force: true });
       }
     }
@@ -244,10 +316,14 @@ export async function rebuildPullRequestArtifacts({
     pullRequests,
     retentionStartDate,
   });
+  result.index.partialPrResolution = partialPrResolution;
+  result.index.resolvedPrShaCount = resolvedRelevantShaCount;
+  result.index.unresolvedPrShaCount = uniqueShas.size - resolvedRelevantShaCount;
+  result.index.skippedPrShaCount = skippedPrShaCount;
 
   writeFileSync(path.join(prDir, 'index.json'), JSON.stringify(result.index, null, 2));
 
-  const staleEntries = new Set(readdirSync(prDir).filter((entry) => entry !== 'index.json'));
+  const staleEntries = new Set(readdirSync(prDir).filter((entry) => entry !== 'index.json' && entry !== 'sha-map.json'));
   for (const [number, detail] of result.details.entries()) {
     const fileName = `${number}.json`;
     staleEntries.delete(fileName);

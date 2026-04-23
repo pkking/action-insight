@@ -373,6 +373,20 @@ function DashboardContent() {
     () => (selectedRepo ? repoIndexesByKey[selectedRepo.key]?.prs ?? [] : []),
     [repoIndexesByKey, selectedRepo]
   );
+  const selectedRepoIndex = selectedRepo ? repoIndexesByKey[selectedRepo.key] : undefined;
+  const selectedRepoMetricsFailed = selectedRepo ? failedRepoKeys.includes(selectedRepo.key) : false;
+  const selectedRepoHasPrArtifact = Boolean(selectedRepoIndex);
+  const selectedRepoHasPartialPrResolution = Boolean(selectedRepoIndex?.partialPrResolution);
+  const selectedRepoMissingPrArtifact = Boolean(selectedRepoIndex?.missingPrArtifact);
+  const emptyMetricsMessage = selectedRepoMetricsFailed
+    ? 'PR metrics artifact failed to load for this repository.'
+    : selectedRepoMissingPrArtifact
+      ? 'PR metrics have not been generated for this repository yet.'
+    : selectedRepoHasPartialPrResolution
+      ? 'PR metrics are partially resolved for this repository. More PRs may appear after future ETL runs.'
+      : selectedRepoHasPrArtifact
+        ? 'No PRs found for the selected repository and time range.'
+        : 'PR metrics have not been generated for this repository yet.';
 
   const filteredPrs = useMemo(() => {
     let result = [...selectedRepoPrs];
@@ -572,6 +586,13 @@ function DashboardContent() {
           </div>
         ) : null}
 
+        {selectedRepoHasPartialPrResolution ? (
+          <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+            Partial PR resolution for {selectedRepo.key}: {selectedRepoIndex?.resolvedPrShaCount ?? 0} SHA(s) resolved,
+            {' '}{selectedRepoIndex?.unresolvedPrShaCount ?? 0} still pending.
+          </div>
+        ) : null}
+
         {loading ? (
           <div className="flex h-64 flex-col items-center justify-center gap-4 text-neutral-400 dark:text-neutral-500">
             <Activity className="h-8 w-8 animate-pulse text-blue-500 dark:text-blue-400" />
@@ -651,7 +672,7 @@ function DashboardContent() {
 
               {dailyTrend.length === 0 ? (
                 <div className="flex h-72 items-center justify-center rounded-lg border border-dashed border-neutral-200 text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
-                  No trend data for the selected repository and time range.
+                  {emptyMetricsMessage}
                 </div>
               ) : (
                 <div className="h-72 select-none">
@@ -697,7 +718,7 @@ function DashboardContent() {
               </div>
 
               {filteredPrs.length === 0 ? (
-                <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">No PRs found for the selected repository and time range.</div>
+                <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">{emptyMetricsMessage}</div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
