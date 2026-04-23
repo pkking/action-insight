@@ -6,6 +6,7 @@ describe('collect option helpers', () => {
   it('parses a forced full backfill with a single target repo', () => {
     expect(parseCollectCliOptions(['--force-full-backfill', '--repo', 'openai/action-insight'])).toEqual({
       forceFullBackfill: true,
+      help: false,
       reverse: false,
       repoName: 'openai/action-insight',
     });
@@ -14,6 +15,7 @@ describe('collect option helpers', () => {
   it('supports the short aliases for full backfill and repo selection', () => {
     expect(parseCollectCliOptions(['--full', '-r', 'openai/action-insight'])).toEqual({
       forceFullBackfill: true,
+      help: false,
       reverse: false,
       repoName: 'openai/action-insight',
     });
@@ -22,6 +24,7 @@ describe('collect option helpers', () => {
   it('does not treat another flag as a repo value', () => {
     expect(parseCollectCliOptions(['--repo', '--full'])).toEqual({
       forceFullBackfill: true,
+      help: false,
       reverse: false,
       repoName: undefined,
     });
@@ -30,6 +33,7 @@ describe('collect option helpers', () => {
   it('parses reverse collection mode', () => {
     expect(parseCollectCliOptions(['--reverse'])).toEqual({
       forceFullBackfill: false,
+      help: false,
       reverse: true,
       repoName: undefined,
     });
