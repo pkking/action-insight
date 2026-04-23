@@ -99,6 +99,11 @@ export interface PullRequestIndexFile {
   repo: string;
   generated_at: string;
   prs: PullRequestMetricsSummary[];
+  partialPrResolution?: boolean;
+  missingPrArtifact?: boolean;
+  resolvedPrShaCount?: number;
+  unresolvedPrShaCount?: number;
+  skippedPrShaCount?: number;
 }
 
 export type OverviewMetricKey = 'prE2EP90Minutes' | 'ciE2EP90Minutes' | 'reviewP90Minutes' | 'ciE2ESlaRate';

@@ -16,6 +16,15 @@ export async function fetchPullRequestIndex(owner: string, repo: string): Promis
     cache: 'no-store',
   });
 
+  if (res.status === 404) {
+    return {
+      repo: `${owner}/${repo}`,
+      generated_at: new Date().toISOString(),
+      prs: [],
+      missingPrArtifact: true,
+    };
+  }
+
   if (!res.ok) {
     throw new Error(`Failed to fetch PR index for ${owner}/${repo}: ${res.status} ${res.statusText}`);
   }

@@ -185,4 +185,98 @@ describe('rebuildPullRequestArtifacts', () => {
       expect.objectContaining({ owner: 'acme', repo: 'widgets', commit_sha: 'abc123' })
     );
   });
+
+  it('still writes partial artifacts when SHA resolution exceeds the rate-limit budget', async () => {
+    const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-insight-pr-artifacts-'));
+    tempDirs.push(repoDir);
+
+    const request = vi.fn().mockImplementation((route: string) => {
+      if (route === 'GET /rate_limit') {
+        return Promise.resolve({
+          data: {
+            resources: {
+              core: {
+                remaining: 1,
+              },
+            },
+          },
+        });
+      }
+
+      if (route === 'GET /repos/{owner}/{repo}/pulls/{pull_number}') {
+        return Promise.resolve({
+          data: {
+            number: 42,
+            title: 'Existing PR association',
+            state: 'closed',
+            created_at: '2026-04-18T01:00:00Z',
+            merged_at: '2026-04-18T02:15:00Z',
+            html_url: 'https://github.com/acme/widgets/pull/42',
+            user: { login: 'octocat' },
+          },
+        });
+      }
+
+      throw new Error(`Unexpected route: ${route}`);
+    });
+
+    await rebuildPullRequestArtifacts({
+      octokit: { request },
+      owner: 'acme',
+      repo: 'widgets',
+      repoKey: 'acme/widgets',
+      repoDir,
+      files: ['2026-04-18.json'],
+      storage: {
+        readDayData: () => ({
+          runs: [
+            {
+              id: 101,
+              name: 'lint',
+              head_branch: 'feature/pr-metrics',
+              status: 'completed',
+              conclusion: 'success',
+              event: 'pull_request',
+              created_at: '2026-04-18T01:05:00Z',
+              updated_at: '2026-04-18T01:15:00Z',
+              html_url: 'https://github.com/acme/widgets/actions/runs/101',
+              durationInSeconds: 600,
+              pull_requests: [{ number: 42 }],
+              jobs: [],
+            },
+            {
+              id: 102,
+              name: 'test',
+              head_branch: 'feature/new-pr',
+              head_sha: 'abc123',
+              status: 'completed',
+              conclusion: 'success',
+              event: 'pull_request',
+              created_at: '2026-04-18T01:10:00Z',
+              updated_at: '2026-04-18T01:20:00Z',
+              html_url: 'https://github.com/acme/widgets/actions/runs/102',
+              durationInSeconds: 600,
+              pull_requests: [],
+              jobs: [],
+            },
+          ],
+        }),
+      },
+    });
+
+    const index = JSON.parse(fs.readFileSync(path.join(repoDir, 'prs', 'index.json'), 'utf8'));
+
+    expect(index.prs).toHaveLength(1);
+    expect(index.prs[0]).toMatchObject({ number: 42, title: 'Existing PR association' });
+    expect(index).toMatchObject({
+      partialPrResolution: true,
+      resolvedPrShaCount: 0,
+      unresolvedPrShaCount: 1,
+      skippedPrShaCount: 1,
+    });
+    expect(request).not.toHaveBeenCalledWith(
+      'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
+      expect.anything()
+    );
+  });
 });

@@ -41,6 +41,24 @@ describe('pr-data-fetcher', () => {
     expect(result.pr.number).toBe(42);
   });
 
+  it('returns an empty missing-artifact marker when a PR index has not been generated', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchPullRequestIndex('foo', 'bar');
+
+    expect(result).toMatchObject({
+      repo: 'foo/bar',
+      prs: [],
+      missingPrArtifact: true,
+    });
+  });
+
   it('fetches multiple PR indexes and reports per-repo failures', async () => {
     const fetchMock = vi
       .fn()

@@ -276,4 +276,71 @@ describe('Dashboard PR view', () => {
 
     expect(await screen.findAllByText('Insufficient data')).toHaveLength(8);
   });
+
+  it('explains when the selected repo metrics artifact failed to load', async () => {
+    fetchPullRequestIndexesMock.mockResolvedValueOnce({
+      indexesByRepoKey: {
+        'openai/action-insight': {
+          repo: 'openai/action-insight',
+          generated_at: '2026-04-18T00:00:00Z',
+          prs: [],
+        },
+      },
+      failedRepoKeys: ['vllm-project/vllm-ascend'],
+    });
+
+    render(<Dashboard />);
+
+    expect(await screen.findAllByText('PR metrics artifact failed to load for this repository.')).toHaveLength(2);
+  });
+
+  it('explains when the selected repo metrics artifact has not been generated', async () => {
+    fetchPullRequestIndexesMock.mockResolvedValueOnce({
+      indexesByRepoKey: {
+        'vllm-project/vllm-ascend': {
+          repo: 'vllm-project/vllm-ascend',
+          generated_at: '2026-04-18T00:00:00Z',
+          prs: [],
+          missingPrArtifact: true,
+        },
+        'openai/action-insight': {
+          repo: 'openai/action-insight',
+          generated_at: '2026-04-18T00:00:00Z',
+          prs: [],
+        },
+      },
+      failedRepoKeys: [],
+    });
+
+    render(<Dashboard />);
+
+    expect(await screen.findAllByText('PR metrics have not been generated for this repository yet.')).toHaveLength(2);
+  });
+
+  it('shows partial PR resolution metadata for high-volume repos', async () => {
+    fetchPullRequestIndexesMock.mockResolvedValueOnce({
+      indexesByRepoKey: {
+        'vllm-project/vllm-ascend': {
+          repo: 'vllm-project/vllm-ascend',
+          generated_at: '2026-04-18T00:00:00Z',
+          prs: [],
+          partialPrResolution: true,
+          resolvedPrShaCount: 25,
+          unresolvedPrShaCount: 100,
+          skippedPrShaCount: 100,
+        },
+        'openai/action-insight': {
+          repo: 'openai/action-insight',
+          generated_at: '2026-04-18T00:00:00Z',
+          prs: [],
+        },
+      },
+      failedRepoKeys: [],
+    });
+
+    render(<Dashboard />);
+
+    expect(await screen.findByText(/Partial PR resolution for vllm-project\/vllm-ascend: 25 SHA/)).toBeInTheDocument();
+    expect(screen.getAllByText('PR metrics are partially resolved for this repository. More PRs may appear after future ETL runs.')).toHaveLength(2);
+  });
 });
