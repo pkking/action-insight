@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { readdir } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import yaml from 'js-yaml';
 
 type RepoOption = {
   owner: string;
@@ -8,34 +9,40 @@ type RepoOption = {
   key: string;
 };
 
+type ReposConfig = {
+  repos?: unknown;
+};
+
+function toRepoOption(entry: string): RepoOption | null {
+  const [owner, repo] = entry.split('/');
+
+  if (!owner || !repo) {
+    return null;
+  }
+
+  return {
+    owner,
+    repo,
+    key: `${owner}/${repo}`,
+  };
+}
+
+function parseReposConfig(content: string): RepoOption[] {
+  const config = yaml.load(content) as ReposConfig | null;
+  const entries = Array.isArray(config?.repos) ? config.repos : [];
+
+  return entries
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => toRepoOption(entry.trim()))
+    .filter((repo): repo is RepoOption => repo !== null);
+}
+
 export async function GET() {
-  const dataDir = path.join(process.cwd(), 'data');
+  const reposConfigPath = path.join(process.cwd(), 'etl', 'repos.yaml');
 
   try {
-    const owners = await readdir(dataDir, { withFileTypes: true });
-    const repos: RepoOption[] = [];
-
-    for (const ownerEntry of owners) {
-      if (!ownerEntry.isDirectory()) {
-        continue;
-      }
-
-      const ownerDir = path.join(dataDir, ownerEntry.name);
-      const repoEntries = await readdir(ownerDir, { withFileTypes: true });
-
-      for (const repoEntry of repoEntries) {
-        if (!repoEntry.isDirectory()) {
-          continue;
-        }
-
-        repos.push({
-          owner: ownerEntry.name,
-          repo: repoEntry.name,
-          key: `${ownerEntry.name}/${repoEntry.name}`,
-        });
-      }
-    }
-
+    const content = await readFile(reposConfigPath, 'utf-8');
+    const repos = parseReposConfig(content);
     repos.sort((a, b) => a.key.localeCompare(b.key));
 
     return NextResponse.json({ repos });

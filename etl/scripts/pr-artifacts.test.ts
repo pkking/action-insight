@@ -41,17 +41,31 @@ describe('rebuildPullRequestArtifacts', () => {
 
     await rebuildPullRequestArtifacts({
       octokit: {
-        request: async () => ({
-          data: {
-            number: 42,
-            title: 'Add PR lifecycle dashboard',
-            state: 'closed',
-            created_at: '2026-04-18T01:00:00Z',
-            merged_at: '2026-04-18T02:15:00Z',
-            html_url: 'https://github.com/acme/widgets/pull/42',
-            user: { login: 'octocat' },
-          },
-        }),
+        request: async (route: string) => {
+          if (route === 'GET /rate_limit') {
+            return {
+              data: {
+                resources: {
+                  core: {
+                    remaining: 100,
+                  },
+                },
+              },
+            };
+          }
+
+          return {
+            data: {
+              number: 42,
+              title: 'Add PR lifecycle dashboard',
+              state: 'closed',
+              created_at: '2026-04-18T01:00:00Z',
+              merged_at: '2026-04-18T02:15:00Z',
+              html_url: 'https://github.com/acme/widgets/pull/42',
+              user: { login: 'octocat' },
+            },
+          };
+        },
       },
       owner: 'acme',
       repo: 'widgets',
@@ -93,6 +107,18 @@ describe('rebuildPullRequestArtifacts', () => {
     tempDirs.push(repoDir);
 
     const request = vi.fn().mockImplementation((route: string) => {
+      if (route === 'GET /rate_limit') {
+        return Promise.resolve({
+          data: {
+            resources: {
+              core: {
+                remaining: 100,
+              },
+            },
+          },
+        });
+      }
+
       if (route === 'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls') {
         return Promise.resolve({
           data: [
