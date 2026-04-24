@@ -25,7 +25,7 @@ interface OctokitLike {
 }
 
 interface RebuildPullRequestArtifactsOptions {
-  octokit: OctokitLike;
+  octokit?: OctokitLike;
   owner: string;
   repo: string;
   repoKey: string;
@@ -229,7 +229,7 @@ export async function rebuildPullRequestArtifacts({
   let shaResolutionBudget = Math.min(unresolvedShas.length, getShaResolutionLimit());
   let skippedPrShaCount = Math.max(0, unresolvedShas.length - shaResolutionBudget);
 
-  if (expectedCalls > 0) {
+  if (octokit && expectedCalls > 0) {
     const budget = await checkRateLimitBudget(octokit, expectedCalls);
     if (!budget.ok) {
       const availableForShaResolution = Math.max(0, budget.remaining - allPrNumbers.length - RATE_LIMIT_RESERVE);
@@ -247,7 +247,9 @@ export async function rebuildPullRequestArtifacts({
   }
 
   const shasToResolve = unresolvedShas.slice(0, shaResolutionBudget);
-  const newlyResolvedPullRequestsBySha = await resolvePullRequestsFromHeadSha(octokit, owner, repo, shasToResolve, warn);
+  const newlyResolvedPullRequestsBySha = octokit
+    ? await resolvePullRequestsFromHeadSha(octokit, owner, repo, shasToResolve, warn)
+    : new Map<string, number>();
   for (const [sha, number] of newlyResolvedPullRequestsBySha.entries()) {
     cachedPullRequestsBySha.set(sha, number);
   }
@@ -308,7 +310,9 @@ export async function rebuildPullRequestArtifacts({
   }
 
   log(`Building PR artifacts for ${repoKey}: ${prNumbers.length} PRs`);
-  const pullRequests = await fetchPullRequestSnapshots(octokit, owner, repo, prNumbers, warn);
+  const pullRequests = octokit
+    ? await fetchPullRequestSnapshots(octokit, owner, repo, prNumbers, warn)
+    : new Map<number, PullRequestSnapshot>();
   const retentionStartDate = files.map((file) => file.replace(/\.json$/, '')).sort()[0];
   const result = buildPullRequestIndex({
     repo: repoKey,

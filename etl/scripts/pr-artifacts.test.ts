@@ -186,6 +186,46 @@ describe('rebuildPullRequestArtifacts', () => {
     );
   });
 
+  it('can rebuild artifacts locally without GitHub API access when runs already include PR refs', async () => {
+    const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-insight-pr-artifacts-'));
+    tempDirs.push(repoDir);
+
+    await rebuildPullRequestArtifacts({
+      owner: 'acme',
+      repo: 'widgets',
+      repoKey: 'acme/widgets',
+      repoDir,
+      files: ['2026-04-18.json'],
+      storage: {
+        readDayData: () => ({
+          runs: [
+            {
+              id: 101,
+              name: 'lint',
+              head_branch: 'feature/pr-metrics',
+              status: 'completed',
+              conclusion: 'success',
+              event: 'pull_request',
+              created_at: '2026-04-18T01:05:00Z',
+              updated_at: '2026-04-18T01:15:00Z',
+              html_url: 'https://github.com/acme/widgets/actions/runs/101',
+              durationInSeconds: 600,
+              pull_requests: [{ number: 42 }],
+              jobs: [],
+            },
+          ],
+        }),
+      },
+    });
+
+    const index = JSON.parse(fs.readFileSync(path.join(repoDir, 'prs', 'index.json'), 'utf8'));
+    const detail = JSON.parse(fs.readFileSync(path.join(repoDir, 'prs', '42.json'), 'utf8'));
+
+    expect(index.prs).toHaveLength(1);
+    expect(index.prs[0]).toMatchObject({ number: 42, title: 'PR #42', branch: 'feature/pr-metrics' });
+    expect(detail.pr).toMatchObject({ number: 42, workflows: [expect.objectContaining({ id: 101 })] });
+  });
+
   it('still writes partial artifacts when SHA resolution exceeds the rate-limit budget', async () => {
     const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-insight-pr-artifacts-'));
     tempDirs.push(repoDir);
