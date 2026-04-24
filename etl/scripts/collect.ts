@@ -41,6 +41,32 @@ function error(...args: unknown[]) {
   console.error(`[${new Date().toISOString()}] ERROR:`, ...args);
 }
 
+function isTransientError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const e = err as Record<string, unknown>;
+  const status = e.status as number | undefined;
+  if (status !== undefined && status >= 500 && status < 600) return true;
+  const code = e.code as string | undefined;
+  if (code && ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ERR_SOCKET_TIMEOUT'].includes(code)) return true;
+  return false;
+}
+
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelayMs = 2000): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (!isTransientError(err) || attempt === maxRetries) throw err;
+      const delay = baseDelayMs * 2 ** attempt;
+      warn(`Transient API error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`, err);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  throw lastErr;
+}
+
 interface PullRequestRef {
   number: number;
 }
@@ -397,13 +423,13 @@ export async function collectRepo(
       const startTime = Date.now();
       let data;
       try {
-        const response = await octokit.request('GET /repos/{owner}/{repo}/actions/runs', {
+        const response = await withRetry(() => octokit.request('GET /repos/{owner}/{repo}/actions/runs', {
           owner,
           repo: repoName,
           per_page: PER_PAGE,
           page,
           created: createdParam,
-        });
+        }));
         data = response.data;
       } catch (err) {
         if (isGitHubRateLimitError(err)) {
@@ -446,11 +472,11 @@ export async function collectRepo(
           const jobsStartTime = Date.now();
           let jobsData;
           try {
-            const response = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
+            const response = await withRetry(() => octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
               owner,
               repo: repoName,
               run_id: runId,
-            });
+            }));
             jobsData = response.data;
           } catch (err) {
             if (isGitHubRateLimitError(err)) {
