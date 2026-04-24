@@ -170,7 +170,7 @@ describe('collect rate limit handling', () => {
     ]);
   });
 
-  it('rebuilds the full retention range at the collector call site when history is marked incomplete', async () => {
+  it('refreshes the latest range first when history is marked incomplete', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-13T00:00:00Z'));
 
@@ -216,14 +216,14 @@ describe('collect rate limit handling', () => {
 
       expect(requests[0]).toEqual({
         route: 'GET /repos/{owner}/{repo}/actions/runs',
-        created: '2026-01-13T00:00:00Z..2026-01-20T23:59:59Z',
+        created: '2026-04-12T00:00:00Z..2026-04-13T23:59:59Z',
       });
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('resumes history collection from the stored cursor by default', async () => {
+  it('refreshes the latest range before resuming history collection from the stored cursor', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-13T00:00:00Z'));
 
@@ -270,7 +270,7 @@ describe('collect rate limit handling', () => {
 
       expect(requests[0]).toEqual({
         route: 'GET /repos/{owner}/{repo}/actions/runs',
-        created: '2026-03-01T00:00:00Z..2026-03-08T23:59:59Z',
+        created: '2026-04-12T00:00:00Z..2026-04-13T23:59:59Z',
       });
     } finally {
       vi.useRealTimers();
