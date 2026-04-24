@@ -16,11 +16,11 @@ interface ReposConfig {
 
 function getRepoDir(repo: string): string {
   const [owner, name] = repo.split('/');
-  return path.join(process.cwd(), 'data', owner, name);
+  return path.join(__dirname, '../../data', owner, name);
 }
 
 function readReposConfig(): string[] {
-  const reposConfigPath = path.join(process.cwd(), 'etl', 'repos.yaml');
+  const reposConfigPath = path.join(__dirname, '../repos.yaml');
   if (!fs.existsSync(reposConfigPath)) {
     return [];
   }
@@ -86,32 +86,36 @@ async function main() {
       continue;
     }
 
-    await rebuildPullRequestArtifacts({
-      owner,
-      repo,
-      repoKey,
-      repoDir,
-      files,
-      storage: {
-        readDayData: (currentRepo: string, date: string) => {
-          const filePath = path.join(getRepoDir(currentRepo), `${date}.json`);
-          try {
-            const data = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { runs?: Run[] };
-            return { runs: Array.isArray(data.runs) ? data.runs : [] };
-          } catch (error) {
-            console.warn(
-              `Warning: Failed to read data for ${currentRepo} on ${date}:`,
-              error instanceof Error ? error.message : error
-            );
-            return { runs: [] };
-          }
+    try {
+      await rebuildPullRequestArtifacts({
+        owner,
+        repo,
+        repoKey,
+        repoDir,
+        files,
+        storage: {
+          readDayData: (currentRepo: string, date: string) => {
+            const filePath = path.join(getRepoDir(currentRepo), `${date}.json`);
+            try {
+              const data = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { runs?: Run[] };
+              return { runs: Array.isArray(data.runs) ? data.runs : [] };
+            } catch (error) {
+              console.warn(
+                `Warning: Failed to read data for ${currentRepo} on ${date}:`,
+                error instanceof Error ? error.message : error
+              );
+              return { runs: [] };
+            }
+          },
         },
-      },
-      log: (...args: unknown[]) => console.log(...args),
-      warn: (...args: unknown[]) => console.warn(...args),
-    });
+        log: (...args: unknown[]) => console.log(...args),
+        warn: (...args: unknown[]) => console.warn(...args),
+      });
 
-    console.log(`Rebuilt PR artifacts for ${repoKey}`);
+      console.log(`Rebuilt PR artifacts for ${repoKey}`);
+    } catch (error) {
+      console.error(`Error rebuilding PR artifacts for ${repoKey}:`, error instanceof Error ? error.message : error);
+    }
   }
 }
 
