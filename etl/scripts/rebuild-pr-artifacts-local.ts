@@ -4,6 +4,7 @@ import path from 'node:path';
 import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts';
+import type { Run } from '../../src/lib/types';
 
 interface IndexFile {
   files?: unknown;
@@ -20,6 +21,10 @@ function getRepoDir(repo: string): string {
 
 function readReposConfig(): string[] {
   const reposConfigPath = path.join(process.cwd(), 'etl', 'repos.yaml');
+  if (!fs.existsSync(reposConfigPath)) {
+    return [];
+  }
+
   const content = fs.readFileSync(reposConfigPath, 'utf8');
   const config = yaml.load(content) as ReposConfig | null;
 
@@ -57,6 +62,10 @@ function parseTargetRepos(argv: string[]): string[] {
 
 async function main() {
   const targetRepos = parseTargetRepos(process.argv.slice(2));
+  if (targetRepos.length === 0) {
+    console.warn('No repositories found to process. Use --repo <owner/repo> or check etl/repos.yaml.');
+    return;
+  }
 
   for (const repoKey of targetRepos) {
     const [owner, repo] = repoKey.split('/');
@@ -87,7 +96,7 @@ async function main() {
         readDayData: (currentRepo: string, date: string) => {
           const filePath = path.join(getRepoDir(currentRepo), `${date}.json`);
           try {
-            const data = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { runs?: unknown[] };
+            const data = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { runs?: Run[] };
             return { runs: Array.isArray(data.runs) ? data.runs : [] };
           } catch (error) {
             console.warn(
