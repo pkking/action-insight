@@ -28,8 +28,17 @@ function readReposConfig(): string[] {
 
 function readIndex(repo: string): string[] {
   const indexPath = path.join(getRepoDir(repo), 'index.json');
-  const index = JSON.parse(fs.readFileSync(indexPath, 'utf8')) as IndexFile;
-  return Array.isArray(index.files) ? index.files.filter((entry): entry is string => typeof entry === 'string') : [];
+  try {
+    if (!fs.existsSync(indexPath)) {
+      return [];
+    }
+
+    const index = JSON.parse(fs.readFileSync(indexPath, 'utf8')) as IndexFile;
+    return Array.isArray(index.files) ? index.files.filter((entry): entry is string => typeof entry === 'string') : [];
+  } catch (error) {
+    console.warn(`Warning: Failed to read index for ${repo}:`, error instanceof Error ? error.message : error);
+    return [];
+  }
 }
 
 function parseTargetRepos(argv: string[]): string[] {
@@ -77,7 +86,16 @@ async function main() {
       storage: {
         readDayData: (currentRepo: string, date: string) => {
           const filePath = path.join(getRepoDir(currentRepo), `${date}.json`);
-          return JSON.parse(fs.readFileSync(filePath, 'utf8')) as { runs: unknown[] };
+          try {
+            const data = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { runs?: unknown[] };
+            return { runs: Array.isArray(data.runs) ? data.runs : [] };
+          } catch (error) {
+            console.warn(
+              `Warning: Failed to read data for ${currentRepo} on ${date}:`,
+              error instanceof Error ? error.message : error
+            );
+            return { runs: [] };
+          }
         },
       },
       log: (...args: unknown[]) => console.log(...args),
