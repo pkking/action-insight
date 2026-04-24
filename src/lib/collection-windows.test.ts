@@ -31,11 +31,12 @@ describe('collection window helpers', () => {
       windowDays: 7,
     });
 
-    expect(windows[0]).toEqual({ start: '2026-03-01', end: '2026-03-08' });
-    expect(windows.at(-1)).toEqual({ start: '2026-04-10', end: '2026-04-13' });
+    expect(windows[0]).toEqual({ start: '2026-04-12', end: '2026-04-13' });
+    expect(windows[1]).toEqual({ start: '2026-03-01', end: '2026-03-08' });
+    expect(windows.at(-1)).toEqual({ start: '2026-04-10', end: '2026-04-11' });
   });
 
-  it('starts from the earliest retained day when history is explicitly marked incomplete', () => {
+  it('refreshes the latest range before backfilling when history is explicitly marked incomplete', () => {
     const windows = buildCollectionWindows({
       latest: '2026-04-12',
       existingFileCount: 3,
@@ -45,12 +46,13 @@ describe('collection window helpers', () => {
       windowDays: 7,
     });
 
-    expect(windows).toHaveLength(12);
-    expect(windows[0]).toEqual({ start: '2026-01-13', end: '2026-01-20' });
-    expect(windows.at(-1)).toEqual({ start: '2026-04-11', end: '2026-04-13' });
+    expect(windows).toHaveLength(13);
+    expect(windows[0]).toEqual({ start: '2026-04-12', end: '2026-04-13' });
+    expect(windows[1]).toEqual({ start: '2026-01-13', end: '2026-01-20' });
+    expect(windows.at(-1)).toEqual({ start: '2026-04-11', end: '2026-04-11' });
   });
 
-  it('starts from the earliest retained day when history looks incomplete', () => {
+  it('refreshes the latest range before backfilling when history looks incomplete', () => {
     const windows = buildCollectionWindows({
       latest: '2026-04-12',
       existingFileCount: 1,
@@ -59,9 +61,10 @@ describe('collection window helpers', () => {
       windowDays: 7,
     });
 
-    expect(windows).toHaveLength(12);
-    expect(windows[0]).toEqual({ start: '2026-01-13', end: '2026-01-20' });
-    expect(windows.at(-1)).toEqual({ start: '2026-04-11', end: '2026-04-13' });
+    expect(windows).toHaveLength(13);
+    expect(windows[0]).toEqual({ start: '2026-04-12', end: '2026-04-13' });
+    expect(windows[1]).toEqual({ start: '2026-01-13', end: '2026-01-20' });
+    expect(windows.at(-1)).toEqual({ start: '2026-04-11', end: '2026-04-11' });
   });
 
   it('rebuilds the full retention window from oldest to newest when forced even if prior data exists', () => {

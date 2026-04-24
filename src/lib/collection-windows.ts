@@ -46,6 +46,17 @@ export function buildCollectionWindows({
     return [{ start: latest, end: today }];
   }
 
+  if (latest && !forceFullBackfill && hasIncompleteHistory) {
+    const recentWindows = buildForwardCollectionWindows(latest, today, windowDays);
+    const backfillEnd = format(subDays(new Date(`${latest}T00:00:00Z`), 1), 'yyyy-MM-dd');
+
+    if (forwardStart > backfillEnd) {
+      return recentWindows;
+    }
+
+    return [...recentWindows, ...buildForwardCollectionWindows(forwardStart, backfillEnd, windowDays)];
+  }
+
   return buildForwardCollectionWindows(forceFullBackfill ? oldest : forwardStart, today, windowDays);
 }
 
