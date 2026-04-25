@@ -255,7 +255,9 @@ function JobDetailsView({ run }: { run: Run }) {
             <span>0m</span>
             <span>{formatDurationMinutes(totalMs / 1000)}</span>
           </div>
-          {run.jobs.map((job) => {
+          {[...run.jobs]
+            .sort((a, b) => new Date(a.created_at || a.started_at || 0).getTime() - new Date(b.created_at || b.started_at || 0).getTime())
+            .map((job) => {
             const startMs = new Date(job.created_at || job.started_at || 0).getTime();
             const queueWidth = ((job.queueDurationInSeconds * 1000) / totalMs) * 100;
             const runWidth = ((job.durationInSeconds * 1000) / totalMs) * 100;
