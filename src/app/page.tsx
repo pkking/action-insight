@@ -88,6 +88,25 @@ function parseDashboardQuery(params: Pick<URLSearchParams, 'get'>): DashboardQue
   };
 }
 
+function sortWorkflows(workflows: Run[], field: WorkflowSortField, order: WorkflowSortOrder): Run[] {
+  const result = [...workflows];
+  if (order === 'none') {
+    return result;
+  }
+
+  result.sort((left, right) => {
+    let comparison = 0;
+
+    if (field === 'date') comparison = left.created_at.localeCompare(right.created_at);
+    else if (field === 'duration') comparison = left.durationInSeconds - right.durationInSeconds;
+    else if (field === 'name') comparison = left.name.localeCompare(right.name);
+
+    return order === 'asc' ? comparison : -comparison;
+  });
+
+  return result;
+}
+
 function StatusBadge({ conclusion }: { conclusion: string }) {
   if (conclusion === 'success') {
     return (
@@ -518,19 +537,7 @@ function DashboardContent() {
       result = result.filter((run) => `${run.name} ${run.head_branch}`.toLowerCase().includes(query));
     }
 
-    if (workflowSortOrder === 'none') {
-      return result;
-    }
-
-    result.sort((left, right) => {
-      let comparison = 0;
-      if (workflowSortField === 'date') comparison = new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
-      if (workflowSortField === 'duration') comparison = left.durationInSeconds - right.durationInSeconds;
-      if (workflowSortField === 'name') comparison = left.name.localeCompare(right.name);
-      return workflowSortOrder === 'asc' ? comparison : -comparison;
-    });
-
-    return result;
+    return sortWorkflows(result, workflowSortField, workflowSortOrder);
   }, [dateRange.end, dateRange.start, fallbackRuns, filterName, workflowSortField, workflowSortOrder]);
 
   const showWorkflowFallback = filteredPrs.length === 0 && filteredFallbackRuns.length > 0;
@@ -604,20 +611,7 @@ function DashboardContent() {
   };
 
   const getSortedWorkflows = (workflows: Run[]) => {
-    const result = [...workflows];
-    if (workflowSortOrder === 'none') {
-      return result;
-    }
-
-    result.sort((left, right) => {
-      let comparison = 0;
-      if (workflowSortField === 'date') comparison = new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
-      if (workflowSortField === 'duration') comparison = left.durationInSeconds - right.durationInSeconds;
-      if (workflowSortField === 'name') comparison = left.name.localeCompare(right.name);
-      return workflowSortOrder === 'asc' ? comparison : -comparison;
-    });
-
-    return result;
+    return sortWorkflows(workflows, workflowSortField, workflowSortOrder);
   };
 
   const toggleMetric = (metricKey: MetricKey) => {
