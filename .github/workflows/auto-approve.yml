@@ -1,0 +1,26 @@
+name: Auto Approve
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+
+permissions:
+  pull-requests: write
+  contents: write
+
+jobs:
+  auto-approve:
+    name: Auto Approve Dependabot
+    runs-on: ubuntu-latest
+    if: >
+      github.actor == 'dependabot[bot]' ||
+      github.actor == 'dependabot-preview[bot]'
+
+    steps:
+      - uses: hmarr/auto-approve-action@v4
+        with:
+          review-message: "Auto-approved by workflow"
