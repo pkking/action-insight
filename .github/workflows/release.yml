@@ -29,9 +29,11 @@ jobs:
         id: changelog
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)
-          echo "changes<<EOF" >> $GITHUB_OUTPUT
-          git log --pretty=format:"- %s (%h)" ${PREV_TAG}..HEAD >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "changes<<EOF"
+            git log --pretty=format:"- %s (%h)" "${PREV_TAG}"..HEAD
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - uses: softprops/action-gh-release@v2
         with:
