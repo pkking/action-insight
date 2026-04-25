@@ -1,0 +1,39 @@
+name: ETL Validate
+
+on:
+  pull_request:
+    paths:
+      - 'etl/**'
+      - '.github/workflows/etl-validate.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'etl/**'
+      - '.github/workflows/etl-validate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate ETL Scripts
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Validate repos.yaml
+        run: npx tsx etl/scripts/validate-repos.ts
+        if: hashFiles('etl/scripts/validate-repos.ts') != ''
+
+      - name: Dry-run collect
+        run: |
+          DRY_RUN=1 npx tsx etl/scripts/collect.ts --help
