@@ -52,6 +52,22 @@ type DashboardClientProps = {
   initialSearchParams?: Record<string, string | string[] | undefined>;
 };
 
+function useDebouncedValue<T>(value: T, delayMs: number) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedValue(value);
+    }, delayMs);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [delayMs, value]);
+
+  return debouncedValue;
+}
+
 const METRIC_OPTIONS: Array<{
   key: MetricKey;
   label: string;
@@ -327,10 +343,10 @@ function DashboardContent({
   const [fallbackRunsLoading, setFallbackRunsLoading] = useState(false);
   const [fallbackRunsError, setFallbackRunsError] = useState('');
   const [shareNotice, setShareNotice] = useState('');
-  const [debouncedFilterName, setDebouncedFilterName] = useState(initialQuery.filterName);
   const [workflowSortField, setWorkflowSortField] = useState<WorkflowSortField>('date');
   const [workflowSortOrder, setWorkflowSortOrder] = useState<WorkflowSortOrder>('desc');
   const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
+  const debouncedFilterName = useDebouncedValue(filterName, 250);
 
   const selectedRepo = useMemo(() => {
     if (repoOptions.length === 0) {
@@ -388,16 +404,6 @@ function DashboardContent({
     setExpandedWorkflowId(null);
     setError('');
   }, [selectedRepoKey]);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      setDebouncedFilterName(filterName);
-    }, 250);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [filterName]);
 
   useEffect(() => {
     const params = new URLSearchParams();

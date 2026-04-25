@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DashboardClient from './DashboardClient';
@@ -256,25 +256,31 @@ describe('Dashboard PR view', () => {
   });
 
   it('debounces filter query updates before syncing them to the URL', async () => {
+    renderDashboard();
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith('/?repo=vllm-project%2Fvllm-ascend', { scroll: false });
+    });
+    replaceMock.mockClear();
+
     vi.useFakeTimers();
 
     try {
-      renderDashboard();
-      replaceMock.mockClear();
-
-      const filterInput = await screen.findByPlaceholderText('Filter by PR, title, branch...');
+      const filterInput = screen.getByPlaceholderText('Filter by PR, title, branch...');
       fireEvent.change(filterInput, { target: { value: 'lint' } });
 
-      expect(replaceMock).not.toHaveBeenCalled();
+      expect(replaceMock).not.toHaveBeenCalledWith('/?repo=vllm-project%2Fvllm-ascend&filterName=lint', { scroll: false });
 
-      vi.advanceTimersByTime(249);
-      expect(replaceMock).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(1);
-      await waitFor(() => {
-        expect(replaceMock).toHaveBeenCalledWith('/?repo=vllm-project%2Fvllm-ascend&filterName=lint', { scroll: false });
+      await act(async () => {
+        vi.advanceTimersByTime(249);
       });
+      expect(replaceMock).not.toHaveBeenCalledWith('/?repo=vllm-project%2Fvllm-ascend&filterName=lint', { scroll: false });
+
+      await act(async () => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(replaceMock).toHaveBeenCalledWith('/?repo=vllm-project%2Fvllm-ascend&filterName=lint', { scroll: false });
     } finally {
+      vi.runOnlyPendingTimers();
       vi.useRealTimers();
     }
   });
