@@ -355,7 +355,11 @@ describe('Dashboard PR view', () => {
 
     const workflowRow = screen
       .getAllByRole('row')
-      .find((row: HTMLElement) => within(row).queryByRole('button', { name: /jobs/i }))!;
+      .find((row: HTMLElement) => within(row).queryByRole('button', { name: /jobs/i }));
+    expect(workflowRow).toBeDefined();
+    if (!workflowRow) {
+      return;
+    }
     fireEvent.click(within(workflowRow).getByRole('button', { name: /jobs/i }));
 
     expect(await screen.findByText('lint-job')).toBeInTheDocument();

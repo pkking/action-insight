@@ -326,6 +326,7 @@ function DashboardContent({
   const [fallbackRuns, setFallbackRuns] = useState<Run[]>([]);
   const [fallbackRunsLoading, setFallbackRunsLoading] = useState(false);
   const [fallbackRunsError, setFallbackRunsError] = useState('');
+  const [shareNotice, setShareNotice] = useState('');
   const [workflowSortField, setWorkflowSortField] = useState<WorkflowSortField>('date');
   const [workflowSortOrder, setWorkflowSortOrder] = useState<WorkflowSortOrder>('desc');
   const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
@@ -403,6 +404,20 @@ function DashboardContent({
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }, [days, endDate, filterName, pathname, router, selectedRepo, startDate, useCustomRange]);
+
+  useEffect(() => {
+    if (!shareNotice) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShareNotice('');
+    }, 2500);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [shareNotice]);
 
   const selectedRepoPrs = useMemo(
     () => (selectedRepo ? repoIndexesByKey[selectedRepo.key]?.prs ?? [] : []),
@@ -537,9 +552,13 @@ function DashboardContent({
     setSelectedRepoKey(repoKey);
   };
 
-  const copyShareLink = () => {
-    navigator.clipboard.writeText(window.location.href);
-    alert('Shareable link copied to clipboard!');
+  const copyShareLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setShareNotice('Shareable link copied.');
+    } catch {
+      setShareNotice('Unable to copy link.');
+    }
   };
 
   const loadDetail = async (number: number) => {
@@ -617,7 +636,15 @@ function DashboardContent({
             </p>
           </div>
 
-          <div className="flex w-full gap-2 md:w-auto">
+          <div className="flex w-full items-center justify-end gap-2 md:w-auto">
+            {shareNotice ? (
+              <span
+                aria-live="polite"
+                className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300"
+              >
+                {shareNotice}
+              </span>
+            ) : null}
             <button onClick={copyShareLink} title="Copy link to current view" className="flex items-center justify-center rounded-lg bg-neutral-100 p-2 text-neutral-600 transition-colors hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700">
               <Share2 className="h-5 w-5" />
             </button>
