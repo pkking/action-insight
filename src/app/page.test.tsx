@@ -255,6 +255,30 @@ describe('Dashboard PR view', () => {
     expect(screen.queryByText('Loading tracked repositories...')).not.toBeInTheDocument();
   });
 
+  it('debounces filter query updates before syncing them to the URL', async () => {
+    vi.useFakeTimers();
+
+    try {
+      renderDashboard();
+      replaceMock.mockClear();
+
+      const filterInput = await screen.findByPlaceholderText('Filter by PR, title, branch...');
+      fireEvent.change(filterInput, { target: { value: 'lint' } });
+
+      expect(replaceMock).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(249);
+      expect(replaceMock).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1);
+      await waitFor(() => {
+        expect(replaceMock).toHaveBeenCalledWith('/?repo=vllm-project%2Fvllm-ascend&filterName=lint', { scroll: false });
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('syncs repo state from the URL on navigation updates', async () => {
     let currentSearchParams = new URLSearchParams('repo=vllm-project/vllm-ascend');
     useSearchParamsMock.mockImplementation(() => currentSearchParams);

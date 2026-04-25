@@ -313,12 +313,12 @@ function DashboardContent({
   const [endDate, setEndDate] = useState(initialQuery.endDate);
   const [useCustomRange, setUseCustomRange] = useState(initialQuery.useCustomRange);
   const [filterName, setFilterName] = useState(initialQuery.filterName);
-  const [repoOptions] = useState<RepoOption[]>(initialRepoOptions);
+  const repoOptions = initialRepoOptions;
   const [selectedRepoKey, setSelectedRepoKey] = useState(initialQuery.repoKey);
   const [selectedMetrics, setSelectedMetrics] = useState<MetricKey[]>(METRIC_OPTIONS.map((metric) => metric.key));
   const [error, setError] = useState(repoOptions.length === 0 ? 'No repository data found under data/.' : '');
-  const [repoIndexesByKey] = useState<Record<string, PullRequestIndexFile>>(initialRepoIndexesByKey);
-  const [failedRepoKeys] = useState<string[]>(initialFailedRepoKeys);
+  const repoIndexesByKey = initialRepoIndexesByKey;
+  const failedRepoKeys = initialFailedRepoKeys;
   const [detailsByNumber, setDetailsByNumber] = useState<Record<number, PullRequestDetailFile['pr']>>({});
   const [loadingDetailNumber, setLoadingDetailNumber] = useState<number | null>(null);
   const [expandedPrNumber, setExpandedPrNumber] = useState<number | null>(null);
@@ -327,6 +327,7 @@ function DashboardContent({
   const [fallbackRunsLoading, setFallbackRunsLoading] = useState(false);
   const [fallbackRunsError, setFallbackRunsError] = useState('');
   const [shareNotice, setShareNotice] = useState('');
+  const [debouncedFilterName, setDebouncedFilterName] = useState(initialQuery.filterName);
   const [workflowSortField, setWorkflowSortField] = useState<WorkflowSortField>('date');
   const [workflowSortOrder, setWorkflowSortOrder] = useState<WorkflowSortOrder>('desc');
   const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
@@ -389,6 +390,16 @@ function DashboardContent({
   }, [selectedRepoKey]);
 
   useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedFilterName(filterName);
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [filterName]);
+
+  useEffect(() => {
     const params = new URLSearchParams();
 
     if (useCustomRange) {
@@ -399,11 +410,17 @@ function DashboardContent({
       params.set('days', String(days));
     }
     if (selectedRepo) params.set('repo', selectedRepo.key);
-    if (filterName) params.set('filterName', filterName);
+    if (debouncedFilterName) params.set('filterName', debouncedFilterName);
 
     const query = params.toString();
+    const current = searchParams.toString();
+
+    if (query === current) {
+      return;
+    }
+
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  }, [days, endDate, filterName, pathname, router, selectedRepo, startDate, useCustomRange]);
+  }, [days, debouncedFilterName, endDate, pathname, router, searchParams, selectedRepo, startDate, useCustomRange]);
 
   useEffect(() => {
     if (!shareNotice) {
