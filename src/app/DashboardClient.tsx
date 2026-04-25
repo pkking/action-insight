@@ -379,7 +379,9 @@ function DashboardContent({
     setEndDate(currentQuery.endDate);
     setUseCustomRange(currentQuery.useCustomRange);
     setFilterName(currentQuery.filterName);
-    setSelectedRepoKey(currentQuery.repoKey);
+    if (currentQuery.repoKey) {
+      setSelectedRepoKey(currentQuery.repoKey);
+    }
   }, [
     currentQuery.days,
     currentQuery.endDate,
