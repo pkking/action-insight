@@ -203,10 +203,10 @@ function JobDetailsView({ run }: { run: Run }) {
     setSortOrder('desc');
   };
 
-  const minTime = Math.min(...run.jobs.map((job) => new Date(job.created_at || job.started_at || 0).getTime()));
-  const maxTime = Math.max(
-    ...run.jobs.map((job) => new Date(job.completed_at || job.started_at || new Date().toISOString()).getTime())
-  );
+  const jobStartTimes = run.jobs.map((job) => new Date(job.created_at || job.started_at || 0).getTime());
+  const jobEndTimes = run.jobs.map((job) => new Date(job.completed_at || job.started_at || new Date().toISOString()).getTime());
+  const minTime = jobStartTimes.reduce((min, t) => Math.min(min, t), Infinity);
+  const maxTime = jobEndTimes.reduce((max, t) => Math.max(max, t), -Infinity);
   const totalMs = Math.max(1000, maxTime - minTime);
 
   return (
@@ -215,6 +215,7 @@ function JobDetailsView({ run }: { run: Run }) {
         <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">Job Execution Details</h4>
         <div className="flex rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800">
           <button
+            type="button"
             onClick={() => setViewMode('timeline')}
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               viewMode === 'timeline'
@@ -225,6 +226,7 @@ function JobDetailsView({ run }: { run: Run }) {
             <AlignLeft className="h-3.5 w-3.5" /> Timeline
           </button>
           <button
+            type="button"
             onClick={() => setViewMode('table')}
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               viewMode === 'table'
@@ -668,7 +670,7 @@ function DashboardContent({
                 {shareNotice}
               </span>
             ) : null}
-            <button onClick={copyShareLink} title="Copy link to current view" className="flex items-center justify-center rounded-lg bg-neutral-100 p-2 text-neutral-600 transition-colors hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700">
+            <button type="button" onClick={copyShareLink} title="Copy link to current view" className="flex items-center justify-center rounded-lg bg-neutral-100 p-2 text-neutral-600 transition-colors hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700">
               <Share2 className="h-5 w-5" />
             </button>
             <a href="https://github.com/pkking/action-insight/issues/new/choose" target="_blank" rel="noopener noreferrer" title="Give Feedback / Report Bug" className="flex items-center justify-center rounded-lg bg-neutral-100 p-2 text-neutral-600 transition-colors hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700">
@@ -689,6 +691,7 @@ function DashboardContent({
 
           {[7, 14, 30, 90].map((value) => (
             <button
+              type="button"
               key={value}
               onClick={() => {
                 setUseCustomRange(false);
@@ -705,6 +708,7 @@ function DashboardContent({
           ))}
 
           <button
+            type="button"
             onClick={() => setUseCustomRange(true)}
             className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
               useCustomRange
@@ -896,6 +900,7 @@ function DashboardContent({
                               <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(workflow.durationInSeconds)}</td>
                               <td className="px-6 py-4 text-right">
                                 <button
+                                  type="button"
                                   onClick={() => setExpandedWorkflowId((current) => current === workflow.id ? null : workflow.id)}
                                   className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
                                 >
@@ -969,7 +974,7 @@ function DashboardContent({
                               <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.ciDurationInSeconds)}</td>
                               <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.timeToMergeInSeconds)}</td>
                               <td className="px-6 py-4 text-right">
-                                <button onClick={() => void loadDetail(pr.number)} className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100">
+                                <button type="button" onClick={() => void loadDetail(pr.number)} className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100">
                                   {expandedPrNumber === pr.number ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                   {loadingDetailNumber === pr.number ? 'Loading...' : 'Workflows'}
                                 </button>
@@ -1030,6 +1035,7 @@ function DashboardContent({
                                                 <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(workflow.durationInSeconds)}</td>
                                                 <td className="px-6 py-4 text-right">
                                                   <button
+                                                    type="button"
                                                     onClick={() => setExpandedWorkflowId((current) => current === workflow.id ? null : workflow.id)}
                                                     className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
                                                   >

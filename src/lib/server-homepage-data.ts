@@ -49,6 +49,10 @@ const getPullRequestIndex = cache(async (owner: string, repo: string): Promise<P
       };
     }
 
+    if (error instanceof SyntaxError) {
+      console.error(`[server-homepage-data] Failed to parse index.json for ${owner}/${repo}:`, error.message);
+    }
+
     throw error;
   }
 });
