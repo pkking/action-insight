@@ -171,7 +171,7 @@ function StatusBadge({ conclusion }: { conclusion: string }) {
 
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200/50 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 dark:border-red-800/50 dark:bg-red-900/30 dark:text-red-400">
-      <XCircle className="h-3.5 w-3.5" /> {conclusion || 'Failed'}
+      <XCircle className="h-3.5 w-3.5" /> {conclusion || 'Pending'}
     </span>
   );
 }
@@ -204,7 +204,7 @@ function JobDetailsView({ run }: { run: Run }) {
   };
 
   const jobStartTimes = run.jobs.map((job) => new Date(job.created_at || job.started_at || 0).getTime());
-  const jobEndTimes = run.jobs.map((job) => new Date(job.completed_at || job.started_at || new Date().toISOString()).getTime());
+  const jobEndTimes = run.jobs.map((job) => new Date(job.completed_at || job.started_at || 0).getTime());
   const minTime = jobStartTimes.reduce((min, t) => Math.min(min, t), Infinity);
   const maxTime = jobEndTimes.reduce((max, t) => Math.max(max, t), -Infinity);
   const totalMs = Math.max(1000, maxTime - minTime);
@@ -332,7 +332,12 @@ function DashboardContent({
   const [useCustomRange, setUseCustomRange] = useState(initialQuery.useCustomRange);
   const [filterName, setFilterName] = useState(initialQuery.filterName);
   const repoOptions = initialRepoOptions;
-  const [selectedRepoKey, setSelectedRepoKey] = useState(initialQuery.repoKey);
+  const [selectedRepoKey, setSelectedRepoKey] = useState(() => {
+    if (initialQuery.repoKey && initialRepoOptions.some((repo) => repo.key === initialQuery.repoKey)) {
+      return initialQuery.repoKey;
+    }
+    return initialRepoOptions.length > 0 ? initialRepoOptions[0].key : '';
+  });
   const [selectedMetrics, setSelectedMetrics] = useState<MetricKey[]>(METRIC_OPTIONS.map((metric) => metric.key));
   const [error, setError] = useState(repoOptions.length === 0 ? 'No repository data found under data/.' : '');
   const repoIndexesByKey = initialRepoIndexesByKey;
@@ -367,16 +372,6 @@ function DashboardContent({
       }),
     [days, endDate, startDate, useCustomRange]
   );
-
-  useEffect(() => {
-    if (repoOptions.length === 0) {
-      return;
-    }
-
-    if (!initialQuery.repoKey || !repoOptions.some((repo) => repo.key === initialQuery.repoKey)) {
-      setSelectedRepoKey(repoOptions[0].key);
-    }
-  }, [initialQuery.repoKey, repoOptions]);
 
   useEffect(() => {
     setDays(currentQuery.days);
@@ -600,9 +595,12 @@ function DashboardContent({
     setLoadingDetailNumber(number);
     try {
       const detail = await fetchPullRequestDetail(selectedRepo.owner, selectedRepo.repo, number);
-      setDetailsByNumber((current) => ({ ...current, [number]: detail.pr }));
-      setExpandedPrNumber(number);
-      setExpandedWorkflowId(null);
+
+      if (previousSelectedRepoKeyRef.current === selectedRepo.key) {
+        setDetailsByNumber((current) => ({ ...current, [number]: detail.pr }));
+        setExpandedPrNumber(number);
+        setExpandedWorkflowId(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to load PR #${number}`);
     } finally {
