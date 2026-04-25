@@ -10,6 +10,28 @@ const fetchPullRequestDetailMock = vi.fn();
 const fetchPullRequestIndexesMock = vi.fn();
 const fetchMock = vi.fn();
 
+function recentIso(hour: number, minute = 0) {
+  const value = new Date();
+  value.setUTCDate(value.getUTCDate() - 1);
+  value.setUTCHours(hour, minute, 0, 0);
+  return value.toISOString();
+}
+
+const RECENT_GENERATED_AT = recentIso(0);
+const PRIMARY_PR_CREATED_AT = recentIso(1);
+const PRIMARY_CI_STARTED_AT = recentIso(1, 5);
+const PRIMARY_CI_COMPLETED_AT = recentIso(1, 45);
+const PRIMARY_MERGED_AT = recentIso(2, 15);
+const SECONDARY_PR_CREATED_AT = recentIso(3);
+const SECONDARY_CI_STARTED_AT = recentIso(3, 5);
+const SECONDARY_CI_COMPLETED_AT = recentIso(3, 40);
+const SECONDARY_MERGED_AT = recentIso(4, 10);
+const WORKFLOW_CREATED_AT = recentIso(1, 5);
+const WORKFLOW_UPDATED_AT = recentIso(1, 15);
+const JOB_CREATED_AT = recentIso(1, 5);
+const JOB_STARTED_AT = recentIso(1, 6);
+const JOB_COMPLETED_AT = recentIso(1, 15);
+
 global.fetch = fetchMock as typeof fetch;
 
 vi.mock('next/navigation', () => ({
@@ -57,7 +79,7 @@ describe('Dashboard PR view', () => {
       indexesByRepoKey: {
         'vllm-project/vllm-ascend': {
           repo: 'vllm-project/vllm-ascend',
-          generated_at: '2026-04-18T00:00:00Z',
+          generated_at: RECENT_GENERATED_AT,
           prs: [
             {
               number: 42,
@@ -66,10 +88,10 @@ describe('Dashboard PR view', () => {
               author: 'octocat',
               state: 'closed',
               html_url: 'https://github.com/vllm-project/vllm-ascend/pull/42',
-              created_at: '2026-04-18T01:00:00Z',
-              ci_started_at: '2026-04-18T01:05:00Z',
-              ci_completed_at: '2026-04-18T01:45:00Z',
-              merged_at: '2026-04-18T02:15:00Z',
+              created_at: PRIMARY_PR_CREATED_AT,
+              ci_started_at: PRIMARY_CI_STARTED_AT,
+              ci_completed_at: PRIMARY_CI_COMPLETED_AT,
+              merged_at: PRIMARY_MERGED_AT,
               partialCiHistory: true,
               timeToCiStartInSeconds: 300,
               ciDurationInSeconds: 2400,
@@ -83,7 +105,7 @@ describe('Dashboard PR view', () => {
         },
         'openai/action-insight': {
           repo: 'openai/action-insight',
-          generated_at: '2026-04-18T00:00:00Z',
+          generated_at: RECENT_GENERATED_AT,
           prs: [
             {
               number: 7,
@@ -92,10 +114,10 @@ describe('Dashboard PR view', () => {
               author: 'robot',
               state: 'closed',
               html_url: 'https://github.com/openai/action-insight/pull/7',
-              created_at: '2026-04-18T03:00:00Z',
-              ci_started_at: '2026-04-18T03:05:00Z',
-              ci_completed_at: '2026-04-18T03:40:00Z',
-              merged_at: '2026-04-18T04:10:00Z',
+              created_at: SECONDARY_PR_CREATED_AT,
+              ci_started_at: SECONDARY_CI_STARTED_AT,
+              ci_completed_at: SECONDARY_CI_COMPLETED_AT,
+              merged_at: SECONDARY_MERGED_AT,
               partialCiHistory: false,
               timeToCiStartInSeconds: 300,
               ciDurationInSeconds: 2100,
@@ -112,7 +134,7 @@ describe('Dashboard PR view', () => {
     });
     fetchPullRequestDetailMock.mockResolvedValue({
       repo: 'vllm-project/vllm-ascend',
-      generated_at: '2026-04-18T00:00:00Z',
+      generated_at: RECENT_GENERATED_AT,
       pr: {
         number: 42,
         title: 'Add PR lifecycle dashboard',
@@ -120,10 +142,10 @@ describe('Dashboard PR view', () => {
         author: 'octocat',
         state: 'closed',
         html_url: 'https://github.com/vllm-project/vllm-ascend/pull/42',
-        created_at: '2026-04-18T01:00:00Z',
-        ci_started_at: '2026-04-18T01:05:00Z',
-        ci_completed_at: '2026-04-18T01:45:00Z',
-        merged_at: '2026-04-18T02:15:00Z',
+        created_at: PRIMARY_PR_CREATED_AT,
+        ci_started_at: PRIMARY_CI_STARTED_AT,
+        ci_completed_at: PRIMARY_CI_COMPLETED_AT,
+        merged_at: PRIMARY_MERGED_AT,
         partialCiHistory: true,
         timeToCiStartInSeconds: 300,
         ciDurationInSeconds: 2400,
@@ -140,8 +162,8 @@ describe('Dashboard PR view', () => {
             status: 'completed',
             conclusion: 'success',
             event: 'pull_request',
-            created_at: '2026-04-18T01:05:00Z',
-            updated_at: '2026-04-18T01:15:00Z',
+            created_at: WORKFLOW_CREATED_AT,
+            updated_at: WORKFLOW_UPDATED_AT,
             html_url: 'https://github.com/vllm-project/vllm-ascend/actions/runs/101',
             durationInSeconds: 600,
             pull_requests: [{ number: 42 }],
@@ -151,9 +173,9 @@ describe('Dashboard PR view', () => {
                 name: 'lint-job',
                 status: 'completed',
                 conclusion: 'success',
-                created_at: '2026-04-18T01:05:00Z',
-                started_at: '2026-04-18T01:06:00Z',
-                completed_at: '2026-04-18T01:15:00Z',
+                created_at: JOB_CREATED_AT,
+                started_at: JOB_STARTED_AT,
+                completed_at: JOB_COMPLETED_AT,
                 html_url: 'https://github.com/vllm-project/vllm-ascend/actions/jobs/1001',
                 queueDurationInSeconds: 60,
                 durationInSeconds: 540,
@@ -202,6 +224,85 @@ describe('Dashboard PR view', () => {
     });
   });
 
+  it('selects a repo when clicking anywhere on the overview row', async () => {
+    render(<Dashboard />);
+
+    const row = (await screen.findByRole('button', { name: /select repo openai\/action-insight/i })).closest('tr');
+    expect(row).not.toBeNull();
+
+    const cells = within(row!).getAllByRole('cell');
+    fireEvent.click(cells[1]);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('openai/action-insight')).toBeInTheDocument();
+    });
+  });
+
+  it('does not refetch repositories or show the bootstrap loading state when switching repos', async () => {
+    render(<Dashboard />);
+
+    await screen.findByText('Repository Overview');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchPullRequestIndexesMock).toHaveBeenCalledTimes(1);
+
+    const row = screen.getByRole('button', { name: /select repo openai\/action-insight/i });
+    fireEvent.click(row);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('openai/action-insight')).toBeInTheDocument();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchPullRequestIndexesMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Fetching repository metrics...')).not.toBeInTheDocument();
+    expect(screen.queryByText('Loading tracked repositories...')).not.toBeInTheDocument();
+  });
+
+  it('syncs repo state from the URL on navigation updates', async () => {
+    let currentSearchParams = new URLSearchParams('repo=vllm-project/vllm-ascend');
+    useSearchParamsMock.mockImplementation(() => currentSearchParams);
+
+    const { rerender } = render(<Dashboard />);
+    expect(await screen.findByDisplayValue('vllm-project/vllm-ascend')).toBeInTheDocument();
+
+    currentSearchParams = new URLSearchParams('repo=openai/action-insight');
+    rerender(<Dashboard />);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('openai/action-insight')).toBeInTheDocument();
+    });
+  });
+
+  it('falls back to the default range when the URL contains an invalid days value', async () => {
+    useSearchParamsMock.mockReturnValue(new URLSearchParams('days=abc'));
+
+    render(<Dashboard />);
+
+    expect(await screen.findByRole('button', { name: /last 7 days/i })).toHaveClass('border-blue-200');
+    expect(screen.getByRole('button', { name: /last 14 days/i })).not.toHaveClass('border-blue-200');
+  });
+
+  it('clears expanded PR details when repo changes from URL navigation', async () => {
+    let currentSearchParams = new URLSearchParams('repo=vllm-project/vllm-ascend');
+    useSearchParamsMock.mockImplementation(() => currentSearchParams);
+
+    const { rerender } = render(<Dashboard />);
+    fireEvent.click(await screen.findByRole('button', { name: /workflows/i }));
+    expect(await screen.findByText('lint')).toBeInTheDocument();
+
+    currentSearchParams = new URLSearchParams('repo=openai/action-insight');
+    rerender(<Dashboard />);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('openai/action-insight')).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('lint')).not.toBeInTheDocument();
+      expect(screen.queryByText('Partial CI history')).not.toBeInTheDocument();
+    });
+  });
+
   it('shows overview metrics and all trend toggles by default', async () => {
     render(<Dashboard />);
 
@@ -246,7 +347,7 @@ describe('Dashboard PR view', () => {
       indexesByRepoKey: {
         'vllm-project/vllm-ascend': {
           repo: 'vllm-project/vllm-ascend',
-          generated_at: '2026-04-18T00:00:00Z',
+          generated_at: RECENT_GENERATED_AT,
           prs: [
             {
               number: 1,
@@ -255,7 +356,7 @@ describe('Dashboard PR view', () => {
               author: 'octocat',
               state: 'open',
               html_url: 'https://github.com/vllm-project/vllm-ascend/pull/1',
-              created_at: '2026-04-18T01:00:00Z',
+              created_at: PRIMARY_PR_CREATED_AT,
               partialCiHistory: false,
               workflowCount: 0,
               successfulWorkflowCount: 0,
@@ -265,7 +366,7 @@ describe('Dashboard PR view', () => {
         },
         'openai/action-insight': {
           repo: 'openai/action-insight',
-          generated_at: '2026-04-18T00:00:00Z',
+          generated_at: RECENT_GENERATED_AT,
           prs: [],
         },
       },
@@ -282,7 +383,7 @@ describe('Dashboard PR view', () => {
       indexesByRepoKey: {
         'openai/action-insight': {
           repo: 'openai/action-insight',
-          generated_at: '2026-04-18T00:00:00Z',
+          generated_at: RECENT_GENERATED_AT,
           prs: [],
         },
       },
@@ -299,13 +400,13 @@ describe('Dashboard PR view', () => {
       indexesByRepoKey: {
         'vllm-project/vllm-ascend': {
           repo: 'vllm-project/vllm-ascend',
-          generated_at: '2026-04-18T00:00:00Z',
+          generated_at: RECENT_GENERATED_AT,
           prs: [],
           missingPrArtifact: true,
         },
         'openai/action-insight': {
           repo: 'openai/action-insight',
-          generated_at: '2026-04-18T00:00:00Z',
+          generated_at: RECENT_GENERATED_AT,
           prs: [],
         },
       },
@@ -322,7 +423,7 @@ describe('Dashboard PR view', () => {
       indexesByRepoKey: {
         'vllm-project/vllm-ascend': {
           repo: 'vllm-project/vllm-ascend',
-          generated_at: '2026-04-18T00:00:00Z',
+          generated_at: RECENT_GENERATED_AT,
           prs: [],
           partialPrResolution: true,
           resolvedPrShaCount: 25,
@@ -331,7 +432,7 @@ describe('Dashboard PR view', () => {
         },
         'openai/action-insight': {
           repo: 'openai/action-insight',
-          generated_at: '2026-04-18T00:00:00Z',
+          generated_at: RECENT_GENERATED_AT,
           prs: [],
         },
       },
