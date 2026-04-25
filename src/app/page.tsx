@@ -229,20 +229,22 @@ function DashboardContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const initialDays = searchParams.get('days') ? parseInt(searchParams.get('days')!, 10) : 7;
-  const initialStartDate = searchParams.get('startDate') || '';
-  const initialEndDate = searchParams.get('endDate') || '';
-  const initialUseCustomRange = searchParams.get('useCustomRange') === 'true';
-  const initialFilterName = searchParams.get('filterName') || '';
-  const initialRepoKey = searchParams.get('repo') || '';
+  const [initialQuery] = useState(() => ({
+    days: searchParams.get('days') ? parseInt(searchParams.get('days')!, 10) : 7,
+    startDate: searchParams.get('startDate') || '',
+    endDate: searchParams.get('endDate') || '',
+    useCustomRange: searchParams.get('useCustomRange') === 'true',
+    filterName: searchParams.get('filterName') || '',
+    repoKey: searchParams.get('repo') || '',
+  }));
 
-  const [days, setDays] = useState(initialDays);
-  const [startDate, setStartDate] = useState(initialStartDate);
-  const [endDate, setEndDate] = useState(initialEndDate);
-  const [useCustomRange, setUseCustomRange] = useState(initialUseCustomRange);
-  const [filterName, setFilterName] = useState(initialFilterName);
+  const [days, setDays] = useState(initialQuery.days);
+  const [startDate, setStartDate] = useState(initialQuery.startDate);
+  const [endDate, setEndDate] = useState(initialQuery.endDate);
+  const [useCustomRange, setUseCustomRange] = useState(initialQuery.useCustomRange);
+  const [filterName, setFilterName] = useState(initialQuery.filterName);
   const [repoOptions, setRepoOptions] = useState<RepoOption[]>([]);
-  const [selectedRepoKey, setSelectedRepoKey] = useState(initialRepoKey);
+  const [selectedRepoKey, setSelectedRepoKey] = useState(initialQuery.repoKey);
   const [selectedMetrics, setSelectedMetrics] = useState<MetricKey[]>(METRIC_OPTIONS.map((metric) => metric.key));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -293,7 +295,7 @@ function DashboardContent() {
           return;
         }
 
-        if (!initialRepoKey || !repos.some((repo) => repo.key === initialRepoKey)) {
+        if (!initialQuery.repoKey || !repos.some((repo) => repo.key === initialQuery.repoKey)) {
           setSelectedRepoKey(repos[0].key);
         }
       } catch (err) {
@@ -308,7 +310,7 @@ function DashboardContent() {
     return () => {
       cancelled = true;
     };
-  }, [initialRepoKey]);
+  }, [initialQuery.repoKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -425,6 +427,19 @@ function DashboardContent() {
 
   const activeMetricOptions = METRIC_OPTIONS.filter((metric) => selectedMetrics.includes(metric.key));
 
+  const handleRepoSelection = (repoKey: string) => {
+    if (repoKey === selectedRepoKey) {
+      return;
+    }
+
+    setSelectedRepoKey(repoKey);
+    setDetailsByNumber({});
+    setLoadingDetailNumber(null);
+    setExpandedPrNumber(null);
+    setExpandedWorkflowId(null);
+    setError('');
+  };
+
   const copyShareLink = () => {
     navigator.clipboard.writeText(window.location.href);
     alert('Shareable link copied to clipboard!');
@@ -531,7 +546,7 @@ function DashboardContent() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900">
             <label htmlFor="repo-select" className="whitespace-nowrap text-sm text-neutral-500 dark:text-neutral-400">Trend Repo</label>
-            <select id="repo-select" value={selectedRepo.key} onChange={(event) => setSelectedRepoKey(event.target.value)} className="min-w-56 bg-transparent text-sm text-neutral-700 outline-none dark:text-neutral-300">
+            <select id="repo-select" value={selectedRepo.key} onChange={(event) => handleRepoSelection(event.target.value)} className="min-w-56 bg-transparent text-sm text-neutral-700 outline-none dark:text-neutral-300">
               {repoOptions.map((repo) => (
                 <option key={repo.key} value={repo.key}>{repo.key}</option>
               ))}
@@ -622,17 +637,25 @@ function DashboardContent() {
                     {overviewRows.map((row) => {
                       const isSelected = row.repoKey === selectedRepo.key;
                       return (
-                        <tr key={row.repoKey} className={isSelected ? 'bg-blue-50/60 dark:bg-blue-900/10' : 'hover:bg-neutral-50 dark:hover:bg-neutral-950/60'}>
+                        <tr
+                          key={row.repoKey}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`Select repo ${row.repoKey}`}
+                          onClick={() => handleRepoSelection(row.repoKey)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              handleRepoSelection(row.repoKey);
+                            }
+                          }}
+                          className={`cursor-pointer outline-none transition-colors focus-visible:bg-blue-50/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:focus-visible:bg-blue-900/10 ${
+                            isSelected ? 'bg-blue-50/60 dark:bg-blue-900/10' : 'hover:bg-neutral-50 dark:hover:bg-neutral-950/60'
+                          }`}
+                        >
                           <td className="px-6 py-4">
-                            <button
-                              type="button"
-                              aria-label={`Select repo ${row.repoKey}`}
-                              onClick={() => setSelectedRepoKey(row.repoKey)}
-                              className="text-left"
-                            >
-                              <div className="font-medium text-neutral-900 dark:text-neutral-100">{row.repoKey}</div>
-                              <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{row.totalPrs} PRs in range</div>
-                            </button>
+                            <div className="font-medium text-neutral-900 dark:text-neutral-100">{row.repoKey}</div>
+                            <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{row.totalPrs} PRs in range</div>
                           </td>
                           <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatMetricMinutes(row.prE2EP90Minutes)}</td>
                           <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatMetricMinutes(row.ciE2EP90Minutes)}</td>
