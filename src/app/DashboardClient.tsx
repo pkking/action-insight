@@ -181,6 +181,22 @@ function JobDetailsView({ run }: { run: Run }) {
   const [sortField, setSortField] = useState<JobSortField>('duration');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  const { minTime, maxTime } = useMemo(() => {
+    if (!run.jobs || run.jobs.length === 0) {
+      return { minTime: 0, maxTime: 1000 };
+    }
+    let min = Infinity;
+    let max = -Infinity;
+    for (const job of run.jobs) {
+      const start = new Date(job.created_at || job.started_at || 0).getTime();
+      const end = new Date(job.completed_at || job.started_at || 0).getTime();
+      if (start < min) min = start;
+      if (end > max) max = end;
+    }
+    return { minTime: min, maxTime: max };
+  }, [run.jobs]);
+  const totalMs = Math.max(1000, maxTime - minTime);
+
   if (!run.jobs || run.jobs.length === 0) {
     return <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">No jobs found for this workflow.</div>;
   }
@@ -202,12 +218,6 @@ function JobDetailsView({ run }: { run: Run }) {
     setSortField(field);
     setSortOrder('desc');
   };
-
-  const jobStartTimes = run.jobs.map((job) => new Date(job.created_at || job.started_at || 0).getTime());
-  const jobEndTimes = run.jobs.map((job) => new Date(job.completed_at || job.started_at || 0).getTime());
-  const minTime = jobStartTimes.reduce((min, t) => Math.min(min, t), Infinity);
-  const maxTime = jobEndTimes.reduce((max, t) => Math.max(max, t), -Infinity);
-  const totalMs = Math.max(1000, maxTime - minTime);
 
   return (
     <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
