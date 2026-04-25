@@ -524,7 +524,7 @@ function DashboardContent() {
     return result;
   }, [dateRange.end, dateRange.start, filterName, selectedRepoPrs]);
 
-  const filteredFallbackRuns = useMemo(() => {
+  const unsortedFallbackRuns = useMemo(() => {
     let result = [...fallbackRuns];
 
     result = result.filter((run) => {
@@ -537,8 +537,12 @@ function DashboardContent() {
       result = result.filter((run) => `${run.name} ${run.head_branch}`.toLowerCase().includes(query));
     }
 
-    return sortWorkflows(result, workflowSortField, workflowSortOrder);
-  }, [dateRange.end, dateRange.start, fallbackRuns, filterName, workflowSortField, workflowSortOrder]);
+    return result;
+  }, [dateRange.end, dateRange.start, fallbackRuns, filterName]);
+
+  const filteredFallbackRuns = useMemo(() => {
+    return sortWorkflows(unsortedFallbackRuns, workflowSortField, workflowSortOrder);
+  }, [unsortedFallbackRuns, workflowSortField, workflowSortOrder]);
 
   const showWorkflowFallback = filteredPrs.length === 0 && filteredFallbackRuns.length > 0;
 
