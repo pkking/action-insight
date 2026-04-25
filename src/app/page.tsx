@@ -74,8 +74,11 @@ function formatRate(value: number | null) {
 }
 
 function parseDashboardQuery(params: Pick<URLSearchParams, 'get'>): DashboardQueryState {
+  const daysParam = params.get('days');
+  const parsedDays = daysParam ? parseInt(daysParam, 10) : 7;
+
   return {
-    days: params.get('days') ? parseInt(params.get('days')!, 10) : 7,
+    days: Number.isNaN(parsedDays) ? 7 : parsedDays,
     startDate: params.get('startDate') || '',
     endDate: params.get('endDate') || '',
     useCustomRange: params.get('useCustomRange') === 'true',
@@ -369,12 +372,12 @@ function DashboardContent() {
   }, [repoOptions]);
 
   useEffect(() => {
-    setDays((value) => (value === currentQuery.days ? value : currentQuery.days));
-    setStartDate((value) => (value === currentQuery.startDate ? value : currentQuery.startDate));
-    setEndDate((value) => (value === currentQuery.endDate ? value : currentQuery.endDate));
-    setUseCustomRange((value) => (value === currentQuery.useCustomRange ? value : currentQuery.useCustomRange));
-    setFilterName((value) => (value === currentQuery.filterName ? value : currentQuery.filterName));
-    setSelectedRepoKey((value) => (value === currentQuery.repoKey ? value : currentQuery.repoKey));
+    setDays(currentQuery.days);
+    setStartDate(currentQuery.startDate);
+    setEndDate(currentQuery.endDate);
+    setUseCustomRange(currentQuery.useCustomRange);
+    setFilterName(currentQuery.filterName);
+    setSelectedRepoKey(currentQuery.repoKey);
   }, [
     currentQuery.days,
     currentQuery.endDate,

@@ -273,6 +273,15 @@ describe('Dashboard PR view', () => {
     });
   });
 
+  it('falls back to the default range when the URL contains an invalid days value', async () => {
+    useSearchParamsMock.mockReturnValue(new URLSearchParams('days=abc'));
+
+    render(<Dashboard />);
+
+    expect(await screen.findByRole('button', { name: /last 7 days/i })).toHaveClass('border-blue-200');
+    expect(screen.getByRole('button', { name: /last 14 days/i })).not.toHaveClass('border-blue-200');
+  });
+
   it('clears expanded PR details when repo changes from URL navigation', async () => {
     let currentSearchParams = new URLSearchParams('repo=vllm-project/vllm-ascend');
     useSearchParamsMock.mockImplementation(() => currentSearchParams);
