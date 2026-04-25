@@ -20,6 +20,7 @@ import {
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { format, isAfter, isBefore } from 'date-fns';
 
+import { fetchRuns } from '@/lib/data-fetcher';
 import { buildDailyTrend, buildRepoOverviewRows, createDateRange } from '@/lib/overview-metrics';
 import { fetchPullRequestDetail, fetchPullRequestIndexes } from '@/lib/pr-data-fetcher';
 import type {
@@ -270,6 +271,9 @@ function DashboardContent() {
   const [loadingDetailNumber, setLoadingDetailNumber] = useState<number | null>(null);
   const [expandedPrNumber, setExpandedPrNumber] = useState<number | null>(null);
   const [expandedWorkflowId, setExpandedWorkflowId] = useState<number | null>(null);
+  const [fallbackRuns, setFallbackRuns] = useState<Run[]>([]);
+  const [fallbackRunsLoading, setFallbackRunsLoading] = useState(false);
+  const [fallbackRunsError, setFallbackRunsError] = useState('');
   const [workflowSortField, setWorkflowSortField] = useState<WorkflowSortField>('date');
   const [workflowSortOrder, setWorkflowSortOrder] = useState<WorkflowSortOrder>('desc');
   const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
@@ -426,6 +430,9 @@ function DashboardContent() {
   const selectedRepoHasPrArtifact = Boolean(selectedRepoIndex);
   const selectedRepoHasPartialPrResolution = Boolean(selectedRepoIndex?.partialPrResolution);
   const selectedRepoMissingPrArtifact = Boolean(selectedRepoIndex?.missingPrArtifact);
+  const shouldLoadWorkflowFallback = Boolean(
+    selectedRepo && (selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution)
+  );
   const emptyMetricsMessage = selectedRepoMetricsFailed
     ? 'PR metrics artifact failed to load for this repository.'
     : selectedRepoMissingPrArtifact
@@ -435,6 +442,50 @@ function DashboardContent() {
       : selectedRepoHasPrArtifact
         ? 'No PRs found for the selected repository and time range.'
         : 'PR metrics have not been generated for this repository yet.';
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFallbackRuns = async () => {
+      if (!selectedRepo || !shouldLoadWorkflowFallback) {
+        setFallbackRuns([]);
+        setFallbackRunsError('');
+        setFallbackRunsLoading(false);
+        return;
+      }
+
+      setFallbackRunsLoading(true);
+      setFallbackRunsError('');
+
+      try {
+        const runs = await fetchRuns(selectedRepo.owner, selectedRepo.repo, {
+          startDate: format(dateRange.start, 'yyyy-MM-dd'),
+          endDate: format(dateRange.end, 'yyyy-MM-dd'),
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        setFallbackRuns(runs);
+      } catch (err) {
+        if (!cancelled) {
+          setFallbackRuns([]);
+          setFallbackRunsError(err instanceof Error ? err.message : 'Failed to load workflow runs.');
+        }
+      } finally {
+        if (!cancelled) {
+          setFallbackRunsLoading(false);
+        }
+      }
+    };
+
+    void loadFallbackRuns();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dateRange.end, dateRange.start, selectedRepo, shouldLoadWorkflowFallback]);
 
   const filteredPrs = useMemo(() => {
     let result = [...selectedRepoPrs];
@@ -453,6 +504,36 @@ function DashboardContent() {
 
     return result;
   }, [dateRange.end, dateRange.start, filterName, selectedRepoPrs]);
+
+  const filteredFallbackRuns = useMemo(() => {
+    let result = [...fallbackRuns];
+
+    result = result.filter((run) => {
+      const createdAt = new Date(run.created_at);
+      return !isBefore(createdAt, dateRange.start) && !isAfter(createdAt, dateRange.end);
+    });
+
+    if (filterName) {
+      const query = filterName.toLowerCase();
+      result = result.filter((run) => `${run.name} ${run.head_branch}`.toLowerCase().includes(query));
+    }
+
+    if (workflowSortOrder === 'none') {
+      return result;
+    }
+
+    result.sort((left, right) => {
+      let comparison = 0;
+      if (workflowSortField === 'date') comparison = new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
+      if (workflowSortField === 'duration') comparison = left.durationInSeconds - right.durationInSeconds;
+      if (workflowSortField === 'name') comparison = left.name.localeCompare(right.name);
+      return workflowSortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [dateRange.end, dateRange.start, fallbackRuns, filterName, workflowSortField, workflowSortOrder]);
+
+  const showWorkflowFallback = filteredPrs.length === 0 && filteredFallbackRuns.length > 0;
 
   const overviewRows = useMemo<RepoOverviewRow[]>(
     () =>
@@ -737,7 +818,7 @@ function DashboardContent() {
 
               {dailyTrend.length === 0 ? (
                 <div className="flex h-72 items-center justify-center rounded-lg border border-dashed border-neutral-200 text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
-                  {emptyMetricsMessage}
+                  {showWorkflowFallback ? 'PR metrics are unavailable for this repository. Raw workflow runs are shown below.' : emptyMetricsMessage}
                 </div>
               ) : (
                 <div className="h-72 select-none">
@@ -783,7 +864,67 @@ function DashboardContent() {
               </div>
 
               {filteredPrs.length === 0 ? (
-                <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">{emptyMetricsMessage}</div>
+                showWorkflowFallback ? (
+                  <div className="overflow-x-auto">
+                    <div className="border-b border-blue-100 bg-blue-50 px-6 py-4 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+                      PR metrics are unavailable for {selectedRepo.key}. Showing raw workflow runs for the selected date range instead.
+                    </div>
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+                        <tr>
+                          <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('name')}>Workflow</th>
+                          <th className="px-6 py-3">Branch</th>
+                          <th className="px-6 py-3">Status</th>
+                          <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('date')}>Created</th>
+                          <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('duration')}>Duration</th>
+                          <th className="px-6 py-3 text-right">Details</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                        {filteredFallbackRuns.map((workflow) => (
+                          <React.Fragment key={workflow.id}>
+                            <tr className="hover:bg-neutral-50 dark:hover:bg-neutral-950/50">
+                              <td className="px-6 py-4 font-medium text-neutral-900 dark:text-neutral-100">{workflow.name}</td>
+                              <td className="px-6 py-4 font-mono text-xs text-neutral-500 dark:text-neutral-400">{workflow.head_branch}</td>
+                              <td className="px-6 py-4"><StatusBadge conclusion={workflow.conclusion} /></td>
+                              <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(workflow.created_at), 'MMM dd, HH:mm')}</td>
+                              <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(workflow.durationInSeconds)}</td>
+                              <td className="px-6 py-4 text-right">
+                                <button
+                                  onClick={() => setExpandedWorkflowId((current) => current === workflow.id ? null : workflow.id)}
+                                  className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                                >
+                                  {expandedWorkflowId === workflow.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                  Jobs
+                                </button>
+                                <a href={workflow.html_url} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+                                  <ExternalLink className="h-4 w-4" />
+                                </a>
+                              </td>
+                            </tr>
+                            {expandedWorkflowId === workflow.id ? (
+                              <tr>
+                                <td colSpan={6} className="p-0">
+                                  <JobDetailsView run={workflow} />
+                                </td>
+                              </tr>
+                            ) : null}
+                          </React.Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">
+                    {emptyMetricsMessage}
+                    {shouldLoadWorkflowFallback && fallbackRunsLoading ? (
+                      <span className="mt-2 block text-xs text-neutral-400 dark:text-neutral-500">Loading raw workflow fallback...</span>
+                    ) : null}
+                    {shouldLoadWorkflowFallback && fallbackRunsError ? (
+                      <span className="mt-2 block text-xs text-neutral-400 dark:text-neutral-500">Raw workflow fallback is temporarily unavailable.</span>
+                    ) : null}
+                  </div>
+                )
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
