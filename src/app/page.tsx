@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Activity,
@@ -269,6 +269,7 @@ function DashboardContent() {
   const [expandedWorkflowId, setExpandedWorkflowId] = useState<number | null>(null);
   const [workflowSortField, setWorkflowSortField] = useState<WorkflowSortField>('date');
   const [workflowSortOrder, setWorkflowSortOrder] = useState<WorkflowSortOrder>('desc');
+  const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
 
   const selectedRepo = useMemo(() => {
     if (repoOptions.length === 0) {
@@ -384,6 +385,19 @@ function DashboardContent() {
   ]);
 
   useEffect(() => {
+    if (previousSelectedRepoKeyRef.current === selectedRepoKey) {
+      return;
+    }
+
+    previousSelectedRepoKeyRef.current = selectedRepoKey;
+    setDetailsByNumber({});
+    setLoadingDetailNumber(null);
+    setExpandedPrNumber(null);
+    setExpandedWorkflowId(null);
+    setError('');
+  }, [selectedRepoKey]);
+
+  useEffect(() => {
     const params = new URLSearchParams();
 
     if (useCustomRange) {
@@ -462,11 +476,6 @@ function DashboardContent() {
     }
 
     setSelectedRepoKey(repoKey);
-    setDetailsByNumber({});
-    setLoadingDetailNumber(null);
-    setExpandedPrNumber(null);
-    setExpandedWorkflowId(null);
-    setError('');
   };
 
   const copyShareLink = () => {

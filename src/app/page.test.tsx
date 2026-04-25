@@ -230,8 +230,8 @@ describe('Dashboard PR view', () => {
     const row = (await screen.findByRole('button', { name: /select repo openai\/action-insight/i })).closest('tr');
     expect(row).not.toBeNull();
 
-    const ciE2ECell = within(row!).getByText('35m');
-    fireEvent.click(ciE2ECell);
+    const cells = within(row!).getAllByRole('cell');
+    fireEvent.click(cells[1]);
 
     await waitFor(() => {
       expect(screen.getByDisplayValue('openai/action-insight')).toBeInTheDocument();
@@ -270,6 +270,27 @@ describe('Dashboard PR view', () => {
 
     await waitFor(() => {
       expect(screen.getByDisplayValue('openai/action-insight')).toBeInTheDocument();
+    });
+  });
+
+  it('clears expanded PR details when repo changes from URL navigation', async () => {
+    let currentSearchParams = new URLSearchParams('repo=vllm-project/vllm-ascend');
+    useSearchParamsMock.mockImplementation(() => currentSearchParams);
+
+    const { rerender } = render(<Dashboard />);
+    fireEvent.click(await screen.findByRole('button', { name: /workflows/i }));
+    expect(await screen.findByText('lint')).toBeInTheDocument();
+
+    currentSearchParams = new URLSearchParams('repo=openai/action-insight');
+    rerender(<Dashboard />);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('openai/action-insight')).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('lint')).not.toBeInTheDocument();
+      expect(screen.queryByText('Partial CI history')).not.toBeInTheDocument();
     });
   });
 
