@@ -36,6 +36,14 @@ type JobSortField = 'queue' | 'duration' | 'name';
 type WorkflowSortField = 'date' | 'duration' | 'name';
 type WorkflowSortOrder = 'asc' | 'desc' | 'none';
 type MetricKey = 'prE2EP90Minutes' | 'ciE2EP90Minutes' | 'reviewP90Minutes' | 'ciE2ESlaRate';
+type DashboardQueryState = {
+  days: number;
+  startDate: string;
+  endDate: string;
+  useCustomRange: boolean;
+  filterName: string;
+  repoKey: string;
+};
 
 const METRIC_OPTIONS: Array<{
   key: MetricKey;
@@ -63,6 +71,17 @@ function formatMetricMinutes(value: number | null) {
 
 function formatRate(value: number | null) {
   return value === null ? 'Insufficient data' : `${value}%`;
+}
+
+function parseDashboardQuery(params: Pick<URLSearchParams, 'get'>): DashboardQueryState {
+  return {
+    days: params.get('days') ? parseInt(params.get('days')!, 10) : 7,
+    startDate: params.get('startDate') || '',
+    endDate: params.get('endDate') || '',
+    useCustomRange: params.get('useCustomRange') === 'true',
+    filterName: params.get('filterName') || '',
+    repoKey: params.get('repo') || '',
+  };
 }
 
 function StatusBadge({ conclusion }: { conclusion: string }) {
@@ -229,14 +248,8 @@ function DashboardContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [initialQuery] = useState(() => ({
-    days: searchParams.get('days') ? parseInt(searchParams.get('days')!, 10) : 7,
-    startDate: searchParams.get('startDate') || '',
-    endDate: searchParams.get('endDate') || '',
-    useCustomRange: searchParams.get('useCustomRange') === 'true',
-    filterName: searchParams.get('filterName') || '',
-    repoKey: searchParams.get('repo') || '',
-  }));
+  const currentQuery = parseDashboardQuery(searchParams);
+  const [initialQuery] = useState(() => currentQuery);
 
   const [days, setDays] = useState(initialQuery.days);
   const [startDate, setStartDate] = useState(initialQuery.startDate);
@@ -353,6 +366,22 @@ function DashboardContent() {
       cancelled = true;
     };
   }, [repoOptions]);
+
+  useEffect(() => {
+    setDays((value) => (value === currentQuery.days ? value : currentQuery.days));
+    setStartDate((value) => (value === currentQuery.startDate ? value : currentQuery.startDate));
+    setEndDate((value) => (value === currentQuery.endDate ? value : currentQuery.endDate));
+    setUseCustomRange((value) => (value === currentQuery.useCustomRange ? value : currentQuery.useCustomRange));
+    setFilterName((value) => (value === currentQuery.filterName ? value : currentQuery.filterName));
+    setSelectedRepoKey((value) => (value === currentQuery.repoKey ? value : currentQuery.repoKey));
+  }, [
+    currentQuery.days,
+    currentQuery.endDate,
+    currentQuery.filterName,
+    currentQuery.repoKey,
+    currentQuery.startDate,
+    currentQuery.useCustomRange,
+  ]);
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -639,23 +668,24 @@ function DashboardContent() {
                       return (
                         <tr
                           key={row.repoKey}
-                          tabIndex={0}
-                          role="button"
-                          aria-label={`Select repo ${row.repoKey}`}
                           onClick={() => handleRepoSelection(row.repoKey)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
-                              handleRepoSelection(row.repoKey);
-                            }
-                          }}
-                          className={`cursor-pointer outline-none transition-colors focus-visible:bg-blue-50/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:focus-visible:bg-blue-900/10 ${
+                          className={`cursor-pointer transition-colors ${
                             isSelected ? 'bg-blue-50/60 dark:bg-blue-900/10' : 'hover:bg-neutral-50 dark:hover:bg-neutral-950/60'
                           }`}
                         >
                           <td className="px-6 py-4">
-                            <div className="font-medium text-neutral-900 dark:text-neutral-100">{row.repoKey}</div>
-                            <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{row.totalPrs} PRs in range</div>
+                            <button
+                              type="button"
+                              aria-label={`Select repo ${row.repoKey}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleRepoSelection(row.repoKey);
+                              }}
+                              className="text-left outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                            >
+                              <div className="font-medium text-neutral-900 dark:text-neutral-100">{row.repoKey}</div>
+                              <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{row.totalPrs} PRs in range</div>
+                            </button>
                           </td>
                           <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatMetricMinutes(row.prE2EP90Minutes)}</td>
                           <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatMetricMinutes(row.ciE2EP90Minutes)}</td>
