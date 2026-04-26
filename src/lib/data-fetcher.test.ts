@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchRuns } from './data-fetcher';
+import { fetchLatestRuns, fetchRuns } from './data-fetcher';
 
 describe('fetchRuns', () => {
   afterEach(() => {
@@ -70,5 +70,32 @@ describe('fetchRuns', () => {
     expect(fetchMock.mock.calls[1]?.[0]).toContain('/data/foo/bar/2026-04-13.json');
     expect(fetchMock.mock.calls[2]?.[0]).toContain('/data/foo/bar/2026-04-12.json');
     expect(runs).toEqual([{ id: 13 }, { id: 12 }]);
+  });
+
+  it('fetches the newest retained files for latest-run fallback', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: ['2026-04-01.json', '2026-04-12.json', '2026-04-05.json'],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ runs: [{ id: 12 }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ runs: [{ id: 5 }] }),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const runs = await fetchLatestRuns('foo', 'bar', 2);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[1]?.[0]).toContain('/data/foo/bar/2026-04-12.json');
+    expect(fetchMock.mock.calls[2]?.[0]).toContain('/data/foo/bar/2026-04-05.json');
+    expect(runs).toEqual([{ id: 12 }, { id: 5 }]);
   });
 });
