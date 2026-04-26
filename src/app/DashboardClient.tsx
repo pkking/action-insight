@@ -29,6 +29,7 @@ import type {
   PullRequestDetailFile,
   PullRequestIndexFile,
   RepoOverviewRow,
+  Index,
   Run,
 } from '@/lib/types';
 
@@ -366,6 +367,7 @@ function DashboardContent({
   const [workflowSortField, setWorkflowSortField] = useState<WorkflowSortField>('date');
   const [workflowSortOrder, setWorkflowSortOrder] = useState<WorkflowSortOrder>('desc');
   const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
+  const workflowIndexCacheRef = useRef<Record<string, Index | Promise<Index>>>({});
   const debouncedFilterName = useDebouncedValue(filterName, 250);
 
   const selectedRepo = useMemo(() => {
@@ -511,7 +513,13 @@ function DashboardContent({
       setFallbackRunsScope('selected-range');
 
       try {
-        const repoIndex = await fetchIndex(selectedRepo.owner, selectedRepo.repo);
+        const cachedIndex =
+          workflowIndexCacheRef.current[selectedRepo.key] ??
+          fetchIndex(selectedRepo.owner, selectedRepo.repo);
+        workflowIndexCacheRef.current[selectedRepo.key] = cachedIndex;
+
+        const repoIndex = await cachedIndex;
+        workflowIndexCacheRef.current[selectedRepo.key] = repoIndex;
         const runs = await fetchRunsFromIndex(selectedRepo.owner, selectedRepo.repo, repoIndex, {
           startDate: format(dateRange.start, 'yyyy-MM-dd'),
           endDate: format(dateRange.end, 'yyyy-MM-dd'),
@@ -536,6 +544,9 @@ function DashboardContent({
         setFallbackRuns(latestRuns);
         setFallbackRunsScope(latestRuns.length > 0 ? 'latest-retained' : 'selected-range');
       } catch (err) {
+        if (selectedRepo && workflowIndexCacheRef.current[selectedRepo.key] instanceof Promise) {
+          delete workflowIndexCacheRef.current[selectedRepo.key];
+        }
         if (!cancelled) {
           setFallbackRuns([]);
           setFallbackRunsError(err instanceof Error ? err.message : 'Failed to load workflow runs.');

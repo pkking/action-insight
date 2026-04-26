@@ -544,4 +544,41 @@ describe('Dashboard PR view', () => {
     expect(fetchLatestRunsFromIndexMock).toHaveBeenCalledWith('openai', 'action-insight', repoIndex);
     expect(screen.getByText(/Showing latest retained raw workflow runs instead/)).toBeInTheDocument();
   });
+
+  it('reuses the raw workflow index when the fallback date range changes', async () => {
+    useSearchParamsMock.mockReturnValue(new URLSearchParams('repo=openai/action-insight'));
+    const repoIndex = { files: ['2026-04-12.json'] };
+    fetchIndexMock.mockResolvedValue(repoIndex);
+    fetchRunsFromIndexMock.mockResolvedValue([]);
+    fetchLatestRunsFromIndexMock.mockResolvedValue([]);
+
+    renderDashboard({
+      searchParams: { repo: 'openai/action-insight' },
+      repoIndexesByKey: {
+        'vllm-project/vllm-ascend': {
+          repo: 'vllm-project/vllm-ascend',
+          generated_at: RECENT_GENERATED_AT,
+          prs: [],
+        },
+        'openai/action-insight': {
+          repo: 'openai/action-insight',
+          generated_at: RECENT_GENERATED_AT,
+          prs: [],
+        },
+      },
+    });
+
+    await waitFor(() => {
+      expect(fetchRunsFromIndexMock).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /last 14 days/i }));
+
+    await waitFor(() => {
+      expect(fetchRunsFromIndexMock).toHaveBeenCalledTimes(2);
+    });
+
+    expect(fetchIndexMock).toHaveBeenCalledTimes(1);
+    expect(fetchRunsFromIndexMock).toHaveBeenLastCalledWith('openai', 'action-insight', repoIndex, expect.any(Object));
+  });
 });
