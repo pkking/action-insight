@@ -474,16 +474,14 @@ function DashboardContent({
         : 'PR metrics have not been generated for this repository yet.';
 
   const dateRangePrs = useMemo(() => {
-    let result = [...selectedRepoPrs];
-
-    return result.filter((pr) => {
+    return selectedRepoPrs.filter((pr) => {
       const createdAt = new Date(pr.created_at);
       return !isBefore(createdAt, dateRange.start) && !isAfter(createdAt, dateRange.end);
     });
   }, [dateRange.end, dateRange.start, selectedRepoPrs]);
 
   const filteredPrs = useMemo(() => {
-    let result = [...dateRangePrs];
+    let result = dateRangePrs;
 
     if (filterName) {
       const query = filterName.toLowerCase();
@@ -560,7 +558,7 @@ function DashboardContent({
   }, [dateRange.end, dateRange.start, selectedRepo, shouldLoadWorkflowFallback]);
 
   const unsortedFallbackRuns = useMemo(() => {
-    let result = [...fallbackRuns];
+    let result = fallbackRuns;
 
     if (fallbackRunsScope === 'selected-range') {
       result = result.filter((run) => {
