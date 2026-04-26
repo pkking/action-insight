@@ -18,10 +18,10 @@ import {
   XCircle,
 } from 'lucide-react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { format, isAfter, isBefore } from 'date-fns';
+import { format } from 'date-fns';
 
-import { fetchLatestRuns, fetchRuns } from '@/lib/data-fetcher';
-import { buildDailyTrend, buildRepoOverviewRows, createDateRange } from '@/lib/overview-metrics';
+import { fetchIndex, fetchLatestRunsFromIndex, fetchRunsFromIndex } from '@/lib/data-fetcher';
+import { buildDailyTrend, buildRepoOverviewRows, createDateRange, filterByDateRange } from '@/lib/overview-metrics';
 import { fetchPullRequestDetail } from '@/lib/pr-data-fetcher';
 import type { RepoOption } from '@/lib/server-homepage-data';
 import type {
@@ -474,11 +474,8 @@ function DashboardContent({
         : 'PR metrics have not been generated for this repository yet.';
 
   const dateRangePrs = useMemo(() => {
-    return selectedRepoPrs.filter((pr) => {
-      const createdAt = new Date(pr.created_at);
-      return !isBefore(createdAt, dateRange.start) && !isAfter(createdAt, dateRange.end);
-    });
-  }, [dateRange.end, dateRange.start, selectedRepoPrs]);
+    return filterByDateRange(selectedRepoPrs, dateRange);
+  }, [dateRange, selectedRepoPrs]);
 
   const filteredPrs = useMemo(() => {
     let result = dateRangePrs;
@@ -514,7 +511,8 @@ function DashboardContent({
       setFallbackRunsScope('selected-range');
 
       try {
-        const runs = await fetchRuns(selectedRepo.owner, selectedRepo.repo, {
+        const repoIndex = await fetchIndex(selectedRepo.owner, selectedRepo.repo);
+        const runs = await fetchRunsFromIndex(selectedRepo.owner, selectedRepo.repo, repoIndex, {
           startDate: format(dateRange.start, 'yyyy-MM-dd'),
           endDate: format(dateRange.end, 'yyyy-MM-dd'),
         });
@@ -529,7 +527,7 @@ function DashboardContent({
           return;
         }
 
-        const latestRuns = await fetchLatestRuns(selectedRepo.owner, selectedRepo.repo);
+        const latestRuns = await fetchLatestRunsFromIndex(selectedRepo.owner, selectedRepo.repo, repoIndex);
 
         if (cancelled) {
           return;
@@ -561,10 +559,7 @@ function DashboardContent({
     let result = fallbackRuns;
 
     if (fallbackRunsScope === 'selected-range') {
-      result = result.filter((run) => {
-        const createdAt = new Date(run.created_at);
-        return !isBefore(createdAt, dateRange.start) && !isAfter(createdAt, dateRange.end);
-      });
+      result = filterByDateRange(result, dateRange);
     }
 
     if (filterName) {
@@ -573,7 +568,7 @@ function DashboardContent({
     }
 
     return result;
-  }, [dateRange.end, dateRange.start, fallbackRuns, fallbackRunsScope, filterName]);
+  }, [dateRange, fallbackRuns, fallbackRunsScope, filterName]);
 
   const filteredFallbackRuns = useMemo(() => {
     return sortWorkflows(unsortedFallbackRuns, workflowSortField, workflowSortOrder);

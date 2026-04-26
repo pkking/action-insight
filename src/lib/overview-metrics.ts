@@ -28,9 +28,9 @@ function percentile(values: number[], value: number): number | null {
   return sorted[index];
 }
 
-function filterByRange(prs: PullRequestMetricsSummary[], range: DateRange): PullRequestMetricsSummary[] {
-  return prs.filter((pr) => {
-    const createdAt = new Date(pr.created_at);
+export function filterByDateRange<T extends { created_at: string }>(items: T[], range: DateRange): T[] {
+  return items.filter((item) => {
+    const createdAt = new Date(item.created_at);
     return !isBefore(createdAt, range.start) && !isAfter(createdAt, range.end);
   });
 }
@@ -85,7 +85,7 @@ export function createDateRange({
 export function buildRepoOverviewRows(entries: RepoOverviewInput[], range: DateRange): RepoOverviewRow[] {
   return entries
     .map(({ repoKey, prs }) => {
-      const filtered = filterByRange(prs, range);
+      const filtered = filterByDateRange(prs, range);
 
       return {
         repoKey,
@@ -103,7 +103,7 @@ export function buildRepoOverviewRows(entries: RepoOverviewInput[], range: DateR
 export function buildDailyTrend(prs: PullRequestMetricsSummary[], range: DateRange): DailyTrendPoint[] {
   const grouped = new Map<string, PullRequestMetricsSummary[]>();
 
-  for (const pr of filterByRange(prs, range)) {
+  for (const pr of filterByDateRange(prs, range)) {
     const date = pr.created_at.slice(0, 10);
     const existing = grouped.get(date) ?? [];
     existing.push(pr);

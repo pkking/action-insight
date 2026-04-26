@@ -72,6 +72,15 @@ async function fetchRunsFromFiles(owner: string, repo: string, files: string[]):
 export async function fetchRuns(owner: string, repo: string, options: FetchRunsOptions = {}): Promise<Run[]> {
   const repoIndex = await fetchIndex(owner, repo);
 
+  return fetchRunsFromIndex(owner, repo, repoIndex, options);
+}
+
+export async function fetchRunsFromIndex(
+  owner: string,
+  repo: string,
+  repoIndex: Index,
+  options: FetchRunsOptions = {}
+): Promise<Run[]> {
   const dates = selectFiles(repoIndex.files, options);
 
   return fetchRunsFromFiles(owner, repo, dates);
@@ -79,6 +88,16 @@ export async function fetchRuns(owner: string, repo: string, options: FetchRunsO
 
 export async function fetchLatestRuns(owner: string, repo: string, maxFiles = 7): Promise<Run[]> {
   const repoIndex = await fetchIndex(owner, repo);
+
+  return fetchLatestRunsFromIndex(owner, repo, repoIndex, maxFiles);
+}
+
+export async function fetchLatestRunsFromIndex(
+  owner: string,
+  repo: string,
+  repoIndex: Index,
+  maxFiles = 7
+): Promise<Run[]> {
   const latestFiles = [...repoIndex.files]
     .sort((left, right) => right.localeCompare(left))
     .slice(0, maxFiles);
