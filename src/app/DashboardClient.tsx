@@ -870,7 +870,9 @@ function DashboardContent({
                   {showWorkflowFallback
                     ? fallbackRunsScope === 'latest-retained'
                       ? 'No PR metrics or workflow runs were found in the selected range. Latest retained raw workflow runs are shown below.'
-                      : 'PR metrics are unavailable for this repository. Raw workflow runs are shown below.'
+                      : (selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution)
+                        ? 'PR metrics are unavailable for this repository. Raw workflow runs are shown below.'
+                        : 'No PR metrics were found in the selected range. Raw workflow runs are shown below.'
                     : emptyMetricsMessage}
                 </div>
               ) : (
@@ -922,7 +924,9 @@ function DashboardContent({
                     <div className="border-b border-blue-100 bg-blue-50 px-6 py-4 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
                       {fallbackRunsScope === 'latest-retained'
                         ? `No PR metrics or workflow runs were found for ${selectedRepo.key} in the selected date range. Showing latest retained raw workflow runs instead.`
-                        : `PR metrics are unavailable for ${selectedRepo.key}. Showing raw workflow runs for the selected date range instead.`}
+                        : (selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution)
+                          ? `PR metrics are unavailable for ${selectedRepo.key}. Showing raw workflow runs for the selected date range instead.`
+                          : `No PR metrics were found for ${selectedRepo.key} in the selected date range. Showing raw workflow runs instead.`}
                     </div>
                     <table className="w-full text-left text-sm">
                       <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
