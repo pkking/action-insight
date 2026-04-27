@@ -1,0 +1,954 @@
+{
+  "repo": "sgl-project/sglang",
+  "generated_at": "2026-04-27T15:39:24.684Z",
+  "pr": {
+    "number": 22917,
+    "title": "[Ray] Support multi-replica serving by making scheduler actor names unique",
+    "branch": "ray/unique-scheduler-actor-name",
+    "author": "xyuzh",
+    "state": "closed",
+    "html_url": "https://github.com/sgl-project/sglang/pull/22917",
+    "created_at": "2026-04-16T01:22:22Z",
+    "ci_started_at": "2026-04-16T20:09:41Z",
+    "ci_completed_at": "2026-04-16T20:13:00Z",
+    "merged_at": "2026-04-16T21:51:02Z",
+    "partialCiHistory": false,
+    "timeToCiStartInSeconds": 67639,
+    "ciDurationInSeconds": 199,
+    "timeToMergeInSeconds": 73720,
+    "mergeLeadTimeInSeconds": 5882,
+    "workflowCount": 8,
+    "successfulWorkflowCount": 2,
+    "conclusion": "failure",
+    "workflows": [
+      {
+        "id": 24531540593,
+        "name": "Execute Notebooks",
+        "head_branch": "ray/unique-scheduler-actor-name",
+        "head_sha": "aca3255492b6cf809bd142ded82367b77e54426b",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-16T20:09:42Z",
+        "updated_at": "2026-04-16T20:09:52Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540593",
+        "durationInSeconds": 10,
+        "pull_requests": [
+          {
+            "number": 22917
+          }
+        ],
+        "jobs": [
+          {
+            "id": 71715717751,
+            "name": "call-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-16T20:09:42Z",
+            "started_at": "2026-04-16T20:09:45Z",
+            "completed_at": "2026-04-16T20:09:51Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540593/job/71715717751",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          },
+          {
+            "id": 71715740867,
+            "name": "run-all-notebooks",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:52Z",
+            "started_at": "2026-04-16T20:09:52Z",
+            "completed_at": "2026-04-16T20:09:51Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540593/job/71715740867",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715741230,
+            "name": "notebook-finish",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:52Z",
+            "started_at": "2026-04-16T20:09:52Z",
+            "completed_at": "2026-04-16T20:09:52Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540593/job/71715741230",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 24531540595,
+        "name": "PR Test (Xeon)",
+        "head_branch": "ray/unique-scheduler-actor-name",
+        "head_sha": "aca3255492b6cf809bd142ded82367b77e54426b",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-16T20:09:42Z",
+        "updated_at": "2026-04-16T20:10:02Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540595",
+        "durationInSeconds": 20,
+        "pull_requests": [
+          {
+            "number": 22917
+          }
+        ],
+        "jobs": [
+          {
+            "id": 71715719262,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-16T20:09:43Z",
+            "started_at": "2026-04-16T20:09:45Z",
+            "completed_at": "2026-04-16T20:09:52Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540595/job/71715719262",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 71715741890,
+            "name": "pr-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-16T20:09:52Z",
+            "started_at": "2026-04-16T20:09:55Z",
+            "completed_at": "2026-04-16T20:10:01Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540595/job/71715741890",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          },
+          {
+            "id": 71715764729,
+            "name": "build-test",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:02Z",
+            "started_at": "2026-04-16T20:10:02Z",
+            "completed_at": "2026-04-16T20:10:02Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540595/job/71715764729",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 24531540574,
+        "name": "PR Test (AMD)",
+        "head_branch": "ray/unique-scheduler-actor-name",
+        "head_sha": "aca3255492b6cf809bd142ded82367b77e54426b",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-16T20:09:42Z",
+        "updated_at": "2026-04-16T20:10:11Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574",
+        "durationInSeconds": 29,
+        "pull_requests": [
+          {
+            "number": 22917
+          }
+        ],
+        "jobs": [
+          {
+            "id": 71715717734,
+            "name": "call-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-16T20:09:42Z",
+            "started_at": "2026-04-16T20:09:45Z",
+            "completed_at": "2026-04-16T20:09:51Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715717734",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          },
+          {
+            "id": 71715739808,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-16T20:09:51Z",
+            "started_at": "2026-04-16T20:09:54Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715739808",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 71715771331,
+            "name": "sgl-kernel-unit-test-2-gpu-amd",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:04Z",
+            "started_at": "2026-04-16T20:10:04Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715771331",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715771363,
+            "name": "multimodal-gen-test-1-gpu-amd",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:04Z",
+            "started_at": "2026-04-16T20:10:04Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715771363",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715771420,
+            "name": "stage-a-test-1-gpu-small-amd",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:04Z",
+            "started_at": "2026-04-16T20:10:04Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715771420",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715771451,
+            "name": "sgl-kernel-unit-test-amd",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:04Z",
+            "started_at": "2026-04-16T20:10:04Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715771451",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715771654,
+            "name": "wait-for-stage-a-amd",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:04Z",
+            "started_at": "2026-04-16T20:10:04Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715771654",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715771765,
+            "name": "multimodal-gen-test-2-gpu-amd",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:05Z",
+            "started_at": "2026-04-16T20:10:05Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715771765",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715771875,
+            "name": "wait-for-stage-b-amd",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:05Z",
+            "started_at": "2026-04-16T20:10:05Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715771875",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715771889,
+            "name": "jit-kernel-unit-test-amd",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:05Z",
+            "started_at": "2026-04-16T20:10:05Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715771889",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715772021,
+            "name": "stage-b-test-1-gpu-small-amd",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:05Z",
+            "started_at": "2026-04-16T20:10:05Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715772021",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715772038,
+            "name": "stage-b-test-1-gpu-small-amd-mi35x",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:05Z",
+            "started_at": "2026-04-16T20:10:05Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715772038",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715772127,
+            "name": "stage-b-test-1-gpu-large-amd",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:05Z",
+            "started_at": "2026-04-16T20:10:05Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715772127",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715772252,
+            "name": "stage-b-test-2-gpu-large-amd",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:05Z",
+            "started_at": "2026-04-16T20:10:05Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715772252",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715772335,
+            "name": "pr-test-amd-finish",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-16T20:10:05Z",
+            "started_at": "2026-04-16T20:10:07Z",
+            "completed_at": "2026-04-16T20:10:10Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715772335",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 3
+          },
+          {
+            "id": 71715772341,
+            "name": "stage-b-test-1-gpu-small-amd-nondeterministic",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:05Z",
+            "started_at": "2026-04-16T20:10:05Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715772341",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715772356,
+            "name": "stage-c-test-large-8-gpu-amd-mi35x",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:05Z",
+            "started_at": "2026-04-16T20:10:05Z",
+            "completed_at": "2026-04-16T20:10:05Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715772356",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715772368,
+            "name": "stage-b-test-large-8-gpu-35x-disaggregation-amd",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:05Z",
+            "started_at": "2026-04-16T20:10:05Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715772368",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715772441,
+            "name": "stage-c-test-4-gpu-amd",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:05Z",
+            "started_at": "2026-04-16T20:10:05Z",
+            "completed_at": "2026-04-16T20:10:05Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715772441",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715772456,
+            "name": "stage-c-test-large-8-gpu-amd",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:05Z",
+            "started_at": "2026-04-16T20:10:05Z",
+            "completed_at": "2026-04-16T20:10:05Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540574/job/71715772456",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 24531540620,
+        "name": "PR Test (XPU)",
+        "head_branch": "ray/unique-scheduler-actor-name",
+        "head_sha": "aca3255492b6cf809bd142ded82367b77e54426b",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-16T20:09:42Z",
+        "updated_at": "2026-04-16T20:10:11Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540620",
+        "durationInSeconds": 29,
+        "pull_requests": [
+          {
+            "number": 22917
+          }
+        ],
+        "jobs": [
+          {
+            "id": 71715717647,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-16T20:09:42Z",
+            "started_at": "2026-04-16T20:09:46Z",
+            "completed_at": "2026-04-16T20:09:56Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540620/job/71715717647",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 71715750729,
+            "name": "pr-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-16T20:09:56Z",
+            "started_at": "2026-04-16T20:10:00Z",
+            "completed_at": "2026-04-16T20:10:06Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540620/job/71715750729",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 6
+          },
+          {
+            "id": 71715775875,
+            "name": "finish",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-16T20:10:06Z",
+            "started_at": "2026-04-16T20:10:08Z",
+            "completed_at": "2026-04-16T20:10:11Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540620/job/71715775875",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 3
+          },
+          {
+            "id": 71715776086,
+            "name": "build-and-test",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:06Z",
+            "started_at": "2026-04-16T20:10:06Z",
+            "completed_at": "2026-04-16T20:10:06Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540620/job/71715776086",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 24531540571,
+        "name": "PR Test",
+        "head_branch": "ray/unique-scheduler-actor-name",
+        "head_sha": "aca3255492b6cf809bd142ded82367b77e54426b",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-16T20:09:42Z",
+        "updated_at": "2026-04-16T20:10:04Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571",
+        "durationInSeconds": 22,
+        "pull_requests": [
+          {
+            "number": 22917
+          }
+        ],
+        "jobs": [
+          {
+            "id": 71715717620,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-16T20:09:42Z",
+            "started_at": "2026-04-16T20:09:45Z",
+            "completed_at": "2026-04-16T20:09:52Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715717620",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 71715740793,
+            "name": "call-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-16T20:09:52Z",
+            "started_at": "2026-04-16T20:09:54Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715740793",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 4
+          },
+          {
+            "id": 71715756108,
+            "name": "call-jit-kernel-tests",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:58Z",
+            "started_at": "2026-04-16T20:09:58Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715756108",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715756217,
+            "name": "stage-a-test-cpu",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:58Z",
+            "started_at": "2026-04-16T20:09:58Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715756217",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715756253,
+            "name": "Build Wheel",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:58Z",
+            "started_at": "2026-04-16T20:09:58Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715756253",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715756300,
+            "name": "Build Wheel Arm",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:58Z",
+            "started_at": "2026-04-16T20:09:58Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715756300",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715756311,
+            "name": "wait-for-stage-a",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:58Z",
+            "started_at": "2026-04-16T20:09:58Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715756311",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715756580,
+            "name": "stage-a-test-1-gpu-small",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:58Z",
+            "started_at": "2026-04-16T20:09:58Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715756580",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715756602,
+            "name": "call-sgl-kernel-tests",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:58Z",
+            "started_at": "2026-04-16T20:09:58Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715756602",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715756611,
+            "name": "stage-b-test-1-gpu-small",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:58Z",
+            "started_at": "2026-04-16T20:09:58Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715756611",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715756614,
+            "name": "stage-b-test-4-gpu-b200",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:58Z",
+            "started_at": "2026-04-16T20:09:58Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715756614",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715756699,
+            "name": "call-multimodal-gen-tests",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:58Z",
+            "started_at": "2026-04-16T20:09:58Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715756699",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715756747,
+            "name": "wait-for-stage-b",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:59Z",
+            "started_at": "2026-04-16T20:09:59Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715756747",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715756752,
+            "name": "stage-b-test-2-gpu-large",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:59Z",
+            "started_at": "2026-04-16T20:09:59Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715756752",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715756890,
+            "name": "stage-b-test-1-gpu-large",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:59Z",
+            "started_at": "2026-04-16T20:09:59Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715756890",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715757063,
+            "name": "pr-test-finish",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-16T20:09:59Z",
+            "started_at": "2026-04-16T20:10:01Z",
+            "completed_at": "2026-04-16T20:10:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715757063",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 3
+          },
+          {
+            "id": 71715757138,
+            "name": "stage-c-test-8-gpu-h20",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:59Z",
+            "started_at": "2026-04-16T20:09:59Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715757138",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715757159,
+            "name": "stage-c-test-8-gpu-h200",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:59Z",
+            "started_at": "2026-04-16T20:09:59Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715757159",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715757269,
+            "name": "stage-c-test-4-gpu-h100",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:59Z",
+            "started_at": "2026-04-16T20:09:59Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715757269",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715757316,
+            "name": "stage-c-test-4-gpu-b200",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:59Z",
+            "started_at": "2026-04-16T20:09:59Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715757316",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715757326,
+            "name": "stage-c-test-deepep-4-gpu-h100",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:59Z",
+            "started_at": "2026-04-16T20:09:59Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715757326",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715757350,
+            "name": "stage-c-test-deepep-8-gpu-h200",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:09:59Z",
+            "started_at": "2026-04-16T20:09:59Z",
+            "completed_at": "2026-04-16T20:09:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540571/job/71715757350",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 24531540630,
+        "name": "PR Test (NPU)",
+        "head_branch": "ray/unique-scheduler-actor-name",
+        "head_sha": "aca3255492b6cf809bd142ded82367b77e54426b",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-16T20:09:42Z",
+        "updated_at": "2026-04-16T20:10:09Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540630",
+        "durationInSeconds": 27,
+        "pull_requests": [
+          {
+            "number": 22917
+          }
+        ],
+        "jobs": [
+          {
+            "id": 71715717778,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-16T20:09:42Z",
+            "started_at": "2026-04-16T20:09:45Z",
+            "completed_at": "2026-04-16T20:09:52Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540630/job/71715717778",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 71715742637,
+            "name": "pr-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-16T20:09:53Z",
+            "started_at": "2026-04-16T20:09:55Z",
+            "completed_at": "2026-04-16T20:10:01Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540630/job/71715742637",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 6
+          },
+          {
+            "id": 71715763433,
+            "name": "pr-test-npu-finish",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-16T20:10:01Z",
+            "started_at": "2026-04-16T20:10:04Z",
+            "completed_at": "2026-04-16T20:10:08Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540630/job/71715763433",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          },
+          {
+            "id": 71715763435,
+            "name": "multimodal-gen-test-1-npu-a3",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:01Z",
+            "started_at": "2026-04-16T20:10:01Z",
+            "completed_at": "2026-04-16T20:10:01Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540630/job/71715763435",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715763439,
+            "name": "multimodal-gen-test-2-npu-a3",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:01Z",
+            "started_at": "2026-04-16T20:10:01Z",
+            "completed_at": "2026-04-16T20:10:01Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540630/job/71715763439",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715763557,
+            "name": "stage-b-test-4-npu-a3",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:01Z",
+            "started_at": "2026-04-16T20:10:01Z",
+            "completed_at": "2026-04-16T20:10:01Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540630/job/71715763557",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715763730,
+            "name": "stage-b-test-16-npu-a3",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:01Z",
+            "started_at": "2026-04-16T20:10:01Z",
+            "completed_at": "2026-04-16T20:10:01Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540630/job/71715763730",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715763764,
+            "name": "stage-b-test-2-npu-a2",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:01Z",
+            "started_at": "2026-04-16T20:10:01Z",
+            "completed_at": "2026-04-16T20:10:01Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540630/job/71715763764",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715763784,
+            "name": "multimodal-gen-test-8-npu-a3",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:01Z",
+            "started_at": "2026-04-16T20:10:01Z",
+            "completed_at": "2026-04-16T20:10:01Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540630/job/71715763784",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 71715763801,
+            "name": "stage-b-test-1-npu-a2",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-16T20:10:01Z",
+            "started_at": "2026-04-16T20:10:01Z",
+            "completed_at": "2026-04-16T20:10:01Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540630/job/71715763801",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 24531540501,
+        "name": "Lint",
+        "head_branch": "ray/unique-scheduler-actor-name",
+        "head_sha": "aca3255492b6cf809bd142ded82367b77e54426b",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-16T20:09:42Z",
+        "updated_at": "2026-04-16T20:13:00Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540501",
+        "durationInSeconds": 198,
+        "pull_requests": [
+          {
+            "number": 22917
+          }
+        ],
+        "jobs": [
+          {
+            "id": 71715717179,
+            "name": "lint",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-16T20:09:42Z",
+            "started_at": "2026-04-16T20:09:45Z",
+            "completed_at": "2026-04-16T20:13:00Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540501/job/71715717179",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 195
+          }
+        ]
+      },
+      {
+        "id": 24531540187,
+        "name": "Auto Label PRs",
+        "head_branch": "ray/unique-scheduler-actor-name",
+        "head_sha": "aca3255492b6cf809bd142ded82367b77e54426b",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-04-16T20:09:41Z",
+        "updated_at": "2026-04-16T20:09:51Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540187",
+        "durationInSeconds": 10,
+        "pull_requests": [
+          {
+            "number": 22917
+          }
+        ],
+        "jobs": [
+          {
+            "id": 71715715967,
+            "name": "label",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-16T20:09:42Z",
+            "started_at": "2026-04-16T20:09:45Z",
+            "completed_at": "2026-04-16T20:09:50Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/24531540187/job/71715715967",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 5
+          }
+        ]
+      }
+    ]
+  }
+}
