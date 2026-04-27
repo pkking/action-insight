@@ -1,0 +1,1634 @@
+{
+  "repo": "verl-project/verl",
+  "generated_at": "2026-04-27T22:10:53.980Z",
+  "pr": {
+    "number": 6091,
+    "title": "[rollout,vllm] feat: split large weight into chunks in NCCL/NIXL checkpoint engine",
+    "branch": "wuxibin/chunk_weight_refit",
+    "author": "wuxibin89",
+    "state": "closed",
+    "html_url": "https://github.com/verl-project/verl/pull/6091",
+    "created_at": "2026-04-21T08:03:16Z",
+    "ci_started_at": "2026-04-21T13:23:46Z",
+    "ci_completed_at": "2026-04-21T15:22:25Z",
+    "merged_at": "2026-04-27T11:49:54Z",
+    "partialCiHistory": false,
+    "timeToCiStartInSeconds": 19230,
+    "ciDurationInSeconds": 7119,
+    "timeToMergeInSeconds": 531998,
+    "mergeLeadTimeInSeconds": 505649,
+    "workflowCount": 30,
+    "successfulWorkflowCount": 24,
+    "conclusion": "failure",
+    "workflows": [
+      {
+        "id": 24726238643,
+        "name": ".github/workflows/check-pr-title.yml",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:52:09Z",
+        "updated_at": "2026-04-21T13:52:19Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24726238643",
+        "durationInSeconds": 10,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72327941460,
+            "name": "check-title",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:52:09Z",
+            "started_at": "2026-04-21T13:52:12Z",
+            "completed_at": "2026-04-21T13:52:18Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24726238643/job/72327941460",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 24725539864,
+        "name": ".github/workflows/check-pr-title.yml",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:38:03Z",
+        "updated_at": "2026-04-21T13:38:13Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24725539864",
+        "durationInSeconds": 10,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72325434906,
+            "name": "check-title",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:38:04Z",
+            "started_at": "2026-04-21T13:38:07Z",
+            "completed_at": "2026-04-21T13:38:12Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24725539864/job/72325434906",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 24724842213,
+        "name": "e2e_fully_async_policy_ascend",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:47Z",
+        "updated_at": "2026-04-21T13:28:57Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842213",
+        "durationInSeconds": 310,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72323032551,
+            "name": "e2e_fully_async_policy_megatron_ascend",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-04-21T13:24:16Z",
+            "started_at": "2026-04-21T13:24:16Z",
+            "completed_at": "2026-04-21T13:28:19Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842213/job/72323032551",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 243
+          },
+          {
+            "id": 72323032591,
+            "name": "e2e_fully_async_policy_fsdp2_ascend",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-04-21T13:24:17Z",
+            "started_at": "2026-04-21T13:24:30Z",
+            "completed_at": "2026-04-21T13:28:56Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842213/job/72323032591",
+            "queueDurationInSeconds": 13,
+            "durationInSeconds": 266
+          }
+        ]
+      },
+      {
+        "id": 24724842107,
+        "name": "e2e_one_step_off_policy_ascend",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:47Z",
+        "updated_at": "2026-04-21T13:33:46Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842107",
+        "durationInSeconds": 599,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322952436,
+            "name": "e2e_one_step_off_policy_megatron_ascend",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-21T13:23:48Z",
+            "started_at": "2026-04-21T13:24:28Z",
+            "completed_at": "2026-04-21T13:33:28Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842107/job/72322952436",
+            "queueDurationInSeconds": 40,
+            "durationInSeconds": 540
+          },
+          {
+            "id": 72322952459,
+            "name": "e2e_one_step_off_policy_fsdp2_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:48Z",
+            "started_at": "2026-04-21T13:24:28Z",
+            "completed_at": "2026-04-21T13:33:46Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842107/job/72322952459",
+            "queueDurationInSeconds": 40,
+            "durationInSeconds": 558
+          }
+        ]
+      },
+      {
+        "id": 24724842149,
+        "name": "GPU unit tests",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:47Z",
+        "updated_at": "2026-04-21T13:46:14Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842149",
+        "durationInSeconds": 1347,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950436,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:23:58Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842149/job/72322950436",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 72322981249,
+            "name": "gpu_unit_tests",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:58Z",
+            "started_at": "2026-04-21T13:27:56Z",
+            "completed_at": "2026-04-21T13:46:05Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842149/job/72322981249",
+            "queueDurationInSeconds": 238,
+            "durationInSeconds": 1089
+          },
+          {
+            "id": 72326863067,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:46:05Z",
+            "started_at": "2026-04-21T13:46:08Z",
+            "completed_at": "2026-04-21T13:46:13Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842149/job/72326863067",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 24724842122,
+        "name": "model",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:47Z",
+        "updated_at": "2026-04-21T14:43:57Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842122",
+        "durationInSeconds": 4810,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950234,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:23:58Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842122/job/72322950234",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 72322981021,
+            "name": "model_rmpad_fsdp2_unstable",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:58Z",
+            "started_at": "2026-04-21T14:32:42Z",
+            "completed_at": "2026-04-21T14:33:23Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842122/job/72322981021",
+            "queueDurationInSeconds": 4124,
+            "durationInSeconds": 41
+          },
+          {
+            "id": 72322981049,
+            "name": "model_rmpad",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:58Z",
+            "started_at": "2026-04-21T14:22:08Z",
+            "completed_at": "2026-04-21T14:24:11Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842122/job/72322981049",
+            "queueDurationInSeconds": 3490,
+            "durationInSeconds": 123
+          },
+          {
+            "id": 72322981059,
+            "name": "model_engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:58Z",
+            "started_at": "2026-04-21T14:33:14Z",
+            "completed_at": "2026-04-21T14:43:44Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842122/job/72322981059",
+            "queueDurationInSeconds": 4156,
+            "durationInSeconds": 630
+          },
+          {
+            "id": 72337340362,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T14:43:45Z",
+            "started_at": "2026-04-21T14:43:48Z",
+            "completed_at": "2026-04-21T14:43:56Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842122/job/72337340362",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 8
+          }
+        ]
+      },
+      {
+        "id": 24724842132,
+        "name": "doc_test",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:47Z",
+        "updated_at": "2026-04-21T13:24:19Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842132",
+        "durationInSeconds": 32,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950726,
+            "name": "doc_test (3.10)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:51Z",
+            "completed_at": "2026-04-21T13:24:18Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842132/job/72322950726",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 27
+          }
+        ]
+      },
+      {
+        "id": 24724842118,
+        "name": ".github/workflows/check-pr-title.yml",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:47Z",
+        "updated_at": "2026-04-21T13:23:55Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842118",
+        "durationInSeconds": 8,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950135,
+            "name": "check-title",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:23:54Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842118/job/72322950135",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 24724842164,
+        "name": "sanity",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:47Z",
+        "updated_at": "2026-04-21T13:25:35Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842164",
+        "durationInSeconds": 108,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322951685,
+            "name": "sanity (3.10)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:48Z",
+            "started_at": "2026-04-21T13:23:58Z",
+            "completed_at": "2026-04-21T13:25:34Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842164/job/72322951685",
+            "queueDurationInSeconds": 10,
+            "durationInSeconds": 96
+          }
+        ]
+      },
+      {
+        "id": 24724842112,
+        "name": "e2e_ppo_trainer_megatron_trtllm",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:47Z",
+        "updated_at": "2026-04-21T13:55:54Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842112",
+        "durationInSeconds": 1927,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950388,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:23:58Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842112/job/72322950388",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 72322980832,
+            "name": "trtllm_unit_tests",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:58Z",
+            "started_at": "2026-04-21T13:35:02Z",
+            "completed_at": "2026-04-21T13:46:20Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842112/job/72322980832",
+            "queueDurationInSeconds": 664,
+            "durationInSeconds": 678
+          },
+          {
+            "id": 72322980847,
+            "name": "e2e_grpo_trainer_megatron-vlm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:58Z",
+            "started_at": "2026-04-21T13:29:56Z",
+            "completed_at": "2026-04-21T13:34:56Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842112/job/72322980847",
+            "queueDurationInSeconds": 358,
+            "durationInSeconds": 300
+          },
+          {
+            "id": 72322980863,
+            "name": "e2e_grpo_trainer_megatron-qwen2",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:58Z",
+            "started_at": "2026-04-21T13:46:25Z",
+            "completed_at": "2026-04-21T13:49:50Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842112/job/72322980863",
+            "queueDurationInSeconds": 1347,
+            "durationInSeconds": 205
+          },
+          {
+            "id": 72322980921,
+            "name": "e2e_grpo_trainer_fsdp-qwen2",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:58Z",
+            "started_at": "2026-04-21T13:49:55Z",
+            "completed_at": "2026-04-21T13:55:45Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842112/job/72322980921",
+            "queueDurationInSeconds": 1557,
+            "durationInSeconds": 350
+          },
+          {
+            "id": 72328575139,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:55:45Z",
+            "started_at": "2026-04-21T13:55:48Z",
+            "completed_at": "2026-04-21T13:55:54Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842112/job/72328575139",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 24724842119,
+        "name": "e2e_ppo_trainer_megatron_sglang",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:47Z",
+        "updated_at": "2026-04-21T14:34:36Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842119",
+        "durationInSeconds": 4249,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950272,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:23:58Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842119/job/72322950272",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 72322982703,
+            "name": "e2e_ppo_trainer_megatron-qwen3",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:59Z",
+            "started_at": "2026-04-21T14:08:46Z",
+            "completed_at": "2026-04-21T14:19:39Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842119/job/72322982703",
+            "queueDurationInSeconds": 2687,
+            "durationInSeconds": 653
+          },
+          {
+            "id": 72322982714,
+            "name": "e2e_ppo_trainer_megatron-deepseek",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:59Z",
+            "started_at": "2026-04-21T14:22:32Z",
+            "completed_at": "2026-04-21T14:34:27Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842119/job/72322982714",
+            "queueDurationInSeconds": 3513,
+            "durationInSeconds": 715
+          },
+          {
+            "id": 72335619565,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T14:34:27Z",
+            "started_at": "2026-04-21T14:34:31Z",
+            "completed_at": "2026-04-21T14:34:36Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842119/job/72335619565",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 24724842175,
+        "name": "e2e_ppo_trainer_megatron_vllm",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:47Z",
+        "updated_at": "2026-04-21T14:58:30Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842175",
+        "durationInSeconds": 5683,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950315,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:56Z",
+            "completed_at": "2026-04-21T13:24:05Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842175/job/72322950315",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 72323000986,
+            "name": "e2e_ppo_trainer_megatron-deepseek",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:24:05Z",
+            "started_at": "2026-04-21T14:33:28Z",
+            "completed_at": "2026-04-21T14:58:21Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842175/job/72323000986",
+            "queueDurationInSeconds": 4163,
+            "durationInSeconds": 1493
+          },
+          {
+            "id": 72323001003,
+            "name": "e2e_ppo_trainer_megatron-qwen3",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-21T13:24:05Z",
+            "started_at": "2026-04-21T14:12:06Z",
+            "completed_at": "2026-04-21T14:22:56Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842175/job/72323001003",
+            "queueDurationInSeconds": 2881,
+            "durationInSeconds": 650
+          },
+          {
+            "id": 72340063213,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T14:58:21Z",
+            "started_at": "2026-04-21T14:58:24Z",
+            "completed_at": "2026-04-21T14:58:30Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842175/job/72340063213",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 24724842129,
+        "name": "reward_model_sglang",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:47Z",
+        "updated_at": "2026-04-21T13:49:46Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842129",
+        "durationInSeconds": 1559,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950109,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:23:58Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842129/job/72322950109",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 72322980167,
+            "name": "reward_model_sglang",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:58Z",
+            "started_at": "2026-04-21T13:46:10Z",
+            "completed_at": "2026-04-21T13:49:38Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842129/job/72322980167",
+            "queueDurationInSeconds": 1332,
+            "durationInSeconds": 208
+          },
+          {
+            "id": 72327492767,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:49:39Z",
+            "started_at": "2026-04-21T13:49:42Z",
+            "completed_at": "2026-04-21T13:49:46Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842129/job/72327492767",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 24724842113,
+        "name": "sgl",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:47Z",
+        "updated_at": "2026-04-21T14:07:45Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842113",
+        "durationInSeconds": 2638,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950462,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:23:56Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842113/job/72322950462",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          },
+          {
+            "id": 72322977108,
+            "name": "sgl",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:57Z",
+            "started_at": "2026-04-21T13:55:20Z",
+            "completed_at": "2026-04-21T14:07:36Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842113/job/72322977108",
+            "queueDurationInSeconds": 1883,
+            "durationInSeconds": 736
+          },
+          {
+            "id": 72322977164,
+            "name": "sgl_checkpoint_engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:57Z",
+            "started_at": "2026-04-21T13:49:43Z",
+            "completed_at": "2026-04-21T13:55:14Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842113/job/72322977164",
+            "queueDurationInSeconds": 1546,
+            "durationInSeconds": 331
+          },
+          {
+            "id": 72330729184,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T14:07:36Z",
+            "started_at": "2026-04-21T14:07:39Z",
+            "completed_at": "2026-04-21T14:07:44Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842113/job/72330729184",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 24724842096,
+        "name": "e2e_ascend",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T13:44:27Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842096",
+        "durationInSeconds": 1241,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322952031,
+            "name": "E2E Ascend testing for RL training scenarios of LLM models using MindSpeed_LLM engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:48Z",
+            "started_at": "2026-04-21T13:24:19Z",
+            "completed_at": "2026-04-21T13:37:28Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842096/job/72322952031",
+            "queueDurationInSeconds": 31,
+            "durationInSeconds": 789
+          },
+          {
+            "id": 72322952060,
+            "name": "E2E Ascend testing for RL training scenarios of LLM models",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:48Z",
+            "started_at": "2026-04-21T13:24:21Z",
+            "completed_at": "2026-04-21T13:44:26Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842096/job/72322952060",
+            "queueDurationInSeconds": 33,
+            "durationInSeconds": 1205
+          },
+          {
+            "id": 72322952079,
+            "name": "E2E Ascend testing for RL training scenarios of VLM models",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:48Z",
+            "started_at": "2026-04-21T13:24:15Z",
+            "completed_at": "2026-04-21T13:33:26Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842096/job/72322952079",
+            "queueDurationInSeconds": 27,
+            "durationInSeconds": 551
+          }
+        ]
+      },
+      {
+        "id": 24724842074,
+        "name": "e2e_sft_llm",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T14:49:44Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842074",
+        "durationInSeconds": 5158,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950541,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:51Z",
+            "completed_at": "2026-04-21T13:24:01Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842074/job/72322950541",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 72322992579,
+            "name": "e2e_sft_llm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:24:02Z",
+            "started_at": "2026-04-21T14:40:02Z",
+            "completed_at": "2026-04-21T14:49:36Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842074/job/72322992579",
+            "queueDurationInSeconds": 4560,
+            "durationInSeconds": 574
+          },
+          {
+            "id": 72338438781,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T14:49:36Z",
+            "started_at": "2026-04-21T14:49:39Z",
+            "completed_at": "2026-04-21T14:49:43Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842074/job/72338438781",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 24724842057,
+        "name": "e2e_one_step_off_policy",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T14:18:19Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842057",
+        "durationInSeconds": 3273,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950428,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:23:58Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842057/job/72322950428",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 72322982249,
+            "name": "e2e_one_step_off_policy_fsdp2",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:59Z",
+            "started_at": "2026-04-21T13:50:53Z",
+            "completed_at": "2026-04-21T13:54:55Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842057/job/72322982249",
+            "queueDurationInSeconds": 1614,
+            "durationInSeconds": 242
+          },
+          {
+            "id": 72322982279,
+            "name": "e2e_one_step_off_policy_megatron",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:59Z",
+            "started_at": "2026-04-21T14:14:57Z",
+            "completed_at": "2026-04-21T14:18:11Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842057/job/72322982279",
+            "queueDurationInSeconds": 3058,
+            "durationInSeconds": 194
+          },
+          {
+            "id": 72332645801,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T14:18:11Z",
+            "started_at": "2026-04-21T14:18:14Z",
+            "completed_at": "2026-04-21T14:18:18Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842057/job/72332645801",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 24724842092,
+        "name": "e2e_sft_vlm",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T14:22:33Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842092",
+        "durationInSeconds": 3527,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950338,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:24:00Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842092/job/72322950338",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 72322986354,
+            "name": "e2e_sft_vlm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:24:00Z",
+            "started_at": "2026-04-21T14:11:59Z",
+            "completed_at": "2026-04-21T14:22:25Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842092/job/72322986354",
+            "queueDurationInSeconds": 2879,
+            "durationInSeconds": 626
+          },
+          {
+            "id": 72333419808,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T14:22:25Z",
+            "started_at": "2026-04-21T14:22:28Z",
+            "completed_at": "2026-04-21T14:22:32Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842092/job/72333419808",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 24724842058,
+        "name": ".github/workflows/secrets_scan.yml",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T13:24:06Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842058",
+        "durationInSeconds": 20,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950033,
+            "name": "test",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:24:05Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842058/job/72322950033",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 15
+          }
+        ]
+      },
+      {
+        "id": 24724842090,
+        "name": "e2e_ppo_trainer",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T13:24:18Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842090",
+        "durationInSeconds": 32,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950150,
+            "name": "pre_commit_for_ppo (3.12)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:24:17Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842090/job/72322950150",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 27
+          }
+        ]
+      },
+      {
+        "id": 24724842089,
+        "name": "pre-commit",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T13:24:20Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842089",
+        "durationInSeconds": 34,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950113,
+            "name": "pre-commit (3.12)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:24:19Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842089/job/72322950113",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 29
+          }
+        ]
+      },
+      {
+        "id": 24724842085,
+        "name": "Type Annotation and Docstring Coverage",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T13:25:27Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842085",
+        "durationInSeconds": 101,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950214,
+            "name": "type-coverage-check",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:25:26Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842085/job/72322950214",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 96
+          }
+        ]
+      },
+      {
+        "id": 24724842078,
+        "name": "vllm_omni",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T13:57:13Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842078",
+        "durationInSeconds": 2007,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950279,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:24:00Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842078/job/72322950279",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 72322988485,
+            "name": "vllm_omni",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:24:01Z",
+            "started_at": "2026-04-21T13:51:17Z",
+            "completed_at": "2026-04-21T13:57:03Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842078/job/72322988485",
+            "queueDurationInSeconds": 1636,
+            "durationInSeconds": 346
+          },
+          {
+            "id": 72328807813,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:57:03Z",
+            "started_at": "2026-04-21T13:57:07Z",
+            "completed_at": "2026-04-21T13:57:13Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842078/job/72328807813",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 24724842072,
+        "name": "e2e_ppo_trainer_veomni_vllm",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T14:33:06Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842072",
+        "durationInSeconds": 4160,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950422,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:24:00Z",
+            "completed_at": "2026-04-21T13:24:10Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842072/job/72322950422",
+            "queueDurationInSeconds": 13,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 72323014801,
+            "name": "e2e_ppo_trainer_veomni_vllm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:24:10Z",
+            "started_at": "2026-04-21T14:24:15Z",
+            "completed_at": "2026-04-21T14:32:57Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842072/job/72323014801",
+            "queueDurationInSeconds": 3605,
+            "durationInSeconds": 522
+          },
+          {
+            "id": 72335343697,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T14:32:57Z",
+            "started_at": "2026-04-21T14:33:00Z",
+            "completed_at": "2026-04-21T14:33:05Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842072/job/72335343697",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 24724842082,
+        "name": "cpu_unit_tests",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T14:37:51Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842082",
+        "durationInSeconds": 4445,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950455,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:24:00Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842082/job/72322950455",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 72322987896,
+            "name": "cpu_unit_tests",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:24:00Z",
+            "started_at": "2026-04-21T14:32:57Z",
+            "completed_at": "2026-04-21T14:37:41Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842082/job/72322987896",
+            "queueDurationInSeconds": 4137,
+            "durationInSeconds": 284
+          },
+          {
+            "id": 72336204625,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T14:37:41Z",
+            "started_at": "2026-04-21T14:37:44Z",
+            "completed_at": "2026-04-21T14:37:50Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842082/job/72336204625",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 24724842091,
+        "name": "e2e_fully_async_policy",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T14:37:59Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842091",
+        "durationInSeconds": 4453,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950390,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:59Z",
+            "completed_at": "2026-04-21T13:24:09Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842091/job/72322950390",
+            "queueDurationInSeconds": 12,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 72323011907,
+            "name": "e2e_fully_async_policy_fsdp2",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-21T13:24:09Z",
+            "started_at": "2026-04-21T13:52:08Z",
+            "completed_at": "2026-04-21T13:56:36Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842091/job/72323011907",
+            "queueDurationInSeconds": 1679,
+            "durationInSeconds": 268
+          },
+          {
+            "id": 72323011932,
+            "name": "e2e_fully_async_policy_megatron",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:24:09Z",
+            "started_at": "2026-04-21T14:33:02Z",
+            "completed_at": "2026-04-21T14:37:59Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842091/job/72323011932",
+            "queueDurationInSeconds": 4133,
+            "durationInSeconds": 297
+          },
+          {
+            "id": 72328731053,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:56:37Z",
+            "started_at": "2026-04-21T13:56:39Z",
+            "completed_at": "2026-04-21T13:56:44Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842091/job/72328731053",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 24724842071,
+        "name": "vllm",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T14:42:05Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842071",
+        "durationInSeconds": 4699,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950564,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:23:57Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842071/job/72322950564",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 72322978195,
+            "name": "vllm_checkpoint_engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:57Z",
+            "started_at": "2026-04-21T13:46:34Z",
+            "completed_at": "2026-04-21T13:50:48Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842071/job/72322978195",
+            "queueDurationInSeconds": 1357,
+            "durationInSeconds": 254
+          },
+          {
+            "id": 72322978209,
+            "name": "vllm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:57Z",
+            "started_at": "2026-04-21T14:28:24Z",
+            "completed_at": "2026-04-21T14:41:56Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842071/job/72322978209",
+            "queueDurationInSeconds": 3867,
+            "durationInSeconds": 812
+          },
+          {
+            "id": 72336999335,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T14:41:56Z",
+            "started_at": "2026-04-21T14:41:59Z",
+            "completed_at": "2026-04-21T14:42:05Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842071/job/72336999335",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 24724842053,
+        "name": "reward_model_vllm",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T14:07:50Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842053",
+        "durationInSeconds": 2644,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950290,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:59Z",
+            "completed_at": "2026-04-21T13:24:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842053/job/72322950290",
+            "queueDurationInSeconds": 12,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 72323009784,
+            "name": "reward_model_vllm",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-21T13:24:08Z",
+            "started_at": "2026-04-21T13:56:42Z",
+            "completed_at": "2026-04-21T14:07:40Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842053/job/72323009784",
+            "queueDurationInSeconds": 1954,
+            "durationInSeconds": 658
+          },
+          {
+            "id": 72330741892,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T14:07:40Z",
+            "started_at": "2026-04-21T14:07:42Z",
+            "completed_at": "2026-04-21T14:07:49Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842053/job/72330741892",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 7
+          }
+        ]
+      },
+      {
+        "id": 24724842101,
+        "name": "e2e_ppo_trainer_megatron_vllm_2",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T15:22:25Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842101",
+        "durationInSeconds": 7119,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950748,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:23:56Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842101/job/72322950748",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          },
+          {
+            "id": 72322975409,
+            "name": "e2e_ppo_trainer_megatron-moe-expert-parallel",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-21T13:23:56Z",
+            "started_at": "2026-04-21T15:07:23Z",
+            "completed_at": "2026-04-21T15:21:56Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842101/job/72322975409",
+            "queueDurationInSeconds": 6207,
+            "durationInSeconds": 873
+          },
+          {
+            "id": 72322975422,
+            "name": "e2e_ppo_trainer_fsdp-qwen2_5vl-3b",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:56Z",
+            "started_at": "2026-04-21T14:42:47Z",
+            "completed_at": "2026-04-21T14:56:46Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842101/job/72322975422",
+            "queueDurationInSeconds": 4731,
+            "durationInSeconds": 839
+          },
+          {
+            "id": 72322975478,
+            "name": "e2e_ppo_trainer_fsdp_vllm",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-21T13:23:56Z",
+            "started_at": "2026-04-21T14:12:55Z",
+            "completed_at": "2026-04-21T14:24:57Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842101/job/72322975478",
+            "queueDurationInSeconds": 2939,
+            "durationInSeconds": 722
+          },
+          {
+            "id": 72344361757,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T15:21:57Z",
+            "started_at": "2026-04-21T15:22:00Z",
+            "completed_at": "2026-04-21T15:22:24Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842101/job/72344361757",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 24
+          }
+        ]
+      },
+      {
+        "id": 24724842059,
+        "name": "e2e_ppo_trainer_megatron_sglang_2",
+        "head_branch": "wuxibin/chunk_weight_refit",
+        "head_sha": "0dafbb18a07666ee2912aa8f208078d0baf45b6f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-21T13:23:46Z",
+        "updated_at": "2026-04-21T15:12:56Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/24724842059",
+        "durationInSeconds": 6550,
+        "pull_requests": [
+          {
+            "number": 6091
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72322950512,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:47Z",
+            "started_at": "2026-04-21T13:23:50Z",
+            "completed_at": "2026-04-21T13:23:58Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842059/job/72322950512",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 72322982294,
+            "name": "e2e_ppo_trainer_fsdp-qwen2_5vl-3b",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:59Z",
+            "started_at": "2026-04-21T15:01:13Z",
+            "completed_at": "2026-04-21T15:12:46Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842059/job/72322982294",
+            "queueDurationInSeconds": 5834,
+            "durationInSeconds": 693
+          },
+          {
+            "id": 72322982328,
+            "name": "e2e_ppo_trainer_fsdp_sglang",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T13:23:59Z",
+            "started_at": "2026-04-21T13:57:01Z",
+            "completed_at": "2026-04-21T14:00:38Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842059/job/72322982328",
+            "queueDurationInSeconds": 1982,
+            "durationInSeconds": 217
+          },
+          {
+            "id": 72342725351,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-21T15:12:46Z",
+            "started_at": "2026-04-21T15:12:49Z",
+            "completed_at": "2026-04-21T15:12:55Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/24724842059/job/72342725351",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          }
+        ]
+      }
+    ]
+  }
+}
