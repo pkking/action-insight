@@ -51,14 +51,10 @@ function selectFiles(files: string[], options: FetchRunsOptions): string[] {
   return files.filter((file) => file.replace(/\.json$/, '') >= cutoffDate);
 }
 
-export async function fetchRuns(owner: string, repo: string, options: FetchRunsOptions = {}): Promise<Run[]> {
-  const repoIndex = await fetchIndex(owner, repo);
-
-  const dates = selectFiles(repoIndex.files, options);
-
+async function fetchRunsFromFiles(owner: string, repo: string, files: string[]): Promise<Run[]> {
   // Fetch all days in parallel
   const dayData = await Promise.allSettled(
-    dates.map((date: string) => fetchDay(owner, repo, date))
+    files.map((date: string) => fetchDay(owner, repo, date))
   );
 
   // Aggregate runs, skipping failed days
@@ -71,4 +67,40 @@ export async function fetchRuns(owner: string, repo: string, options: FetchRunsO
   }
 
   return runs;
+}
+
+export async function fetchRuns(owner: string, repo: string, options: FetchRunsOptions = {}): Promise<Run[]> {
+  const repoIndex = await fetchIndex(owner, repo);
+
+  return fetchRunsFromIndex(owner, repo, repoIndex, options);
+}
+
+export async function fetchRunsFromIndex(
+  owner: string,
+  repo: string,
+  repoIndex: Index,
+  options: FetchRunsOptions = {}
+): Promise<Run[]> {
+  const dates = selectFiles(repoIndex.files, options);
+
+  return fetchRunsFromFiles(owner, repo, dates);
+}
+
+export async function fetchLatestRuns(owner: string, repo: string, maxFiles = 7): Promise<Run[]> {
+  const repoIndex = await fetchIndex(owner, repo);
+
+  return fetchLatestRunsFromIndex(owner, repo, repoIndex, maxFiles);
+}
+
+export async function fetchLatestRunsFromIndex(
+  owner: string,
+  repo: string,
+  repoIndex: Index,
+  maxFiles = 7
+): Promise<Run[]> {
+  const latestFiles = [...repoIndex.files]
+    .sort((left, right) => right.localeCompare(left))
+    .slice(0, maxFiles);
+
+  return fetchRunsFromFiles(owner, repo, latestFiles);
 }
