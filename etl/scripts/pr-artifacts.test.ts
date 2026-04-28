@@ -186,6 +186,97 @@ describe('rebuildPullRequestArtifacts', () => {
     );
   });
 
+  it('falls back to issue search when commit-to-PR resolution returns no matches', async () => {
+    const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-insight-pr-artifacts-'));
+    tempDirs.push(repoDir);
+
+    const request = vi.fn().mockImplementation((route: string) => {
+      if (route === 'GET /rate_limit') {
+        return Promise.resolve({
+          data: {
+            resources: {
+              core: {
+                remaining: 100,
+              },
+            },
+          },
+        });
+      }
+
+      if (route === 'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls') {
+        return Promise.resolve({ data: [] });
+      }
+
+      if (route === 'GET /search/issues') {
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                number: 42,
+                pull_request: {},
+              },
+            ],
+          },
+        });
+      }
+
+      if (route === 'GET /repos/{owner}/{repo}/pulls/{pull_number}') {
+        return Promise.resolve({
+          data: {
+            number: 42,
+            title: 'Recovered from search',
+            state: 'closed',
+            created_at: '2026-04-18T01:00:00Z',
+            merged_at: '2026-04-18T02:15:00Z',
+            html_url: 'https://github.com/acme/widgets/pull/42',
+            user: { login: 'octocat' },
+          },
+        });
+      }
+
+      throw new Error(`Unexpected route: ${route}`);
+    });
+
+    await rebuildPullRequestArtifacts({
+      octokit: { request },
+      owner: 'acme',
+      repo: 'widgets',
+      repoKey: 'acme/widgets',
+      repoDir,
+      files: ['2026-04-18.json'],
+      storage: {
+        readDayData: () => ({
+          runs: [
+            {
+              id: 101,
+              name: 'lint',
+              head_branch: 'main',
+              head_sha: 'abc123',
+              status: 'completed',
+              conclusion: 'success',
+              event: 'pull_request',
+              created_at: '2026-04-18T01:05:00Z',
+              updated_at: '2026-04-18T01:15:00Z',
+              html_url: 'https://github.com/acme/widgets/actions/runs/101',
+              durationInSeconds: 600,
+              pull_requests: [],
+              jobs: [],
+            },
+          ],
+        }),
+      },
+    });
+
+    const index = JSON.parse(fs.readFileSync(path.join(repoDir, 'prs', 'index.json'), 'utf8'));
+
+    expect(index.prs).toHaveLength(1);
+    expect(index.prs[0]).toMatchObject({ number: 42, title: 'Recovered from search' });
+    expect(request).toHaveBeenCalledWith(
+      'GET /search/issues',
+      expect.objectContaining({ q: 'abc123 repo:acme/widgets type:pr', per_page: 1 })
+    );
+  });
+
   it('can rebuild artifacts locally without GitHub API access when runs already include PR refs', async () => {
     const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-insight-pr-artifacts-'));
     tempDirs.push(repoDir);
@@ -317,6 +408,160 @@ describe('rebuildPullRequestArtifacts', () => {
     expect(request).not.toHaveBeenCalledWith(
       'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
       expect.anything()
+    );
+  });
+
+  it('uses remaining rate-limit budget for partial SHA resolution after keeping a small reserve', async () => {
+    const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-insight-pr-artifacts-'));
+    tempDirs.push(repoDir);
+
+    const request = vi.fn().mockImplementation((route: string, params?: Record<string, unknown>) => {
+      if (route === 'GET /rate_limit') {
+        return Promise.resolve({
+          data: {
+            resources: {
+              core: {
+                remaining: 13,
+              },
+            },
+          },
+        });
+      }
+
+      if (route === 'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls') {
+        return Promise.resolve({
+          data: [
+            {
+              number: params?.commit_sha === 'sha-one' ? 42 : 43,
+            },
+          ],
+        });
+      }
+
+      if (route === 'GET /repos/{owner}/{repo}/pulls/{pull_number}') {
+        return Promise.resolve({
+          data: {
+            number: params?.pull_number,
+            title: `PR #${params?.pull_number}`,
+            state: 'closed',
+            created_at: '2026-04-18T01:00:00Z',
+            merged_at: '2026-04-18T02:15:00Z',
+            html_url: `https://github.com/acme/widgets/pull/${params?.pull_number}`,
+            user: { login: 'octocat' },
+          },
+        });
+      }
+
+      throw new Error(`Unexpected route: ${route}`);
+    });
+
+    await rebuildPullRequestArtifacts({
+      octokit: { request },
+      owner: 'acme',
+      repo: 'widgets',
+      repoKey: 'acme/widgets',
+      repoDir,
+      files: ['2026-04-18.json'],
+      storage: {
+        readDayData: () => ({
+          runs: [
+            {
+              id: 101,
+              name: 'lint',
+              head_branch: 'feature/one',
+              head_sha: 'sha-one',
+              status: 'completed',
+              conclusion: 'success',
+              event: 'pull_request',
+              created_at: '2026-04-18T01:05:00Z',
+              updated_at: '2026-04-18T01:15:00Z',
+              html_url: 'https://github.com/acme/widgets/actions/runs/101',
+              durationInSeconds: 600,
+              pull_requests: [],
+              jobs: [],
+            },
+            {
+              id: 102,
+              name: 'test',
+              head_branch: 'feature/two',
+              head_sha: 'sha-two',
+              status: 'completed',
+              conclusion: 'success',
+              event: 'pull_request',
+              created_at: '2026-04-18T01:10:00Z',
+              updated_at: '2026-04-18T01:20:00Z',
+              html_url: 'https://github.com/acme/widgets/actions/runs/102',
+              durationInSeconds: 600,
+              pull_requests: [],
+              jobs: [],
+            },
+            {
+              id: 103,
+              name: 'docs',
+              head_branch: 'feature/three',
+              head_sha: 'sha-three',
+              status: 'completed',
+              conclusion: 'success',
+              event: 'pull_request',
+              created_at: '2026-04-18T01:15:00Z',
+              updated_at: '2026-04-18T01:25:00Z',
+              html_url: 'https://github.com/acme/widgets/actions/runs/103',
+              durationInSeconds: 600,
+              pull_requests: [],
+              jobs: [],
+            },
+            {
+              id: 104,
+              name: 'build',
+              head_branch: 'feature/four',
+              head_sha: 'sha-four',
+              status: 'completed',
+              conclusion: 'success',
+              event: 'pull_request',
+              created_at: '2026-04-18T01:20:00Z',
+              updated_at: '2026-04-18T01:30:00Z',
+              html_url: 'https://github.com/acme/widgets/actions/runs/104',
+              durationInSeconds: 600,
+              pull_requests: [],
+              jobs: [],
+            },
+            {
+              id: 105,
+              name: 'e2e',
+              head_branch: 'feature/five',
+              head_sha: 'sha-five',
+              status: 'completed',
+              conclusion: 'success',
+              event: 'pull_request',
+              created_at: '2026-04-18T01:25:00Z',
+              updated_at: '2026-04-18T01:35:00Z',
+              html_url: 'https://github.com/acme/widgets/actions/runs/105',
+              durationInSeconds: 600,
+              pull_requests: [],
+              jobs: [],
+            },
+          ],
+        }),
+      },
+    });
+
+    const index = JSON.parse(fs.readFileSync(path.join(repoDir, 'prs', 'index.json'), 'utf8'));
+
+    expect(index.prs).toHaveLength(1);
+    expect(index.prs[0]).toMatchObject({ number: 42 });
+    expect(index).toMatchObject({
+      partialPrResolution: true,
+      resolvedPrShaCount: 1,
+      unresolvedPrShaCount: 4,
+      skippedPrShaCount: 4,
+    });
+    expect(request).toHaveBeenCalledWith(
+      'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
+      expect.objectContaining({ commit_sha: 'sha-one' })
+    );
+    expect(request).not.toHaveBeenCalledWith(
+      'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
+      expect.objectContaining({ commit_sha: 'sha-two' })
     );
   });
 });

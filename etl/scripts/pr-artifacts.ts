@@ -43,7 +43,8 @@ interface ShaMapFile {
 }
 
 const DEFAULT_SHA_RESOLUTION_LIMIT = 250;
-const RATE_LIMIT_RESERVE = 100;
+const DEFAULT_RATE_LIMIT_RESERVE = 10;
+const WORST_CASE_CALLS_PER_SHA_RESOLUTION = 3;
 
 function getPrDir(repoDir: string): string {
   return path.join(repoDir, 'prs');
@@ -89,6 +90,11 @@ function getShaResolutionLimit(): number {
   return Number.isFinite(value) && value >= 0 ? value : DEFAULT_SHA_RESOLUTION_LIMIT;
 }
 
+function getRateLimitReserve(): number {
+  const value = Number.parseInt(process.env.PR_ARTIFACT_RATE_LIMIT_RESERVE ?? '', 10);
+  return Number.isFinite(value) && value >= 0 ? value : DEFAULT_RATE_LIMIT_RESERVE;
+}
+
 function readRetainedRuns(repoKey: string, files: string[], storage: StorageAdapter): Run[] {
   const runs: Run[] = [];
 
@@ -130,6 +136,19 @@ async function resolvePullRequestsFromHeadSha(
       const number = data.find((pullRequest) => typeof pullRequest.number === 'number')?.number;
       if (typeof number === 'number') {
         resolved.set(sha, number);
+        continue;
+      }
+
+      const searchResponse = await octokit.request('GET /search/issues', {
+        q: `${sha} repo:${owner}/${repo} type:pr`,
+        per_page: 1,
+      });
+      const searchData = searchResponse.data as { items?: Array<{ number?: number; pull_request?: unknown }> };
+      const searchNumber = searchData.items?.find(
+        (item) => item.pull_request && typeof item.number === 'number'
+      )?.number;
+      if (typeof searchNumber === 'number') {
+        resolved.set(sha, searchNumber);
       }
     } catch (error) {
       if (isGitHubRateLimitError(error)) {
@@ -225,24 +244,27 @@ export async function rebuildPullRequestArtifacts({
         .filter((number): number is number => typeof number === 'number')
     )
   );
-  const expectedCalls = unresolvedShas.length + allPrNumbers.length;
+  const worstCaseExpectedCalls = (unresolvedShas.length * WORST_CASE_CALLS_PER_SHA_RESOLUTION) + allPrNumbers.length;
   let shaResolutionBudget = Math.min(unresolvedShas.length, getShaResolutionLimit());
   let skippedPrShaCount = Math.max(0, unresolvedShas.length - shaResolutionBudget);
 
-  if (octokit && expectedCalls > 0) {
-    const budget = await checkRateLimitBudget(octokit, expectedCalls);
+  if (octokit && worstCaseExpectedCalls > 0) {
+    const budget = await checkRateLimitBudget(octokit, worstCaseExpectedCalls);
     if (!budget.ok) {
-      const availableForShaResolution = Math.max(0, budget.remaining - allPrNumbers.length - RATE_LIMIT_RESERVE);
+      const rateLimitReserve = getRateLimitReserve();
+      const availableForShaResolution = Math.floor(
+        Math.max(0, budget.remaining - allPrNumbers.length - rateLimitReserve) / WORST_CASE_CALLS_PER_SHA_RESOLUTION
+      );
       shaResolutionBudget = Math.min(shaResolutionBudget, availableForShaResolution);
       skippedPrShaCount = unresolvedShas.length - shaResolutionBudget;
       warn(
-        `Rate limit budget check: ${budget.remaining} remaining, need ${expectedCalls}. Building partial PR artifacts with ${shaResolutionBudget} SHA lookup(s).`
+        `Rate limit budget check: ${budget.remaining} remaining, need up to ${worstCaseExpectedCalls}. Building partial PR artifacts with ${shaResolutionBudget} SHA lookup(s).`
       );
       if (budget.resetAt) {
         warn(`Rate limit resets at ${budget.resetAt.toISOString()}.`);
       }
     } else {
-      log(`Rate limit budget check: ${budget.remaining} remaining, need ${expectedCalls}. Proceeding.`);
+      log(`Rate limit budget check: ${budget.remaining} remaining, need up to ${worstCaseExpectedCalls}. Proceeding.`);
     }
   }
 

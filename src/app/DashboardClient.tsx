@@ -133,6 +133,21 @@ function searchParamsToUrlSearchParams(input?: Record<string, string | string[] 
   return params;
 }
 
+function getLatestPrDate(repoIndexesByKey: Record<string, PullRequestIndexFile>): Date | undefined {
+  let latestTimestamp = 0;
+
+  for (const index of Object.values(repoIndexesByKey)) {
+    for (const pr of index.prs) {
+      const timestamp = new Date(pr.created_at).getTime();
+      if (!Number.isNaN(timestamp) && timestamp > latestTimestamp) {
+        latestTimestamp = timestamp;
+      }
+    }
+  }
+
+  return latestTimestamp > 0 ? new Date(latestTimestamp) : undefined;
+}
+
 function sortWorkflows(workflows: Run[], field: WorkflowSortField, order: WorkflowSortOrder): Run[] {
   const result = [...workflows];
   if (order === 'none') {
@@ -354,6 +369,7 @@ function DashboardContent({
   const [error, setError] = useState(repoOptions.length === 0 ? 'No repository data found under data/.' : '');
   const repoIndexesByKey = initialRepoIndexesByKey;
   const failedRepoKeys = initialFailedRepoKeys;
+  const latestPrDate = useMemo(() => getLatestPrDate(repoIndexesByKey), [repoIndexesByKey]);
   const [detailsByNumber, setDetailsByNumber] = useState<Record<number, PullRequestDetailFile['pr']>>({});
   const [loadingDetailNumber, setLoadingDetailNumber] = useState<number | null>(null);
   const [expandedPrNumber, setExpandedPrNumber] = useState<number | null>(null);
@@ -381,8 +397,9 @@ function DashboardContent({
         days,
         startDate: useCustomRange ? startDate : undefined,
         endDate: useCustomRange ? endDate : undefined,
+        now: latestPrDate,
       }),
-    [days, endDate, startDate, useCustomRange]
+    [days, endDate, latestPrDate, startDate, useCustomRange]
   );
 
   useEffect(() => {
@@ -839,7 +856,11 @@ function DashboardContent({
 
               {dailyTrend.length === 0 ? (
                 <div className="flex h-72 items-center justify-center rounded-lg border border-dashed border-neutral-200 text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
-                  {showWorkflowFallback ? 'PR metrics are unavailable for this repository. Raw workflow runs are shown below.' : emptyMetricsMessage}
+                  {showWorkflowFallback
+                    ? selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution
+                      ? 'PR metrics are unavailable for this repository. Raw workflow runs are shown below.'
+                      : 'No PR metrics were found in the selected range. Raw workflow runs are shown below.'
+                    : emptyMetricsMessage}
                 </div>
               ) : (
                 <div className="h-72 select-none">
@@ -888,7 +909,9 @@ function DashboardContent({
                 showWorkflowFallback ? (
                   <div className="overflow-x-auto">
                     <div className="border-b border-blue-100 bg-blue-50 px-6 py-4 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
-                      PR metrics are unavailable for {selectedRepo.key}. Showing raw workflow runs for the selected date range instead.
+                      {selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution
+                        ? `PR metrics are unavailable for ${selectedRepo.key}. Showing raw workflow runs for the selected date range instead.`
+                        : `No PR metrics were found for ${selectedRepo.key} in the selected date range. Showing raw workflow runs instead.`}
                     </div>
                     <table className="w-full text-left text-sm">
                       <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
