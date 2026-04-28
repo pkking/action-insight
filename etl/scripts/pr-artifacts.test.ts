@@ -277,6 +277,102 @@ describe('rebuildPullRequestArtifacts', () => {
     );
   });
 
+  it('caps issue search fallback attempts to avoid exhausting Search API quota', async () => {
+    const previousLimit = process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT;
+    process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT = '1';
+    const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-insight-pr-artifacts-'));
+    tempDirs.push(repoDir);
+
+    const warn = vi.fn();
+    const request = vi.fn().mockImplementation((route: string) => {
+      if (route === 'GET /rate_limit') {
+        return Promise.resolve({
+          data: {
+            resources: {
+              core: {
+                remaining: 100,
+              },
+            },
+          },
+        });
+      }
+
+      if (route === 'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls') {
+        return Promise.resolve({ data: [] });
+      }
+
+      if (route === 'GET /search/issues') {
+        return Promise.resolve({
+          data: {
+            items: [],
+          },
+        });
+      }
+
+      throw new Error(`Unexpected route: ${route}`);
+    });
+
+    try {
+      await rebuildPullRequestArtifacts({
+        octokit: { request },
+        owner: 'acme',
+        repo: 'widgets',
+        repoKey: 'acme/widgets',
+        repoDir,
+        files: ['2026-04-18.json'],
+        storage: {
+          readDayData: () => ({
+            runs: [
+              {
+                id: 101,
+                name: 'lint',
+                head_branch: 'main',
+                head_sha: 'sha-one',
+                status: 'completed',
+                conclusion: 'success',
+                event: 'pull_request',
+                created_at: '2026-04-18T01:05:00Z',
+                updated_at: '2026-04-18T01:15:00Z',
+                html_url: 'https://github.com/acme/widgets/actions/runs/101',
+                durationInSeconds: 600,
+                pull_requests: [],
+                jobs: [],
+              },
+              {
+                id: 102,
+                name: 'test',
+                head_branch: 'main',
+                head_sha: 'sha-two',
+                status: 'completed',
+                conclusion: 'success',
+                event: 'pull_request',
+                created_at: '2026-04-18T01:10:00Z',
+                updated_at: '2026-04-18T01:20:00Z',
+                html_url: 'https://github.com/acme/widgets/actions/runs/102',
+                durationInSeconds: 600,
+                pull_requests: [],
+                jobs: [],
+              },
+            ],
+          }),
+        },
+        warn,
+      });
+    } finally {
+      if (previousLimit === undefined) {
+        delete process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT;
+      } else {
+        process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT = previousLimit;
+      }
+    }
+
+    expect(request).toHaveBeenCalledTimes(4);
+    expect(request).toHaveBeenCalledWith('GET /search/issues', expect.anything());
+    expect(warn).toHaveBeenCalledWith(
+      'Skipping Search API fallback for commit sha-two: search resolution limit reached'
+    );
+  });
+
   it('can rebuild artifacts locally without GitHub API access when runs already include PR refs', async () => {
     const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-insight-pr-artifacts-'));
     tempDirs.push(repoDir);

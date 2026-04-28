@@ -43,6 +43,7 @@ interface ShaMapFile {
 }
 
 const DEFAULT_SHA_RESOLUTION_LIMIT = 250;
+const DEFAULT_SEARCH_RESOLUTION_LIMIT = 25;
 const DEFAULT_RATE_LIMIT_RESERVE = 10;
 const WORST_CASE_CALLS_PER_SHA_RESOLUTION = 3;
 
@@ -95,6 +96,11 @@ function getRateLimitReserve(): number {
   return Number.isFinite(value) && value >= 0 ? value : DEFAULT_RATE_LIMIT_RESERVE;
 }
 
+function getSearchResolutionLimit(): number {
+  const value = Number.parseInt(process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT ?? '', 10);
+  return Number.isFinite(value) && value >= 0 ? value : DEFAULT_SEARCH_RESOLUTION_LIMIT;
+}
+
 function readRetainedRuns(repoKey: string, files: string[], storage: StorageAdapter): Run[] {
   const runs: Run[] = [];
 
@@ -120,6 +126,8 @@ async function resolvePullRequestsFromHeadSha(
 ): Promise<Map<string, number>> {
   const resolved = new Map<string, number>();
   let rateLimited = false;
+  let searchAttempts = 0;
+  const searchResolutionLimit = getSearchResolutionLimit();
 
   for (const sha of shas) {
     if (rateLimited) {
@@ -139,6 +147,12 @@ async function resolvePullRequestsFromHeadSha(
         continue;
       }
 
+      if (searchAttempts >= searchResolutionLimit) {
+        warn(`Skipping Search API fallback for commit ${sha}: search resolution limit reached`);
+        continue;
+      }
+
+      searchAttempts += 1;
       const searchResponse = await octokit.request('GET /search/issues', {
         q: `${sha} repo:${owner}/${repo} type:pr`,
         per_page: 1,

@@ -18,10 +18,10 @@ import {
   XCircle,
 } from 'lucide-react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { format, isAfter, isBefore } from 'date-fns';
+import { format } from 'date-fns';
 
-import { fetchRuns } from '@/lib/data-fetcher';
-import { buildDailyTrend, buildRepoOverviewRows, createDateRange } from '@/lib/overview-metrics';
+import { fetchIndex, fetchLatestRunsFromIndex, fetchRunsFromIndex } from '@/lib/data-fetcher';
+import { buildDailyTrend, buildRepoOverviewRows, createDateRange, filterByDateRange } from '@/lib/overview-metrics';
 import { fetchPullRequestDetail } from '@/lib/pr-data-fetcher';
 import type { RepoOption } from '@/lib/server-homepage-data';
 import type {
@@ -29,6 +29,7 @@ import type {
   PullRequestDetailFile,
   PullRequestIndexFile,
   RepoOverviewRow,
+  Index,
   Run,
 } from '@/lib/types';
 
@@ -134,18 +135,17 @@ function searchParamsToUrlSearchParams(input?: Record<string, string | string[] 
 }
 
 function getLatestPrDate(repoIndexesByKey: Record<string, PullRequestIndexFile>): Date | undefined {
-  let latestTimestamp = 0;
+  let latestCreatedAt = '';
 
   for (const index of Object.values(repoIndexesByKey)) {
     for (const pr of index.prs) {
-      const timestamp = new Date(pr.created_at).getTime();
-      if (!Number.isNaN(timestamp) && timestamp > latestTimestamp) {
-        latestTimestamp = timestamp;
+      if (pr.created_at > latestCreatedAt) {
+        latestCreatedAt = pr.created_at;
       }
     }
   }
 
-  return latestTimestamp > 0 ? new Date(latestTimestamp) : undefined;
+  return latestCreatedAt ? new Date(latestCreatedAt) : undefined;
 }
 
 function sortWorkflows(workflows: Run[], field: WorkflowSortField, order: WorkflowSortOrder): Run[] {
@@ -377,10 +377,12 @@ function DashboardContent({
   const [fallbackRuns, setFallbackRuns] = useState<Run[]>([]);
   const [fallbackRunsLoading, setFallbackRunsLoading] = useState(false);
   const [fallbackRunsError, setFallbackRunsError] = useState('');
+  const [fallbackRunsScope, setFallbackRunsScope] = useState<'selected-range' | 'latest-retained'>('selected-range');
   const [shareNotice, setShareNotice] = useState('');
   const [workflowSortField, setWorkflowSortField] = useState<WorkflowSortField>('date');
   const [workflowSortOrder, setWorkflowSortOrder] = useState<WorkflowSortOrder>('desc');
   const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
+  const workflowIndexCacheRef = useRef<Record<string, Index | Promise<Index>>>({});
   const debouncedFilterName = useDebouncedValue(filterName, 250);
 
   const selectedRepo = useMemo(() => {
@@ -479,9 +481,6 @@ function DashboardContent({
   const selectedRepoHasPrArtifact = Boolean(selectedRepoIndex);
   const selectedRepoHasPartialPrResolution = Boolean(selectedRepoIndex?.partialPrResolution);
   const selectedRepoMissingPrArtifact = Boolean(selectedRepoIndex?.missingPrArtifact);
-  const shouldLoadWorkflowFallback = Boolean(
-    selectedRepo && (selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution)
-  );
   const emptyMetricsMessage = selectedRepoMetricsFailed
     ? 'PR metrics artifact failed to load for this repository.'
     : selectedRepoMissingPrArtifact
@@ -492,6 +491,27 @@ function DashboardContent({
         ? 'No PRs found for the selected repository and time range.'
         : 'PR metrics have not been generated for this repository yet.';
 
+  const dateRangePrs = useMemo(() => {
+    return filterByDateRange(selectedRepoPrs, dateRange);
+  }, [dateRange, selectedRepoPrs]);
+
+  const filteredPrs = useMemo(() => {
+    let result = dateRangePrs;
+
+    if (filterName) {
+      const query = filterName.toLowerCase();
+      result = result.filter((pr) =>
+        `${pr.number} ${pr.title} ${pr.branch} ${pr.author}`.toLowerCase().includes(query)
+      );
+    }
+
+    return result;
+  }, [dateRangePrs, filterName]);
+
+  const shouldLoadWorkflowFallback = Boolean(
+    selectedRepo && (selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution || dateRangePrs.length === 0)
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -500,14 +520,23 @@ function DashboardContent({
         setFallbackRuns([]);
         setFallbackRunsError('');
         setFallbackRunsLoading(false);
+        setFallbackRunsScope('selected-range');
         return;
       }
 
       setFallbackRunsLoading(true);
       setFallbackRunsError('');
+      setFallbackRunsScope('selected-range');
 
       try {
-        const runs = await fetchRuns(selectedRepo.owner, selectedRepo.repo, {
+        const cachedIndex =
+          workflowIndexCacheRef.current[selectedRepo.key] ??
+          fetchIndex(selectedRepo.owner, selectedRepo.repo);
+        workflowIndexCacheRef.current[selectedRepo.key] = cachedIndex;
+
+        const repoIndex = await cachedIndex;
+        workflowIndexCacheRef.current[selectedRepo.key] = repoIndex;
+        const runs = await fetchRunsFromIndex(selectedRepo.owner, selectedRepo.repo, repoIndex, {
           startDate: format(dateRange.start, 'yyyy-MM-dd'),
           endDate: format(dateRange.end, 'yyyy-MM-dd'),
         });
@@ -516,11 +545,28 @@ function DashboardContent({
           return;
         }
 
-        setFallbackRuns(runs);
+        if (runs.length > 0) {
+          setFallbackRuns(runs);
+          setFallbackRunsScope('selected-range');
+          return;
+        }
+
+        const latestRuns = await fetchLatestRunsFromIndex(selectedRepo.owner, selectedRepo.repo, repoIndex);
+
+        if (cancelled) {
+          return;
+        }
+
+        setFallbackRuns(latestRuns);
+        setFallbackRunsScope(latestRuns.length > 0 ? 'latest-retained' : 'selected-range');
       } catch (err) {
+        if (selectedRepo && workflowIndexCacheRef.current[selectedRepo.key] instanceof Promise) {
+          delete workflowIndexCacheRef.current[selectedRepo.key];
+        }
         if (!cancelled) {
           setFallbackRuns([]);
           setFallbackRunsError(err instanceof Error ? err.message : 'Failed to load workflow runs.');
+          setFallbackRunsScope('selected-range');
         }
       } finally {
         if (!cancelled) {
@@ -536,31 +582,12 @@ function DashboardContent({
     };
   }, [dateRange.end, dateRange.start, selectedRepo, shouldLoadWorkflowFallback]);
 
-  const filteredPrs = useMemo(() => {
-    let result = [...selectedRepoPrs];
-
-    result = result.filter((pr) => {
-      const createdAt = new Date(pr.created_at);
-      return !isBefore(createdAt, dateRange.start) && !isAfter(createdAt, dateRange.end);
-    });
-
-    if (filterName) {
-      const query = filterName.toLowerCase();
-      result = result.filter((pr) =>
-        `${pr.number} ${pr.title} ${pr.branch} ${pr.author}`.toLowerCase().includes(query)
-      );
-    }
-
-    return result;
-  }, [dateRange.end, dateRange.start, filterName, selectedRepoPrs]);
-
   const unsortedFallbackRuns = useMemo(() => {
-    let result = [...fallbackRuns];
+    let result = fallbackRuns;
 
-    result = result.filter((run) => {
-      const createdAt = new Date(run.created_at);
-      return !isBefore(createdAt, dateRange.start) && !isAfter(createdAt, dateRange.end);
-    });
+    if (fallbackRunsScope === 'selected-range') {
+      result = filterByDateRange(result, dateRange);
+    }
 
     if (filterName) {
       const query = filterName.toLowerCase();
@@ -568,7 +595,7 @@ function DashboardContent({
     }
 
     return result;
-  }, [dateRange.end, dateRange.start, fallbackRuns, filterName]);
+  }, [dateRange, fallbackRuns, fallbackRunsScope, filterName]);
 
   const filteredFallbackRuns = useMemo(() => {
     return sortWorkflows(unsortedFallbackRuns, workflowSortField, workflowSortOrder);
@@ -857,9 +884,11 @@ function DashboardContent({
               {dailyTrend.length === 0 ? (
                 <div className="flex h-72 items-center justify-center rounded-lg border border-dashed border-neutral-200 text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
                   {showWorkflowFallback
-                    ? selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution
-                      ? 'PR metrics are unavailable for this repository. Raw workflow runs are shown below.'
-                      : 'No PR metrics were found in the selected range. Raw workflow runs are shown below.'
+                    ? fallbackRunsScope === 'latest-retained'
+                      ? 'No PR metrics or workflow runs were found in the selected range. Latest retained raw workflow runs are shown below.'
+                      : (selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution)
+                        ? 'PR metrics are unavailable for this repository. Raw workflow runs are shown below.'
+                        : 'No PR metrics were found in the selected range. Raw workflow runs are shown below.'
                     : emptyMetricsMessage}
                 </div>
               ) : (
@@ -909,9 +938,11 @@ function DashboardContent({
                 showWorkflowFallback ? (
                   <div className="overflow-x-auto">
                     <div className="border-b border-blue-100 bg-blue-50 px-6 py-4 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
-                      {selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution
-                        ? `PR metrics are unavailable for ${selectedRepo.key}. Showing raw workflow runs for the selected date range instead.`
-                        : `No PR metrics were found for ${selectedRepo.key} in the selected date range. Showing raw workflow runs instead.`}
+                      {fallbackRunsScope === 'latest-retained'
+                        ? `No PR metrics or workflow runs were found for ${selectedRepo.key} in the selected date range. Showing latest retained raw workflow runs instead.`
+                        : (selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution)
+                          ? `PR metrics are unavailable for ${selectedRepo.key}. Showing raw workflow runs for the selected date range instead.`
+                          : `No PR metrics were found for ${selectedRepo.key} in the selected date range. Showing raw workflow runs instead.`}
                     </div>
                     <table className="w-full text-left text-sm">
                       <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">

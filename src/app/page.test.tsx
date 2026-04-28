@@ -8,6 +8,9 @@ import type { PullRequestIndexFile } from '@/lib/types';
 const replaceMock = vi.fn();
 const useSearchParamsMock = vi.fn();
 const fetchPullRequestDetailMock = vi.fn();
+const fetchIndexMock = vi.fn();
+const fetchRunsFromIndexMock = vi.fn();
+const fetchLatestRunsFromIndexMock = vi.fn();
 
 function recentIso(hour: number, minute = 0) {
   const value = new Date();
@@ -39,6 +42,12 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/lib/pr-data-fetcher', () => ({
   fetchPullRequestDetail: (...args: unknown[]) => fetchPullRequestDetailMock(...args),
+}));
+
+vi.mock('@/lib/data-fetcher', () => ({
+  fetchIndex: (...args: unknown[]) => fetchIndexMock(...args),
+  fetchRunsFromIndex: (...args: unknown[]) => fetchRunsFromIndexMock(...args),
+  fetchLatestRunsFromIndex: (...args: unknown[]) => fetchLatestRunsFromIndexMock(...args),
 }));
 
 vi.mock('recharts', () => ({
@@ -135,7 +144,13 @@ describe('Dashboard PR view', () => {
   beforeEach(() => {
     replaceMock.mockReset();
     fetchPullRequestDetailMock.mockReset();
+    fetchIndexMock.mockReset();
+    fetchRunsFromIndexMock.mockReset();
+    fetchLatestRunsFromIndexMock.mockReset();
     useSearchParamsMock.mockReturnValue(new URLSearchParams(''));
+    fetchIndexMock.mockResolvedValue({ files: [] });
+    fetchRunsFromIndexMock.mockResolvedValue([]);
+    fetchLatestRunsFromIndexMock.mockResolvedValue([]);
     fetchPullRequestDetailMock.mockResolvedValue({
       repo: 'vllm-project/vllm-ascend',
       generated_at: RECENT_GENERATED_AT,
@@ -485,5 +500,85 @@ describe('Dashboard PR view', () => {
 
     expect(await screen.findByText(/Partial PR resolution for vllm-project\/vllm-ascend: 25 SHA/)).toBeInTheDocument();
     expect(screen.getAllByText('PR metrics are partially resolved for this repository. More PRs may appear after future ETL runs.')).toHaveLength(2);
+  });
+
+  it('falls back to latest retained workflow runs when the selected range is empty', async () => {
+    useSearchParamsMock.mockReturnValue(new URLSearchParams('repo=openai/action-insight'));
+    const repoIndex = { files: ['2026-04-12.json'] };
+    fetchIndexMock.mockResolvedValue(repoIndex);
+    fetchRunsFromIndexMock.mockResolvedValue([]);
+    fetchLatestRunsFromIndexMock.mockResolvedValue([
+      {
+        id: 501,
+        name: 'nightly-e2e',
+        head_branch: 'main',
+        status: 'completed',
+        conclusion: 'success',
+        created_at: WORKFLOW_CREATED_AT,
+        updated_at: WORKFLOW_UPDATED_AT,
+        html_url: 'https://github.com/openai/action-insight/actions/runs/501',
+        durationInSeconds: 1200,
+        jobs: [],
+      },
+    ]);
+
+    renderDashboard({
+      searchParams: { repo: 'openai/action-insight' },
+      repoIndexesByKey: {
+        'vllm-project/vllm-ascend': {
+          repo: 'vllm-project/vllm-ascend',
+          generated_at: RECENT_GENERATED_AT,
+          prs: [],
+        },
+        'openai/action-insight': {
+          repo: 'openai/action-insight',
+          generated_at: RECENT_GENERATED_AT,
+          prs: [],
+        },
+      },
+    });
+
+    expect(await screen.findByText('nightly-e2e')).toBeInTheDocument();
+    expect(fetchIndexMock).toHaveBeenCalledWith('openai', 'action-insight');
+    expect(fetchRunsFromIndexMock).toHaveBeenCalledWith('openai', 'action-insight', repoIndex, expect.any(Object));
+    expect(fetchLatestRunsFromIndexMock).toHaveBeenCalledWith('openai', 'action-insight', repoIndex);
+    expect(screen.getByText(/Showing latest retained raw workflow runs instead/)).toBeInTheDocument();
+  });
+
+  it('reuses the raw workflow index when the fallback date range changes', async () => {
+    useSearchParamsMock.mockReturnValue(new URLSearchParams('repo=openai/action-insight'));
+    const repoIndex = { files: ['2026-04-12.json'] };
+    fetchIndexMock.mockResolvedValue(repoIndex);
+    fetchRunsFromIndexMock.mockResolvedValue([]);
+    fetchLatestRunsFromIndexMock.mockResolvedValue([]);
+
+    renderDashboard({
+      searchParams: { repo: 'openai/action-insight' },
+      repoIndexesByKey: {
+        'vllm-project/vllm-ascend': {
+          repo: 'vllm-project/vllm-ascend',
+          generated_at: RECENT_GENERATED_AT,
+          prs: [],
+        },
+        'openai/action-insight': {
+          repo: 'openai/action-insight',
+          generated_at: RECENT_GENERATED_AT,
+          prs: [],
+        },
+      },
+    });
+
+    await waitFor(() => {
+      expect(fetchRunsFromIndexMock).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /last 14 days/i }));
+
+    await waitFor(() => {
+      expect(fetchRunsFromIndexMock).toHaveBeenCalledTimes(2);
+    });
+
+    expect(fetchIndexMock).toHaveBeenCalledTimes(1);
+    expect(fetchRunsFromIndexMock).toHaveBeenLastCalledWith('openai', 'action-insight', repoIndex, expect.any(Object));
   });
 });
