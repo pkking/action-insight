@@ -1,0 +1,1363 @@
+{
+  "repo": "tile-ai/tilelang-ascend",
+  "generated_at": "2026-04-28T12:39:33.415Z",
+  "pr": {
+    "number": 817,
+    "title": "[AscendNPU-IR] Refactor Autotune, add Anneal model, unify Kernel Cache",
+    "branch": "autotune_0410",
+    "author": "WCY2000",
+    "state": "closed",
+    "html_url": "https://github.com/tile-ai/tilelang-ascend/pull/817",
+    "created_at": "2026-04-15T01:55:23Z",
+    "ci_started_at": "2026-04-23T03:58:41Z",
+    "ci_completed_at": "2026-04-28T12:30:49Z",
+    "merged_at": "2026-04-28T12:30:44Z",
+    "partialCiHistory": false,
+    "timeToCiStartInSeconds": 698598,
+    "ciDurationInSeconds": 462728,
+    "timeToMergeInSeconds": 1161321,
+    "workflowCount": 19,
+    "successfulWorkflowCount": 11,
+    "conclusion": "failure",
+    "workflows": [
+      {
+        "id": 25052899124,
+        "name": "documentation",
+        "head_branch": "autotune_0410",
+        "head_sha": "2849bead7220a867612ad721d4d305ad4a850050",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request_target",
+        "created_at": "2026-04-28T12:30:48Z",
+        "updated_at": "2026-04-28T12:30:49Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25052899124",
+        "durationInSeconds": 1,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73385157238,
+            "name": "docs",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T12:30:48Z",
+            "started_at": "2026-04-28T12:30:48Z",
+            "completed_at": "2026-04-28T12:30:48Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25052899124/job/73385157238",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25042603602,
+        "name": "CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "2849bead7220a867612ad721d4d305ad4a850050",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-28T08:34:19Z",
+        "updated_at": "2026-04-28T08:36:06Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25042603602",
+        "durationInSeconds": 107,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73349371528,
+            "name": "format-check",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T08:34:19Z",
+            "started_at": "2026-04-28T08:34:23Z",
+            "completed_at": "2026-04-28T08:36:05Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25042603602/job/73349371528",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 102
+          }
+        ]
+      },
+      {
+        "id": 25042603686,
+        "name": "AscendNPU-IR CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "2849bead7220a867612ad721d4d305ad4a850050",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-28T08:34:19Z",
+        "updated_at": "2026-04-28T09:32:44Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25042603686",
+        "durationInSeconds": 3505,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25042533801,
+        "name": "CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "209c8003e279f80a6e794e2271ebbf523cf9a728",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-28T08:32:42Z",
+        "updated_at": "2026-04-28T08:34:50Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25042533801",
+        "durationInSeconds": 128,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73349132156,
+            "name": "format-check",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T08:32:43Z",
+            "started_at": "2026-04-28T08:32:46Z",
+            "completed_at": "2026-04-28T08:34:49Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25042533801/job/73349132156",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 123
+          }
+        ]
+      },
+      {
+        "id": 25042533813,
+        "name": "AscendNPU-IR CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "209c8003e279f80a6e794e2271ebbf523cf9a728",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-28T08:32:42Z",
+        "updated_at": "2026-04-28T09:28:17Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25042533813",
+        "durationInSeconds": 3335,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25037434799,
+        "name": "AscendNPU-IR CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "0ddb7be43a980531b676fa70f66eddfedb2e4f08",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-28T06:24:38Z",
+        "updated_at": "2026-04-28T06:51:07Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25037434799",
+        "durationInSeconds": 1589,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73332277787,
+            "name": "check-trigger",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:24:39Z",
+            "started_at": "2026-04-28T06:24:42Z",
+            "completed_at": "2026-04-28T06:24:45Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25037434799/job/73332277787",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 3
+          },
+          {
+            "id": 73332277964,
+            "name": "build-release",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:24:39Z",
+            "started_at": "2026-04-28T06:24:39Z",
+            "completed_at": "2026-04-28T06:24:39Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25037434799/job/73332277964",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73332278153,
+            "name": "upload-release-assets",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:24:39Z",
+            "started_at": "2026-04-28T06:24:39Z",
+            "completed_at": "2026-04-28T06:24:39Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25037434799/job/73332278153",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73332290113,
+            "name": "build / prebuild-npuir / build-npuir (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:24:46Z",
+            "started_at": "2026-04-28T06:24:49Z",
+            "completed_at": "2026-04-28T06:25:15Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25037434799/job/73332290113",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 26
+          },
+          {
+            "id": 73332290123,
+            "name": "build / prebuild-npuir / build-npuir (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:24:46Z",
+            "started_at": "2026-04-28T06:24:50Z",
+            "completed_at": "2026-04-28T06:25:14Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25037434799/job/73332290123",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 24
+          },
+          {
+            "id": 73332290128,
+            "name": "build / prebuild-tvm / build-tvm (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:24:46Z",
+            "started_at": "2026-04-28T06:24:49Z",
+            "completed_at": "2026-04-28T06:24:58Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25037434799/job/73332290128",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 73332290134,
+            "name": "build / prebuild-tvm / build-tvm (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:24:46Z",
+            "started_at": "2026-04-28T06:24:49Z",
+            "completed_at": "2026-04-28T06:25:02Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25037434799/job/73332290134",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 13
+          },
+          {
+            "id": 73332344864,
+            "name": "build / build-wheel (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:25:15Z",
+            "started_at": "2026-04-28T06:25:19Z",
+            "completed_at": "2026-04-28T06:29:58Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25037434799/job/73332344864",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 279
+          },
+          {
+            "id": 73332344881,
+            "name": "build / build-wheel (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:25:15Z",
+            "started_at": "2026-04-28T06:25:19Z",
+            "completed_at": "2026-04-28T06:29:51Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25037434799/job/73332344881",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 272
+          },
+          {
+            "id": 73332849484,
+            "name": "test-npuir",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-28T06:29:59Z",
+            "started_at": "2026-04-28T06:30:24Z",
+            "completed_at": "2026-04-28T06:51:06Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25037434799/job/73332849484",
+            "queueDurationInSeconds": 25,
+            "durationInSeconds": 1242
+          }
+        ]
+      },
+      {
+        "id": 25037434793,
+        "name": "CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "0ddb7be43a980531b676fa70f66eddfedb2e4f08",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-28T06:24:38Z",
+        "updated_at": "2026-04-28T06:26:42Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25037434793",
+        "durationInSeconds": 124,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73332277574,
+            "name": "format-check",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-28T06:24:39Z",
+            "started_at": "2026-04-28T06:24:42Z",
+            "completed_at": "2026-04-28T06:26:41Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/25037434793/job/73332277574",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 119
+          }
+        ]
+      },
+      {
+        "id": 24993029369,
+        "name": "CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "83477cdfec337b19182b11c870ea453c1cffef89",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-27T11:43:53Z",
+        "updated_at": "2026-04-27T11:45:46Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24993029369",
+        "durationInSeconds": 113,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73183015542,
+            "name": "format-check",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T11:43:53Z",
+            "started_at": "2026-04-27T11:43:57Z",
+            "completed_at": "2026-04-27T11:45:45Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24993029369/job/73183015542",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 108
+          }
+        ]
+      },
+      {
+        "id": 24993029552,
+        "name": "AscendNPU-IR CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "83477cdfec337b19182b11c870ea453c1cffef89",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-27T11:43:53Z",
+        "updated_at": "2026-04-27T13:19:41Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24993029552",
+        "durationInSeconds": 5748,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73183016258,
+            "name": "check-trigger",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T11:43:54Z",
+            "started_at": "2026-04-27T11:43:57Z",
+            "completed_at": "2026-04-27T11:44:00Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24993029552/job/73183016258",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 3
+          },
+          {
+            "id": 73183016457,
+            "name": "build-release",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-27T11:43:54Z",
+            "started_at": "2026-04-27T11:43:54Z",
+            "completed_at": "2026-04-27T11:43:54Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24993029552/job/73183016457",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73183016705,
+            "name": "upload-release-assets",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-27T11:43:54Z",
+            "started_at": "2026-04-27T11:43:54Z",
+            "completed_at": "2026-04-27T11:43:54Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24993029552/job/73183016705",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73183031590,
+            "name": "build / prebuild-npuir / build-npuir (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T11:44:01Z",
+            "started_at": "2026-04-27T11:44:05Z",
+            "completed_at": "2026-04-27T11:44:29Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24993029552/job/73183031590",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 24
+          },
+          {
+            "id": 73183031614,
+            "name": "build / prebuild-tvm / build-tvm (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T11:44:01Z",
+            "started_at": "2026-04-27T11:44:05Z",
+            "completed_at": "2026-04-27T11:44:11Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24993029552/job/73183031614",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 6
+          },
+          {
+            "id": 73183031624,
+            "name": "build / prebuild-npuir / build-npuir (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T11:44:01Z",
+            "started_at": "2026-04-27T11:44:04Z",
+            "completed_at": "2026-04-27T11:44:18Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24993029552/job/73183031624",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 14
+          },
+          {
+            "id": 73183031639,
+            "name": "build / prebuild-tvm / build-tvm (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T11:44:01Z",
+            "started_at": "2026-04-27T11:44:04Z",
+            "completed_at": "2026-04-27T11:44:11Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24993029552/job/73183031639",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 73183099254,
+            "name": "build / build-wheel (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T11:44:30Z",
+            "started_at": "2026-04-27T11:44:33Z",
+            "completed_at": "2026-04-27T11:48:49Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24993029552/job/73183099254",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 256
+          },
+          {
+            "id": 73183099256,
+            "name": "build / build-wheel (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T11:44:30Z",
+            "started_at": "2026-04-27T11:44:34Z",
+            "completed_at": "2026-04-27T11:49:11Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24993029552/job/73183099256",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 277
+          },
+          {
+            "id": 73183769793,
+            "name": "test-npuir",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-27T11:49:12Z",
+            "started_at": "2026-04-27T12:59:09Z",
+            "completed_at": "2026-04-27T13:19:40Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24993029552/job/73183769793",
+            "queueDurationInSeconds": 4197,
+            "durationInSeconds": 1231
+          }
+        ]
+      },
+      {
+        "id": 24974459709,
+        "name": "AscendNPU-IR CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "a38bb171089685f07edcfeb12fe03c6505688791",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-27T03:01:00Z",
+        "updated_at": "2026-04-27T03:27:27Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24974459709",
+        "durationInSeconds": 1587,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73123485721,
+            "name": "check-trigger",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T03:01:00Z",
+            "started_at": "2026-04-27T03:01:02Z",
+            "completed_at": "2026-04-27T03:01:06Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24974459709/job/73123485721",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 4
+          },
+          {
+            "id": 73123485855,
+            "name": "build-release",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-27T03:01:00Z",
+            "started_at": "2026-04-27T03:01:00Z",
+            "completed_at": "2026-04-27T03:01:00Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24974459709/job/73123485855",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73123486032,
+            "name": "upload-release-assets",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-27T03:01:00Z",
+            "started_at": "2026-04-27T03:01:00Z",
+            "completed_at": "2026-04-27T03:01:00Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24974459709/job/73123486032",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73123493275,
+            "name": "build / prebuild-npuir / build-npuir (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T03:01:06Z",
+            "started_at": "2026-04-27T03:01:09Z",
+            "completed_at": "2026-04-27T03:01:31Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24974459709/job/73123493275",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 22
+          },
+          {
+            "id": 73123493280,
+            "name": "build / prebuild-tvm / build-tvm (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T03:01:06Z",
+            "started_at": "2026-04-27T03:01:09Z",
+            "completed_at": "2026-04-27T03:01:17Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24974459709/job/73123493280",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 73123493281,
+            "name": "build / prebuild-npuir / build-npuir (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T03:01:06Z",
+            "started_at": "2026-04-27T03:01:09Z",
+            "completed_at": "2026-04-27T03:01:27Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24974459709/job/73123493281",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 18
+          },
+          {
+            "id": 73123493296,
+            "name": "build / prebuild-tvm / build-tvm (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T03:01:06Z",
+            "started_at": "2026-04-27T03:01:10Z",
+            "completed_at": "2026-04-27T03:01:18Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24974459709/job/73123493296",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 73123523860,
+            "name": "build / build-wheel (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T03:01:31Z",
+            "started_at": "2026-04-27T03:01:34Z",
+            "completed_at": "2026-04-27T03:05:58Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24974459709/job/73123523860",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 264
+          },
+          {
+            "id": 73123523870,
+            "name": "build / build-wheel (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T03:01:31Z",
+            "started_at": "2026-04-27T03:01:34Z",
+            "completed_at": "2026-04-27T03:06:17Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24974459709/job/73123523870",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 283
+          },
+          {
+            "id": 73123879056,
+            "name": "test-npuir",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T03:06:17Z",
+            "started_at": "2026-04-27T03:06:41Z",
+            "completed_at": "2026-04-27T03:27:27Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24974459709/job/73123879056",
+            "queueDurationInSeconds": 24,
+            "durationInSeconds": 1246
+          }
+        ]
+      },
+      {
+        "id": 24974459695,
+        "name": "CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "a38bb171089685f07edcfeb12fe03c6505688791",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-27T03:01:00Z",
+        "updated_at": "2026-04-27T03:02:59Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24974459695",
+        "durationInSeconds": 119,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73123485646,
+            "name": "format-check",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-27T03:01:00Z",
+            "started_at": "2026-04-27T03:01:03Z",
+            "completed_at": "2026-04-27T03:02:58Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24974459695/job/73123485646",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 115
+          }
+        ]
+      },
+      {
+        "id": 24867444948,
+        "name": "CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "4d26bd2b997c0fb4b4a7d6e7d5d7509ea9f753d2",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-24T01:25:30Z",
+        "updated_at": "2026-04-24T01:27:38Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24867444948",
+        "durationInSeconds": 128,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72806499539,
+            "name": "format-check",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-24T01:25:30Z",
+            "started_at": "2026-04-24T01:25:33Z",
+            "completed_at": "2026-04-24T01:27:38Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24867444948/job/72806499539",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 125
+          }
+        ]
+      },
+      {
+        "id": 24867444952,
+        "name": "AscendNPU-IR CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "4d26bd2b997c0fb4b4a7d6e7d5d7509ea9f753d2",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-24T01:25:30Z",
+        "updated_at": "2026-04-24T01:51:58Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24867444952",
+        "durationInSeconds": 1588,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72806499655,
+            "name": "check-trigger",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-24T01:25:30Z",
+            "started_at": "2026-04-24T01:25:33Z",
+            "completed_at": "2026-04-24T01:25:35Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24867444952/job/72806499655",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 2
+          },
+          {
+            "id": 72806499724,
+            "name": "build-release",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-24T01:25:30Z",
+            "started_at": "2026-04-24T01:25:30Z",
+            "completed_at": "2026-04-24T01:25:30Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24867444952/job/72806499724",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 72806499928,
+            "name": "upload-release-assets",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-24T01:25:30Z",
+            "started_at": "2026-04-24T01:25:30Z",
+            "completed_at": "2026-04-24T01:25:30Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24867444952/job/72806499928",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 72806506716,
+            "name": "build / prebuild-tvm / build-tvm (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-24T01:25:35Z",
+            "started_at": "2026-04-24T01:25:38Z",
+            "completed_at": "2026-04-24T01:25:43Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24867444952/job/72806506716",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 5
+          },
+          {
+            "id": 72806506719,
+            "name": "build / prebuild-tvm / build-tvm (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-24T01:25:35Z",
+            "started_at": "2026-04-24T01:25:38Z",
+            "completed_at": "2026-04-24T01:25:47Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24867444952/job/72806506719",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 72806506732,
+            "name": "build / prebuild-npuir / build-npuir (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-24T01:25:35Z",
+            "started_at": "2026-04-24T01:25:39Z",
+            "completed_at": "2026-04-24T01:26:01Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24867444952/job/72806506732",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 22
+          },
+          {
+            "id": 72806506737,
+            "name": "build / prebuild-npuir / build-npuir (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-24T01:25:35Z",
+            "started_at": "2026-04-24T01:25:38Z",
+            "completed_at": "2026-04-24T01:26:07Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24867444952/job/72806506737",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 29
+          },
+          {
+            "id": 72806550260,
+            "name": "build / build-wheel (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-24T01:26:08Z",
+            "started_at": "2026-04-24T01:26:11Z",
+            "completed_at": "2026-04-24T01:30:37Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24867444952/job/72806550260",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 266
+          },
+          {
+            "id": 72806550262,
+            "name": "build / build-wheel (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-24T01:26:08Z",
+            "started_at": "2026-04-24T01:26:10Z",
+            "completed_at": "2026-04-24T01:30:31Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24867444952/job/72806550262",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 261
+          },
+          {
+            "id": 72806926947,
+            "name": "test-npuir",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-24T01:30:37Z",
+            "started_at": "2026-04-24T01:31:03Z",
+            "completed_at": "2026-04-24T01:51:57Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24867444952/job/72806926947",
+            "queueDurationInSeconds": 26,
+            "durationInSeconds": 1254
+          }
+        ]
+      },
+      {
+        "id": 24831944505,
+        "name": "AscendNPU-IR CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "eef32149102b2e20f7ad44b5bfae73e442e0454f",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-23T11:10:42Z",
+        "updated_at": "2026-04-23T11:37:47Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24831944505",
+        "durationInSeconds": 1625,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72682401208,
+            "name": "check-trigger",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T11:10:42Z",
+            "started_at": "2026-04-23T11:10:45Z",
+            "completed_at": "2026-04-23T11:10:49Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24831944505/job/72682401208",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          },
+          {
+            "id": 72682401601,
+            "name": "upload-release-assets",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-23T11:10:42Z",
+            "started_at": "2026-04-23T11:10:42Z",
+            "completed_at": "2026-04-23T11:10:42Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24831944505/job/72682401601",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 72682401736,
+            "name": "build-release",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-23T11:10:42Z",
+            "started_at": "2026-04-23T11:10:42Z",
+            "completed_at": "2026-04-23T11:10:42Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24831944505/job/72682401736",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 72682417856,
+            "name": "build / prebuild-npuir / build-npuir (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T11:10:50Z",
+            "started_at": "2026-04-23T11:10:53Z",
+            "completed_at": "2026-04-23T11:11:07Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24831944505/job/72682417856",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 14
+          },
+          {
+            "id": 72682417874,
+            "name": "build / prebuild-tvm / build-tvm (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T11:10:50Z",
+            "started_at": "2026-04-23T11:10:53Z",
+            "completed_at": "2026-04-23T11:11:02Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24831944505/job/72682417874",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 72682417884,
+            "name": "build / prebuild-npuir / build-npuir (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T11:10:50Z",
+            "started_at": "2026-04-23T11:10:54Z",
+            "completed_at": "2026-04-23T11:11:18Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24831944505/job/72682417884",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 24
+          },
+          {
+            "id": 72682417888,
+            "name": "build / prebuild-tvm / build-tvm (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T11:10:50Z",
+            "started_at": "2026-04-23T11:10:53Z",
+            "completed_at": "2026-04-23T11:11:02Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24831944505/job/72682417888",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 72682486644,
+            "name": "build / build-wheel (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T11:11:18Z",
+            "started_at": "2026-04-23T11:11:22Z",
+            "completed_at": "2026-04-23T11:15:44Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24831944505/job/72682486644",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 262
+          },
+          {
+            "id": 72682486674,
+            "name": "build / build-wheel (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T11:11:18Z",
+            "started_at": "2026-04-23T11:11:22Z",
+            "completed_at": "2026-04-23T11:15:56Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24831944505/job/72682486674",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 274
+          },
+          {
+            "id": 72683118064,
+            "name": "test-npuir",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-23T11:15:56Z",
+            "started_at": "2026-04-23T11:16:22Z",
+            "completed_at": "2026-04-23T11:37:47Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24831944505/job/72683118064",
+            "queueDurationInSeconds": 26,
+            "durationInSeconds": 1285
+          }
+        ]
+      },
+      {
+        "id": 24831944388,
+        "name": "CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "eef32149102b2e20f7ad44b5bfae73e442e0454f",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-23T11:10:41Z",
+        "updated_at": "2026-04-23T11:12:29Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24831944388",
+        "durationInSeconds": 108,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72682401074,
+            "name": "format-check",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-23T11:10:42Z",
+            "started_at": "2026-04-23T11:10:45Z",
+            "completed_at": "2026-04-23T11:12:28Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24831944388/job/72682401074",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 103
+          }
+        ]
+      },
+      {
+        "id": 24821717962,
+        "name": "CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "c6d003f54fa7f9c79700e5764606148277f39948",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-23T07:02:35Z",
+        "updated_at": "2026-04-23T07:05:16Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24821717962",
+        "durationInSeconds": 161,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72647776330,
+            "name": "format-check",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T07:02:35Z",
+            "started_at": "2026-04-23T07:02:39Z",
+            "completed_at": "2026-04-23T07:05:15Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24821717962/job/72647776330",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 156
+          }
+        ]
+      },
+      {
+        "id": 24821717948,
+        "name": "AscendNPU-IR CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "c6d003f54fa7f9c79700e5764606148277f39948",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-23T07:02:35Z",
+        "updated_at": "2026-04-23T07:29:25Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24821717948",
+        "durationInSeconds": 1610,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72647776404,
+            "name": "check-trigger",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T07:02:36Z",
+            "started_at": "2026-04-23T07:02:39Z",
+            "completed_at": "2026-04-23T07:02:43Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24821717948/job/72647776404",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          },
+          {
+            "id": 72647776586,
+            "name": "build-release",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-23T07:02:36Z",
+            "started_at": "2026-04-23T07:02:36Z",
+            "completed_at": "2026-04-23T07:02:35Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24821717948/job/72647776586",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 72647776817,
+            "name": "upload-release-assets",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-23T07:02:36Z",
+            "started_at": "2026-04-23T07:02:36Z",
+            "completed_at": "2026-04-23T07:02:36Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24821717948/job/72647776817",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 72647790916,
+            "name": "build / prebuild-npuir / build-npuir (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T07:02:43Z",
+            "started_at": "2026-04-23T07:02:46Z",
+            "completed_at": "2026-04-23T07:03:12Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24821717948/job/72647790916",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 26
+          },
+          {
+            "id": 72647790929,
+            "name": "build / prebuild-tvm / build-tvm (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T07:02:43Z",
+            "started_at": "2026-04-23T07:02:47Z",
+            "completed_at": "2026-04-23T07:02:54Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24821717948/job/72647790929",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 72647790931,
+            "name": "build / prebuild-tvm / build-tvm (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T07:02:43Z",
+            "started_at": "2026-04-23T07:02:46Z",
+            "completed_at": "2026-04-23T07:02:52Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24821717948/job/72647790931",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          },
+          {
+            "id": 72647790932,
+            "name": "build / prebuild-npuir / build-npuir (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T07:02:43Z",
+            "started_at": "2026-04-23T07:02:47Z",
+            "completed_at": "2026-04-23T07:03:05Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24821717948/job/72647790932",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 18
+          },
+          {
+            "id": 72647851119,
+            "name": "build / build-wheel (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T07:03:13Z",
+            "started_at": "2026-04-23T07:03:16Z",
+            "completed_at": "2026-04-23T07:07:58Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24821717948/job/72647851119",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 282
+          },
+          {
+            "id": 72647851121,
+            "name": "build / build-wheel (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T07:03:13Z",
+            "started_at": "2026-04-23T07:03:17Z",
+            "completed_at": "2026-04-23T07:07:38Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24821717948/job/72647851121",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 261
+          },
+          {
+            "id": 72648406191,
+            "name": "test-npuir",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T07:07:58Z",
+            "started_at": "2026-04-23T07:08:23Z",
+            "completed_at": "2026-04-23T07:29:24Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24821717948/job/72648406191",
+            "queueDurationInSeconds": 25,
+            "durationInSeconds": 1261
+          }
+        ]
+      },
+      {
+        "id": 24815900921,
+        "name": "CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "c4e1eecc9d510f85523fe6a1b4fe39dd5aaf8993",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-23T03:58:41Z",
+        "updated_at": "2026-04-23T04:00:40Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24815900921",
+        "durationInSeconds": 119,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72630108957,
+            "name": "format-check",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T03:58:42Z",
+            "started_at": "2026-04-23T03:58:44Z",
+            "completed_at": "2026-04-23T04:00:40Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24815900921/job/72630108957",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 116
+          }
+        ]
+      },
+      {
+        "id": 24815900946,
+        "name": "AscendNPU-IR CI",
+        "head_branch": "autotune_0410",
+        "head_sha": "c4e1eecc9d510f85523fe6a1b4fe39dd5aaf8993",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-23T03:58:41Z",
+        "updated_at": "2026-04-23T04:24:33Z",
+        "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24815900946",
+        "durationInSeconds": 1552,
+        "pull_requests": [
+          {
+            "number": 817
+          }
+        ],
+        "jobs": [
+          {
+            "id": 72630108997,
+            "name": "check-trigger",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T03:58:42Z",
+            "started_at": "2026-04-23T03:58:44Z",
+            "completed_at": "2026-04-23T03:58:48Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24815900946/job/72630108997",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 4
+          },
+          {
+            "id": 72630109177,
+            "name": "build-release",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-23T03:58:42Z",
+            "started_at": "2026-04-23T03:58:42Z",
+            "completed_at": "2026-04-23T03:58:42Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24815900946/job/72630109177",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 72630109438,
+            "name": "upload-release-assets",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-23T03:58:42Z",
+            "started_at": "2026-04-23T03:58:42Z",
+            "completed_at": "2026-04-23T03:58:42Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24815900946/job/72630109438",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 72630116605,
+            "name": "build / prebuild-tvm / build-tvm (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T03:58:48Z",
+            "started_at": "2026-04-23T03:58:51Z",
+            "completed_at": "2026-04-23T03:58:57Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24815900946/job/72630116605",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          },
+          {
+            "id": 72630116608,
+            "name": "build / prebuild-tvm / build-tvm (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T03:58:48Z",
+            "started_at": "2026-04-23T03:58:51Z",
+            "completed_at": "2026-04-23T03:59:01Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24815900946/job/72630116608",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 72630116628,
+            "name": "build / prebuild-npuir / build-npuir (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T03:58:48Z",
+            "started_at": "2026-04-23T03:58:51Z",
+            "completed_at": "2026-04-23T03:59:10Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24815900946/job/72630116628",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 19
+          },
+          {
+            "id": 72630116643,
+            "name": "build / prebuild-npuir / build-npuir (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T03:58:48Z",
+            "started_at": "2026-04-23T03:58:51Z",
+            "completed_at": "2026-04-23T03:59:19Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24815900946/job/72630116643",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 28
+          },
+          {
+            "id": 72630156237,
+            "name": "build / build-wheel (arm64, ubuntu-22.04-arm)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T03:59:19Z",
+            "started_at": "2026-04-23T03:59:22Z",
+            "completed_at": "2026-04-23T04:03:47Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24815900946/job/72630156237",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 265
+          },
+          {
+            "id": 72630156244,
+            "name": "build / build-wheel (x64, ubuntu-22.04)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-23T03:59:19Z",
+            "started_at": "2026-04-23T03:59:23Z",
+            "completed_at": "2026-04-23T04:03:55Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24815900946/job/72630156244",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 272
+          },
+          {
+            "id": 72630561801,
+            "name": "test-npuir",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-23T04:03:55Z",
+            "started_at": "2026-04-23T04:04:19Z",
+            "completed_at": "2026-04-23T04:24:32Z",
+            "html_url": "https://github.com/tile-ai/tilelang-ascend/actions/runs/24815900946/job/72630561801",
+            "queueDurationInSeconds": 24,
+            "durationInSeconds": 1213
+          }
+        ]
+      }
+    ]
+  }
+}
