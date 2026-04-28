@@ -138,10 +138,9 @@ function getLatestPrDate(repoIndexesByKey: Record<string, PullRequestIndexFile>)
   let latestCreatedAt = '';
 
   for (const index of Object.values(repoIndexesByKey)) {
-    for (const pr of index.prs) {
-      if (pr.created_at > latestCreatedAt) {
-        latestCreatedAt = pr.created_at;
-      }
+    const latestInRepo = index.prs[0]?.created_at;
+    if (latestInRepo && latestInRepo > latestCreatedAt) {
+      latestCreatedAt = latestInRepo;
     }
   }
 
