@@ -1,0 +1,1556 @@
+{
+  "repo": "vllm-project/vllm-ascend",
+  "generated_at": "2026-04-29T05:54:30.958Z",
+  "pr": {
+    "number": 8671,
+    "title": "[Performance] In scenarios A2 and A3, replace npu_fusion_attention with the _npu_flash_attention_unpad operator.",
+    "branch": "mm_encoder_attention",
+    "author": "chenxi-hh",
+    "state": "closed",
+    "html_url": "https://github.com/vllm-project/vllm-ascend/pull/8671",
+    "created_at": "2026-04-24T09:09:38Z",
+    "ci_started_at": "2026-04-28T01:14:50Z",
+    "ci_completed_at": "2026-04-29T03:06:53Z",
+    "merged_at": "2026-04-29T03:06:41Z",
+    "partialCiHistory": false,
+    "timeToCiStartInSeconds": 317112,
+    "ciDurationInSeconds": 93123,
+    "timeToMergeInSeconds": 410223,
+    "workflowCount": 25,
+    "successfulWorkflowCount": 9,
+    "conclusion": "failure",
+    "workflows": [
+      {
+        "id": 25088880699,
+        "name": "Cancel runs on PR close",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "0eca58cd296629d0dc796d56bef416779e5541a2",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T03:06:44Z",
+        "updated_at": "2026-04-29T03:06:53Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25088880699",
+        "durationInSeconds": 9,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73510364303,
+            "name": "cancel",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T03:06:44Z",
+            "started_at": "2026-04-29T03:06:46Z",
+            "completed_at": "2026-04-29T03:06:52Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25088880699/job/73510364303",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25045208467,
+        "name": "E2E-Light",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "0eca58cd296629d0dc796d56bef416779e5541a2",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-28T09:32:12Z",
+        "updated_at": "2026-04-28T09:59:20Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25045208467",
+        "durationInSeconds": 1628,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25045208373,
+        "name": "Nightly-A2",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "0eca58cd296629d0dc796d56bef416779e5541a2",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-04-28T09:32:12Z",
+        "updated_at": "2026-04-28T09:32:14Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25045208373",
+        "durationInSeconds": 2,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25045208424,
+        "name": "Nightly-A3",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "0eca58cd296629d0dc796d56bef416779e5541a2",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-04-28T09:32:12Z",
+        "updated_at": "2026-04-28T09:32:14Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25045208424",
+        "durationInSeconds": 2,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25045208390,
+        "name": "Image Build and Push",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "0eca58cd296629d0dc796d56bef416779e5541a2",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-04-28T09:32:12Z",
+        "updated_at": "2026-04-28T09:32:13Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25045208390",
+        "durationInSeconds": 1,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25045208486,
+        "name": "E2E-Full",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "0eca58cd296629d0dc796d56bef416779e5541a2",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-28T09:32:12Z",
+        "updated_at": "2026-04-28T15:53:57Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25045208486",
+        "durationInSeconds": 22905,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25045207908,
+        "name": "Merge Conflict Labeler",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "0eca58cd296629d0dc796d56bef416779e5541a2",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-04-28T09:32:11Z",
+        "updated_at": "2026-04-28T09:42:24Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25045207908",
+        "durationInSeconds": 613,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25045176156,
+        "name": "Nightly-A2",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "5ac1692ab7428554ad9badd78f200dd846473a67",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-04-28T09:31:29Z",
+        "updated_at": "2026-04-28T09:31:31Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25045176156",
+        "durationInSeconds": 2,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25045176164,
+        "name": "Image Build and Push",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "5ac1692ab7428554ad9badd78f200dd846473a67",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-04-28T09:31:29Z",
+        "updated_at": "2026-04-28T09:31:30Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25045176164",
+        "durationInSeconds": 1,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25045176145,
+        "name": "Nightly-A3",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "5ac1692ab7428554ad9badd78f200dd846473a67",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-04-28T09:31:29Z",
+        "updated_at": "2026-04-28T09:31:31Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25045176145",
+        "durationInSeconds": 2,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25045176135,
+        "name": "E2E-Full",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "5ac1692ab7428554ad9badd78f200dd846473a67",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-04-28T09:31:29Z",
+        "updated_at": "2026-04-28T09:32:14Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25045176135",
+        "durationInSeconds": 45,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25045176223,
+        "name": "E2E-Light",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "5ac1692ab7428554ad9badd78f200dd846473a67",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-04-28T09:31:29Z",
+        "updated_at": "2026-04-28T09:32:14Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25045176223",
+        "durationInSeconds": 45,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25045175803,
+        "name": "Merge Conflict Labeler",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "5ac1692ab7428554ad9badd78f200dd846473a67",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-04-28T09:31:28Z",
+        "updated_at": "2026-04-28T09:41:42Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25045175803",
+        "durationInSeconds": 614,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25037069827,
+        "name": "Image Build and Push",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "f7c4962e8e929471c5cba35f392d759f61811081",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-04-28T06:13:50Z",
+        "updated_at": "2026-04-28T06:13:51Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069827",
+        "durationInSeconds": 1,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73331116053,
+            "name": "Image Build and Push",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:50Z",
+            "started_at": "2026-04-28T06:13:50Z",
+            "completed_at": "2026-04-28T06:13:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069827/job/73331116053",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331128689,
+            "name": "Image Build and Push",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:57Z",
+            "started_at": "2026-04-28T06:13:57Z",
+            "completed_at": "2026-04-28T06:13:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069827/job/73331128689",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25037069826,
+        "name": "Nightly-A3",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "f7c4962e8e929471c5cba35f392d759f61811081",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-04-28T06:13:50Z",
+        "updated_at": "2026-04-28T06:13:51Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069826",
+        "durationInSeconds": 1,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73331116193,
+            "name": "Build nightly-a3 image",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:50Z",
+            "started_at": "2026-04-28T06:13:50Z",
+            "completed_at": "2026-04-28T06:13:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069826/job/73331116193",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331116357,
+            "name": "Parse trigger and determine test scope",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:51Z",
+            "started_at": "2026-04-28T06:13:51Z",
+            "completed_at": "2026-04-28T06:13:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069826/job/73331116357",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331116380,
+            "name": "Export global env vars as job outputs",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:51Z",
+            "started_at": "2026-04-28T06:13:51Z",
+            "completed_at": "2026-04-28T06:13:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069826/job/73331116380",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331116659,
+            "name": "multi-node",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:51Z",
+            "started_at": "2026-04-28T06:13:51Z",
+            "completed_at": "2026-04-28T06:13:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069826/job/73331116659",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331116690,
+            "name": "double-node",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:51Z",
+            "started_at": "2026-04-28T06:13:51Z",
+            "completed_at": "2026-04-28T06:13:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069826/job/73331116690",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331116947,
+            "name": "single-node",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:51Z",
+            "started_at": "2026-04-28T06:13:51Z",
+            "completed_at": "2026-04-28T06:13:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069826/job/73331116947",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331117138,
+            "name": "clear-pre-logs",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:51Z",
+            "started_at": "2026-04-28T06:13:51Z",
+            "completed_at": "2026-04-28T06:13:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069826/job/73331117138",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331117169,
+            "name": "single-node",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:51Z",
+            "started_at": "2026-04-28T06:13:51Z",
+            "completed_at": "2026-04-28T06:13:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069826/job/73331117169",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331117187,
+            "name": "Merge benchmark artifacts into nightly-a3.zip",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:51Z",
+            "started_at": "2026-04-28T06:13:51Z",
+            "completed_at": "2026-04-28T06:13:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069826/job/73331117187",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25037069813,
+        "name": "Nightly-A2",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "f7c4962e8e929471c5cba35f392d759f61811081",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-04-28T06:13:50Z",
+        "updated_at": "2026-04-28T06:13:51Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069813",
+        "durationInSeconds": 1,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73331116130,
+            "name": "Build nightly-a2 image",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:50Z",
+            "started_at": "2026-04-28T06:13:50Z",
+            "completed_at": "2026-04-28T06:13:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069813/job/73331116130",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331116159,
+            "name": "doc-test",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:50Z",
+            "started_at": "2026-04-28T06:13:50Z",
+            "completed_at": "2026-04-28T06:13:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069813/job/73331116159",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331116175,
+            "name": "Generate accuracy test matrix",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:50Z",
+            "started_at": "2026-04-28T06:13:50Z",
+            "completed_at": "2026-04-28T06:13:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069813/job/73331116175",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331116413,
+            "name": "single-node-accuracy-tests",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:51Z",
+            "started_at": "2026-04-28T06:13:51Z",
+            "completed_at": "2026-04-28T06:13:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069813/job/73331116413",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331116470,
+            "name": "single-node-accuracy-tests-pr-only",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:51Z",
+            "started_at": "2026-04-28T06:13:51Z",
+            "completed_at": "2026-04-28T06:13:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069813/job/73331116470",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331116474,
+            "name": "single-node",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:51Z",
+            "started_at": "2026-04-28T06:13:51Z",
+            "completed_at": "2026-04-28T06:13:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069813/job/73331116474",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331116654,
+            "name": "multi-node",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:51Z",
+            "started_at": "2026-04-28T06:13:51Z",
+            "completed_at": "2026-04-28T06:13:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069813/job/73331116654",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331116662,
+            "name": "Merge benchmark artifacts into nightly-a2.zip",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:51Z",
+            "started_at": "2026-04-28T06:13:51Z",
+            "completed_at": "2026-04-28T06:13:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069813/job/73331116662",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331116796,
+            "name": "clear-pre-logs",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:13:51Z",
+            "started_at": "2026-04-28T06:13:51Z",
+            "completed_at": "2026-04-28T06:13:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069813/job/73331116796",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331132910,
+            "name": "Export global env vars as job outputs",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:14:00Z",
+            "started_at": "2026-04-28T06:14:00Z",
+            "completed_at": "2026-04-28T06:13:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069813/job/73331132910",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331133225,
+            "name": "Parse trigger and determine test scope",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:14:00Z",
+            "started_at": "2026-04-28T06:14:00Z",
+            "completed_at": "2026-04-28T06:13:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069813/job/73331133225",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25037069692,
+        "name": "Merge Conflict Labeler",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "f7c4962e8e929471c5cba35f392d759f61811081",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-04-28T06:13:50Z",
+        "updated_at": "2026-04-28T06:24:00Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069692",
+        "durationInSeconds": 610,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73331115423,
+            "name": "main",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:13:50Z",
+            "started_at": "2026-04-28T06:13:52Z",
+            "completed_at": "2026-04-28T06:23:59Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069692/job/73331115423",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 607
+          }
+        ]
+      },
+      {
+        "id": 25037069843,
+        "name": "E2E-Light",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "f7c4962e8e929471c5cba35f392d759f61811081",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-28T06:13:50Z",
+        "updated_at": "2026-04-28T06:34:06Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069843",
+        "durationInSeconds": 1216,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73331115968,
+            "name": "changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:13:50Z",
+            "started_at": "2026-04-28T06:14:13Z",
+            "completed_at": "2026-04-28T06:15:11Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069843/job/73331115968",
+            "queueDurationInSeconds": 23,
+            "durationInSeconds": 58
+          },
+          {
+            "id": 73331116047,
+            "name": "lint / validate-pr-title",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:13:50Z",
+            "started_at": "2026-04-28T06:14:18Z",
+            "completed_at": "2026-04-28T06:14:34Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069843/job/73331116047",
+            "queueDurationInSeconds": 28,
+            "durationInSeconds": 16
+          },
+          {
+            "id": 73331194236,
+            "name": "lint / pre-commit",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:14:34Z",
+            "started_at": "2026-04-28T06:15:10Z",
+            "completed_at": "2026-04-28T06:17:47Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069843/job/73331194236",
+            "queueDurationInSeconds": 36,
+            "durationInSeconds": 157
+          },
+          {
+            "id": 73331542510,
+            "name": "e2e-light",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T06:17:48Z",
+            "started_at": "2026-04-28T06:17:48Z",
+            "completed_at": "2026-04-28T06:17:48Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069843/job/73331542510",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73331542621,
+            "name": "smart test (v0.19.1) / smart-ut (a3 x2)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:17:48Z",
+            "started_at": "2026-04-28T06:18:12Z",
+            "completed_at": "2026-04-28T06:24:00Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069843/job/73331542621",
+            "queueDurationInSeconds": 24,
+            "durationInSeconds": 348
+          },
+          {
+            "id": 73331542627,
+            "name": "smart test (v0.19.1) / smart-ut (cpu x0)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:17:48Z",
+            "started_at": "2026-04-28T06:19:03Z",
+            "completed_at": "2026-04-28T06:23:04Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069843/job/73331542627",
+            "queueDurationInSeconds": 75,
+            "durationInSeconds": 241
+          },
+          {
+            "id": 73331542637,
+            "name": "smart test (6f786f2c506cb07f4566771fdc62e640e2c4a176) / smart-ut (a3 x2)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:17:48Z",
+            "started_at": "2026-04-28T06:18:10Z",
+            "completed_at": "2026-04-28T06:26:33Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069843/job/73331542637",
+            "queueDurationInSeconds": 22,
+            "durationInSeconds": 503
+          },
+          {
+            "id": 73331542641,
+            "name": "smart test (v0.19.1) / smart-ut (a2 x1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:17:48Z",
+            "started_at": "2026-04-28T06:18:17Z",
+            "completed_at": "2026-04-28T06:30:37Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069843/job/73331542641",
+            "queueDurationInSeconds": 29,
+            "durationInSeconds": 740
+          },
+          {
+            "id": 73331542653,
+            "name": "smart test (6f786f2c506cb07f4566771fdc62e640e2c4a176) / smart-ut (cpu x0)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:17:48Z",
+            "started_at": "2026-04-28T06:18:12Z",
+            "completed_at": "2026-04-28T06:22:38Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069843/job/73331542653",
+            "queueDurationInSeconds": 24,
+            "durationInSeconds": 266
+          },
+          {
+            "id": 73331542687,
+            "name": "smart test (6f786f2c506cb07f4566771fdc62e640e2c4a176) / smart-ut (a2 x1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T06:17:48Z",
+            "started_at": "2026-04-28T06:22:40Z",
+            "completed_at": "2026-04-28T06:34:05Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069843/job/73331542687",
+            "queueDurationInSeconds": 292,
+            "durationInSeconds": 685
+          }
+        ]
+      },
+      {
+        "id": 25037069829,
+        "name": "E2E-Full",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "f7c4962e8e929471c5cba35f392d759f61811081",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-04-28T06:13:50Z",
+        "updated_at": "2026-04-28T09:32:30Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25037069829",
+        "durationInSeconds": 11920,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25028458892,
+        "name": "Merge Conflict Labeler",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "6bfd9fb3cfaf707c83f0a2915c96510cf0978e8a",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-04-28T01:14:50Z",
+        "updated_at": "2026-04-28T01:24:59Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028458892",
+        "durationInSeconds": 609,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73304770304,
+            "name": "main",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:14:50Z",
+            "started_at": "2026-04-28T01:14:52Z",
+            "completed_at": "2026-04-28T01:24:58Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028458892/job/73304770304",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 606
+          }
+        ]
+      },
+      {
+        "id": 25028459033,
+        "name": "Nightly-A2",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "6bfd9fb3cfaf707c83f0a2915c96510cf0978e8a",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-04-28T01:14:50Z",
+        "updated_at": "2026-04-28T01:14:52Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459033",
+        "durationInSeconds": 2,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73304771092,
+            "name": "doc-test",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459033/job/73304771092",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304771281,
+            "name": "Generate accuracy test matrix",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459033/job/73304771281",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304771285,
+            "name": "single-node-accuracy-tests-pr-only",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459033/job/73304771285",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304771287,
+            "name": "single-node",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459033/job/73304771287",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304771290,
+            "name": "Export global env vars as job outputs",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459033/job/73304771290",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304771353,
+            "name": "single-node-accuracy-tests",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459033/job/73304771353",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304771391,
+            "name": "Merge benchmark artifacts into nightly-a2.zip",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459033/job/73304771391",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304771491,
+            "name": "multi-node",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459033/job/73304771491",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304771679,
+            "name": "clear-pre-logs",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459033/job/73304771679",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304780581,
+            "name": "Parse trigger and determine test scope",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:57Z",
+            "started_at": "2026-04-28T01:14:57Z",
+            "completed_at": "2026-04-28T01:14:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459033/job/73304780581",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304786996,
+            "name": "Build nightly-a2 image",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:15:00Z",
+            "started_at": "2026-04-28T01:15:00Z",
+            "completed_at": "2026-04-28T01:14:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459033/job/73304786996",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25028459013,
+        "name": "Image Build and Push",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "6bfd9fb3cfaf707c83f0a2915c96510cf0978e8a",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-04-28T01:14:50Z",
+        "updated_at": "2026-04-28T01:14:51Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459013",
+        "durationInSeconds": 1,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73304770671,
+            "name": "Image Build and Push",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459013/job/73304770671",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304770765,
+            "name": "Image Build and Push",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459013/job/73304770765",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25028458988,
+        "name": "Nightly-A3",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "6bfd9fb3cfaf707c83f0a2915c96510cf0978e8a",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-04-28T01:14:50Z",
+        "updated_at": "2026-04-28T01:14:51Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028458988",
+        "durationInSeconds": 1,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73304770869,
+            "name": "Build nightly-a3 image",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028458988/job/73304770869",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304770934,
+            "name": "Parse trigger and determine test scope",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028458988/job/73304770934",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304771103,
+            "name": "multi-node",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028458988/job/73304771103",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304771145,
+            "name": "double-node",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028458988/job/73304771145",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304771258,
+            "name": "clear-pre-logs",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028458988/job/73304771258",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304771370,
+            "name": "single-node",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028458988/job/73304771370",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304771432,
+            "name": "single-node",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028458988/job/73304771432",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304771478,
+            "name": "Merge benchmark artifacts into nightly-a3.zip",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028458988/job/73304771478",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304786872,
+            "name": "Export global env vars as job outputs",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:15:00Z",
+            "started_at": "2026-04-28T01:15:00Z",
+            "completed_at": "2026-04-28T01:14:50Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028458988/job/73304786872",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25028459054,
+        "name": "E2E-Light",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "6bfd9fb3cfaf707c83f0a2915c96510cf0978e8a",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-28T01:14:50Z",
+        "updated_at": "2026-04-28T01:40:49Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459054",
+        "durationInSeconds": 1559,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73304770864,
+            "name": "changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:15:12Z",
+            "completed_at": "2026-04-28T01:16:05Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459054/job/73304770864",
+            "queueDurationInSeconds": 21,
+            "durationInSeconds": 53
+          },
+          {
+            "id": 73304770950,
+            "name": "lint / validate-pr-title",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:15:15Z",
+            "completed_at": "2026-04-28T01:15:31Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459054/job/73304770950",
+            "queueDurationInSeconds": 24,
+            "durationInSeconds": 16
+          },
+          {
+            "id": 73304836085,
+            "name": "lint / pre-commit",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:15:31Z",
+            "started_at": "2026-04-28T01:15:52Z",
+            "completed_at": "2026-04-28T01:18:31Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459054/job/73304836085",
+            "queueDurationInSeconds": 21,
+            "durationInSeconds": 159
+          },
+          {
+            "id": 73305095291,
+            "name": "smart test (6f786f2c506cb07f4566771fdc62e640e2c4a176) / smart-ut (a2 x1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:18:32Z",
+            "started_at": "2026-04-28T01:19:01Z",
+            "completed_at": "2026-04-28T01:39:18Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459054/job/73305095291",
+            "queueDurationInSeconds": 29,
+            "durationInSeconds": 1217
+          },
+          {
+            "id": 73305095296,
+            "name": "smart test (6f786f2c506cb07f4566771fdc62e640e2c4a176) / smart-ut (a3 x2)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:18:32Z",
+            "started_at": "2026-04-28T01:18:53Z",
+            "completed_at": "2026-04-28T01:24:57Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459054/job/73305095296",
+            "queueDurationInSeconds": 21,
+            "durationInSeconds": 364
+          },
+          {
+            "id": 73305095298,
+            "name": "smart test (6f786f2c506cb07f4566771fdc62e640e2c4a176) / smart-ut (cpu x0)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:18:32Z",
+            "started_at": "2026-04-28T01:18:54Z",
+            "completed_at": "2026-04-28T01:22:58Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459054/job/73305095298",
+            "queueDurationInSeconds": 22,
+            "durationInSeconds": 244
+          },
+          {
+            "id": 73305095299,
+            "name": "smart test (v0.19.1) / smart-ut (a2 x1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:18:32Z",
+            "started_at": "2026-04-28T01:29:15Z",
+            "completed_at": "2026-04-28T01:40:48Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459054/job/73305095299",
+            "queueDurationInSeconds": 643,
+            "durationInSeconds": 693
+          },
+          {
+            "id": 73305095303,
+            "name": "smart test (v0.19.1) / smart-ut (a3 x2)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:18:32Z",
+            "started_at": "2026-04-28T01:18:55Z",
+            "completed_at": "2026-04-28T01:24:54Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459054/job/73305095303",
+            "queueDurationInSeconds": 23,
+            "durationInSeconds": 359
+          },
+          {
+            "id": 73305095318,
+            "name": "smart test (v0.19.1) / smart-ut (cpu x0)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:18:32Z",
+            "started_at": "2026-04-28T01:19:43Z",
+            "completed_at": "2026-04-28T01:23:49Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459054/job/73305095318",
+            "queueDurationInSeconds": 71,
+            "durationInSeconds": 246
+          },
+          {
+            "id": 73305095516,
+            "name": "e2e-light",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:18:32Z",
+            "started_at": "2026-04-28T01:18:32Z",
+            "completed_at": "2026-04-28T01:18:31Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459054/job/73305095516",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25028459024,
+        "name": "E2E-Full",
+        "head_branch": "mm_encoder_attention",
+        "head_sha": "6bfd9fb3cfaf707c83f0a2915c96510cf0978e8a",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-28T01:14:50Z",
+        "updated_at": "2026-04-28T05:26:14Z",
+        "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024",
+        "durationInSeconds": 15084,
+        "pull_requests": [
+          {
+            "number": 8671
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73304770924,
+            "name": "changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:15:13Z",
+            "completed_at": "2026-04-28T01:15:48Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304770924",
+            "queueDurationInSeconds": 22,
+            "durationInSeconds": 35
+          },
+          {
+            "id": 73304770967,
+            "name": "Parse /e2e comment / Parse /e2e comment",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:15:18Z",
+            "completed_at": "2026-04-28T01:15:30Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304770967",
+            "queueDurationInSeconds": 27,
+            "durationInSeconds": 12
+          },
+          {
+            "id": 73304771270,
+            "name": "Parse /e2e comment / Parse nightly trigger and determine test scope",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:14:51Z",
+            "started_at": "2026-04-28T01:14:51Z",
+            "completed_at": "2026-04-28T01:14:51Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304771270",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304835097,
+            "name": "e2e-comment (${{ matrix.vllm_version }})",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:15:30Z",
+            "started_at": "2026-04-28T01:15:30Z",
+            "completed_at": "2026-04-28T01:15:30Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304835097",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304860174,
+            "name": "e2e-full (6f786f2c506cb07f4566771fdc62e640e2c4a176) / singlecard-full (0)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:16:13Z",
+            "completed_at": "2026-04-28T03:52:15Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860174",
+            "queueDurationInSeconds": 25,
+            "durationInSeconds": 9362
+          },
+          {
+            "id": 73304860181,
+            "name": "e2e-full (6f786f2c506cb07f4566771fdc62e640e2c4a176) / multicard-2-full (0)",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:16:12Z",
+            "completed_at": "2026-04-28T03:46:06Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860181",
+            "queueDurationInSeconds": 24,
+            "durationInSeconds": 8994
+          },
+          {
+            "id": 73304860193,
+            "name": "e2e-full (v0.19.1) / multicard-2-full (0)",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:16:09Z",
+            "completed_at": "2026-04-28T03:43:29Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860193",
+            "queueDurationInSeconds": 21,
+            "durationInSeconds": 8840
+          },
+          {
+            "id": 73304860198,
+            "name": "e2e-full (v0.19.1) / multicard-4-full (0)",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:16:13Z",
+            "completed_at": "2026-04-28T05:26:13Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860198",
+            "queueDurationInSeconds": 25,
+            "durationInSeconds": 15000
+          },
+          {
+            "id": 73304860202,
+            "name": "e2e-full (6f786f2c506cb07f4566771fdc62e640e2c4a176) / singlecard-full (1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:16:13Z",
+            "completed_at": "2026-04-28T04:09:06Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860202",
+            "queueDurationInSeconds": 25,
+            "durationInSeconds": 10373
+          },
+          {
+            "id": 73304860210,
+            "name": "e2e-full (6f786f2c506cb07f4566771fdc62e640e2c4a176) / multicard-4-full (0)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:16:17Z",
+            "completed_at": "2026-04-28T05:25:16Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860210",
+            "queueDurationInSeconds": 29,
+            "durationInSeconds": 14939
+          },
+          {
+            "id": 73304860217,
+            "name": "e2e-full (v0.19.1) / singlecard-full (0)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:16:18Z",
+            "completed_at": "2026-04-28T03:51:28Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860217",
+            "queueDurationInSeconds": 30,
+            "durationInSeconds": 9310
+          },
+          {
+            "id": 73304860219,
+            "name": "e2e-full (v0.19.1) / singlecard-full (1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:18:54Z",
+            "completed_at": "2026-04-28T03:53:04Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860219",
+            "queueDurationInSeconds": 186,
+            "durationInSeconds": 9250
+          },
+          {
+            "id": 73304860325,
+            "name": "e2e-full (v0.19.1) / multicard-2-light",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:15:48Z",
+            "completed_at": "2026-04-28T01:15:48Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860325",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304860403,
+            "name": "e2e-full (6f786f2c506cb07f4566771fdc62e640e2c4a176) / 310p singlecard",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:15:48Z",
+            "completed_at": "2026-04-28T01:15:48Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860403",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304860496,
+            "name": "e2e-full (6f786f2c506cb07f4566771fdc62e640e2c4a176) / 310p multicards 4cards",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:15:48Z",
+            "completed_at": "2026-04-28T01:15:48Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860496",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304860524,
+            "name": "e2e-full (v0.19.1) / 310p singlecard",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:15:48Z",
+            "completed_at": "2026-04-28T01:15:48Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860524",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304860525,
+            "name": "e2e-full (6f786f2c506cb07f4566771fdc62e640e2c4a176) / multicard-2-light",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:15:48Z",
+            "completed_at": "2026-04-28T01:15:48Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860525",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304860556,
+            "name": "e2e-full (6f786f2c506cb07f4566771fdc62e640e2c4a176) / singlecard-light",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:15:48Z",
+            "completed_at": "2026-04-28T01:15:48Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860556",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304860559,
+            "name": "e2e-full (v0.19.1) / 310p multicards 4cards",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:15:48Z",
+            "completed_at": "2026-04-28T01:15:48Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860559",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73304860578,
+            "name": "e2e-full (v0.19.1) / singlecard-light",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T01:15:48Z",
+            "started_at": "2026-04-28T01:15:48Z",
+            "completed_at": "2026-04-28T01:15:48Z",
+            "html_url": "https://github.com/vllm-project/vllm-ascend/actions/runs/25028459024/job/73304860578",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      }
+    ]
+  }
+}
