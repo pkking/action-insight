@@ -1,0 +1,570 @@
+{
+  "repo": "sgl-project/sglang",
+  "generated_at": "2026-04-29T15:23:11.861Z",
+  "pr": {
+    "number": 23833,
+    "title": "[JIT Kernel][1/2]Migrate MXFP8 Group GEMM & Quant into JIT",
+    "branch": "dev_es_mxfp8_moe_migrate_jit",
+    "author": "HydraQYH",
+    "state": "closed",
+    "html_url": "https://github.com/sgl-project/sglang/pull/23833",
+    "created_at": "2026-04-27T10:33:47Z",
+    "ci_started_at": "2026-04-28T02:19:34Z",
+    "ci_completed_at": "2026-04-29T14:50:30Z",
+    "merged_at": "2026-04-29T14:50:09Z",
+    "partialCiHistory": false,
+    "timeToCiStartInSeconds": 56747,
+    "ciDurationInSeconds": 131456,
+    "timeToMergeInSeconds": 188182,
+    "workflowCount": 9,
+    "successfulWorkflowCount": 7,
+    "conclusion": "failure",
+    "workflows": [
+      {
+        "id": 25116017338,
+        "name": "Cancel PR Workflows on Merge",
+        "head_branch": "dev_es_mxfp8_moe_migrate_jit",
+        "head_sha": "4cf6312b140d86469bdbe2f0da278d08fe01741d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-04-29T14:50:14Z",
+        "updated_at": "2026-04-29T14:50:30Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25116017338",
+        "durationInSeconds": 16,
+        "pull_requests": [
+          {
+            "number": 23833
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73603129692,
+            "name": "cancel",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T14:50:15Z",
+            "started_at": "2026-04-29T14:50:24Z",
+            "completed_at": "2026-04-29T14:50:29Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25116017338/job/73603129692",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25030362977,
+        "name": "PR Test (AMD)",
+        "head_branch": "dev_es_mxfp8_moe_migrate_jit",
+        "head_sha": "4cf6312b140d86469bdbe2f0da278d08fe01741d",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-28T02:19:34Z",
+        "updated_at": "2026-04-28T05:00:36Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977",
+        "durationInSeconds": 9662,
+        "pull_requests": [
+          {
+            "number": 23833
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73310488769,
+            "name": "call-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:19:44Z",
+            "started_at": "2026-04-28T02:19:46Z",
+            "completed_at": "2026-04-28T02:19:51Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73310488769",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 5
+          },
+          {
+            "id": 73310498407,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:19:51Z",
+            "started_at": "2026-04-28T02:19:54Z",
+            "completed_at": "2026-04-28T02:20:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73310498407",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 73310515188,
+            "name": "wait-for-stage-a-amd",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:20:04Z",
+            "started_at": "2026-04-28T02:20:07Z",
+            "completed_at": "2026-04-28T02:45:28Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73310515188",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 1521
+          },
+          {
+            "id": 73310515192,
+            "name": "jit-kernel-unit-test-amd (linux-mi300-1gpu-sglang)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:20:04Z",
+            "started_at": "2026-04-28T02:20:06Z",
+            "completed_at": "2026-04-28T02:38:07Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73310515192",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 1081
+          },
+          {
+            "id": 73310515198,
+            "name": "stage-a-test-1-gpu-small-amd (linux-mi300-1gpu-sglang)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:20:04Z",
+            "started_at": "2026-04-28T02:20:06Z",
+            "completed_at": "2026-04-28T02:45:10Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73310515198",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 1504
+          },
+          {
+            "id": 73310515332,
+            "name": "multimodal-gen-test-1-gpu-amd (linux-${{ (inputs.runner_arch || ((((github.event_name == 'pull_request') && 'mi300') || 'mi325'))) }}-1gpu-sglang, ${{ matrix.part }})",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T02:20:05Z",
+            "started_at": "2026-04-28T02:20:05Z",
+            "completed_at": "2026-04-28T02:20:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73310515332",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73310515349,
+            "name": "multimodal-gen-test-2-gpu-amd (linux-${{ (inputs.runner_arch || ((((github.event_name == 'pull_request') && 'mi300') || 'mi325'))) }}-2gpu-sglang, ${{ matrix.part }})",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T02:20:05Z",
+            "started_at": "2026-04-28T02:20:05Z",
+            "completed_at": "2026-04-28T02:20:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73310515349",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73310515391,
+            "name": "sgl-kernel-unit-test-2-gpu-amd (linux-${{ (inputs.runner_arch || ((((github.event_name == 'pull_request') && 'mi300') || 'mi325'))) }}-2gpu-sglang)",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T02:20:05Z",
+            "started_at": "2026-04-28T02:20:05Z",
+            "completed_at": "2026-04-28T02:20:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73310515391",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73310515542,
+            "name": "sgl-kernel-unit-test-amd (linux-${{ (inputs.runner_arch || ((((github.event_name == 'pull_request') && 'mi300') || 'mi325'))) }}-1gpu-sglang)",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-04-28T02:20:05Z",
+            "started_at": "2026-04-28T02:20:05Z",
+            "completed_at": "2026-04-28T02:20:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73310515542",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 73312655379,
+            "name": "stage-b-test-large-8-gpu-35x-disaggregation-amd (linux-mi35x-gpu-8.fabric)",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:30Z",
+            "completed_at": "2026-04-28T03:00:23Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655379",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 893
+          },
+          {
+            "id": 73312655392,
+            "name": "stage-b-test-1-gpu-small-amd-mi35x (linux-mi35x-gpu-1)",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:30Z",
+            "completed_at": "2026-04-28T02:59:49Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655392",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 859
+          },
+          {
+            "id": 73312655400,
+            "name": "stage-b-test-1-gpu-large-amd (linux-mi300-1gpu-sglang, 1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:32Z",
+            "completed_at": "2026-04-28T03:41:13Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655400",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 3341
+          },
+          {
+            "id": 73312655412,
+            "name": "stage-b-test-1-gpu-large-amd (linux-mi300-1gpu-sglang, 0)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:32Z",
+            "completed_at": "2026-04-28T03:38:01Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655412",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 3149
+          },
+          {
+            "id": 73312655414,
+            "name": "stage-b-test-1-gpu-large-amd (linux-mi300-1gpu-sglang, 2)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:32Z",
+            "completed_at": "2026-04-28T03:23:23Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655414",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 2271
+          },
+          {
+            "id": 73312655425,
+            "name": "stage-b-test-2-gpu-large-amd (linux-mi300-2gpu-sglang, 1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:33Z",
+            "completed_at": "2026-04-28T03:34:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655425",
+            "queueDurationInSeconds": 5,
+            "durationInSeconds": 2965
+          },
+          {
+            "id": 73312655429,
+            "name": "wait-for-stage-b-amd",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:30Z",
+            "completed_at": "2026-04-28T03:48:29Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655429",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 3779
+          },
+          {
+            "id": 73312655432,
+            "name": "stage-b-test-2-gpu-large-amd (linux-mi300-2gpu-sglang, 0)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:30Z",
+            "completed_at": "2026-04-28T03:42:04Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655432",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 3394
+          },
+          {
+            "id": 73312655433,
+            "name": "stage-b-test-1-gpu-small-amd-nondeterministic (linux-mi300-1gpu-sglang)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:32Z",
+            "completed_at": "2026-04-28T03:23:32Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655433",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 2280
+          },
+          {
+            "id": 73312655542,
+            "name": "stage-b-test-1-gpu-small-amd (linux-mi300-1gpu-sglang, 5)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:45Z",
+            "completed_at": "2026-04-28T03:29:10Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655542",
+            "queueDurationInSeconds": 17,
+            "durationInSeconds": 2605
+          },
+          {
+            "id": 73312655549,
+            "name": "stage-b-test-1-gpu-small-amd (linux-mi300-1gpu-sglang, 2)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:46Z",
+            "completed_at": "2026-04-28T03:32:48Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655549",
+            "queueDurationInSeconds": 18,
+            "durationInSeconds": 2822
+          },
+          {
+            "id": 73312655550,
+            "name": "stage-b-test-1-gpu-small-amd (linux-mi300-1gpu-sglang, 4)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:39Z",
+            "completed_at": "2026-04-28T03:35:37Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655550",
+            "queueDurationInSeconds": 11,
+            "durationInSeconds": 2998
+          },
+          {
+            "id": 73312655555,
+            "name": "stage-b-test-1-gpu-small-amd (linux-mi300-1gpu-sglang, 6)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:33Z",
+            "completed_at": "2026-04-28T03:35:32Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655555",
+            "queueDurationInSeconds": 5,
+            "durationInSeconds": 2999
+          },
+          {
+            "id": 73312655556,
+            "name": "stage-b-test-1-gpu-small-amd (linux-mi300-1gpu-sglang, 0)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:48Z",
+            "completed_at": "2026-04-28T03:21:54Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655556",
+            "queueDurationInSeconds": 20,
+            "durationInSeconds": 2166
+          },
+          {
+            "id": 73312655562,
+            "name": "stage-b-test-1-gpu-small-amd (linux-mi300-1gpu-sglang, 3)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:46Z",
+            "completed_at": "2026-04-28T03:31:30Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655562",
+            "queueDurationInSeconds": 18,
+            "durationInSeconds": 2744
+          },
+          {
+            "id": 73312655565,
+            "name": "stage-b-test-1-gpu-small-amd (linux-mi300-1gpu-sglang, 10)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:48Z",
+            "completed_at": "2026-04-28T03:41:26Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655565",
+            "queueDurationInSeconds": 20,
+            "durationInSeconds": 3338
+          },
+          {
+            "id": 73312655567,
+            "name": "stage-b-test-1-gpu-small-amd (linux-mi300-1gpu-sglang, 8)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:48Z",
+            "completed_at": "2026-04-28T03:47:33Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655567",
+            "queueDurationInSeconds": 20,
+            "durationInSeconds": 3705
+          },
+          {
+            "id": 73312655568,
+            "name": "stage-b-test-1-gpu-small-amd (linux-mi300-1gpu-sglang, 7)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:39Z",
+            "completed_at": "2026-04-28T03:38:09Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655568",
+            "queueDurationInSeconds": 11,
+            "durationInSeconds": 3150
+          },
+          {
+            "id": 73312655569,
+            "name": "stage-b-test-1-gpu-small-amd (linux-mi300-1gpu-sglang, 9)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:48Z",
+            "completed_at": "2026-04-28T03:45:14Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655569",
+            "queueDurationInSeconds": 20,
+            "durationInSeconds": 3566
+          },
+          {
+            "id": 73312655570,
+            "name": "stage-b-test-1-gpu-small-amd (linux-mi300-1gpu-sglang, 1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:48Z",
+            "completed_at": "2026-04-28T03:29:00Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655570",
+            "queueDurationInSeconds": 20,
+            "durationInSeconds": 2592
+          },
+          {
+            "id": 73312655589,
+            "name": "stage-b-test-1-gpu-small-amd (linux-mi300-1gpu-sglang, 12)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-28T02:45:28Z",
+            "started_at": "2026-04-28T02:45:46Z",
+            "completed_at": "2026-04-28T03:44:22Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362977/job/73312655589",
+            "queueDurationInSeconds": 18,
+            "durationInSeconds": 3516
+          }
+        ]
+      },
+      {
+        "id": 25030362984,
+        "name": "Execute Notebooks",
+        "head_branch": "dev_es_mxfp8_moe_migrate_jit",
+        "head_sha": "4cf6312b140d86469bdbe2f0da278d08fe01741d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-28T02:19:34Z",
+        "updated_at": "2026-04-28T02:42:57Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362984",
+        "durationInSeconds": 1403,
+        "pull_requests": [
+          {
+            "number": 23833
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25030362936,
+        "name": "Auto Label PRs",
+        "head_branch": "dev_es_mxfp8_moe_migrate_jit",
+        "head_sha": "4cf6312b140d86469bdbe2f0da278d08fe01741d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-04-28T02:19:34Z",
+        "updated_at": "2026-04-28T02:19:41Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362936",
+        "durationInSeconds": 7,
+        "pull_requests": [
+          {
+            "number": 23833
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25030362967,
+        "name": "PR Test (NPU)",
+        "head_branch": "dev_es_mxfp8_moe_migrate_jit",
+        "head_sha": "4cf6312b140d86469bdbe2f0da278d08fe01741d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-28T02:19:34Z",
+        "updated_at": "2026-04-28T02:58:34Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362967",
+        "durationInSeconds": 2340,
+        "pull_requests": [
+          {
+            "number": 23833
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25030362963,
+        "name": "PR Test (XPU)",
+        "head_branch": "dev_es_mxfp8_moe_migrate_jit",
+        "head_sha": "4cf6312b140d86469bdbe2f0da278d08fe01741d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-28T02:19:34Z",
+        "updated_at": "2026-04-28T02:55:07Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362963",
+        "durationInSeconds": 2133,
+        "pull_requests": [
+          {
+            "number": 23833
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25030362941,
+        "name": "Lint",
+        "head_branch": "dev_es_mxfp8_moe_migrate_jit",
+        "head_sha": "4cf6312b140d86469bdbe2f0da278d08fe01741d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-28T02:19:34Z",
+        "updated_at": "2026-04-28T02:22:46Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362941",
+        "durationInSeconds": 192,
+        "pull_requests": [
+          {
+            "number": 23833
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25030362975,
+        "name": "PR Test (Xeon)",
+        "head_branch": "dev_es_mxfp8_moe_migrate_jit",
+        "head_sha": "4cf6312b140d86469bdbe2f0da278d08fe01741d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-28T02:19:34Z",
+        "updated_at": "2026-04-28T03:28:51Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362975",
+        "durationInSeconds": 4157,
+        "pull_requests": [
+          {
+            "number": 23833
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25030362964,
+        "name": "PR Test",
+        "head_branch": "dev_es_mxfp8_moe_migrate_jit",
+        "head_sha": "4cf6312b140d86469bdbe2f0da278d08fe01741d",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-04-28T02:19:34Z",
+        "updated_at": "2026-04-28T09:15:11Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25030362964",
+        "durationInSeconds": 24937,
+        "pull_requests": [
+          {
+            "number": 23833
+          }
+        ],
+        "jobs": []
+      }
+    ]
+  }
+}
