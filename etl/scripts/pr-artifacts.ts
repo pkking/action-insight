@@ -257,15 +257,18 @@ export async function rebuildPullRequestArtifacts({
         .filter((number): number is number => typeof number === 'number')
     )
   );
-  const expectedCoreCalls = unresolvedShas.length + allPrNumbers.length;
   let shaResolutionBudget = Math.min(unresolvedShas.length, getShaResolutionLimit());
+  const expectedCoreCalls = (2 * shaResolutionBudget) + allPrNumbers.length;
   let skippedPrShaCount = Math.max(0, unresolvedShas.length - shaResolutionBudget);
 
   if (octokit && expectedCoreCalls > 0) {
     const budget = await checkRateLimitBudget(octokit, expectedCoreCalls);
     if (!budget.ok) {
       const rateLimitReserve = getRateLimitReserve();
-      const availableForShaResolution = Math.max(0, budget.remaining - allPrNumbers.length - rateLimitReserve);
+      const availableForShaResolution = Math.max(
+        0,
+        Math.floor((budget.remaining - allPrNumbers.length - rateLimitReserve) / 2)
+      );
       shaResolutionBudget = Math.min(shaResolutionBudget, availableForShaResolution);
       skippedPrShaCount = unresolvedShas.length - shaResolutionBudget;
       warn(

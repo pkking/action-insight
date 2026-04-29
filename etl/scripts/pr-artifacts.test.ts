@@ -653,18 +653,13 @@ describe('rebuildPullRequestArtifacts', () => {
 
     const index = JSON.parse(fs.readFileSync(path.join(repoDir, 'prs', 'index.json'), 'utf8'));
 
-    expect(index.prs).toHaveLength(2);
-    expect(index.prs).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ number: 42 }),
-        expect.objectContaining({ number: 43 }),
-      ])
-    );
+    expect(index.prs).toHaveLength(1);
+    expect(index.prs[0]).toMatchObject({ number: 42 });
     expect(index).toMatchObject({
       partialPrResolution: true,
-      resolvedPrShaCount: 3,
-      unresolvedPrShaCount: 2,
-      skippedPrShaCount: 2,
+      resolvedPrShaCount: 1,
+      unresolvedPrShaCount: 4,
+      skippedPrShaCount: 4,
     });
     expect(request).toHaveBeenCalledWith(
       'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
@@ -672,7 +667,7 @@ describe('rebuildPullRequestArtifacts', () => {
     );
     expect(request).not.toHaveBeenCalledWith(
       'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
-      expect.objectContaining({ commit_sha: 'sha-four' })
+      expect.objectContaining({ commit_sha: 'sha-two' })
     );
   });
 });
