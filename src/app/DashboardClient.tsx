@@ -134,6 +134,19 @@ function searchParamsToUrlSearchParams(input?: Record<string, string | string[] 
   return params;
 }
 
+function getLatestPrDate(repoIndexesByKey: Record<string, PullRequestIndexFile>): Date | undefined {
+  let latestCreatedAt = '';
+
+  for (const index of Object.values(repoIndexesByKey)) {
+    const latestInRepo = index.prs[0]?.created_at;
+    if (latestInRepo && latestInRepo > latestCreatedAt) {
+      latestCreatedAt = latestInRepo;
+    }
+  }
+
+  return latestCreatedAt ? new Date(latestCreatedAt) : undefined;
+}
+
 function sortWorkflows(workflows: Run[], field: WorkflowSortField, order: WorkflowSortOrder): Run[] {
   const result = [...workflows];
   if (order === 'none') {
@@ -355,6 +368,7 @@ function DashboardContent({
   const [error, setError] = useState(repoOptions.length === 0 ? 'No repository data found under data/.' : '');
   const repoIndexesByKey = initialRepoIndexesByKey;
   const failedRepoKeys = initialFailedRepoKeys;
+  const latestPrDate = useMemo(() => getLatestPrDate(repoIndexesByKey), [repoIndexesByKey]);
   const [detailsByNumber, setDetailsByNumber] = useState<Record<number, PullRequestDetailFile['pr']>>({});
   const [loadingDetailNumber, setLoadingDetailNumber] = useState<number | null>(null);
   const [expandedPrNumber, setExpandedPrNumber] = useState<number | null>(null);
@@ -384,8 +398,9 @@ function DashboardContent({
         days,
         startDate: useCustomRange ? startDate : undefined,
         endDate: useCustomRange ? endDate : undefined,
+        now: latestPrDate,
       }),
-    [days, endDate, startDate, useCustomRange]
+    [days, endDate, latestPrDate, startDate, useCustomRange]
   );
 
   useEffect(() => {

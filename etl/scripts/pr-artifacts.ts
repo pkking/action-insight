@@ -43,7 +43,8 @@ interface ShaMapFile {
 }
 
 const DEFAULT_SHA_RESOLUTION_LIMIT = 250;
-const RATE_LIMIT_RESERVE = 100;
+const DEFAULT_SEARCH_RESOLUTION_LIMIT = 25;
+const DEFAULT_RATE_LIMIT_RESERVE = 10;
 
 function getPrDir(repoDir: string): string {
   return path.join(repoDir, 'prs');
@@ -89,6 +90,16 @@ function getShaResolutionLimit(): number {
   return Number.isFinite(value) && value >= 0 ? value : DEFAULT_SHA_RESOLUTION_LIMIT;
 }
 
+function getRateLimitReserve(): number {
+  const value = Number.parseInt(process.env.PR_ARTIFACT_RATE_LIMIT_RESERVE ?? '', 10);
+  return Number.isFinite(value) && value >= 0 ? value : DEFAULT_RATE_LIMIT_RESERVE;
+}
+
+function getSearchResolutionLimit(): number {
+  const value = Number.parseInt(process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT ?? '', 10);
+  return Number.isFinite(value) && value >= 0 ? value : DEFAULT_SEARCH_RESOLUTION_LIMIT;
+}
+
 function readRetainedRuns(repoKey: string, files: string[], storage: StorageAdapter): Run[] {
   const runs: Run[] = [];
 
@@ -114,6 +125,8 @@ async function resolvePullRequestsFromHeadSha(
 ): Promise<Map<string, number>> {
   const resolved = new Map<string, number>();
   let rateLimited = false;
+  let searchAttempts = 0;
+  const searchResolutionLimit = getSearchResolutionLimit();
 
   for (const sha of shas) {
     if (rateLimited) {
@@ -130,6 +143,25 @@ async function resolvePullRequestsFromHeadSha(
       const number = data.find((pullRequest) => typeof pullRequest.number === 'number')?.number;
       if (typeof number === 'number') {
         resolved.set(sha, number);
+        continue;
+      }
+
+      if (searchAttempts >= searchResolutionLimit) {
+        warn(`Skipping Search API fallback for commit ${sha}: search resolution limit reached`);
+        continue;
+      }
+
+      searchAttempts += 1;
+      const searchResponse = await octokit.request('GET /search/issues', {
+        q: `${sha} repo:${owner}/${repo} type:pr`,
+        per_page: 1,
+      });
+      const searchData = searchResponse.data as { items?: Array<{ number?: number; pull_request?: unknown }> };
+      const searchNumber = searchData.items?.find(
+        (item) => item.pull_request && typeof item.number === 'number'
+      )?.number;
+      if (typeof searchNumber === 'number') {
+        resolved.set(sha, searchNumber);
       }
     } catch (error) {
       if (isGitHubRateLimitError(error)) {
@@ -225,24 +257,28 @@ export async function rebuildPullRequestArtifacts({
         .filter((number): number is number => typeof number === 'number')
     )
   );
-  const expectedCalls = unresolvedShas.length + allPrNumbers.length;
   let shaResolutionBudget = Math.min(unresolvedShas.length, getShaResolutionLimit());
+  const expectedCoreCalls = (2 * shaResolutionBudget) + allPrNumbers.length;
   let skippedPrShaCount = Math.max(0, unresolvedShas.length - shaResolutionBudget);
 
-  if (octokit && expectedCalls > 0) {
-    const budget = await checkRateLimitBudget(octokit, expectedCalls);
+  if (octokit && expectedCoreCalls > 0) {
+    const budget = await checkRateLimitBudget(octokit, expectedCoreCalls);
     if (!budget.ok) {
-      const availableForShaResolution = Math.max(0, budget.remaining - allPrNumbers.length - RATE_LIMIT_RESERVE);
+      const rateLimitReserve = getRateLimitReserve();
+      const availableForShaResolution = Math.max(
+        0,
+        Math.floor((budget.remaining - allPrNumbers.length - rateLimitReserve) / 2)
+      );
       shaResolutionBudget = Math.min(shaResolutionBudget, availableForShaResolution);
       skippedPrShaCount = unresolvedShas.length - shaResolutionBudget;
       warn(
-        `Rate limit budget check: ${budget.remaining} remaining, need ${expectedCalls}. Building partial PR artifacts with ${shaResolutionBudget} SHA lookup(s).`
+        `Core rate limit budget check: ${budget.remaining} remaining, need ${expectedCoreCalls}. Building partial PR artifacts with ${shaResolutionBudget} SHA lookup(s).`
       );
       if (budget.resetAt) {
         warn(`Rate limit resets at ${budget.resetAt.toISOString()}.`);
       }
     } else {
-      log(`Rate limit budget check: ${budget.remaining} remaining, need ${expectedCalls}. Proceeding.`);
+      log(`Core rate limit budget check: ${budget.remaining} remaining, need ${expectedCoreCalls}. Proceeding.`);
     }
   }
 
