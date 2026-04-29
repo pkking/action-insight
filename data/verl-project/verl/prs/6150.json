@@ -1,0 +1,3615 @@
+{
+  "repo": "verl-project/verl",
+  "generated_at": "2026-04-29T11:09:51.190Z",
+  "pr": {
+    "number": 6150,
+    "title": "[fsdp] fix: honor mixed_precision.param_dtype in forward_step autocast (#5932)",
+    "branch": "fix/fsdp-forward-step-autocast-dtype",
+    "author": "shivam2199",
+    "state": "open",
+    "html_url": "https://github.com/verl-project/verl/pull/6150",
+    "created_at": "2026-04-26T12:19:43Z",
+    "ci_started_at": "2026-04-29T05:06:28Z",
+    "ci_completed_at": "2026-04-29T10:03:36Z",
+    "partialCiHistory": false,
+    "timeToCiStartInSeconds": 233205,
+    "ciDurationInSeconds": 17828,
+    "workflowCount": 71,
+    "successfulWorkflowCount": 55,
+    "conclusion": "failure",
+    "workflows": [
+      {
+        "id": 25095571713,
+        "name": "sglang_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T08:27:09Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571713",
+        "durationInSeconds": 4786,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540743012,
+            "name": "sglang_ascend",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T08:20:16Z",
+            "started_at": "2026-04-29T08:20:41Z",
+            "completed_at": "2026-04-29T08:27:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571713/job/73540743012",
+            "queueDurationInSeconds": 25,
+            "durationInSeconds": 387
+          }
+        ]
+      },
+      {
+        "id": 25095571754,
+        "name": "e2e_one_step_off_policy_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T08:29:05Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571754",
+        "durationInSeconds": 4902,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540744927,
+            "name": "e2e_one_step_off_policy_fsdp2_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:17Z",
+            "started_at": "2026-04-29T08:20:55Z",
+            "completed_at": "2026-04-29T08:28:42Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571754/job/73540744927",
+            "queueDurationInSeconds": 38,
+            "durationInSeconds": 467
+          },
+          {
+            "id": 73540744940,
+            "name": "e2e_one_step_off_policy_megatron_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:17Z",
+            "started_at": "2026-04-29T08:20:53Z",
+            "completed_at": "2026-04-29T08:29:04Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571754/job/73540744940",
+            "queueDurationInSeconds": 36,
+            "durationInSeconds": 491
+          }
+        ]
+      },
+      {
+        "id": 25095571750,
+        "name": "GPU unit tests",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:19:21Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571750",
+        "durationInSeconds": 7918,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540744966,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:17Z",
+            "started_at": "2026-04-29T08:20:19Z",
+            "completed_at": "2026-04-29T08:20:29Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571750/job/73540744966",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 73540774040,
+            "name": "gpu_unit_tests",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:30Z",
+            "started_at": "2026-04-29T09:04:52Z",
+            "completed_at": "2026-04-29T09:19:13Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571750/job/73540774040",
+            "queueDurationInSeconds": 2662,
+            "durationInSeconds": 861
+          },
+          {
+            "id": 73549252616,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T09:19:13Z",
+            "started_at": "2026-04-29T09:19:15Z",
+            "completed_at": "2026-04-29T09:19:20Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571750/job/73549252616",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25095571823,
+        "name": "vllm_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:20:19Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571823",
+        "durationInSeconds": 7976,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540750799,
+            "name": "vllm_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:19Z",
+            "started_at": "2026-04-29T08:58:44Z",
+            "completed_at": "2026-04-29T09:20:18Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571823/job/73540750799",
+            "queueDurationInSeconds": 2305,
+            "durationInSeconds": 1294
+          }
+        ]
+      },
+      {
+        "id": 25095571772,
+        "name": "cpu_unit_tests",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:21:33Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571772",
+        "durationInSeconds": 8050,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540747417,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:18Z",
+            "started_at": "2026-04-29T08:20:21Z",
+            "completed_at": "2026-04-29T08:20:31Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571772/job/73540747417",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 73540778619,
+            "name": "cpu_unit_tests",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:31Z",
+            "started_at": "2026-04-29T09:16:42Z",
+            "completed_at": "2026-04-29T09:21:17Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571772/job/73540778619",
+            "queueDurationInSeconds": 3371,
+            "durationInSeconds": 275
+          },
+          {
+            "id": 73549559378,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T09:21:17Z",
+            "started_at": "2026-04-29T09:21:26Z",
+            "completed_at": "2026-04-29T09:21:32Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571772/job/73549559378",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25095571819,
+        "name": "e2e_ppo_trainer_megatron_vllm_2_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:24:53Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571819",
+        "durationInSeconds": 8250,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540750313,
+            "name": "e2e_ppo_trainer_fsdp_vllm_ascend",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T08:20:19Z",
+            "started_at": "2026-04-29T09:01:29Z",
+            "completed_at": "2026-04-29T09:13:46Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571819/job/73540750313",
+            "queueDurationInSeconds": 2470,
+            "durationInSeconds": 737
+          },
+          {
+            "id": 73540750334,
+            "name": "e2e_ppo_trainer_fsdp-qwen2_5vl-3b_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:19Z",
+            "started_at": "2026-04-29T09:01:29Z",
+            "completed_at": "2026-04-29T09:24:52Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571819/job/73540750334",
+            "queueDurationInSeconds": 2470,
+            "durationInSeconds": 1403
+          }
+        ]
+      },
+      {
+        "id": 25095571778,
+        "name": "reward_model_vllm_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:14:50Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571778",
+        "durationInSeconds": 7647,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540748428,
+            "name": "reward_model_vllm_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:18Z",
+            "started_at": "2026-04-29T08:58:24Z",
+            "completed_at": "2026-04-29T09:14:49Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571778/job/73540748428",
+            "queueDurationInSeconds": 2286,
+            "durationInSeconds": 985
+          }
+        ]
+      },
+      {
+        "id": 25095571773,
+        "name": "NPU unit tests",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:16:16Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571773",
+        "durationInSeconds": 7733,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540747556,
+            "name": "npu_unit_tests",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:18Z",
+            "started_at": "2026-04-29T08:54:18Z",
+            "completed_at": "2026-04-29T09:16:15Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571773/job/73540747556",
+            "queueDurationInSeconds": 2040,
+            "durationInSeconds": 1317
+          }
+        ]
+      },
+      {
+        "id": 25095571809,
+        "name": "e2e_sft_llm_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:16:57Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571809",
+        "durationInSeconds": 7774,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540751757,
+            "name": "e2e_sft_llm_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:20Z",
+            "started_at": "2026-04-29T08:58:45Z",
+            "completed_at": "2026-04-29T09:16:57Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571809/job/73540751757",
+            "queueDurationInSeconds": 2305,
+            "durationInSeconds": 1092
+          }
+        ]
+      },
+      {
+        "id": 25095571807,
+        "name": "e2e_ppo_trainer_megatron_sglang",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:30:03Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571807",
+        "durationInSeconds": 8560,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540750418,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:19Z",
+            "started_at": "2026-04-29T08:20:21Z",
+            "completed_at": "2026-04-29T08:20:32Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571807/job/73540750418",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 11
+          },
+          {
+            "id": 73540781047,
+            "name": "e2e_ppo_trainer_megatron-qwen3",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:33Z",
+            "started_at": "2026-04-29T09:07:38Z",
+            "completed_at": "2026-04-29T09:16:50Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571807/job/73540781047",
+            "queueDurationInSeconds": 2825,
+            "durationInSeconds": 552
+          },
+          {
+            "id": 73540781059,
+            "name": "e2e_ppo_trainer_megatron-deepseek",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:33Z",
+            "started_at": "2026-04-29T09:18:30Z",
+            "completed_at": "2026-04-29T09:29:51Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571807/job/73540781059",
+            "queueDurationInSeconds": 3477,
+            "durationInSeconds": 681
+          },
+          {
+            "id": 73550803655,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T09:29:52Z",
+            "started_at": "2026-04-29T09:29:56Z",
+            "completed_at": "2026-04-29T09:30:02Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571807/job/73550803655",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25095571769,
+        "name": "reward_model_vllm",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:30:59Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571769",
+        "durationInSeconds": 8616,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540746690,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:18Z",
+            "started_at": "2026-04-29T08:20:21Z",
+            "completed_at": "2026-04-29T08:20:30Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571769/job/73540746690",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 73540776314,
+            "name": "reward_model_vllm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:30Z",
+            "started_at": "2026-04-29T09:23:35Z",
+            "completed_at": "2026-04-29T09:30:45Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571769/job/73540776314",
+            "queueDurationInSeconds": 3785,
+            "durationInSeconds": 430
+          },
+          {
+            "id": 73550945280,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T09:30:45Z",
+            "started_at": "2026-04-29T09:30:54Z",
+            "completed_at": "2026-04-29T09:30:59Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571769/job/73550945280",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25095571744,
+        "name": "e2e_ppo_trainer_megatron_trtllm",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:01:42Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571744",
+        "durationInSeconds": 6859,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540743658,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:16Z",
+            "started_at": "2026-04-29T08:20:25Z",
+            "completed_at": "2026-04-29T08:20:35Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571744/job/73540743658",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 73540787676,
+            "name": "e2e_grpo_trainer_megatron-qwen2",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:35Z",
+            "started_at": "2026-04-29T08:58:08Z",
+            "completed_at": "2026-04-29T09:01:30Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571744/job/73540787676",
+            "queueDurationInSeconds": 2253,
+            "durationInSeconds": 202
+          },
+          {
+            "id": 73540787677,
+            "name": "trtllm_unit_tests",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:35Z",
+            "started_at": "2026-04-29T08:42:13Z",
+            "completed_at": "2026-04-29T08:52:51Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571744/job/73540787677",
+            "queueDurationInSeconds": 1298,
+            "durationInSeconds": 638
+          },
+          {
+            "id": 73540787692,
+            "name": "e2e_grpo_trainer_megatron-vlm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:35Z",
+            "started_at": "2026-04-29T08:49:30Z",
+            "completed_at": "2026-04-29T08:54:27Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571744/job/73540787692",
+            "queueDurationInSeconds": 1735,
+            "durationInSeconds": 297
+          },
+          {
+            "id": 73540787720,
+            "name": "e2e_grpo_trainer_fsdp-qwen2",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:35Z",
+            "started_at": "2026-04-29T08:33:33Z",
+            "completed_at": "2026-04-29T08:37:01Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571744/job/73540787720",
+            "queueDurationInSeconds": 778,
+            "durationInSeconds": 208
+          },
+          {
+            "id": 73546652137,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T09:01:31Z",
+            "started_at": "2026-04-29T09:01:33Z",
+            "completed_at": "2026-04-29T09:01:41Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571744/job/73546652137",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 8
+          }
+        ]
+      },
+      {
+        "id": 25095571742,
+        "name": "e2e_ppo_trainer_veomni_vllm_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T08:54:08Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571742",
+        "durationInSeconds": 6405,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540744660,
+            "name": "e2e_ppo_trainer_veomni_vllm_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:17Z",
+            "started_at": "2026-04-29T08:47:20Z",
+            "completed_at": "2026-04-29T08:54:07Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571742/job/73540744660",
+            "queueDurationInSeconds": 1623,
+            "durationInSeconds": 407
+          }
+        ]
+      },
+      {
+        "id": 25095571766,
+        "name": "model_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T08:56:25Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571766",
+        "durationInSeconds": 6542,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540746614,
+            "name": "model_rmpad_fsdp2_unstable_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:18Z",
+            "started_at": "2026-04-29T08:47:20Z",
+            "completed_at": "2026-04-29T08:50:38Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571766/job/73540746614",
+            "queueDurationInSeconds": 1622,
+            "durationInSeconds": 198
+          },
+          {
+            "id": 73540746669,
+            "name": "model_rmpad_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:18Z",
+            "started_at": "2026-04-29T08:50:51Z",
+            "completed_at": "2026-04-29T08:56:24Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571766/job/73540746669",
+            "queueDurationInSeconds": 1833,
+            "durationInSeconds": 333
+          }
+        ]
+      },
+      {
+        "id": 25095571776,
+        "name": "sgl",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:49:31Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571776",
+        "durationInSeconds": 9728,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540748077,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:18Z",
+            "started_at": "2026-04-29T08:20:20Z",
+            "completed_at": "2026-04-29T08:20:30Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571776/job/73540748077",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 73540775358,
+            "name": "sgl_checkpoint_engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:30Z",
+            "started_at": "2026-04-29T08:28:09Z",
+            "completed_at": "2026-04-29T08:31:48Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571776/job/73540775358",
+            "queueDurationInSeconds": 459,
+            "durationInSeconds": 219
+          },
+          {
+            "id": 73540775446,
+            "name": "sgl",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:30Z",
+            "started_at": "2026-04-29T09:41:25Z",
+            "completed_at": "2026-04-29T09:49:22Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571776/job/73540775446",
+            "queueDurationInSeconds": 4855,
+            "durationInSeconds": 477
+          },
+          {
+            "id": 73553759878,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T09:49:22Z",
+            "started_at": "2026-04-29T09:49:24Z",
+            "completed_at": "2026-04-29T09:49:30Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571776/job/73553759878",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25095571791,
+        "name": "e2e_sft_llm",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:49:29Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571791",
+        "durationInSeconds": 9726,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540748539,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:18Z",
+            "started_at": "2026-04-29T08:20:21Z",
+            "completed_at": "2026-04-29T08:20:30Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571791/job/73540748539",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 73540776377,
+            "name": "e2e_sft_llm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:30Z",
+            "started_at": "2026-04-29T09:40:25Z",
+            "completed_at": "2026-04-29T09:49:19Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571791/job/73540776377",
+            "queueDurationInSeconds": 4795,
+            "durationInSeconds": 534
+          },
+          {
+            "id": 73553754462,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T09:49:20Z",
+            "started_at": "2026-04-29T09:49:22Z",
+            "completed_at": "2026-04-29T09:49:28Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571791/job/73553754462",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25095571824,
+        "name": "e2e_ppo_trainer_megatron_sglang_2",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:50:15Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571824",
+        "durationInSeconds": 9772,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540750669,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:19Z",
+            "started_at": "2026-04-29T08:20:22Z",
+            "completed_at": "2026-04-29T08:20:27Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571824/job/73540750669",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 5
+          },
+          {
+            "id": 73540768310,
+            "name": "e2e_ppo_trainer_fsdp_sglang",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:27Z",
+            "started_at": "2026-04-29T09:34:04Z",
+            "completed_at": "2026-04-29T09:36:21Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571824/job/73540768310",
+            "queueDurationInSeconds": 4417,
+            "durationInSeconds": 137
+          },
+          {
+            "id": 73540768330,
+            "name": "e2e_ppo_trainer_fsdp-qwen2_5vl-3b",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:27Z",
+            "started_at": "2026-04-29T09:41:38Z",
+            "completed_at": "2026-04-29T09:50:06Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571824/job/73540768330",
+            "queueDurationInSeconds": 4871,
+            "durationInSeconds": 508
+          },
+          {
+            "id": 73553867814,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T09:50:06Z",
+            "started_at": "2026-04-29T09:50:09Z",
+            "completed_at": "2026-04-29T09:50:15Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571824/job/73553867814",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25095571775,
+        "name": "vllm",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:38:51Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571775",
+        "durationInSeconds": 9088,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540746337,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:18Z",
+            "started_at": "2026-04-29T08:20:21Z",
+            "completed_at": "2026-04-29T08:20:34Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571775/job/73540746337",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 13
+          },
+          {
+            "id": 73540786107,
+            "name": "vllm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:35Z",
+            "started_at": "2026-04-29T08:26:07Z",
+            "completed_at": "2026-04-29T08:38:59Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571775/job/73540786107",
+            "queueDurationInSeconds": 332,
+            "durationInSeconds": 772
+          },
+          {
+            "id": 73540786117,
+            "name": "vllm_checkpoint_engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:35Z",
+            "started_at": "2026-04-29T09:33:34Z",
+            "completed_at": "2026-04-29T09:38:35Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571775/job/73540786117",
+            "queueDurationInSeconds": 4379,
+            "durationInSeconds": 301
+          },
+          {
+            "id": 73552114289,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T09:38:35Z",
+            "started_at": "2026-04-29T09:38:44Z",
+            "completed_at": "2026-04-29T09:38:51Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571775/job/73552114289",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 7
+          }
+        ]
+      },
+      {
+        "id": 25095571761,
+        "name": "reward_model_sglang",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:39:23Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571761",
+        "durationInSeconds": 9120,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540745824,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:17Z",
+            "started_at": "2026-04-29T08:20:19Z",
+            "completed_at": "2026-04-29T08:20:27Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571761/job/73540745824",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 73540768809,
+            "name": "reward_model_sglang",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:27Z",
+            "started_at": "2026-04-29T09:36:25Z",
+            "completed_at": "2026-04-29T09:39:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571761/job/73540768809",
+            "queueDurationInSeconds": 4558,
+            "durationInSeconds": 163
+          },
+          {
+            "id": 73552197545,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T09:39:09Z",
+            "started_at": "2026-04-29T09:39:17Z",
+            "completed_at": "2026-04-29T09:39:22Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571761/job/73552197545",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25095571804,
+        "name": "model",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:40:59Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571804",
+        "durationInSeconds": 9216,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540749836,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:19Z",
+            "started_at": "2026-04-29T08:20:21Z",
+            "completed_at": "2026-04-29T08:20:30Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571804/job/73540749836",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 73540776913,
+            "name": "model_rmpad_fsdp2_unstable",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:31Z",
+            "started_at": "2026-04-29T09:40:12Z",
+            "completed_at": "2026-04-29T09:40:51Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571804/job/73540776913",
+            "queueDurationInSeconds": 4781,
+            "durationInSeconds": 39
+          },
+          {
+            "id": 73540776925,
+            "name": "model_rmpad",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:31Z",
+            "started_at": "2026-04-29T09:17:16Z",
+            "completed_at": "2026-04-29T09:19:18Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571804/job/73540776925",
+            "queueDurationInSeconds": 3405,
+            "durationInSeconds": 122
+          },
+          {
+            "id": 73540776930,
+            "name": "model_engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:31Z",
+            "started_at": "2026-04-29T08:23:51Z",
+            "completed_at": "2026-04-29T08:32:15Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571804/job/73540776930",
+            "queueDurationInSeconds": 200,
+            "durationInSeconds": 504
+          },
+          {
+            "id": 73552465599,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T09:40:51Z",
+            "started_at": "2026-04-29T09:40:53Z",
+            "completed_at": "2026-04-29T09:40:58Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571804/job/73552465599",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25095571738,
+        "name": "e2e_ppo_trainer_megatron_vllm_2",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:56:35Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571738",
+        "durationInSeconds": 10152,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540743514,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:16Z",
+            "started_at": "2026-04-29T08:20:20Z",
+            "completed_at": "2026-04-29T08:20:30Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571738/job/73540743514",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 73540776198,
+            "name": "e2e_ppo_trainer_fsdp_vllm",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T08:20:30Z",
+            "started_at": "2026-04-29T09:19:33Z",
+            "completed_at": "2026-04-29T09:26:24Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571738/job/73540776198",
+            "queueDurationInSeconds": 3543,
+            "durationInSeconds": 411
+          },
+          {
+            "id": 73540776223,
+            "name": "e2e_ppo_trainer_fsdp-qwen2_5vl-3b",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:30Z",
+            "started_at": "2026-04-29T09:42:50Z",
+            "completed_at": "2026-04-29T09:56:19Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571738/job/73540776223",
+            "queueDurationInSeconds": 4940,
+            "durationInSeconds": 809
+          },
+          {
+            "id": 73540776237,
+            "name": "e2e_ppo_trainer_megatron-moe-expert-parallel",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:30Z",
+            "started_at": "2026-04-29T09:20:07Z",
+            "completed_at": "2026-04-29T09:33:28Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571738/job/73540776237",
+            "queueDurationInSeconds": 3577,
+            "durationInSeconds": 801
+          },
+          {
+            "id": 73554814174,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T09:56:19Z",
+            "started_at": "2026-04-29T09:56:28Z",
+            "completed_at": "2026-04-29T09:56:34Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571738/job/73554814174",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25095571833,
+        "name": "e2e_sft_vlm",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T09:56:50Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571833",
+        "durationInSeconds": 10167,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540751580,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:20Z",
+            "started_at": "2026-04-29T08:20:37Z",
+            "completed_at": "2026-04-29T08:20:47Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571833/job/73540751580",
+            "queueDurationInSeconds": 17,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 73540814603,
+            "name": "e2e_sft_vlm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:47Z",
+            "started_at": "2026-04-29T09:46:22Z",
+            "completed_at": "2026-04-29T09:56:43Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571833/job/73540814603",
+            "queueDurationInSeconds": 5135,
+            "durationInSeconds": 621
+          },
+          {
+            "id": 73554871751,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T09:56:43Z",
+            "started_at": "2026-04-29T09:56:45Z",
+            "completed_at": "2026-04-29T09:56:49Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571833/job/73554871751",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 25095571759,
+        "name": "e2e_one_step_off_policy",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T10:00:21Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571759",
+        "durationInSeconds": 10378,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540745264,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:17Z",
+            "started_at": "2026-04-29T08:20:20Z",
+            "completed_at": "2026-04-29T08:20:30Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571759/job/73540745264",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 73540774818,
+            "name": "e2e_one_step_off_policy_megatron",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:30Z",
+            "started_at": "2026-04-29T09:57:33Z",
+            "completed_at": "2026-04-29T10:00:14Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571759/job/73540774818",
+            "queueDurationInSeconds": 5823,
+            "durationInSeconds": 161
+          },
+          {
+            "id": 73540774844,
+            "name": "e2e_one_step_off_policy_fsdp2",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:30Z",
+            "started_at": "2026-04-29T09:34:10Z",
+            "completed_at": "2026-04-29T09:36:59Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571759/job/73540774844",
+            "queueDurationInSeconds": 4420,
+            "durationInSeconds": 169
+          },
+          {
+            "id": 73555397015,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T10:00:14Z",
+            "started_at": "2026-04-29T10:00:17Z",
+            "completed_at": "2026-04-29T10:00:21Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571759/job/73555397015",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 25095571783,
+        "name": "e2e_ppo_trainer_megatron_vllm",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T10:00:56Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571783",
+        "durationInSeconds": 10413,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540748840,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:18Z",
+            "started_at": "2026-04-29T08:20:21Z",
+            "completed_at": "2026-04-29T08:20:29Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571783/job/73540748840",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 73540772893,
+            "name": "e2e_ppo_trainer_megatron-qwen3",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:29Z",
+            "started_at": "2026-04-29T09:48:46Z",
+            "completed_at": "2026-04-29T10:00:40Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571783/job/73540772893",
+            "queueDurationInSeconds": 5297,
+            "durationInSeconds": 714
+          },
+          {
+            "id": 73540772909,
+            "name": "e2e_ppo_trainer_megatron-deepseek",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T08:20:29Z",
+            "started_at": "2026-04-29T09:38:39Z",
+            "completed_at": "2026-04-29T09:48:42Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571783/job/73540772909",
+            "queueDurationInSeconds": 4690,
+            "durationInSeconds": 603
+          },
+          {
+            "id": 73555468258,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T10:00:40Z",
+            "started_at": "2026-04-29T10:00:49Z",
+            "completed_at": "2026-04-29T10:00:56Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571783/job/73555468258",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 7
+          }
+        ]
+      },
+      {
+        "id": 25095571780,
+        "name": "e2e_fully_async_policy",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T10:03:36Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571780",
+        "durationInSeconds": 10573,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540749262,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:19Z",
+            "started_at": "2026-04-29T08:20:27Z",
+            "completed_at": "2026-04-29T08:20:34Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571780/job/73540749262",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 73540786444,
+            "name": "e2e_fully_async_policy_megatron",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:35Z",
+            "started_at": "2026-04-29T09:55:05Z",
+            "completed_at": "2026-04-29T10:00:18Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571780/job/73540786444",
+            "queueDurationInSeconds": 5670,
+            "durationInSeconds": 313
+          },
+          {
+            "id": 73540786458,
+            "name": "e2e_fully_async_policy_fsdp2",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:35Z",
+            "started_at": "2026-04-29T10:00:12Z",
+            "completed_at": "2026-04-29T10:03:26Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571780/job/73540786458",
+            "queueDurationInSeconds": 5977,
+            "durationInSeconds": 194
+          },
+          {
+            "id": 73555879803,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T10:03:27Z",
+            "started_at": "2026-04-29T10:03:29Z",
+            "completed_at": "2026-04-29T10:03:35Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571780/job/73555879803",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25095571747,
+        "name": "e2e_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T08:40:35Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571747",
+        "durationInSeconds": 5592,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540744260,
+            "name": "E2E Ascend testing for RL training scenarios of LLM models",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:17Z",
+            "started_at": "2026-04-29T08:20:47Z",
+            "completed_at": "2026-04-29T08:40:34Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571747/job/73540744260",
+            "queueDurationInSeconds": 30,
+            "durationInSeconds": 1187
+          },
+          {
+            "id": 73540744265,
+            "name": "E2E Ascend testing for RL training scenarios of VLM models",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:17Z",
+            "started_at": "2026-04-29T08:20:47Z",
+            "completed_at": "2026-04-29T08:31:52Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571747/job/73540744265",
+            "queueDurationInSeconds": 30,
+            "durationInSeconds": 665
+          },
+          {
+            "id": 73540744266,
+            "name": "E2E Ascend testing for RL training scenarios of LLM models using MindSpeed_LLM engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:17Z",
+            "started_at": "2026-04-29T08:20:42Z",
+            "completed_at": "2026-04-29T08:32:57Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571747/job/73540744266",
+            "queueDurationInSeconds": 25,
+            "durationInSeconds": 735
+          }
+        ]
+      },
+      {
+        "id": 25095571792,
+        "name": "e2e_ppo_trainer_veomni_vllm",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T08:43:45Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571792",
+        "durationInSeconds": 5782,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540751811,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:20Z",
+            "started_at": "2026-04-29T08:20:26Z",
+            "completed_at": "2026-04-29T08:20:36Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571792/job/73540751811",
+            "queueDurationInSeconds": 6,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 73540789083,
+            "name": "e2e_ppo_trainer_veomni_vllm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:36Z",
+            "started_at": "2026-04-29T08:35:58Z",
+            "completed_at": "2026-04-29T08:43:29Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571792/job/73540789083",
+            "queueDurationInSeconds": 922,
+            "durationInSeconds": 451
+          },
+          {
+            "id": 73543979736,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:43:30Z",
+            "started_at": "2026-04-29T08:43:39Z",
+            "completed_at": "2026-04-29T08:43:44Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571792/job/73543979736",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25095571741,
+        "name": ".github/workflows/check-pr-title.yml",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T08:20:24Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571741",
+        "durationInSeconds": 4381,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540743487,
+            "name": "check-title",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:16Z",
+            "started_at": "2026-04-29T08:20:19Z",
+            "completed_at": "2026-04-29T08:20:24Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571741/job/73540743487",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25095571832,
+        "name": ".github/workflows/secrets_scan.yml",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T08:20:41Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571832",
+        "durationInSeconds": 4398,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540751277,
+            "name": "test",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:20Z",
+            "started_at": "2026-04-29T08:20:29Z",
+            "completed_at": "2026-04-29T08:20:40Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571832/job/73540751277",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 11
+          }
+        ]
+      },
+      {
+        "id": 25095571765,
+        "name": "e2e_ppo_trainer",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T08:20:42Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571765",
+        "durationInSeconds": 4399,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540747416,
+            "name": "pre_commit_for_ppo (3.12)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:18Z",
+            "started_at": "2026-04-29T08:20:20Z",
+            "completed_at": "2026-04-29T08:20:41Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571765/job/73540747416",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 21
+          }
+        ]
+      },
+      {
+        "id": 25095571727,
+        "name": "pre-commit",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T08:20:52Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571727",
+        "durationInSeconds": 4409,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540742748,
+            "name": "pre-commit (3.12)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:16Z",
+            "started_at": "2026-04-29T08:20:19Z",
+            "completed_at": "2026-04-29T08:20:51Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571727/job/73540742748",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 32
+          }
+        ]
+      },
+      {
+        "id": 25095571739,
+        "name": "doc_test",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T08:20:53Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571739",
+        "durationInSeconds": 4410,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540743014,
+            "name": "doc_test (3.10)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:16Z",
+            "started_at": "2026-04-29T08:20:25Z",
+            "completed_at": "2026-04-29T08:20:52Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571739/job/73540743014",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 27
+          }
+        ]
+      },
+      {
+        "id": 25095571849,
+        "name": "Type Annotation and Docstring Coverage",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T08:22:11Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571849",
+        "durationInSeconds": 4488,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540751472,
+            "name": "type-coverage-check",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:20Z",
+            "started_at": "2026-04-29T08:20:30Z",
+            "completed_at": "2026-04-29T08:22:10Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571849/job/73540751472",
+            "queueDurationInSeconds": 10,
+            "durationInSeconds": 100
+          }
+        ]
+      },
+      {
+        "id": 25095571763,
+        "name": "sanity",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T08:21:56Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571763",
+        "durationInSeconds": 4473,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540746015,
+            "name": "sanity (3.10)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:17Z",
+            "started_at": "2026-04-29T08:20:20Z",
+            "completed_at": "2026-04-29T08:21:55Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571763/job/73540746015",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 95
+          }
+        ]
+      },
+      {
+        "id": 25095571797,
+        "name": "e2e_fully_async_policy_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3592aedded56076aec829a3f69d3416b17ce3287",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T07:07:23Z",
+        "updated_at": "2026-04-29T08:30:57Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25095571797",
+        "durationInSeconds": 5014,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73540749748,
+            "name": "e2e_fully_async_policy_megatron_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:19Z",
+            "started_at": "2026-04-29T08:21:07Z",
+            "completed_at": "2026-04-29T08:30:57Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571797/job/73540749748",
+            "queueDurationInSeconds": 48,
+            "durationInSeconds": 590
+          },
+          {
+            "id": 73540749771,
+            "name": "e2e_fully_async_policy_fsdp2_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T08:20:19Z",
+            "started_at": "2026-04-29T08:21:06Z",
+            "completed_at": "2026-04-29T08:28:58Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25095571797/job/73540749771",
+            "queueDurationInSeconds": 47,
+            "durationInSeconds": 472
+          }
+        ]
+      },
+      {
+        "id": 25091919492,
+        "name": "e2e_ppo_trainer_veomni_vllm_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:12:55Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919492",
+        "durationInSeconds": 3987,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524327200,
+            "name": "e2e_ppo_trainer_veomni_vllm_ascend",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T05:59:20Z",
+            "started_at": "2026-04-29T06:07:02Z",
+            "completed_at": "2026-04-29T06:12:55Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919492/job/73524327200",
+            "queueDurationInSeconds": 462,
+            "durationInSeconds": 353
+          }
+        ]
+      },
+      {
+        "id": 25091919504,
+        "name": "e2e_one_step_off_policy_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:13:51Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919504",
+        "durationInSeconds": 4043,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524328440,
+            "name": "e2e_one_step_off_policy_megatron_ascend",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T05:59:20Z",
+            "started_at": "2026-04-29T06:03:44Z",
+            "completed_at": "2026-04-29T06:11:07Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919504/job/73524328440",
+            "queueDurationInSeconds": 264,
+            "durationInSeconds": 443
+          },
+          {
+            "id": 73524328449,
+            "name": "e2e_one_step_off_policy_fsdp2_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:20Z",
+            "started_at": "2026-04-29T06:04:25Z",
+            "completed_at": "2026-04-29T06:13:50Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919504/job/73524328449",
+            "queueDurationInSeconds": 305,
+            "durationInSeconds": 565
+          }
+        ]
+      },
+      {
+        "id": 25091919524,
+        "name": "e2e_fully_async_policy_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:16:47Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919524",
+        "durationInSeconds": 4219,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524329533,
+            "name": "e2e_fully_async_policy_megatron_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:21Z",
+            "started_at": "2026-04-29T06:04:55Z",
+            "completed_at": "2026-04-29T06:16:47Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919524/job/73524329533",
+            "queueDurationInSeconds": 334,
+            "durationInSeconds": 712
+          },
+          {
+            "id": 73524329535,
+            "name": "e2e_fully_async_policy_fsdp2_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:21Z",
+            "started_at": "2026-04-29T06:04:45Z",
+            "completed_at": "2026-04-29T06:12:41Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919524/job/73524329535",
+            "queueDurationInSeconds": 324,
+            "durationInSeconds": 476
+          }
+        ]
+      },
+      {
+        "id": 25091919494,
+        "name": "e2e_sft_llm",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:17:25Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919494",
+        "durationInSeconds": 4257,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524327607,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:20Z",
+            "started_at": "2026-04-29T05:59:22Z",
+            "completed_at": "2026-04-29T05:59:29Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919494/job/73524327607",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 73524342105,
+            "name": "e2e_sft_llm",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T05:59:29Z",
+            "started_at": "2026-04-29T06:10:21Z",
+            "completed_at": "2026-04-29T06:17:16Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919494/job/73524342105",
+            "queueDurationInSeconds": 652,
+            "durationInSeconds": 415
+          },
+          {
+            "id": 73526096614,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:17:16Z",
+            "started_at": "2026-04-29T06:17:18Z",
+            "completed_at": "2026-04-29T06:17:24Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919494/job/73526096614",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25091919479,
+        "name": "e2e_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:20:30Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919479",
+        "durationInSeconds": 4442,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524326867,
+            "name": "E2E Ascend testing for RL training scenarios of VLM models",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:19Z",
+            "started_at": "2026-04-29T06:07:58Z",
+            "completed_at": "2026-04-29T06:17:01Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919479/job/73524326867",
+            "queueDurationInSeconds": 519,
+            "durationInSeconds": 543
+          },
+          {
+            "id": 73524326876,
+            "name": "E2E Ascend testing for RL training scenarios of LLM models using MindSpeed_LLM engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:19Z",
+            "started_at": "2026-04-29T06:00:48Z",
+            "completed_at": "2026-04-29T06:12:53Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919479/job/73524326876",
+            "queueDurationInSeconds": 89,
+            "durationInSeconds": 725
+          },
+          {
+            "id": 73524326878,
+            "name": "E2E Ascend testing for RL training scenarios of LLM models",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:19Z",
+            "started_at": "2026-04-29T06:02:25Z",
+            "completed_at": "2026-04-29T06:20:29Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919479/job/73524326878",
+            "queueDurationInSeconds": 186,
+            "durationInSeconds": 1084
+          }
+        ]
+      },
+      {
+        "id": 25091919456,
+        "name": ".github/workflows/secrets_scan.yml",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T05:59:32Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919456",
+        "durationInSeconds": 3184,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524325837,
+            "name": "test",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:19Z",
+            "started_at": "2026-04-29T05:59:20Z",
+            "completed_at": "2026-04-29T05:59:32Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919456/job/73524325837",
+            "queueDurationInSeconds": 1,
+            "durationInSeconds": 12
+          }
+        ]
+      },
+      {
+        "id": 25091919496,
+        "name": "pre-commit",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T05:59:55Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919496",
+        "durationInSeconds": 3207,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524327857,
+            "name": "pre-commit (3.12)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:20Z",
+            "started_at": "2026-04-29T05:59:23Z",
+            "completed_at": "2026-04-29T05:59:54Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919496/job/73524327857",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 31
+          }
+        ]
+      },
+      {
+        "id": 25091919472,
+        "name": "e2e_ppo_trainer",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T05:59:43Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919472",
+        "durationInSeconds": 3195,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524326465,
+            "name": "pre_commit_for_ppo (3.12)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:19Z",
+            "started_at": "2026-04-29T05:59:21Z",
+            "completed_at": "2026-04-29T05:59:42Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919472/job/73524326465",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 21
+          }
+        ]
+      },
+      {
+        "id": 25091919468,
+        "name": "doc_test",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T05:59:47Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919468",
+        "durationInSeconds": 3199,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524326340,
+            "name": "doc_test (3.10)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:19Z",
+            "started_at": "2026-04-29T05:59:21Z",
+            "completed_at": "2026-04-29T05:59:47Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919468/job/73524326340",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 26
+          }
+        ]
+      },
+      {
+        "id": 25091919508,
+        "name": "reward_model_sglang",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:22:29Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919508",
+        "durationInSeconds": 4561,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524329006,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:21Z",
+            "started_at": "2026-04-29T05:59:23Z",
+            "completed_at": "2026-04-29T05:59:33Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919508/job/73524329006",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 73524348296,
+            "name": "reward_model_sglang",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:33Z",
+            "started_at": "2026-04-29T06:19:24Z",
+            "completed_at": "2026-04-29T06:22:20Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919508/job/73524348296",
+            "queueDurationInSeconds": 1191,
+            "durationInSeconds": 176
+          },
+          {
+            "id": 73526605482,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:22:21Z",
+            "started_at": "2026-04-29T06:22:23Z",
+            "completed_at": "2026-04-29T06:22:28Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919508/job/73526605482",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25091919526,
+        "name": "vllm_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T07:06:17Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919526",
+        "durationInSeconds": 7189,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524329470,
+            "name": "vllm_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:21Z",
+            "started_at": "2026-04-29T06:45:16Z",
+            "completed_at": "2026-04-29T07:06:16Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919526/job/73524329470",
+            "queueDurationInSeconds": 2755,
+            "durationInSeconds": 1260
+          }
+        ]
+      },
+      {
+        "id": 25091919501,
+        "name": "e2e_ppo_trainer_megatron_vllm_2",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T07:06:58Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919501",
+        "durationInSeconds": 7230,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524328677,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:21Z",
+            "started_at": "2026-04-29T05:59:23Z",
+            "completed_at": "2026-04-29T05:59:32Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919501/job/73524328677",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 73524346763,
+            "name": "e2e_ppo_trainer_fsdp_vllm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:32Z",
+            "started_at": "2026-04-29T06:45:37Z",
+            "completed_at": "2026-04-29T07:06:47Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919501/job/73524346763",
+            "queueDurationInSeconds": 2765,
+            "durationInSeconds": 1270
+          },
+          {
+            "id": 73524346767,
+            "name": "e2e_ppo_trainer_megatron-moe-expert-parallel",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T05:59:32Z",
+            "started_at": "2026-04-29T06:50:45Z",
+            "completed_at": "2026-04-29T06:51:30Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919501/job/73524346767",
+            "queueDurationInSeconds": 3073,
+            "durationInSeconds": 45
+          },
+          {
+            "id": 73524346780,
+            "name": "e2e_ppo_trainer_fsdp-qwen2_5vl-3b",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:32Z",
+            "started_at": "2026-04-29T06:49:48Z",
+            "completed_at": "2026-04-29T07:04:21Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919501/job/73524346780",
+            "queueDurationInSeconds": 3016,
+            "durationInSeconds": 873
+          },
+          {
+            "id": 73531382214,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T07:06:47Z",
+            "started_at": "2026-04-29T07:06:49Z",
+            "completed_at": "2026-04-29T07:06:57Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919501/job/73531382214",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 8
+          }
+        ]
+      },
+      {
+        "id": 25091919478,
+        "name": "e2e_ppo_trainer_megatron_trtllm",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T07:09:15Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919478",
+        "durationInSeconds": 7367,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524326477,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:19Z",
+            "started_at": "2026-04-29T05:59:21Z",
+            "completed_at": "2026-04-29T05:59:29Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919478/job/73524326477",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 73524341771,
+            "name": "e2e_grpo_trainer_megatron-qwen2",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:29Z",
+            "started_at": "2026-04-29T06:15:51Z",
+            "completed_at": "2026-04-29T06:19:19Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919478/job/73524341771",
+            "queueDurationInSeconds": 982,
+            "durationInSeconds": 208
+          },
+          {
+            "id": 73524341779,
+            "name": "e2e_grpo_trainer_fsdp-qwen2",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:29Z",
+            "started_at": "2026-04-29T06:46:22Z",
+            "completed_at": "2026-04-29T06:49:49Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919478/job/73524341779",
+            "queueDurationInSeconds": 2813,
+            "durationInSeconds": 207
+          },
+          {
+            "id": 73524341789,
+            "name": "trtllm_unit_tests",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:29Z",
+            "started_at": "2026-04-29T06:49:53Z",
+            "completed_at": "2026-04-29T07:02:40Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919478/job/73524341789",
+            "queueDurationInSeconds": 3024,
+            "durationInSeconds": 767
+          },
+          {
+            "id": 73524341830,
+            "name": "e2e_grpo_trainer_megatron-vlm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:29Z",
+            "started_at": "2026-04-29T07:01:26Z",
+            "completed_at": "2026-04-29T07:08:59Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919478/job/73524341830",
+            "queueDurationInSeconds": 3717,
+            "durationInSeconds": 453
+          },
+          {
+            "id": 73531640106,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T07:08:59Z",
+            "started_at": "2026-04-29T07:09:09Z",
+            "completed_at": "2026-04-29T07:09:14Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919478/job/73531640106",
+            "queueDurationInSeconds": 10,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25091919467,
+        "name": ".github/workflows/check-pr-title.yml",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T05:59:27Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919467",
+        "durationInSeconds": 3179,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524326144,
+            "name": "check-title",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:19Z",
+            "started_at": "2026-04-29T05:59:21Z",
+            "completed_at": "2026-04-29T05:59:27Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919467/job/73524326144",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25091919480,
+        "name": "sanity",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:00:54Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919480",
+        "durationInSeconds": 3266,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524326630,
+            "name": "sanity (3.10)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:19Z",
+            "started_at": "2026-04-29T05:59:21Z",
+            "completed_at": "2026-04-29T06:00:53Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919480/job/73524326630",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 92
+          }
+        ]
+      },
+      {
+        "id": 25091919506,
+        "name": "Type Annotation and Docstring Coverage",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:00:52Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919506",
+        "durationInSeconds": 3264,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524327761,
+            "name": "type-coverage-check",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:20Z",
+            "started_at": "2026-04-29T05:59:22Z",
+            "completed_at": "2026-04-29T06:00:51Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919506/job/73524327761",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 89
+          }
+        ]
+      },
+      {
+        "id": 25091919489,
+        "name": "cpu_unit_tests",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:06:13Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919489",
+        "durationInSeconds": 3585,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524327378,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:20Z",
+            "started_at": "2026-04-29T05:59:22Z",
+            "completed_at": "2026-04-29T05:59:32Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919489/job/73524327378",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 73524346864,
+            "name": "cpu_unit_tests",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T05:59:32Z",
+            "started_at": "2026-04-29T06:02:40Z",
+            "completed_at": "2026-04-29T06:06:05Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919489/job/73524346864",
+            "queueDurationInSeconds": 188,
+            "durationInSeconds": 205
+          },
+          {
+            "id": 73525003960,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:06:05Z",
+            "started_at": "2026-04-29T06:06:07Z",
+            "completed_at": "2026-04-29T06:06:12Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919489/job/73525003960",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25091919474,
+        "name": "sglang_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:06:08Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919474",
+        "durationInSeconds": 3580,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524326163,
+            "name": "sglang_ascend",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T05:59:19Z",
+            "started_at": "2026-04-29T05:59:40Z",
+            "completed_at": "2026-04-29T06:06:07Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919474/job/73524326163",
+            "queueDurationInSeconds": 21,
+            "durationInSeconds": 387
+          }
+        ]
+      },
+      {
+        "id": 25091919495,
+        "name": "vllm_omni",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:11:14Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919495",
+        "durationInSeconds": 3886,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524328157,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:20Z",
+            "started_at": "2026-04-29T05:59:22Z",
+            "completed_at": "2026-04-29T05:59:32Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919495/job/73524328157",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 73524347317,
+            "name": "vllm_omni",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:32Z",
+            "started_at": "2026-04-29T06:05:17Z",
+            "completed_at": "2026-04-29T06:11:03Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919495/job/73524347317",
+            "queueDurationInSeconds": 345,
+            "durationInSeconds": 346
+          },
+          {
+            "id": 73525495682,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:11:03Z",
+            "started_at": "2026-04-29T06:11:05Z",
+            "completed_at": "2026-04-29T06:11:13Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919495/job/73525495682",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 8
+          }
+        ]
+      },
+      {
+        "id": 25091919455,
+        "name": "vllm",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:50:48Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919455",
+        "durationInSeconds": 6260,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524325473,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:18Z",
+            "started_at": "2026-04-29T05:59:26Z",
+            "completed_at": "2026-04-29T05:59:35Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919455/job/73524325473",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 73524351831,
+            "name": "vllm_checkpoint_engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:35Z",
+            "started_at": "2026-04-29T06:46:13Z",
+            "completed_at": "2026-04-29T06:50:40Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919455/job/73524351831",
+            "queueDurationInSeconds": 2798,
+            "durationInSeconds": 267
+          },
+          {
+            "id": 73524351835,
+            "name": "vllm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:35Z",
+            "started_at": "2026-04-29T06:05:50Z",
+            "completed_at": "2026-04-29T06:21:25Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919455/job/73524351835",
+            "queueDurationInSeconds": 375,
+            "durationInSeconds": 935
+          },
+          {
+            "id": 73529525304,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:50:41Z",
+            "started_at": "2026-04-29T06:50:43Z",
+            "completed_at": "2026-04-29T06:50:47Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919455/job/73529525304",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 25091919514,
+        "name": "e2e_ppo_trainer_megatron_vllm_2_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:50:58Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919514",
+        "durationInSeconds": 6270,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524329000,
+            "name": "e2e_ppo_trainer_fsdp-qwen2_5vl-3b_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:21Z",
+            "started_at": "2026-04-29T06:29:01Z",
+            "completed_at": "2026-04-29T06:50:57Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919514/job/73524329000",
+            "queueDurationInSeconds": 1780,
+            "durationInSeconds": 1316
+          },
+          {
+            "id": 73524329007,
+            "name": "e2e_ppo_trainer_fsdp_vllm_ascend",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T05:59:21Z",
+            "started_at": "2026-04-29T06:24:49Z",
+            "completed_at": "2026-04-29T06:49:15Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919514/job/73524329007",
+            "queueDurationInSeconds": 1528,
+            "durationInSeconds": 1466
+          }
+        ]
+      },
+      {
+        "id": 25091919475,
+        "name": "GPU unit tests",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:51:23Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919475",
+        "durationInSeconds": 6295,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524326695,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:19Z",
+            "started_at": "2026-04-29T05:59:21Z",
+            "completed_at": "2026-04-29T05:59:28Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919475/job/73524326695",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 73524341213,
+            "name": "gpu_unit_tests",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:29Z",
+            "started_at": "2026-04-29T06:35:54Z",
+            "completed_at": "2026-04-29T06:51:13Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919475/job/73524341213",
+            "queueDurationInSeconds": 2185,
+            "durationInSeconds": 919
+          },
+          {
+            "id": 73529584719,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:51:14Z",
+            "started_at": "2026-04-29T06:51:17Z",
+            "completed_at": "2026-04-29T06:51:22Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919475/job/73529584719",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25091919491,
+        "name": "e2e_ppo_trainer_megatron_vllm",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:57:22Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919491",
+        "durationInSeconds": 6654,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524327605,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:20Z",
+            "started_at": "2026-04-29T05:59:22Z",
+            "completed_at": "2026-04-29T05:59:31Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919491/job/73524327605",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 73524346355,
+            "name": "e2e_ppo_trainer_megatron-qwen3",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T05:59:32Z",
+            "started_at": "2026-04-29T06:39:02Z",
+            "completed_at": "2026-04-29T06:49:43Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919491/job/73524346355",
+            "queueDurationInSeconds": 2370,
+            "durationInSeconds": 641
+          },
+          {
+            "id": 73524346367,
+            "name": "e2e_ppo_trainer_megatron-deepseek",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T05:59:32Z",
+            "started_at": "2026-04-29T06:47:42Z",
+            "completed_at": "2026-04-29T06:57:13Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919491/job/73524346367",
+            "queueDurationInSeconds": 2890,
+            "durationInSeconds": 571
+          },
+          {
+            "id": 73530249475,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:57:13Z",
+            "started_at": "2026-04-29T06:57:16Z",
+            "completed_at": "2026-04-29T06:57:21Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919491/job/73530249475",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25091919544,
+        "name": "NPU unit tests",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:59:12Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919544",
+        "durationInSeconds": 6764,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524330279,
+            "name": "npu_unit_tests",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:21Z",
+            "started_at": "2026-04-29T06:37:14Z",
+            "completed_at": "2026-04-29T06:59:11Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919544/job/73524330279",
+            "queueDurationInSeconds": 2273,
+            "durationInSeconds": 1317
+          }
+        ]
+      },
+      {
+        "id": 25091919498,
+        "name": "reward_model_vllm_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:36:09Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919498",
+        "durationInSeconds": 5381,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524328114,
+            "name": "reward_model_vllm_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:20Z",
+            "started_at": "2026-04-29T06:19:00Z",
+            "completed_at": "2026-04-29T06:36:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919498/job/73524328114",
+            "queueDurationInSeconds": 1180,
+            "durationInSeconds": 1028
+          }
+        ]
+      },
+      {
+        "id": 25091919499,
+        "name": "e2e_ppo_trainer_megatron_sglang",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:35:59Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919499",
+        "durationInSeconds": 5371,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524328927,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:21Z",
+            "started_at": "2026-04-29T05:59:22Z",
+            "completed_at": "2026-04-29T05:59:31Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919499/job/73524328927",
+            "queueDurationInSeconds": 1,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 73524345692,
+            "name": "e2e_ppo_trainer_megatron-deepseek",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:31Z",
+            "started_at": "2026-04-29T06:24:49Z",
+            "completed_at": "2026-04-29T06:35:50Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919499/job/73524345692",
+            "queueDurationInSeconds": 1518,
+            "durationInSeconds": 661
+          },
+          {
+            "id": 73524345695,
+            "name": "e2e_ppo_trainer_megatron-qwen3",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:31Z",
+            "started_at": "2026-04-29T06:22:36Z",
+            "completed_at": "2026-04-29T06:32:04Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919499/job/73524345695",
+            "queueDurationInSeconds": 1385,
+            "durationInSeconds": 568
+          },
+          {
+            "id": 73527944803,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:35:50Z",
+            "started_at": "2026-04-29T06:35:52Z",
+            "completed_at": "2026-04-29T06:35:58Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919499/job/73527944803",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25091919530,
+        "name": "reward_model_vllm",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:37:21Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919530",
+        "durationInSeconds": 5453,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524330937,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:22Z",
+            "started_at": "2026-04-29T05:59:31Z",
+            "completed_at": "2026-04-29T05:59:39Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919530/job/73524330937",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 73524358271,
+            "name": "reward_model_vllm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:39Z",
+            "started_at": "2026-04-29T06:26:25Z",
+            "completed_at": "2026-04-29T06:37:07Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919530/job/73524358271",
+            "queueDurationInSeconds": 1606,
+            "durationInSeconds": 642
+          },
+          {
+            "id": 73528072724,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:37:07Z",
+            "started_at": "2026-04-29T06:37:15Z",
+            "completed_at": "2026-04-29T06:37:20Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919530/job/73528072724",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25091919522,
+        "name": "e2e_fully_async_policy",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:38:12Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919522",
+        "durationInSeconds": 5504,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524329921,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:21Z",
+            "started_at": "2026-04-29T05:59:30Z",
+            "completed_at": "2026-04-29T05:59:39Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919522/job/73524329921",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 73524357781,
+            "name": "e2e_fully_async_policy_fsdp2",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:39Z",
+            "started_at": "2026-04-29T06:17:30Z",
+            "completed_at": "2026-04-29T06:21:14Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919522/job/73524357781",
+            "queueDurationInSeconds": 1071,
+            "durationInSeconds": 224
+          },
+          {
+            "id": 73524357786,
+            "name": "e2e_fully_async_policy_megatron",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:39Z",
+            "started_at": "2026-04-29T06:32:44Z",
+            "completed_at": "2026-04-29T06:38:11Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919522/job/73524357786",
+            "queueDurationInSeconds": 1985,
+            "durationInSeconds": 327
+          },
+          {
+            "id": 73526498379,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:21:15Z",
+            "started_at": "2026-04-29T06:21:17Z",
+            "completed_at": "2026-04-29T06:21:24Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919522/job/73526498379",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 7
+          }
+        ]
+      },
+      {
+        "id": 25091919517,
+        "name": "sgl",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:39:50Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919517",
+        "durationInSeconds": 5602,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524329709,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:21Z",
+            "started_at": "2026-04-29T05:59:29Z",
+            "completed_at": "2026-04-29T05:59:37Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919517/job/73524329709",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 73524355597,
+            "name": "sgl",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:38Z",
+            "started_at": "2026-04-29T06:31:27Z",
+            "completed_at": "2026-04-29T06:39:40Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919517/job/73524355597",
+            "queueDurationInSeconds": 1909,
+            "durationInSeconds": 493
+          },
+          {
+            "id": 73524355606,
+            "name": "sgl_checkpoint_engine",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T05:59:38Z",
+            "started_at": "2026-04-29T06:24:26Z",
+            "completed_at": "2026-04-29T06:24:44Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919517/job/73524355606",
+            "queueDurationInSeconds": 1488,
+            "durationInSeconds": 18
+          },
+          {
+            "id": 73528327003,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:39:40Z",
+            "started_at": "2026-04-29T06:39:42Z",
+            "completed_at": "2026-04-29T06:39:49Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919517/job/73528327003",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 7
+          }
+        ]
+      },
+      {
+        "id": 25091919523,
+        "name": "model_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:43:09Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919523",
+        "durationInSeconds": 5801,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524329784,
+            "name": "model_rmpad_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:21Z",
+            "started_at": "2026-04-29T06:38:17Z",
+            "completed_at": "2026-04-29T06:43:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919523/job/73524329784",
+            "queueDurationInSeconds": 2336,
+            "durationInSeconds": 291
+          },
+          {
+            "id": 73524329806,
+            "name": "model_rmpad_fsdp2_unstable_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:21Z",
+            "started_at": "2026-04-29T06:37:14Z",
+            "completed_at": "2026-04-29T06:39:02Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919523/job/73524329806",
+            "queueDurationInSeconds": 2273,
+            "durationInSeconds": 108
+          }
+        ]
+      },
+      {
+        "id": 25091919511,
+        "name": "e2e_one_step_off_policy",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:46:19Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919511",
+        "durationInSeconds": 5991,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524330502,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:22Z",
+            "started_at": "2026-04-29T05:59:33Z",
+            "completed_at": "2026-04-29T05:59:42Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919511/job/73524330502",
+            "queueDurationInSeconds": 11,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 73524362788,
+            "name": "e2e_one_step_off_policy_fsdp2",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:42Z",
+            "started_at": "2026-04-29T06:40:13Z",
+            "completed_at": "2026-04-29T06:43:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919511/job/73524362788",
+            "queueDurationInSeconds": 2431,
+            "durationInSeconds": 175
+          },
+          {
+            "id": 73524362805,
+            "name": "e2e_one_step_off_policy_megatron",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:42Z",
+            "started_at": "2026-04-29T06:43:12Z",
+            "completed_at": "2026-04-29T06:46:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919511/job/73524362805",
+            "queueDurationInSeconds": 2610,
+            "durationInSeconds": 176
+          },
+          {
+            "id": 73529018013,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:46:08Z",
+            "started_at": "2026-04-29T06:46:10Z",
+            "completed_at": "2026-04-29T06:46:18Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919511/job/73529018013",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 8
+          }
+        ]
+      },
+      {
+        "id": 25091919462,
+        "name": "e2e_sft_vlm",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:27:46Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919462",
+        "durationInSeconds": 4878,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524326155,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:19Z",
+            "started_at": "2026-04-29T05:59:27Z",
+            "completed_at": "2026-04-29T05:59:35Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919462/job/73524326155",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 73524352262,
+            "name": "e2e_sft_vlm",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T05:59:36Z",
+            "started_at": "2026-04-29T06:20:34Z",
+            "completed_at": "2026-04-29T06:27:38Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919462/job/73524352262",
+            "queueDurationInSeconds": 1258,
+            "durationInSeconds": 424
+          },
+          {
+            "id": 73527122073,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:27:39Z",
+            "started_at": "2026-04-29T06:27:41Z",
+            "completed_at": "2026-04-29T06:27:45Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919462/job/73527122073",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 25091919513,
+        "name": "e2e_ppo_trainer_megatron_sglang_2",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:31:34Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919513",
+        "durationInSeconds": 5106,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524329167,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:21Z",
+            "started_at": "2026-04-29T05:59:37Z",
+            "completed_at": "2026-04-29T05:59:46Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919513/job/73524329167",
+            "queueDurationInSeconds": 16,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 73524368588,
+            "name": "e2e_ppo_trainer_fsdp-qwen2_5vl-3b",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:46Z",
+            "started_at": "2026-04-29T06:22:25Z",
+            "completed_at": "2026-04-29T06:31:22Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919513/job/73524368588",
+            "queueDurationInSeconds": 1359,
+            "durationInSeconds": 537
+          },
+          {
+            "id": 73524368594,
+            "name": "e2e_ppo_trainer_fsdp_sglang",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:46Z",
+            "started_at": "2026-04-29T06:04:27Z",
+            "completed_at": "2026-04-29T06:06:33Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919513/job/73524368594",
+            "queueDurationInSeconds": 281,
+            "durationInSeconds": 126
+          },
+          {
+            "id": 73527501530,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:31:23Z",
+            "started_at": "2026-04-29T06:31:26Z",
+            "completed_at": "2026-04-29T06:31:33Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919513/job/73527501530",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 7
+          }
+        ]
+      },
+      {
+        "id": 25091919503,
+        "name": "e2e_ppo_trainer_veomni_vllm",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:48:59Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919503",
+        "durationInSeconds": 6151,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524328408,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:20Z",
+            "started_at": "2026-04-29T05:59:29Z",
+            "completed_at": "2026-04-29T05:59:39Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919503/job/73524328408",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 73524357469,
+            "name": "e2e_ppo_trainer_veomni_vllm",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T05:59:39Z",
+            "started_at": "2026-04-29T06:45:21Z",
+            "completed_at": "2026-04-29T06:48:49Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919503/job/73524357469",
+            "queueDurationInSeconds": 2742,
+            "durationInSeconds": 208
+          },
+          {
+            "id": 73529317565,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:48:49Z",
+            "started_at": "2026-04-29T06:48:53Z",
+            "completed_at": "2026-04-29T06:48:58Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919503/job/73529317565",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25091919483,
+        "name": "model",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:49:49Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919483",
+        "durationInSeconds": 6201,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524327192,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:20Z",
+            "started_at": "2026-04-29T05:59:21Z",
+            "completed_at": "2026-04-29T05:59:31Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919483/job/73524327192",
+            "queueDurationInSeconds": 1,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 73524345645,
+            "name": "model_rmpad_fsdp2_unstable",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:31Z",
+            "started_at": "2026-04-29T06:49:04Z",
+            "completed_at": "2026-04-29T06:49:42Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919483/job/73524345645",
+            "queueDurationInSeconds": 2973,
+            "durationInSeconds": 38
+          },
+          {
+            "id": 73524345648,
+            "name": "model_rmpad",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:31Z",
+            "started_at": "2026-04-29T06:36:05Z",
+            "completed_at": "2026-04-29T06:38:03Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919483/job/73524345648",
+            "queueDurationInSeconds": 2194,
+            "durationInSeconds": 118
+          },
+          {
+            "id": 73524345651,
+            "name": "model_engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T05:59:31Z",
+            "started_at": "2026-04-29T06:21:30Z",
+            "completed_at": "2026-04-29T06:32:39Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919483/job/73524345651",
+            "queueDurationInSeconds": 1319,
+            "durationInSeconds": 669
+          },
+          {
+            "id": 73529411298,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-29T06:49:42Z",
+            "started_at": "2026-04-29T06:49:45Z",
+            "completed_at": "2026-04-29T06:49:49Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919483/job/73529411298",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 25091919527,
+        "name": "e2e_sft_llm_ascend",
+        "head_branch": "fix/fsdp-forward-step-autocast-dtype",
+        "head_sha": "3ccc03fb865bb5d41009e9cd779ad5e702c03e8d",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-04-29T05:06:28Z",
+        "updated_at": "2026-04-29T06:50:16Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25091919527",
+        "durationInSeconds": 6228,
+        "pull_requests": [
+          {
+            "number": 6150
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73524330257,
+            "name": "e2e_sft_llm_ascend",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-04-29T05:59:21Z",
+            "started_at": "2026-04-29T06:36:18Z",
+            "completed_at": "2026-04-29T06:50:15Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25091919527/job/73524330257",
+            "queueDurationInSeconds": 2217,
+            "durationInSeconds": 837
+          }
+        ]
+      }
+    ]
+  }
+}
