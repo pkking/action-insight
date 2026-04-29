@@ -45,7 +45,6 @@ interface ShaMapFile {
 const DEFAULT_SHA_RESOLUTION_LIMIT = 250;
 const DEFAULT_SEARCH_RESOLUTION_LIMIT = 25;
 const DEFAULT_RATE_LIMIT_RESERVE = 10;
-const WORST_CASE_CALLS_PER_SHA_RESOLUTION = 3;
 
 function getPrDir(repoDir: string): string {
   return path.join(repoDir, 'prs');
@@ -258,27 +257,25 @@ export async function rebuildPullRequestArtifacts({
         .filter((number): number is number => typeof number === 'number')
     )
   );
-  const worstCaseExpectedCalls = (unresolvedShas.length * WORST_CASE_CALLS_PER_SHA_RESOLUTION) + allPrNumbers.length;
+  const expectedCoreCalls = unresolvedShas.length + allPrNumbers.length;
   let shaResolutionBudget = Math.min(unresolvedShas.length, getShaResolutionLimit());
   let skippedPrShaCount = Math.max(0, unresolvedShas.length - shaResolutionBudget);
 
-  if (octokit && worstCaseExpectedCalls > 0) {
-    const budget = await checkRateLimitBudget(octokit, worstCaseExpectedCalls);
+  if (octokit && expectedCoreCalls > 0) {
+    const budget = await checkRateLimitBudget(octokit, expectedCoreCalls);
     if (!budget.ok) {
       const rateLimitReserve = getRateLimitReserve();
-      const availableForShaResolution = Math.floor(
-        Math.max(0, budget.remaining - allPrNumbers.length - rateLimitReserve) / WORST_CASE_CALLS_PER_SHA_RESOLUTION
-      );
+      const availableForShaResolution = Math.max(0, budget.remaining - allPrNumbers.length - rateLimitReserve);
       shaResolutionBudget = Math.min(shaResolutionBudget, availableForShaResolution);
       skippedPrShaCount = unresolvedShas.length - shaResolutionBudget;
       warn(
-        `Rate limit budget check: ${budget.remaining} remaining, need up to ${worstCaseExpectedCalls}. Building partial PR artifacts with ${shaResolutionBudget} SHA lookup(s).`
+        `Core rate limit budget check: ${budget.remaining} remaining, need ${expectedCoreCalls}. Building partial PR artifacts with ${shaResolutionBudget} SHA lookup(s).`
       );
       if (budget.resetAt) {
         warn(`Rate limit resets at ${budget.resetAt.toISOString()}.`);
       }
     } else {
-      log(`Rate limit budget check: ${budget.remaining} remaining, need up to ${worstCaseExpectedCalls}. Proceeding.`);
+      log(`Core rate limit budget check: ${budget.remaining} remaining, need ${expectedCoreCalls}. Proceeding.`);
     }
   }
 

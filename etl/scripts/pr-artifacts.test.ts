@@ -508,6 +508,8 @@ describe('rebuildPullRequestArtifacts', () => {
   });
 
   it('uses remaining rate-limit budget for partial SHA resolution after keeping a small reserve', async () => {
+    const previousReserve = process.env.PR_ARTIFACT_RATE_LIMIT_RESERVE;
+    process.env.PR_ARTIFACT_RATE_LIMIT_RESERVE = '1';
     const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-insight-pr-artifacts-'));
     tempDirs.push(repoDir);
 
@@ -517,7 +519,7 @@ describe('rebuildPullRequestArtifacts', () => {
           data: {
             resources: {
               core: {
-                remaining: 13,
+                remaining: 4,
               },
             },
           },
@@ -551,105 +553,118 @@ describe('rebuildPullRequestArtifacts', () => {
       throw new Error(`Unexpected route: ${route}`);
     });
 
-    await rebuildPullRequestArtifacts({
-      octokit: { request },
-      owner: 'acme',
-      repo: 'widgets',
-      repoKey: 'acme/widgets',
-      repoDir,
-      files: ['2026-04-18.json'],
-      storage: {
-        readDayData: () => ({
-          runs: [
-            {
-              id: 101,
-              name: 'lint',
-              head_branch: 'feature/one',
-              head_sha: 'sha-one',
-              status: 'completed',
-              conclusion: 'success',
-              event: 'pull_request',
-              created_at: '2026-04-18T01:05:00Z',
-              updated_at: '2026-04-18T01:15:00Z',
-              html_url: 'https://github.com/acme/widgets/actions/runs/101',
-              durationInSeconds: 600,
-              pull_requests: [],
-              jobs: [],
-            },
-            {
-              id: 102,
-              name: 'test',
-              head_branch: 'feature/two',
-              head_sha: 'sha-two',
-              status: 'completed',
-              conclusion: 'success',
-              event: 'pull_request',
-              created_at: '2026-04-18T01:10:00Z',
-              updated_at: '2026-04-18T01:20:00Z',
-              html_url: 'https://github.com/acme/widgets/actions/runs/102',
-              durationInSeconds: 600,
-              pull_requests: [],
-              jobs: [],
-            },
-            {
-              id: 103,
-              name: 'docs',
-              head_branch: 'feature/three',
-              head_sha: 'sha-three',
-              status: 'completed',
-              conclusion: 'success',
-              event: 'pull_request',
-              created_at: '2026-04-18T01:15:00Z',
-              updated_at: '2026-04-18T01:25:00Z',
-              html_url: 'https://github.com/acme/widgets/actions/runs/103',
-              durationInSeconds: 600,
-              pull_requests: [],
-              jobs: [],
-            },
-            {
-              id: 104,
-              name: 'build',
-              head_branch: 'feature/four',
-              head_sha: 'sha-four',
-              status: 'completed',
-              conclusion: 'success',
-              event: 'pull_request',
-              created_at: '2026-04-18T01:20:00Z',
-              updated_at: '2026-04-18T01:30:00Z',
-              html_url: 'https://github.com/acme/widgets/actions/runs/104',
-              durationInSeconds: 600,
-              pull_requests: [],
-              jobs: [],
-            },
-            {
-              id: 105,
-              name: 'e2e',
-              head_branch: 'feature/five',
-              head_sha: 'sha-five',
-              status: 'completed',
-              conclusion: 'success',
-              event: 'pull_request',
-              created_at: '2026-04-18T01:25:00Z',
-              updated_at: '2026-04-18T01:35:00Z',
-              html_url: 'https://github.com/acme/widgets/actions/runs/105',
-              durationInSeconds: 600,
-              pull_requests: [],
-              jobs: [],
-            },
-          ],
-        }),
-      },
-    });
+    try {
+      await rebuildPullRequestArtifacts({
+        octokit: { request },
+        owner: 'acme',
+        repo: 'widgets',
+        repoKey: 'acme/widgets',
+        repoDir,
+        files: ['2026-04-18.json'],
+        storage: {
+          readDayData: () => ({
+            runs: [
+              {
+                id: 101,
+                name: 'lint',
+                head_branch: 'feature/one',
+                head_sha: 'sha-one',
+                status: 'completed',
+                conclusion: 'success',
+                event: 'pull_request',
+                created_at: '2026-04-18T01:05:00Z',
+                updated_at: '2026-04-18T01:15:00Z',
+                html_url: 'https://github.com/acme/widgets/actions/runs/101',
+                durationInSeconds: 600,
+                pull_requests: [],
+                jobs: [],
+              },
+              {
+                id: 102,
+                name: 'test',
+                head_branch: 'feature/two',
+                head_sha: 'sha-two',
+                status: 'completed',
+                conclusion: 'success',
+                event: 'pull_request',
+                created_at: '2026-04-18T01:10:00Z',
+                updated_at: '2026-04-18T01:20:00Z',
+                html_url: 'https://github.com/acme/widgets/actions/runs/102',
+                durationInSeconds: 600,
+                pull_requests: [],
+                jobs: [],
+              },
+              {
+                id: 103,
+                name: 'docs',
+                head_branch: 'feature/three',
+                head_sha: 'sha-three',
+                status: 'completed',
+                conclusion: 'success',
+                event: 'pull_request',
+                created_at: '2026-04-18T01:15:00Z',
+                updated_at: '2026-04-18T01:25:00Z',
+                html_url: 'https://github.com/acme/widgets/actions/runs/103',
+                durationInSeconds: 600,
+                pull_requests: [],
+                jobs: [],
+              },
+              {
+                id: 104,
+                name: 'build',
+                head_branch: 'feature/four',
+                head_sha: 'sha-four',
+                status: 'completed',
+                conclusion: 'success',
+                event: 'pull_request',
+                created_at: '2026-04-18T01:20:00Z',
+                updated_at: '2026-04-18T01:30:00Z',
+                html_url: 'https://github.com/acme/widgets/actions/runs/104',
+                durationInSeconds: 600,
+                pull_requests: [],
+                jobs: [],
+              },
+              {
+                id: 105,
+                name: 'e2e',
+                head_branch: 'feature/five',
+                head_sha: 'sha-five',
+                status: 'completed',
+                conclusion: 'success',
+                event: 'pull_request',
+                created_at: '2026-04-18T01:25:00Z',
+                updated_at: '2026-04-18T01:35:00Z',
+                html_url: 'https://github.com/acme/widgets/actions/runs/105',
+                durationInSeconds: 600,
+                pull_requests: [],
+                jobs: [],
+              },
+            ],
+          }),
+        },
+      });
+    } finally {
+      if (previousReserve === undefined) {
+        delete process.env.PR_ARTIFACT_RATE_LIMIT_RESERVE;
+      } else {
+        process.env.PR_ARTIFACT_RATE_LIMIT_RESERVE = previousReserve;
+      }
+    }
 
     const index = JSON.parse(fs.readFileSync(path.join(repoDir, 'prs', 'index.json'), 'utf8'));
 
-    expect(index.prs).toHaveLength(1);
-    expect(index.prs[0]).toMatchObject({ number: 42 });
+    expect(index.prs).toHaveLength(2);
+    expect(index.prs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ number: 42 }),
+        expect.objectContaining({ number: 43 }),
+      ])
+    );
     expect(index).toMatchObject({
       partialPrResolution: true,
-      resolvedPrShaCount: 1,
-      unresolvedPrShaCount: 4,
-      skippedPrShaCount: 4,
+      resolvedPrShaCount: 3,
+      unresolvedPrShaCount: 2,
+      skippedPrShaCount: 2,
     });
     expect(request).toHaveBeenCalledWith(
       'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
@@ -657,7 +672,7 @@ describe('rebuildPullRequestArtifacts', () => {
     );
     expect(request).not.toHaveBeenCalledWith(
       'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
-      expect.objectContaining({ commit_sha: 'sha-two' })
+      expect.objectContaining({ commit_sha: 'sha-four' })
     );
   });
 });
