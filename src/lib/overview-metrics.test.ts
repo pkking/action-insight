@@ -148,6 +148,43 @@ describe('overview-metrics', () => {
     ]);
   });
 
+  it('derives missing PR E2E and review metrics from timestamps in cached artifacts', () => {
+    const range = createDateRange({ startDate: '2026-04-01', endDate: '2026-04-30' });
+    const rows = buildRepoOverviewRows(
+      [
+        {
+          repoKey: 'alpha/core',
+          prs: [
+            buildPr({
+              number: 1,
+              created_at: '2026-04-10T08:00:00Z',
+              ci_completed_at: '2026-04-10T09:00:15Z',
+              merged_at: '2026-04-10T09:00:00Z',
+              timeToMergeInSeconds: undefined,
+              mergeLeadTimeInSeconds: undefined,
+            }),
+            buildPr({
+              number: 2,
+              created_at: '2026-04-11T08:00:00Z',
+              ci_completed_at: '2026-04-11T08:30:00Z',
+              merged_at: '2026-04-11T10:00:00Z',
+              timeToMergeInSeconds: undefined,
+              mergeLeadTimeInSeconds: undefined,
+            }),
+          ],
+        },
+      ],
+      range
+    );
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        prE2EP90Minutes: 120,
+        reviewP90Minutes: 90,
+      })
+    );
+  });
+
   it('builds daily trend points with only computable metrics per day', () => {
     const range = createDateRange({ startDate: '2026-04-01', endDate: '2026-04-30' });
     const points = buildDailyTrend(
