@@ -1,6 +1,7 @@
 import { endOfDay, format, isAfter, isBefore, parseISO, startOfDay, subDays } from 'date-fns';
 
 import type { DailyTrendPoint, DateRange, PullRequestMetricsSummary, RepoOverviewRow } from './types';
+import { diffSeconds } from './time-utils';
 
 interface CreateDateRangeOptions {
   days?: number;
@@ -26,28 +27,6 @@ function percentile(values: number[], value: number): number | null {
   const sorted = [...values].sort((left, right) => left - right);
   const index = Math.max(0, Math.ceil(value * sorted.length) - 1);
   return sorted[index];
-}
-
-function diffSeconds(
-  start?: string | null,
-  end?: string | null,
-  { clampNegative = false }: { clampNegative?: boolean } = {}
-): number | undefined {
-  if (!start || !end) {
-    return undefined;
-  }
-
-  const startMs = new Date(start).getTime();
-  const endMs = new Date(end).getTime();
-  if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
-    return undefined;
-  }
-
-  if (endMs < startMs) {
-    return clampNegative ? 0 : undefined;
-  }
-
-  return Math.round((endMs - startMs) / 1000);
 }
 
 function getTimeToMergeSeconds(pr: PullRequestMetricsSummary): number | undefined {
