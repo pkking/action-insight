@@ -19,15 +19,23 @@ interface BuildPullRequestIndexResult {
   details: Map<number, PullRequestMetricsDetail>;
 }
 
-function diffSeconds(start?: string | null, end?: string | null): number | undefined {
+function diffSeconds(
+  start?: string | null,
+  end?: string | null,
+  { clampNegative = false }: { clampNegative?: boolean } = {}
+): number | undefined {
   if (!start || !end) {
     return undefined;
   }
 
   const startMs = new Date(start).getTime();
   const endMs = new Date(end).getTime();
-  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs < startMs) {
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
     return undefined;
+  }
+
+  if (endMs < startMs) {
+    return clampNegative ? 0 : undefined;
   }
 
   return Math.round((endMs - startMs) / 1000);
@@ -101,7 +109,7 @@ export function buildPullRequestIndex({
       timeToCiStartInSeconds: diffSeconds(metadata?.created_at, ciStartedAt),
       ciDurationInSeconds: diffSeconds(ciStartedAt, ciCompletedAt),
       timeToMergeInSeconds: diffSeconds(metadata?.created_at, metadata?.merged_at),
-      mergeLeadTimeInSeconds: diffSeconds(ciCompletedAt, metadata?.merged_at),
+      mergeLeadTimeInSeconds: diffSeconds(ciCompletedAt, metadata?.merged_at, { clampNegative: true }),
       workflowCount: prRuns.length,
       successfulWorkflowCount,
       conclusion: summarizeConclusion(prRuns),

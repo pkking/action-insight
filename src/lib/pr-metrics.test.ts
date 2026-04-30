@@ -156,4 +156,51 @@ describe('buildPullRequestIndex', () => {
       partialCiHistory: true,
     });
   });
+
+  it('treats PRs merged before final workflow update as zero review lead time', () => {
+    const runs: Run[] = [
+      {
+        id: 401,
+        name: 'ci',
+        head_branch: 'feature/fast-merge',
+        status: 'completed',
+        conclusion: 'success',
+        event: 'pull_request',
+        created_at: '2026-04-18T05:00:00Z',
+        updated_at: '2026-04-18T05:10:15Z',
+        html_url: 'https://github.com/acme/widgets/actions/runs/401',
+        durationInSeconds: 615,
+        pull_requests: [{ number: 88 }],
+        jobs: [],
+      },
+    ];
+
+    const result = buildPullRequestIndex({
+      repo: 'acme/widgets',
+      runs,
+      pullRequests: new Map([
+        [
+          88,
+          {
+            number: 88,
+            title: 'Fast merge',
+            state: 'closed',
+            created_at: '2026-04-18T04:55:00Z',
+            merged_at: '2026-04-18T05:10:00Z',
+            html_url: 'https://github.com/acme/widgets/pull/88',
+            user: {
+              login: 'octocat',
+            },
+          },
+        ],
+      ]),
+      generatedAt: '2026-04-18T06:00:00Z',
+      retentionStartDate: '2026-04-18',
+    });
+
+    expect(result.index.prs[0]).toMatchObject({
+      timeToMergeInSeconds: 900,
+      mergeLeadTimeInSeconds: 0,
+    });
+  });
 });

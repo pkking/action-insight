@@ -28,6 +28,36 @@ function percentile(values: number[], value: number): number | null {
   return sorted[index];
 }
 
+function diffSeconds(
+  start?: string | null,
+  end?: string | null,
+  { clampNegative = false }: { clampNegative?: boolean } = {}
+): number | undefined {
+  if (!start || !end) {
+    return undefined;
+  }
+
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end).getTime();
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+    return undefined;
+  }
+
+  if (endMs < startMs) {
+    return clampNegative ? 0 : undefined;
+  }
+
+  return Math.round((endMs - startMs) / 1000);
+}
+
+function getTimeToMergeSeconds(pr: PullRequestMetricsSummary): number | undefined {
+  return pr.timeToMergeInSeconds ?? diffSeconds(pr.created_at, pr.merged_at);
+}
+
+function getMergeLeadTimeSeconds(pr: PullRequestMetricsSummary): number | undefined {
+  return pr.mergeLeadTimeInSeconds ?? diffSeconds(pr.ci_completed_at, pr.merged_at, { clampNegative: true });
+}
+
 export function filterByDateRange<T extends { created_at: string }>(items: T[], range: DateRange): T[] {
   return items.filter((item) => {
     const createdAt = new Date(item.created_at);
@@ -56,9 +86,9 @@ function toDailyPoint(date: string, prs: PullRequestMetricsSummary[]): DailyTren
     date,
     label: format(parseISO(date), 'MMM dd'),
     sampleCount: prs.length,
-    prE2EP90Minutes: toMinutesOrNull(prs.map((pr) => pr.timeToMergeInSeconds)),
+    prE2EP90Minutes: toMinutesOrNull(prs.map(getTimeToMergeSeconds)),
     ciE2EP90Minutes: toMinutesOrNull(prs.map((pr) => pr.ciDurationInSeconds)),
-    reviewP90Minutes: toMinutesOrNull(prs.map((pr) => pr.mergeLeadTimeInSeconds)),
+    reviewP90Minutes: toMinutesOrNull(prs.map(getMergeLeadTimeSeconds)),
     ciE2ESlaRate: toRateOrNull(prs.map((pr) => pr.ciDurationInSeconds)),
   };
 }
@@ -91,9 +121,9 @@ export function buildRepoOverviewRows(entries: RepoOverviewInput[], range: DateR
         repoKey,
         totalPrs: filtered.length,
         sampleCount: filtered.length,
-        prE2EP90Minutes: toMinutesOrNull(filtered.map((pr) => pr.timeToMergeInSeconds)),
+        prE2EP90Minutes: toMinutesOrNull(filtered.map(getTimeToMergeSeconds)),
         ciE2EP90Minutes: toMinutesOrNull(filtered.map((pr) => pr.ciDurationInSeconds)),
-        reviewP90Minutes: toMinutesOrNull(filtered.map((pr) => pr.mergeLeadTimeInSeconds)),
+        reviewP90Minutes: toMinutesOrNull(filtered.map(getMergeLeadTimeSeconds)),
         ciE2ESlaRate: toRateOrNull(filtered.map((pr) => pr.ciDurationInSeconds)),
       };
     })
