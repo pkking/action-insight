@@ -1,6 +1,6 @@
 {
   "repo": "sgl-project/sglang",
-  "generated_at": "2026-05-02T13:07:28.462Z",
+  "generated_at": "2026-05-02T14:20:02.924Z",
   "pr": {
     "number": 24025,
     "title": "[codex] Optimize LTX2 QK norm fusion",
@@ -10,14 +10,202 @@
     "html_url": "https://github.com/sgl-project/sglang/pull/24025",
     "created_at": "2026-04-29T07:48:59Z",
     "ci_started_at": "2026-04-29T07:49:02Z",
-    "ci_completed_at": "2026-05-02T05:31:49Z",
+    "ci_completed_at": "2026-05-02T13:27:07Z",
     "partialCiHistory": false,
     "timeToCiStartInSeconds": 3,
-    "ciDurationInSeconds": 250967,
-    "workflowCount": 41,
-    "successfulWorkflowCount": 16,
+    "ciDurationInSeconds": 279485,
+    "workflowCount": 45,
+    "successfulWorkflowCount": 19,
     "conclusion": "failure",
     "workflows": [
+      {
+        "id": 25252711518,
+        "name": "PR Test (XPU)",
+        "head_branch": "codex/ltx2-fused-qknorm",
+        "head_sha": "8ada3270b06b19eed0fb7834611d77a34b3d4cf0",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-02T13:13:21Z",
+        "updated_at": "2026-05-02T13:16:03Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25252711518",
+        "durationInSeconds": 162,
+        "pull_requests": [
+          {
+            "number": 24025
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74047161888,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-02T13:13:21Z",
+            "started_at": "2026-05-02T13:13:23Z",
+            "completed_at": "2026-05-02T13:13:30Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25252711518/job/74047161888",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 74047169342,
+            "name": "pr-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-02T13:13:31Z",
+            "started_at": "2026-05-02T13:13:32Z",
+            "completed_at": "2026-05-02T13:13:36Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25252711518/job/74047169342",
+            "queueDurationInSeconds": 1,
+            "durationInSeconds": 4
+          },
+          {
+            "id": 74047174196,
+            "name": "build-and-test",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-02T13:13:36Z",
+            "started_at": "2026-05-02T13:14:30Z",
+            "completed_at": "2026-05-02T13:15:57Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25252711518/job/74047174196",
+            "queueDurationInSeconds": 54,
+            "durationInSeconds": 87
+          },
+          {
+            "id": 74047280273,
+            "name": "finish",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-02T13:15:57Z",
+            "started_at": "2026-05-02T13:15:59Z",
+            "completed_at": "2026-05-02T13:16:02Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25252711518/job/74047280273",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 3
+          }
+        ]
+      },
+      {
+        "id": 25252711474,
+        "name": "Execute Notebooks",
+        "head_branch": "codex/ltx2-fused-qknorm",
+        "head_sha": "8ada3270b06b19eed0fb7834611d77a34b3d4cf0",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-02T13:13:21Z",
+        "updated_at": "2026-05-02T13:27:07Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25252711474",
+        "durationInSeconds": 826,
+        "pull_requests": [
+          {
+            "number": 24025
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74047161755,
+            "name": "call-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-02T13:13:21Z",
+            "started_at": "2026-05-02T13:13:23Z",
+            "completed_at": "2026-05-02T13:13:30Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25252711474/job/74047161755",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 74047168752,
+            "name": "run-all-notebooks",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-02T13:13:30Z",
+            "started_at": "2026-05-02T13:13:31Z",
+            "completed_at": "2026-05-02T13:26:59Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25252711474/job/74047168752",
+            "queueDurationInSeconds": 1,
+            "durationInSeconds": 808
+          },
+          {
+            "id": 74047764605,
+            "name": "notebook-finish",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-02T13:26:59Z",
+            "started_at": "2026-05-02T13:27:03Z",
+            "completed_at": "2026-05-02T13:27:07Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25252711474/job/74047764605",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 25252711450,
+        "name": "Lint",
+        "head_branch": "codex/ltx2-fused-qknorm",
+        "head_sha": "8ada3270b06b19eed0fb7834611d77a34b3d4cf0",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-02T13:13:20Z",
+        "updated_at": "2026-05-02T13:16:58Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25252711450",
+        "durationInSeconds": 218,
+        "pull_requests": [
+          {
+            "number": 24025
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74047161667,
+            "name": "lint",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-02T13:13:21Z",
+            "started_at": "2026-05-02T13:13:23Z",
+            "completed_at": "2026-05-02T13:16:57Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25252711450/job/74047161667",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 214
+          }
+        ]
+      },
+      {
+        "id": 25252711112,
+        "name": "Auto Label PRs",
+        "head_branch": "codex/ltx2-fused-qknorm",
+        "head_sha": "8ada3270b06b19eed0fb7834611d77a34b3d4cf0",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-02T13:13:19Z",
+        "updated_at": "2026-05-02T13:13:28Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25252711112",
+        "durationInSeconds": 9,
+        "pull_requests": [
+          {
+            "number": 24025
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74047160924,
+            "name": "label",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-02T13:13:19Z",
+            "started_at": "2026-05-02T13:13:22Z",
+            "completed_at": "2026-05-02T13:13:27Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25252711112/job/74047160924",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 5
+          }
+        ]
+      },
       {
         "id": 25241310450,
         "name": "Lint",
