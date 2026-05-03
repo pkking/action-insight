@@ -1,6 +1,6 @@
 {
   "repo": "sgl-project/sglang",
-  "generated_at": "2026-05-03T14:20:39.042Z",
+  "generated_at": "2026-05-03T15:50:34.140Z",
   "pr": {
     "number": 24271,
     "title": "[KDA] Optimize prefill kernels with diagonal and recompute fuse",
@@ -10,14 +10,202 @@
     "html_url": "https://github.com/sgl-project/sglang/pull/24271",
     "created_at": "2026-05-02T11:36:11Z",
     "ci_started_at": "2026-05-02T11:36:14Z",
-    "ci_completed_at": "2026-05-02T14:03:59Z",
+    "ci_completed_at": "2026-05-03T15:41:08Z",
     "partialCiHistory": false,
     "timeToCiStartInSeconds": 3,
-    "ciDurationInSeconds": 8865,
-    "workflowCount": 16,
-    "successfulWorkflowCount": 8,
+    "ciDurationInSeconds": 101094,
+    "workflowCount": 20,
+    "successfulWorkflowCount": 11,
     "conclusion": "failure",
     "workflows": [
+      {
+        "id": 25283171961,
+        "name": "PR Test (XPU)",
+        "head_branch": "opt_kda",
+        "head_sha": "4ac5ed5d3b054c0075809813e54742642bdfcdca",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-03T15:28:27Z",
+        "updated_at": "2026-05-03T15:31:36Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25283171961",
+        "durationInSeconds": 189,
+        "pull_requests": [
+          {
+            "number": 24271
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74123480893,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-03T15:28:27Z",
+            "started_at": "2026-05-03T15:28:35Z",
+            "completed_at": "2026-05-03T15:28:42Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25283171961/job/74123480893",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 74123492953,
+            "name": "pr-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-03T15:28:42Z",
+            "started_at": "2026-05-03T15:28:44Z",
+            "completed_at": "2026-05-03T15:28:51Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25283171961/job/74123492953",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 74123500699,
+            "name": "build-and-test",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-03T15:28:51Z",
+            "started_at": "2026-05-03T15:28:53Z",
+            "completed_at": "2026-05-03T15:31:30Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25283171961/job/74123500699",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 157
+          },
+          {
+            "id": 74123648459,
+            "name": "finish",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-03T15:31:30Z",
+            "started_at": "2026-05-03T15:31:32Z",
+            "completed_at": "2026-05-03T15:31:35Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25283171961/job/74123648459",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 3
+          }
+        ]
+      },
+      {
+        "id": 25283171901,
+        "name": "Lint",
+        "head_branch": "opt_kda",
+        "head_sha": "4ac5ed5d3b054c0075809813e54742642bdfcdca",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-03T15:28:27Z",
+        "updated_at": "2026-05-03T15:32:10Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25283171901",
+        "durationInSeconds": 223,
+        "pull_requests": [
+          {
+            "number": 24271
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74123480584,
+            "name": "lint",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-03T15:28:27Z",
+            "started_at": "2026-05-03T15:28:35Z",
+            "completed_at": "2026-05-03T15:32:09Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25283171901/job/74123480584",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 214
+          }
+        ]
+      },
+      {
+        "id": 25283171963,
+        "name": "Execute Notebooks",
+        "head_branch": "opt_kda",
+        "head_sha": "4ac5ed5d3b054c0075809813e54742642bdfcdca",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-03T15:28:27Z",
+        "updated_at": "2026-05-03T15:41:08Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25283171963",
+        "durationInSeconds": 761,
+        "pull_requests": [
+          {
+            "number": 24271
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74123480757,
+            "name": "call-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-03T15:28:27Z",
+            "started_at": "2026-05-03T15:28:29Z",
+            "completed_at": "2026-05-03T15:28:34Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25283171963/job/74123480757",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 5
+          },
+          {
+            "id": 74123486568,
+            "name": "run-all-notebooks",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-03T15:28:34Z",
+            "started_at": "2026-05-03T15:28:36Z",
+            "completed_at": "2026-05-03T15:41:03Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25283171963/job/74123486568",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 747
+          },
+          {
+            "id": 74124178437,
+            "name": "notebook-finish",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-03T15:41:03Z",
+            "started_at": "2026-05-03T15:41:04Z",
+            "completed_at": "2026-05-03T15:41:07Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25283171963/job/74124178437",
+            "queueDurationInSeconds": 1,
+            "durationInSeconds": 3
+          }
+        ]
+      },
+      {
+        "id": 25283171220,
+        "name": "Auto Label PRs",
+        "head_branch": "opt_kda",
+        "head_sha": "4ac5ed5d3b054c0075809813e54742642bdfcdca",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-03T15:28:25Z",
+        "updated_at": "2026-05-03T15:28:33Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25283171220",
+        "durationInSeconds": 8,
+        "pull_requests": [
+          {
+            "number": 24271
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74123479044,
+            "name": "label",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-03T15:28:25Z",
+            "started_at": "2026-05-03T15:28:27Z",
+            "completed_at": "2026-05-03T15:28:32Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25283171220/job/74123479044",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 5
+          }
+        ]
+      },
       {
         "id": 25252279434,
         "name": "Execute Notebooks",
