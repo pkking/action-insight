@@ -1,6 +1,6 @@
 {
   "repo": "sgl-project/sglang",
-  "generated_at": "2026-05-04T02:42:12.267Z",
+  "generated_at": "2026-05-04T06:10:57.429Z",
   "pr": {
     "number": 24304,
     "title": "[diffusion] feat: cache encoder results for default negative prompt",
@@ -10,14 +10,398 @@
     "html_url": "https://github.com/sgl-project/sglang/pull/24304",
     "created_at": "2026-05-03T09:55:19Z",
     "ci_started_at": "2026-05-03T09:55:22Z",
-    "ci_completed_at": "2026-05-03T16:18:38Z",
+    "ci_completed_at": "2026-05-04T05:58:57Z",
     "partialCiHistory": false,
     "timeToCiStartInSeconds": 3,
-    "ciDurationInSeconds": 22996,
-    "workflowCount": 40,
-    "successfulWorkflowCount": 22,
+    "ciDurationInSeconds": 72215,
+    "workflowCount": 46,
+    "successfulWorkflowCount": 27,
     "conclusion": "failure",
     "workflows": [
+      {
+        "id": 25302913434,
+        "name": "PR Test (Xeon)",
+        "head_branch": "codex/ltx23-twostage-perf-20260503",
+        "head_sha": "b3e2b4c1a629718c8152adfb2fa27a617e6e21d1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-04T05:37:22Z",
+        "updated_at": "2026-05-04T05:37:31Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913434",
+        "durationInSeconds": 9,
+        "pull_requests": [
+          {
+            "number": 24304
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74173013048,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-04T05:37:22Z",
+            "started_at": "2026-05-04T05:37:24Z",
+            "completed_at": "2026-05-04T05:37:30Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913434/job/74173013048",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 6
+          },
+          {
+            "id": 74173024993,
+            "name": "pr-gate",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-04T05:37:31Z",
+            "started_at": "2026-05-04T05:37:31Z",
+            "completed_at": "2026-05-04T05:37:31Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913434/job/74173024993",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 74173025229,
+            "name": "build-test",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-04T05:37:31Z",
+            "started_at": "2026-05-04T05:37:31Z",
+            "completed_at": "2026-05-04T05:37:31Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913434/job/74173025229",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25302913402,
+        "name": "PR Test (XPU)",
+        "head_branch": "codex/ltx23-twostage-perf-20260503",
+        "head_sha": "b3e2b4c1a629718c8152adfb2fa27a617e6e21d1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-04T05:37:22Z",
+        "updated_at": "2026-05-04T05:37:38Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913402",
+        "durationInSeconds": 16,
+        "pull_requests": [
+          {
+            "number": 24304
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74173013041,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-04T05:37:22Z",
+            "started_at": "2026-05-04T05:37:24Z",
+            "completed_at": "2026-05-04T05:37:32Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913402/job/74173013041",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 74173026857,
+            "name": "finish",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-04T05:37:32Z",
+            "started_at": "2026-05-04T05:37:34Z",
+            "completed_at": "2026-05-04T05:37:38Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913402/job/74173026857",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 4
+          },
+          {
+            "id": 74173026970,
+            "name": "pr-gate",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-04T05:37:32Z",
+            "started_at": "2026-05-04T05:37:32Z",
+            "completed_at": "2026-05-04T05:37:32Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913402/job/74173026970",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 74173026999,
+            "name": "build-and-test",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-04T05:37:32Z",
+            "started_at": "2026-05-04T05:37:32Z",
+            "completed_at": "2026-05-04T05:37:32Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913402/job/74173026999",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25302913443,
+        "name": "Execute Notebooks",
+        "head_branch": "codex/ltx23-twostage-perf-20260503",
+        "head_sha": "b3e2b4c1a629718c8152adfb2fa27a617e6e21d1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-04T05:37:22Z",
+        "updated_at": "2026-05-04T05:53:50Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913443",
+        "durationInSeconds": 988,
+        "pull_requests": [
+          {
+            "number": 24304
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74173013072,
+            "name": "call-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-04T05:37:22Z",
+            "started_at": "2026-05-04T05:37:30Z",
+            "completed_at": "2026-05-04T05:37:33Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913443/job/74173013072",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 3
+          },
+          {
+            "id": 74173028372,
+            "name": "run-all-notebooks",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-04T05:37:33Z",
+            "started_at": "2026-05-04T05:37:35Z",
+            "completed_at": "2026-05-04T05:53:44Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913443/job/74173028372",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 969
+          },
+          {
+            "id": 74174395752,
+            "name": "notebook-finish",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-04T05:53:45Z",
+            "started_at": "2026-05-04T05:53:47Z",
+            "completed_at": "2026-05-04T05:53:49Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913443/job/74174395752",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 2
+          }
+        ]
+      },
+      {
+        "id": 25302913457,
+        "name": "PR Test (NPU)",
+        "head_branch": "codex/ltx23-twostage-perf-20260503",
+        "head_sha": "b3e2b4c1a629718c8152adfb2fa27a617e6e21d1",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-04T05:37:22Z",
+        "updated_at": "2026-05-04T05:58:57Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913457",
+        "durationInSeconds": 1295,
+        "pull_requests": [
+          {
+            "number": 24304
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74173013179,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-04T05:37:22Z",
+            "started_at": "2026-05-04T05:37:25Z",
+            "completed_at": "2026-05-04T05:37:34Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913457/job/74173013179",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 74173029879,
+            "name": "pr-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-04T05:37:34Z",
+            "started_at": "2026-05-04T05:37:43Z",
+            "completed_at": "2026-05-04T05:37:50Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913457/job/74173029879",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 74173051168,
+            "name": "multimodal-gen-test-2-npu-a3",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-04T05:37:50Z",
+            "started_at": "2026-05-04T05:38:18Z",
+            "completed_at": "2026-05-04T05:58:44Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913457/job/74173051168",
+            "queueDurationInSeconds": 28,
+            "durationInSeconds": 1226
+          },
+          {
+            "id": 74173051175,
+            "name": "multimodal-gen-test-8-npu-a3",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-04T05:37:50Z",
+            "started_at": "2026-05-04T05:38:15Z",
+            "completed_at": "2026-05-04T05:55:19Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913457/job/74173051175",
+            "queueDurationInSeconds": 25,
+            "durationInSeconds": 1024
+          },
+          {
+            "id": 74173051181,
+            "name": "multimodal-gen-test-1-npu-a3",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-04T05:37:50Z",
+            "started_at": "2026-05-04T05:38:19Z",
+            "completed_at": "2026-05-04T05:46:30Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913457/job/74173051181",
+            "queueDurationInSeconds": 29,
+            "durationInSeconds": 491
+          },
+          {
+            "id": 74173051261,
+            "name": "stage-b-test-4-npu-a3",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-04T05:37:50Z",
+            "started_at": "2026-05-04T05:37:50Z",
+            "completed_at": "2026-05-04T05:37:50Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913457/job/74173051261",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 74173051289,
+            "name": "stage-b-test-16-npu-a3",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-04T05:37:50Z",
+            "started_at": "2026-05-04T05:37:50Z",
+            "completed_at": "2026-05-04T05:37:50Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913457/job/74173051289",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 74173051291,
+            "name": "stage-b-test-1-npu-a2",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-04T05:37:50Z",
+            "started_at": "2026-05-04T05:37:50Z",
+            "completed_at": "2026-05-04T05:37:50Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913457/job/74173051291",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 74173051335,
+            "name": "stage-b-test-2-npu-a2",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-04T05:37:50Z",
+            "started_at": "2026-05-04T05:37:50Z",
+            "completed_at": "2026-05-04T05:37:50Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913457/job/74173051335",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 74174793265,
+            "name": "pr-test-npu-finish",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-04T05:58:44Z",
+            "started_at": "2026-05-04T05:58:52Z",
+            "completed_at": "2026-05-04T05:58:56Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913457/job/74174793265",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 25302913316,
+        "name": "Lint",
+        "head_branch": "codex/ltx23-twostage-perf-20260503",
+        "head_sha": "b3e2b4c1a629718c8152adfb2fa27a617e6e21d1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-04T05:37:21Z",
+        "updated_at": "2026-05-04T05:40:54Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913316",
+        "durationInSeconds": 213,
+        "pull_requests": [
+          {
+            "number": 24304
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74173012766,
+            "name": "lint",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-04T05:37:22Z",
+            "started_at": "2026-05-04T05:37:29Z",
+            "completed_at": "2026-05-04T05:40:54Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302913316/job/74173012766",
+            "queueDurationInSeconds": 7,
+            "durationInSeconds": 205
+          }
+        ]
+      },
+      {
+        "id": 25302912707,
+        "name": "Auto Label PRs",
+        "head_branch": "codex/ltx23-twostage-perf-20260503",
+        "head_sha": "b3e2b4c1a629718c8152adfb2fa27a617e6e21d1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-04T05:37:20Z",
+        "updated_at": "2026-05-04T05:37:33Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302912707",
+        "durationInSeconds": 13,
+        "pull_requests": [
+          {
+            "number": 24304
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74173011253,
+            "name": "label",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-04T05:37:21Z",
+            "started_at": "2026-05-04T05:37:29Z",
+            "completed_at": "2026-05-04T05:37:32Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25302912707/job/74173011253",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 3
+          }
+        ]
+      },
       {
         "id": 25277875639,
         "name": "PR Test (XPU)",
