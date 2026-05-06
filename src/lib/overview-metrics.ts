@@ -1,6 +1,7 @@
 import { endOfDay, format, isAfter, isBefore, parseISO, startOfDay, subDays } from 'date-fns';
 
 import type { DailyTrendPoint, DateRange, PullRequestMetricsSummary, RepoOverviewRow } from './types';
+import { diffSeconds } from './time-utils';
 
 interface CreateDateRangeOptions {
   days?: number;
@@ -26,6 +27,14 @@ function percentile(values: number[], value: number): number | null {
   const sorted = [...values].sort((left, right) => left - right);
   const index = Math.max(0, Math.ceil(value * sorted.length) - 1);
   return sorted[index];
+}
+
+function getTimeToMergeSeconds(pr: PullRequestMetricsSummary): number | undefined {
+  return pr.timeToMergeInSeconds ?? diffSeconds(pr.created_at, pr.merged_at);
+}
+
+function getMergeLeadTimeSeconds(pr: PullRequestMetricsSummary): number | undefined {
+  return pr.mergeLeadTimeInSeconds ?? diffSeconds(pr.ci_completed_at, pr.merged_at, { clampNegative: true });
 }
 
 export function filterByDateRange<T extends { created_at: string }>(items: T[], range: DateRange): T[] {
@@ -56,9 +65,9 @@ function toDailyPoint(date: string, prs: PullRequestMetricsSummary[]): DailyTren
     date,
     label: format(parseISO(date), 'MMM dd'),
     sampleCount: prs.length,
-    prE2EP90Minutes: toMinutesOrNull(prs.map((pr) => pr.timeToMergeInSeconds)),
+    prE2EP90Minutes: toMinutesOrNull(prs.map(getTimeToMergeSeconds)),
     ciE2EP90Minutes: toMinutesOrNull(prs.map((pr) => pr.ciDurationInSeconds)),
-    reviewP90Minutes: toMinutesOrNull(prs.map((pr) => pr.mergeLeadTimeInSeconds)),
+    reviewP90Minutes: toMinutesOrNull(prs.map(getMergeLeadTimeSeconds)),
     ciE2ESlaRate: toRateOrNull(prs.map((pr) => pr.ciDurationInSeconds)),
   };
 }
@@ -91,9 +100,9 @@ export function buildRepoOverviewRows(entries: RepoOverviewInput[], range: DateR
         repoKey,
         totalPrs: filtered.length,
         sampleCount: filtered.length,
-        prE2EP90Minutes: toMinutesOrNull(filtered.map((pr) => pr.timeToMergeInSeconds)),
+        prE2EP90Minutes: toMinutesOrNull(filtered.map(getTimeToMergeSeconds)),
         ciE2EP90Minutes: toMinutesOrNull(filtered.map((pr) => pr.ciDurationInSeconds)),
-        reviewP90Minutes: toMinutesOrNull(filtered.map((pr) => pr.mergeLeadTimeInSeconds)),
+        reviewP90Minutes: toMinutesOrNull(filtered.map(getMergeLeadTimeSeconds)),
         ciE2ESlaRate: toRateOrNull(filtered.map((pr) => pr.ciDurationInSeconds)),
       };
     })
