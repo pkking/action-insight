@@ -1,6 +1,6 @@
 {
   "repo": "sgl-project/sglang",
-  "generated_at": "2026-05-06T19:49:40.923Z",
+  "generated_at": "2026-05-06T21:24:45.464Z",
   "pr": {
     "number": 24268,
     "title": "[Kernel] Deprecate DeepGemm in sgl kernel and apply custom wheel sgl-deep-gemm",
@@ -10,14 +10,410 @@
     "html_url": "https://github.com/sgl-project/sglang/pull/24268",
     "created_at": "2026-05-02T09:04:43Z",
     "ci_started_at": "2026-05-02T09:04:46Z",
-    "ci_completed_at": "2026-05-06T07:39:37Z",
+    "ci_completed_at": "2026-05-06T20:40:53Z",
     "partialCiHistory": false,
     "timeToCiStartInSeconds": 3,
-    "ciDurationInSeconds": 340491,
-    "workflowCount": 145,
-    "successfulWorkflowCount": 55,
+    "ciDurationInSeconds": 387367,
+    "workflowCount": 151,
+    "successfulWorkflowCount": 60,
     "conclusion": "failure",
     "workflows": [
+      {
+        "id": 25458148862,
+        "name": "Auto Label PRs",
+        "head_branch": "dg-wheel",
+        "head_sha": "8c373ad104cf1d09de73cad66a546178765c72b1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-06T20:03:45Z",
+        "updated_at": "2026-05-06T20:04:01Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148862",
+        "durationInSeconds": 16,
+        "pull_requests": [
+          {
+            "number": 24268
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74693028326,
+            "name": "label",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:03:46Z",
+            "started_at": "2026-05-06T20:03:55Z",
+            "completed_at": "2026-05-06T20:04:00Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148862/job/74693028326",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25458148834,
+        "name": "Lint",
+        "head_branch": "dg-wheel",
+        "head_sha": "8c373ad104cf1d09de73cad66a546178765c72b1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T20:03:45Z",
+        "updated_at": "2026-05-06T20:06:59Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148834",
+        "durationInSeconds": 194,
+        "pull_requests": [
+          {
+            "number": 24268
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74693028332,
+            "name": "lint",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:03:46Z",
+            "started_at": "2026-05-06T20:03:48Z",
+            "completed_at": "2026-05-06T20:06:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148834/job/74693028332",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 190
+          }
+        ]
+      },
+      {
+        "id": 25458148938,
+        "name": "PR Test (XPU)",
+        "head_branch": "dg-wheel",
+        "head_sha": "8c373ad104cf1d09de73cad66a546178765c72b1",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-06T20:03:45Z",
+        "updated_at": "2026-05-06T20:27:58Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148938",
+        "durationInSeconds": 1453,
+        "pull_requests": [
+          {
+            "number": 24268
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74693028647,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:03:46Z",
+            "started_at": "2026-05-06T20:03:55Z",
+            "completed_at": "2026-05-06T20:04:03Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148938/job/74693028647",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 74693075692,
+            "name": "pr-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:04:03Z",
+            "started_at": "2026-05-06T20:04:05Z",
+            "completed_at": "2026-05-06T20:04:11Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148938/job/74693075692",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 6
+          },
+          {
+            "id": 74693098002,
+            "name": "build-and-test",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-06T20:04:11Z",
+            "started_at": "2026-05-06T20:04:13Z",
+            "completed_at": "2026-05-06T20:27:50Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148938/job/74693098002",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 1417
+          },
+          {
+            "id": 74696935597,
+            "name": "finish",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-06T20:27:50Z",
+            "started_at": "2026-05-06T20:27:53Z",
+            "completed_at": "2026-05-06T20:27:57Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148938/job/74696935597",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 25458148904,
+        "name": "Execute Notebooks",
+        "head_branch": "dg-wheel",
+        "head_sha": "8c373ad104cf1d09de73cad66a546178765c72b1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T20:03:45Z",
+        "updated_at": "2026-05-06T20:14:16Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148904",
+        "durationInSeconds": 631,
+        "pull_requests": [
+          {
+            "number": 24268
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74693028690,
+            "name": "call-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:03:46Z",
+            "started_at": "2026-05-06T20:03:49Z",
+            "completed_at": "2026-05-06T20:03:53Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148904/job/74693028690",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          },
+          {
+            "id": 74693048994,
+            "name": "run-all-notebooks",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:03:53Z",
+            "started_at": "2026-05-06T20:03:56Z",
+            "completed_at": "2026-05-06T20:14:07Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148904/job/74693048994",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 611
+          },
+          {
+            "id": 74694737711,
+            "name": "notebook-finish",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:14:07Z",
+            "started_at": "2026-05-06T20:14:11Z",
+            "completed_at": "2026-05-06T20:14:16Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148904/job/74694737711",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25458148843,
+        "name": "PR Test (SMG)",
+        "head_branch": "dg-wheel",
+        "head_sha": "8c373ad104cf1d09de73cad66a546178765c72b1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T20:03:45Z",
+        "updated_at": "2026-05-06T20:35:18Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148843",
+        "durationInSeconds": 1893,
+        "pull_requests": [
+          {
+            "number": 24268
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74693028485,
+            "name": "k8s-integration",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:03:46Z",
+            "started_at": "2026-05-06T20:03:55Z",
+            "completed_at": "2026-05-06T20:08:32Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148843/job/74693028485",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 277
+          },
+          {
+            "id": 74693028488,
+            "name": "unit-tests",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:03:46Z",
+            "started_at": "2026-05-06T20:03:54Z",
+            "completed_at": "2026-05-06T20:15:12Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148843/job/74693028488",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 678
+          },
+          {
+            "id": 74693028489,
+            "name": "docker-build-test",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:03:46Z",
+            "started_at": "2026-05-06T20:03:55Z",
+            "completed_at": "2026-05-06T20:24:13Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148843/job/74693028489",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 1218
+          },
+          {
+            "id": 74693028509,
+            "name": "build-wheel",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:03:46Z",
+            "started_at": "2026-05-06T20:03:55Z",
+            "completed_at": "2026-05-06T20:15:32Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148843/job/74693028509",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 697
+          },
+          {
+            "id": 74694963478,
+            "name": "python-unit-tests",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:15:32Z",
+            "started_at": "2026-05-06T20:15:35Z",
+            "completed_at": "2026-05-06T20:16:15Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148843/job/74694963478",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 40
+          },
+          {
+            "id": 74694963666,
+            "name": "e2e",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:15:32Z",
+            "started_at": "2026-05-06T20:15:35Z",
+            "completed_at": "2026-05-06T20:25:29Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148843/job/74694963666",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 594
+          },
+          {
+            "id": 74694963681,
+            "name": "benchmarks",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:15:32Z",
+            "started_at": "2026-05-06T20:15:37Z",
+            "completed_at": "2026-05-06T20:21:44Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148843/job/74694963681",
+            "queueDurationInSeconds": 5,
+            "durationInSeconds": 367
+          },
+          {
+            "id": 74694963697,
+            "name": "chat-completions",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:15:32Z",
+            "started_at": "2026-05-06T20:25:31Z",
+            "completed_at": "2026-05-06T20:35:07Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148843/job/74694963697",
+            "queueDurationInSeconds": 599,
+            "durationInSeconds": 576
+          },
+          {
+            "id": 74694963728,
+            "name": "chat-completions-4gpu",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:15:32Z",
+            "started_at": "2026-05-06T20:21:48Z",
+            "completed_at": "2026-05-06T20:25:50Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148843/job/74694963728",
+            "queueDurationInSeconds": 376,
+            "durationInSeconds": 242
+          },
+          {
+            "id": 74698173188,
+            "name": "finish",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:35:07Z",
+            "started_at": "2026-05-06T20:35:10Z",
+            "completed_at": "2026-05-06T20:35:13Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148843/job/74698173188",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 3
+          },
+          {
+            "id": 74698173225,
+            "name": "summarize-benchmarks",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:35:07Z",
+            "started_at": "2026-05-06T20:35:10Z",
+            "completed_at": "2026-05-06T20:35:18Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148843/job/74698173225",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 8
+          }
+        ]
+      },
+      {
+        "id": 25458148913,
+        "name": "PR Test (Xeon)",
+        "head_branch": "dg-wheel",
+        "head_sha": "8c373ad104cf1d09de73cad66a546178765c72b1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T20:03:45Z",
+        "updated_at": "2026-05-06T20:40:53Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148913",
+        "durationInSeconds": 2228,
+        "pull_requests": [
+          {
+            "number": 24268
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74693028565,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:03:46Z",
+            "started_at": "2026-05-06T20:03:49Z",
+            "completed_at": "2026-05-06T20:03:58Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148913/job/74693028565",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 74693061578,
+            "name": "pr-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:03:58Z",
+            "started_at": "2026-05-06T20:04:01Z",
+            "completed_at": "2026-05-06T20:04:05Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148913/job/74693061578",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          },
+          {
+            "id": 74693082270,
+            "name": "build-test (all)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T20:04:06Z",
+            "started_at": "2026-05-06T20:09:43Z",
+            "completed_at": "2026-05-06T20:40:52Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25458148913/job/74693082270",
+            "queueDurationInSeconds": 337,
+            "durationInSeconds": 1869
+          }
+        ]
+      },
       {
         "id": 25421030027,
         "name": "Lint",
