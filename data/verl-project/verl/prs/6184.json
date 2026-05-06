@@ -1,23 +1,1546 @@
 {
   "repo": "verl-project/verl",
-  "generated_at": "2026-05-05T23:59:30.047Z",
+  "generated_at": "2026-05-06T03:13:02.795Z",
   "pr": {
     "number": 6184,
-    "title": "[veomni] feat: drop forward monkey patch, use VeOmni's native return_log_probs path",
+    "title": "[veomni] feat: use VeOmni's native return_log_probs path to compute log_probs",
     "branch": "veomni/apply-monkey-patch-fused-kernels",
     "author": "Luosuu",
-    "state": "open",
+    "state": "closed",
     "html_url": "https://github.com/verl-project/verl/pull/6184",
     "created_at": "2026-04-28T07:10:53Z",
     "ci_started_at": "2026-04-28T07:10:57Z",
-    "ci_completed_at": "2026-05-05T18:13:11Z",
+    "ci_completed_at": "2026-05-06T01:37:29Z",
+    "merged_at": "2026-05-06T02:22:59Z",
     "partialCiHistory": false,
     "timeToCiStartInSeconds": 4,
-    "ciDurationInSeconds": 644534,
-    "workflowCount": 241,
-    "successfulWorkflowCount": 154,
+    "ciDurationInSeconds": 671192,
+    "timeToMergeInSeconds": 673926,
+    "mergeLeadTimeInSeconds": 2730,
+    "workflowCount": 276,
+    "successfulWorkflowCount": 179,
     "conclusion": "failure",
     "workflows": [
+      {
+        "id": 25410776325,
+        "name": ".github/workflows/check-pr-title.yml",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T00:59:31Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776325",
+        "durationInSeconds": 15,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531823336,
+            "name": "check-title",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:17Z",
+            "started_at": "2026-05-06T00:59:25Z",
+            "completed_at": "2026-05-06T00:59:30Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776325/job/74531823336",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25410776321,
+        "name": ".github/workflows/secrets_scan.yml",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T00:59:39Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776321",
+        "durationInSeconds": 23,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531823337,
+            "name": "test",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:17Z",
+            "started_at": "2026-05-06T00:59:25Z",
+            "completed_at": "2026-05-06T00:59:38Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776321/job/74531823337",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 13
+          }
+        ]
+      },
+      {
+        "id": 25410776312,
+        "name": "e2e_ppo_trainer",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T00:59:50Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776312",
+        "durationInSeconds": 34,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531823558,
+            "name": "pre_commit_for_ppo (3.12)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:17Z",
+            "started_at": "2026-05-06T00:59:27Z",
+            "completed_at": "2026-05-06T00:59:49Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776312/job/74531823558",
+            "queueDurationInSeconds": 10,
+            "durationInSeconds": 22
+          }
+        ]
+      },
+      {
+        "id": 25410776348,
+        "name": "pre-commit",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T00:59:50Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776348",
+        "durationInSeconds": 34,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531823351,
+            "name": "pre-commit (3.12)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:17Z",
+            "started_at": "2026-05-06T00:59:19Z",
+            "completed_at": "2026-05-06T00:59:49Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776348/job/74531823351",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 30
+          }
+        ]
+      },
+      {
+        "id": 25410776324,
+        "name": "doc_test",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T00:59:45Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776324",
+        "durationInSeconds": 29,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531823443,
+            "name": "doc_test (3.10)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:17Z",
+            "started_at": "2026-05-06T00:59:19Z",
+            "completed_at": "2026-05-06T00:59:44Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776324/job/74531823443",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 25
+          }
+        ]
+      },
+      {
+        "id": 25410776334,
+        "name": "Type Annotation and Docstring Coverage",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:00:51Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776334",
+        "durationInSeconds": 95,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531823295,
+            "name": "type-coverage-check",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:17Z",
+            "started_at": "2026-05-06T00:59:19Z",
+            "completed_at": "2026-05-06T01:00:50Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776334/job/74531823295",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 91
+          }
+        ]
+      },
+      {
+        "id": 25410776343,
+        "name": "sanity",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:01:37Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776343",
+        "durationInSeconds": 141,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531823543,
+            "name": "sanity (3.10)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:17Z",
+            "started_at": "2026-05-06T00:59:19Z",
+            "completed_at": "2026-05-06T01:01:36Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776343/job/74531823543",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 137
+          }
+        ]
+      },
+      {
+        "id": 25410776331,
+        "name": "cpu_unit_tests",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:04:29Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776331",
+        "durationInSeconds": 313,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531835097,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:25Z",
+            "started_at": "2026-05-06T00:59:27Z",
+            "completed_at": "2026-05-06T00:59:35Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776331/job/74531835097",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 74531847617,
+            "name": "cpu_unit_tests",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:35Z",
+            "started_at": "2026-05-06T00:59:40Z",
+            "completed_at": "2026-05-06T01:04:13Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776331/job/74531847617",
+            "queueDurationInSeconds": 5,
+            "durationInSeconds": 273
+          },
+          {
+            "id": 74532279142,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:04:14Z",
+            "started_at": "2026-05-06T01:04:21Z",
+            "completed_at": "2026-05-06T01:04:28Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776331/job/74532279142",
+            "queueDurationInSeconds": 7,
+            "durationInSeconds": 7
+          }
+        ]
+      },
+      {
+        "id": 25410776357,
+        "name": "reward_model_sglang",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:06:28Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776357",
+        "durationInSeconds": 432,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531860989,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:44Z",
+            "started_at": "2026-05-06T00:59:46Z",
+            "completed_at": "2026-05-06T00:59:53Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776357/job/74531860989",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 74531874064,
+            "name": "reward_model_sglang",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:53Z",
+            "started_at": "2026-05-06T01:03:00Z",
+            "completed_at": "2026-05-06T01:06:17Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776357/job/74531874064",
+            "queueDurationInSeconds": 187,
+            "durationInSeconds": 197
+          },
+          {
+            "id": 74532464117,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:06:17Z",
+            "started_at": "2026-05-06T01:06:20Z",
+            "completed_at": "2026-05-06T01:06:27Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776357/job/74532464117",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 7
+          }
+        ]
+      },
+      {
+        "id": 25410776349,
+        "name": "sglang_ascend",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:07:07Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776349",
+        "durationInSeconds": 471,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531835798,
+            "name": "sglang_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:26Z",
+            "started_at": "2026-05-06T00:59:55Z",
+            "completed_at": "2026-05-06T01:07:06Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776349/job/74531835798",
+            "queueDurationInSeconds": 29,
+            "durationInSeconds": 431
+          }
+        ]
+      },
+      {
+        "id": 25410776336,
+        "name": "e2e_one_step_off_policy_ascend",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:08:41Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776336",
+        "durationInSeconds": 565,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531837045,
+            "name": "e2e_one_step_off_policy_fsdp2_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:27Z",
+            "started_at": "2026-05-06T01:00:05Z",
+            "completed_at": "2026-05-06T01:08:38Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776336/job/74531837045",
+            "queueDurationInSeconds": 38,
+            "durationInSeconds": 513
+          },
+          {
+            "id": 74531837055,
+            "name": "e2e_one_step_off_policy_megatron_ascend",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-06T00:59:27Z",
+            "started_at": "2026-05-06T01:00:15Z",
+            "completed_at": "2026-05-06T01:08:40Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776336/job/74531837055",
+            "queueDurationInSeconds": 48,
+            "durationInSeconds": 505
+          }
+        ]
+      },
+      {
+        "id": 25410776351,
+        "name": "e2e_ppo_trainer_veomni_vllm",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:08:14Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776351",
+        "durationInSeconds": 538,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531823504,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:17Z",
+            "started_at": "2026-05-06T00:59:25Z",
+            "completed_at": "2026-05-06T00:59:36Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776351/job/74531823504",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 11
+          },
+          {
+            "id": 74531849292,
+            "name": "e2e_ppo_trainer_veomni_vllm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:36Z",
+            "started_at": "2026-05-06T00:59:43Z",
+            "completed_at": "2026-05-06T01:08:04Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776351/job/74531849292",
+            "queueDurationInSeconds": 7,
+            "durationInSeconds": 501
+          },
+          {
+            "id": 74532619315,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:08:04Z",
+            "started_at": "2026-05-06T01:08:07Z",
+            "completed_at": "2026-05-06T01:08:13Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776351/job/74532619315",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25410776316,
+        "name": "e2e_ppo_trainer_megatron_sglang_2",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:09:27Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776316",
+        "durationInSeconds": 611,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531838781,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:28Z",
+            "started_at": "2026-05-06T00:59:30Z",
+            "completed_at": "2026-05-06T00:59:41Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776316/job/74531838781",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 11
+          },
+          {
+            "id": 74531855980,
+            "name": "e2e_ppo_trainer_fsdp_sglang",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:41Z",
+            "started_at": "2026-05-06T01:00:10Z",
+            "completed_at": "2026-05-06T01:02:56Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776316/job/74531855980",
+            "queueDurationInSeconds": 29,
+            "durationInSeconds": 166
+          },
+          {
+            "id": 74531855981,
+            "name": "e2e_ppo_trainer_fsdp-qwen2_5vl-3b",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:41Z",
+            "started_at": "2026-05-06T00:59:44Z",
+            "completed_at": "2026-05-06T01:09:14Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776316/job/74531855981",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 570
+          },
+          {
+            "id": 74532720000,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:09:14Z",
+            "started_at": "2026-05-06T01:09:22Z",
+            "completed_at": "2026-05-06T01:09:26Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776316/job/74532720000",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 25410776323,
+        "name": "e2e_sft_vlm",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:09:53Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776323",
+        "durationInSeconds": 637,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531823505,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:17Z",
+            "started_at": "2026-05-06T00:59:19Z",
+            "completed_at": "2026-05-06T00:59:29Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776323/job/74531823505",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 74531839998,
+            "name": "e2e_sft_vlm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:29Z",
+            "started_at": "2026-05-06T00:59:50Z",
+            "completed_at": "2026-05-06T01:09:37Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776323/job/74531839998",
+            "queueDurationInSeconds": 21,
+            "durationInSeconds": 587
+          },
+          {
+            "id": 74532754860,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:09:37Z",
+            "started_at": "2026-05-06T01:09:46Z",
+            "completed_at": "2026-05-06T01:09:52Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776323/job/74532754860",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25410776311,
+        "name": "sgl",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:09:51Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776311",
+        "durationInSeconds": 635,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531838959,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:28Z",
+            "started_at": "2026-05-06T00:59:30Z",
+            "completed_at": "2026-05-06T00:59:40Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776311/job/74531838959",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 74531855955,
+            "name": "sgl_checkpoint_engine",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-06T00:59:41Z",
+            "started_at": "2026-05-06T00:59:45Z",
+            "completed_at": "2026-05-06T01:00:05Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776311/job/74531855955",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 20
+          },
+          {
+            "id": 74531855956,
+            "name": "sgl",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:41Z",
+            "started_at": "2026-05-06T00:59:52Z",
+            "completed_at": "2026-05-06T01:09:39Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776311/job/74531855956",
+            "queueDurationInSeconds": 11,
+            "durationInSeconds": 587
+          },
+          {
+            "id": 74532757993,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:09:39Z",
+            "started_at": "2026-05-06T01:09:47Z",
+            "completed_at": "2026-05-06T01:09:50Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776311/job/74532757993",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 3
+          }
+        ]
+      },
+      {
+        "id": 25410776327,
+        "name": "e2e_fully_async_policy_ascend",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:12:26Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776327",
+        "durationInSeconds": 790,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531837266,
+            "name": "e2e_fully_async_policy_fsdp2_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:27Z",
+            "started_at": "2026-05-06T01:00:39Z",
+            "completed_at": "2026-05-06T01:09:02Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776327/job/74531837266",
+            "queueDurationInSeconds": 72,
+            "durationInSeconds": 503
+          },
+          {
+            "id": 74531837280,
+            "name": "e2e_fully_async_policy_megatron_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:27Z",
+            "started_at": "2026-05-06T01:00:42Z",
+            "completed_at": "2026-05-06T01:12:25Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776327/job/74531837280",
+            "queueDurationInSeconds": 75,
+            "durationInSeconds": 703
+          }
+        ]
+      },
+      {
+        "id": 25410776317,
+        "name": "e2e_fully_async_policy",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:12:41Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776317",
+        "durationInSeconds": 805,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531864806,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:47Z",
+            "started_at": "2026-05-06T00:59:54Z",
+            "completed_at": "2026-05-06T01:00:01Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776317/job/74531864806",
+            "queueDurationInSeconds": 7,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 74531886737,
+            "name": "e2e_fully_async_policy_megatron",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:00:02Z",
+            "started_at": "2026-05-06T01:07:46Z",
+            "completed_at": "2026-05-06T01:12:40Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776317/job/74531886737",
+            "queueDurationInSeconds": 464,
+            "durationInSeconds": 294
+          },
+          {
+            "id": 74531886757,
+            "name": "e2e_fully_async_policy_fsdp2",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:00:02Z",
+            "started_at": "2026-05-06T01:04:18Z",
+            "completed_at": "2026-05-06T01:07:41Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776317/job/74531886757",
+            "queueDurationInSeconds": 256,
+            "durationInSeconds": 203
+          },
+          {
+            "id": 74532586458,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:07:41Z",
+            "started_at": "2026-05-06T01:07:50Z",
+            "completed_at": "2026-05-06T01:07:55Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776317/job/74532586458",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25410776329,
+        "name": "e2e_ppo_trainer_megatron_trtllm",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:13:54Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776329",
+        "durationInSeconds": 878,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531864759,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:47Z",
+            "started_at": "2026-05-06T00:59:48Z",
+            "completed_at": "2026-05-06T00:59:57Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776329/job/74531864759",
+            "queueDurationInSeconds": 1,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 74531879531,
+            "name": "trtllm_unit_tests",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-06T00:59:57Z",
+            "started_at": "2026-05-06T01:02:41Z",
+            "completed_at": "2026-05-06T01:13:47Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776329/job/74531879531",
+            "queueDurationInSeconds": 164,
+            "durationInSeconds": 666
+          },
+          {
+            "id": 74531879533,
+            "name": "e2e_grpo_trainer_megatron-qwen2",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-06T00:59:57Z",
+            "started_at": "2026-05-06T01:00:00Z",
+            "completed_at": "2026-05-06T01:02:37Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776329/job/74531879533",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 157
+          },
+          {
+            "id": 74531879534,
+            "name": "e2e_grpo_trainer_megatron-vlm",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-06T00:59:57Z",
+            "started_at": "2026-05-06T01:00:01Z",
+            "completed_at": "2026-05-06T01:02:58Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776329/job/74531879534",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 177
+          },
+          {
+            "id": 74531879550,
+            "name": "e2e_grpo_trainer_fsdp-qwen2",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-06T00:59:57Z",
+            "started_at": "2026-05-06T01:03:02Z",
+            "completed_at": "2026-05-06T01:05:26Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776329/job/74531879550",
+            "queueDurationInSeconds": 185,
+            "durationInSeconds": 144
+          },
+          {
+            "id": 74533110800,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:13:48Z",
+            "started_at": "2026-05-06T01:13:50Z",
+            "completed_at": "2026-05-06T01:13:54Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776329/job/74533110800",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 25410776341,
+        "name": "vllm",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:29:14Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776341",
+        "durationInSeconds": 1798,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531874583,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:53Z",
+            "started_at": "2026-05-06T00:59:56Z",
+            "completed_at": "2026-05-06T01:00:05Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776341/job/74531874583",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 74531892592,
+            "name": "vllm_checkpoint_engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:00:05Z",
+            "started_at": "2026-05-06T01:12:44Z",
+            "completed_at": "2026-05-06T01:17:28Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776341/job/74531892592",
+            "queueDurationInSeconds": 759,
+            "durationInSeconds": 284
+          },
+          {
+            "id": 74531892634,
+            "name": "vllm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:00:05Z",
+            "started_at": "2026-05-06T01:15:51Z",
+            "completed_at": "2026-05-06T01:29:06Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776341/job/74531892634",
+            "queueDurationInSeconds": 946,
+            "durationInSeconds": 795
+          },
+          {
+            "id": 74534348654,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:29:06Z",
+            "started_at": "2026-05-06T01:29:08Z",
+            "completed_at": "2026-05-06T01:29:14Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776341/job/74534348654",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25410776344,
+        "name": "e2e_ppo_trainer_megatron_vllm",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:37:29Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776344",
+        "durationInSeconds": 2293,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531842801,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:31Z",
+            "started_at": "2026-05-06T00:59:33Z",
+            "completed_at": "2026-05-06T00:59:44Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776344/job/74531842801",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 11
+          },
+          {
+            "id": 74531860683,
+            "name": "e2e_ppo_trainer_megatron-qwen3",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:44Z",
+            "started_at": "2026-05-06T01:17:32Z",
+            "completed_at": "2026-05-06T01:29:12Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776344/job/74531860683",
+            "queueDurationInSeconds": 1068,
+            "durationInSeconds": 700
+          },
+          {
+            "id": 74531860685,
+            "name": "e2e_ppo_trainer_megatron-deepseek",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:44Z",
+            "started_at": "2026-05-06T01:16:49Z",
+            "completed_at": "2026-05-06T01:37:12Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776344/job/74531860685",
+            "queueDurationInSeconds": 1025,
+            "durationInSeconds": 1223
+          },
+          {
+            "id": 74535051054,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:37:12Z",
+            "started_at": "2026-05-06T01:37:22Z",
+            "completed_at": "2026-05-06T01:37:28Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776344/job/74535051054",
+            "queueDurationInSeconds": 10,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25410776330,
+        "name": "reward_model_vllm",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:15:55Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776330",
+        "durationInSeconds": 999,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531858684,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:43Z",
+            "started_at": "2026-05-06T00:59:44Z",
+            "completed_at": "2026-05-06T00:59:52Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776330/job/74531858684",
+            "queueDurationInSeconds": 1,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 74531872123,
+            "name": "reward_model_vllm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:52Z",
+            "started_at": "2026-05-06T01:08:08Z",
+            "completed_at": "2026-05-06T01:15:47Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776330/job/74531872123",
+            "queueDurationInSeconds": 496,
+            "durationInSeconds": 459
+          },
+          {
+            "id": 74533273913,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:15:47Z",
+            "started_at": "2026-05-06T01:15:50Z",
+            "completed_at": "2026-05-06T01:15:54Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776330/job/74533273913",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 25410776307,
+        "name": "e2e_ascend",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:17:38Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776307",
+        "durationInSeconds": 1102,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531836570,
+            "name": "E2E Ascend testing for RL training scenarios of LLM models",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:27Z",
+            "started_at": "2026-05-06T01:00:04Z",
+            "completed_at": "2026-05-06T01:17:37Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776307/job/74531836570",
+            "queueDurationInSeconds": 37,
+            "durationInSeconds": 1053
+          },
+          {
+            "id": 74531836571,
+            "name": "E2E Ascend testing for RL training scenarios of LLM models using MindSpeed_LLM engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:27Z",
+            "started_at": "2026-05-06T01:00:05Z",
+            "completed_at": "2026-05-06T01:12:26Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776307/job/74531836571",
+            "queueDurationInSeconds": 38,
+            "durationInSeconds": 741
+          },
+          {
+            "id": 74531836573,
+            "name": "E2E Ascend testing for RL training scenarios of VLM models",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:27Z",
+            "started_at": "2026-05-06T00:59:48Z",
+            "completed_at": "2026-05-06T01:08:34Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776307/job/74531836573",
+            "queueDurationInSeconds": 21,
+            "durationInSeconds": 526
+          }
+        ]
+      },
+      {
+        "id": 25410776363,
+        "name": "e2e_sft_llm",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:18:23Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776363",
+        "durationInSeconds": 1147,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531895806,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:00:07Z",
+            "started_at": "2026-05-06T01:00:17Z",
+            "completed_at": "2026-05-06T01:00:26Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776363/job/74531895806",
+            "queueDurationInSeconds": 10,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 74531929408,
+            "name": "e2e_sft_llm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:00:26Z",
+            "started_at": "2026-05-06T01:09:18Z",
+            "completed_at": "2026-05-06T01:18:15Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776363/job/74531929408",
+            "queueDurationInSeconds": 532,
+            "durationInSeconds": 537
+          },
+          {
+            "id": 74533471749,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:18:15Z",
+            "started_at": "2026-05-06T01:18:17Z",
+            "completed_at": "2026-05-06T01:18:23Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776363/job/74533471749",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25410776342,
+        "name": "e2e_ppo_trainer_megatron_vllm_2",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:21:03Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776342",
+        "durationInSeconds": 1307,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531835682,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:26Z",
+            "started_at": "2026-05-06T00:59:28Z",
+            "completed_at": "2026-05-06T00:59:35Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776342/job/74531835682",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 74531849043,
+            "name": "e2e_ppo_trainer_megatron-moe-expert-parallel",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:36Z",
+            "started_at": "2026-05-06T00:59:52Z",
+            "completed_at": "2026-05-06T01:16:45Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776342/job/74531849043",
+            "queueDurationInSeconds": 16,
+            "durationInSeconds": 1013
+          },
+          {
+            "id": 74531849053,
+            "name": "e2e_ppo_trainer_fsdp-qwen2_5vl-3b",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:36Z",
+            "started_at": "2026-05-06T00:59:53Z",
+            "completed_at": "2026-05-06T01:14:32Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776342/job/74531849053",
+            "queueDurationInSeconds": 17,
+            "durationInSeconds": 879
+          },
+          {
+            "id": 74531849056,
+            "name": "e2e_ppo_trainer_fsdp_vllm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:36Z",
+            "started_at": "2026-05-06T00:59:52Z",
+            "completed_at": "2026-05-06T01:20:48Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776342/job/74531849056",
+            "queueDurationInSeconds": 16,
+            "durationInSeconds": 1256
+          },
+          {
+            "id": 74533682732,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:20:49Z",
+            "started_at": "2026-05-06T01:20:57Z",
+            "completed_at": "2026-05-06T01:21:02Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776342/job/74533682732",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25410776326,
+        "name": "e2e_ppo_trainer_megatron_sglang",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:21:03Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776326",
+        "durationInSeconds": 1307,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531869595,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:50Z",
+            "started_at": "2026-05-06T00:59:52Z",
+            "completed_at": "2026-05-06T01:00:02Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776326/job/74531869595",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 74531887845,
+            "name": "e2e_ppo_trainer_megatron-deepseek",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:00:02Z",
+            "started_at": "2026-05-06T01:09:08Z",
+            "completed_at": "2026-05-06T01:20:55Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776326/job/74531887845",
+            "queueDurationInSeconds": 546,
+            "durationInSeconds": 707
+          },
+          {
+            "id": 74531887865,
+            "name": "e2e_ppo_trainer_megatron-qwen3",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:00:02Z",
+            "started_at": "2026-05-06T01:09:42Z",
+            "completed_at": "2026-05-06T01:19:07Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776326/job/74531887865",
+            "queueDurationInSeconds": 580,
+            "durationInSeconds": 565
+          },
+          {
+            "id": 74533691562,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:20:55Z",
+            "started_at": "2026-05-06T01:20:57Z",
+            "completed_at": "2026-05-06T01:21:03Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776326/job/74533691562",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25410776335,
+        "name": "e2e_one_step_off_policy",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:20:52Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776335",
+        "durationInSeconds": 1296,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531874970,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:54Z",
+            "started_at": "2026-05-06T00:59:56Z",
+            "completed_at": "2026-05-06T01:00:04Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776335/job/74531874970",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 74531892093,
+            "name": "e2e_one_step_off_policy_fsdp2",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:00:05Z",
+            "started_at": "2026-05-06T01:14:37Z",
+            "completed_at": "2026-05-06T01:17:29Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776335/job/74531892093",
+            "queueDurationInSeconds": 872,
+            "durationInSeconds": 172
+          },
+          {
+            "id": 74531892095,
+            "name": "e2e_one_step_off_policy_megatron",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:00:05Z",
+            "started_at": "2026-05-06T01:17:06Z",
+            "completed_at": "2026-05-06T01:20:36Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776335/job/74531892095",
+            "queueDurationInSeconds": 1021,
+            "durationInSeconds": 210
+          },
+          {
+            "id": 74533665418,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:20:36Z",
+            "started_at": "2026-05-06T01:20:45Z",
+            "completed_at": "2026-05-06T01:20:51Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776335/job/74533665418",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 6
+          }
+        ]
+      },
+      {
+        "id": 25410776362,
+        "name": "GPU unit tests",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:21:46Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776362",
+        "durationInSeconds": 1350,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531873460,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:53Z",
+            "started_at": "2026-05-06T00:59:55Z",
+            "completed_at": "2026-05-06T01:00:04Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776362/job/74531873460",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 74531891935,
+            "name": "gpu_unit_tests",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:00:05Z",
+            "started_at": "2026-05-06T01:06:21Z",
+            "completed_at": "2026-05-06T01:21:33Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776362/job/74531891935",
+            "queueDurationInSeconds": 376,
+            "durationInSeconds": 912
+          },
+          {
+            "id": 74533741172,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:21:33Z",
+            "started_at": "2026-05-06T01:21:41Z",
+            "completed_at": "2026-05-06T01:21:45Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776362/job/74533741172",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 4
+          }
+        ]
+      },
+      {
+        "id": 25410776359,
+        "name": "model",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "a58b7a954c9ceccb43719ab4c9741be219bb7b01",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-06T00:59:16Z",
+        "updated_at": "2026-05-06T01:27:14Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25410776359",
+        "durationInSeconds": 1678,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74531842423,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:31Z",
+            "started_at": "2026-05-06T00:59:33Z",
+            "completed_at": "2026-05-06T00:59:42Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776359/job/74531842423",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 74531858036,
+            "name": "model_engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:42Z",
+            "started_at": "2026-05-06T01:17:33Z",
+            "completed_at": "2026-05-06T01:27:00Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776359/job/74531858036",
+            "queueDurationInSeconds": 1071,
+            "durationInSeconds": 567
+          },
+          {
+            "id": 74531858044,
+            "name": "model_rmpad",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:42Z",
+            "started_at": "2026-05-06T01:20:49Z",
+            "completed_at": "2026-05-06T01:22:44Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776359/job/74531858044",
+            "queueDurationInSeconds": 1267,
+            "durationInSeconds": 115
+          },
+          {
+            "id": 74531858052,
+            "name": "model_rmpad_fsdp2_unstable",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T00:59:42Z",
+            "started_at": "2026-05-06T01:20:53Z",
+            "completed_at": "2026-05-06T01:21:37Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776359/job/74531858052",
+            "queueDurationInSeconds": 1271,
+            "durationInSeconds": 44
+          },
+          {
+            "id": 74534176113,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-06T01:27:00Z",
+            "started_at": "2026-05-06T01:27:08Z",
+            "completed_at": "2026-05-06T01:27:13Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25410776359/job/74534176113",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 5
+          }
+        ]
+      },
       {
         "id": 25392409039,
         "name": "e2e_ppo_trainer_veomni_vllm",
@@ -35,7 +1558,44 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141263,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:10Z",
+            "completed_at": "2026-05-05T17:41:20Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409039/job/74470141263",
+            "queueDurationInSeconds": 10,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 74470199595,
+            "name": "e2e_ppo_trainer_veomni_vllm",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-05T17:41:20Z",
+            "started_at": "2026-05-05T17:42:03Z",
+            "completed_at": "2026-05-05T17:43:41Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409039/job/74470199595",
+            "queueDurationInSeconds": 43,
+            "durationInSeconds": 98
+          },
+          {
+            "id": 74470598407,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:43:42Z",
+            "started_at": "2026-05-05T17:43:44Z",
+            "completed_at": "2026-05-05T17:43:48Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409039/job/74470598407",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 4
+          }
+        ]
       },
       {
         "id": 25392409082,
@@ -54,7 +1614,20 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141219,
+            "name": "sanity (3.10)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:25Z",
+            "completed_at": "2026-05-05T17:43:11Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409082/job/74470141219",
+            "queueDurationInSeconds": 25,
+            "durationInSeconds": 106
+          }
+        ]
       },
       {
         "id": 25392409017,
@@ -73,7 +1646,44 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141196,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:08Z",
+            "completed_at": "2026-05-05T17:41:16Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409017/job/74470141196",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 74470186984,
+            "name": "cpu_unit_tests",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-05T17:41:16Z",
+            "started_at": "2026-05-05T17:43:54Z",
+            "completed_at": "2026-05-05T17:47:16Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409017/job/74470186984",
+            "queueDurationInSeconds": 158,
+            "durationInSeconds": 202
+          },
+          {
+            "id": 74471204300,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:47:16Z",
+            "started_at": "2026-05-05T17:47:26Z",
+            "completed_at": "2026-05-05T17:47:31Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409017/job/74471204300",
+            "queueDurationInSeconds": 10,
+            "durationInSeconds": 5
+          }
+        ]
       },
       {
         "id": 25392409024,
@@ -92,7 +1702,20 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141183,
+            "name": "sglang_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:30Z",
+            "completed_at": "2026-05-05T17:48:23Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409024/job/74470141183",
+            "queueDurationInSeconds": 30,
+            "durationInSeconds": 413
+          }
+        ]
       },
       {
         "id": 25392409036,
@@ -111,7 +1734,44 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141244,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:22Z",
+            "completed_at": "2026-05-05T17:41:29Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409036/job/74470141244",
+            "queueDurationInSeconds": 22,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 74470225016,
+            "name": "e2e_sft_vlm",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-05T17:41:30Z",
+            "started_at": "2026-05-05T17:42:33Z",
+            "completed_at": "2026-05-05T17:48:50Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409036/job/74470225016",
+            "queueDurationInSeconds": 63,
+            "durationInSeconds": 377
+          },
+          {
+            "id": 74471463489,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:48:50Z",
+            "started_at": "2026-05-05T17:48:53Z",
+            "completed_at": "2026-05-05T17:48:58Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409036/job/74471463489",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 5
+          }
+        ]
       },
       {
         "id": 25392409097,
@@ -130,7 +1790,56 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141190,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:09Z",
+            "completed_at": "2026-05-05T17:41:17Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409097/job/74470141190",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 74470191900,
+            "name": "e2e_one_step_off_policy_fsdp2",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:18Z",
+            "started_at": "2026-05-05T17:42:19Z",
+            "completed_at": "2026-05-05T17:45:43Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409097/job/74470191900",
+            "queueDurationInSeconds": 61,
+            "durationInSeconds": 204
+          },
+          {
+            "id": 74470191998,
+            "name": "e2e_one_step_off_policy_megatron",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:18Z",
+            "started_at": "2026-05-05T17:45:56Z",
+            "completed_at": "2026-05-05T17:48:53Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409097/job/74470191998",
+            "queueDurationInSeconds": 278,
+            "durationInSeconds": 177
+          },
+          {
+            "id": 74471472346,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:48:53Z",
+            "started_at": "2026-05-05T17:49:02Z",
+            "completed_at": "2026-05-05T17:49:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409097/job/74471472346",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 6
+          }
+        ]
       },
       {
         "id": 25392409166,
@@ -149,7 +1858,32 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141392,
+            "name": "e2e_one_step_off_policy_fsdp2_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:40Z",
+            "completed_at": "2026-05-05T17:49:30Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409166/job/74470141392",
+            "queueDurationInSeconds": 40,
+            "durationInSeconds": 470
+          },
+          {
+            "id": 74470141400,
+            "name": "e2e_one_step_off_policy_megatron_ascend",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:41Z",
+            "completed_at": "2026-05-05T17:48:04Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409166/job/74470141400",
+            "queueDurationInSeconds": 41,
+            "durationInSeconds": 383
+          }
+        ]
       },
       {
         "id": 25392409002,
@@ -168,7 +1902,56 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141223,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:08Z",
+            "completed_at": "2026-05-05T17:41:15Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409002/job/74470141223",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 74470184696,
+            "name": "sgl",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-05T17:41:15Z",
+            "started_at": "2026-05-05T17:42:05Z",
+            "completed_at": "2026-05-05T17:42:28Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409002/job/74470184696",
+            "queueDurationInSeconds": 50,
+            "durationInSeconds": 23
+          },
+          {
+            "id": 74470184703,
+            "name": "sgl_checkpoint_engine",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-05T17:41:15Z",
+            "started_at": "2026-05-05T17:49:02Z",
+            "completed_at": "2026-05-05T17:49:22Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409002/job/74470184703",
+            "queueDurationInSeconds": 467,
+            "durationInSeconds": 20
+          },
+          {
+            "id": 74471549692,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:49:22Z",
+            "started_at": "2026-05-05T17:49:31Z",
+            "completed_at": "2026-05-05T17:49:35Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409002/job/74471549692",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 4
+          }
+        ]
       },
       {
         "id": 25392409043,
@@ -187,7 +1970,68 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141584,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:03Z",
+            "completed_at": "2026-05-05T17:41:14Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409043/job/74470141584",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 11
+          },
+          {
+            "id": 74470182551,
+            "name": "model_engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:14Z",
+            "started_at": "2026-05-05T17:42:04Z",
+            "completed_at": "2026-05-05T17:51:47Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409043/job/74470182551",
+            "queueDurationInSeconds": 50,
+            "durationInSeconds": 583
+          },
+          {
+            "id": 74470182556,
+            "name": "model_rmpad_fsdp2_unstable",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:14Z",
+            "started_at": "2026-05-05T17:42:05Z",
+            "completed_at": "2026-05-05T17:42:53Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409043/job/74470182556",
+            "queueDurationInSeconds": 51,
+            "durationInSeconds": 48
+          },
+          {
+            "id": 74470182569,
+            "name": "model_rmpad",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:14Z",
+            "started_at": "2026-05-05T17:42:10Z",
+            "completed_at": "2026-05-05T17:44:09Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409043/job/74470182569",
+            "queueDurationInSeconds": 56,
+            "durationInSeconds": 119
+          },
+          {
+            "id": 74471957354,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:51:47Z",
+            "started_at": "2026-05-05T17:51:57Z",
+            "completed_at": "2026-05-05T17:52:03Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409043/job/74471957354",
+            "queueDurationInSeconds": 10,
+            "durationInSeconds": 6
+          }
+        ]
       },
       {
         "id": 25392409027,
@@ -206,7 +2050,44 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141282,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:18Z",
+            "completed_at": "2026-05-05T17:41:26Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409027/job/74470141282",
+            "queueDurationInSeconds": 18,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 74470215749,
+            "name": "reward_model_sglang",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:26Z",
+            "started_at": "2026-05-05T17:49:26Z",
+            "completed_at": "2026-05-05T17:52:43Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409027/job/74470215749",
+            "queueDurationInSeconds": 480,
+            "durationInSeconds": 197
+          },
+          {
+            "id": 74472116316,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:52:43Z",
+            "started_at": "2026-05-05T17:52:52Z",
+            "completed_at": "2026-05-05T17:52:58Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409027/job/74472116316",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 6
+          }
+        ]
       },
       {
         "id": 25392409004,
@@ -225,7 +2106,32 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141022,
+            "name": "e2e_fully_async_policy_megatron_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:32Z",
+            "completed_at": "2026-05-05T17:53:27Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409004/job/74470141022",
+            "queueDurationInSeconds": 32,
+            "durationInSeconds": 715
+          },
+          {
+            "id": 74470141029,
+            "name": "e2e_fully_async_policy_fsdp2_ascend",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:34Z",
+            "completed_at": "2026-05-05T17:48:26Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409004/job/74470141029",
+            "queueDurationInSeconds": 34,
+            "durationInSeconds": 412
+          }
+        ]
       },
       {
         "id": 25392409012,
@@ -244,7 +2150,20 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141134,
+            "name": "pre_commit_for_ppo (3.12)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:03Z",
+            "completed_at": "2026-05-05T17:41:34Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409012/job/74470141134",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 31
+          }
+        ]
       },
       {
         "id": 25392409101,
@@ -263,7 +2182,20 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141048,
+            "name": "test",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:09Z",
+            "completed_at": "2026-05-05T17:41:21Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409101/job/74470141048",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 12
+          }
+        ]
       },
       {
         "id": 25392409057,
@@ -282,7 +2214,20 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470140808,
+            "name": "check-title",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:08Z",
+            "completed_at": "2026-05-05T17:41:14Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409057/job/74470140808",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 6
+          }
+        ]
       },
       {
         "id": 25392409075,
@@ -301,7 +2246,20 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141135,
+            "name": "doc_test (3.10)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:09Z",
+            "completed_at": "2026-05-05T17:41:37Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409075/job/74470141135",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 28
+          }
+        ]
       },
       {
         "id": 25392409121,
@@ -320,7 +2278,20 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470140899,
+            "name": "pre-commit (3.12)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:03Z",
+            "completed_at": "2026-05-05T17:41:50Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409121/job/74470140899",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 47
+          }
+        ]
       },
       {
         "id": 25392409034,
@@ -339,7 +2310,20 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470140994,
+            "name": "type-coverage-check",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:09Z",
+            "completed_at": "2026-05-05T17:42:39Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409034/job/74470140994",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 90
+          }
+        ]
       },
       {
         "id": 25392409077,
@@ -358,7 +2342,44 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141122,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:10Z",
+            "completed_at": "2026-05-05T17:41:19Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409077/job/74470141122",
+            "queueDurationInSeconds": 10,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 74470195419,
+            "name": "reward_model_vllm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:19Z",
+            "started_at": "2026-05-05T17:47:26Z",
+            "completed_at": "2026-05-05T17:56:28Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409077/job/74470195419",
+            "queueDurationInSeconds": 367,
+            "durationInSeconds": 542
+          },
+          {
+            "id": 74472760601,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:56:29Z",
+            "started_at": "2026-05-05T17:56:38Z",
+            "completed_at": "2026-05-05T17:56:43Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409077/job/74472760601",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 5
+          }
+        ]
       },
       {
         "id": 25392408982,
@@ -377,7 +2398,56 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141157,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:09Z",
+            "completed_at": "2026-05-05T17:41:18Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392408982/job/74470141157",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 74470192580,
+            "name": "vllm_checkpoint_engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:18Z",
+            "started_at": "2026-05-05T17:42:18Z",
+            "completed_at": "2026-05-05T17:47:13Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392408982/job/74470192580",
+            "queueDurationInSeconds": 60,
+            "durationInSeconds": 295
+          },
+          {
+            "id": 74470192639,
+            "name": "vllm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:18Z",
+            "started_at": "2026-05-05T17:43:05Z",
+            "completed_at": "2026-05-05T17:57:35Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392408982/job/74470192639",
+            "queueDurationInSeconds": 107,
+            "durationInSeconds": 870
+          },
+          {
+            "id": 74472951071,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:57:35Z",
+            "started_at": "2026-05-05T17:57:37Z",
+            "completed_at": "2026-05-05T17:57:42Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392408982/job/74472951071",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 5
+          }
+        ]
       },
       {
         "id": 25392408999,
@@ -396,7 +2466,44 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141051,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:03Z",
+            "completed_at": "2026-05-05T17:41:14Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392408999/job/74470141051",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 11
+          },
+          {
+            "id": 74470182822,
+            "name": "gpu_unit_tests",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:15Z",
+            "started_at": "2026-05-05T17:42:03Z",
+            "completed_at": "2026-05-05T17:58:01Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392408999/job/74470182822",
+            "queueDurationInSeconds": 48,
+            "durationInSeconds": 958
+          },
+          {
+            "id": 74473026330,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:58:01Z",
+            "started_at": "2026-05-05T17:58:04Z",
+            "completed_at": "2026-05-05T17:58:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392408999/job/74473026330",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          }
+        ]
       },
       {
         "id": 25392409100,
@@ -415,7 +2522,44 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141238,
+            "name": "E2E Ascend testing for RL training scenarios of LLM models",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:34Z",
+            "completed_at": "2026-05-05T17:58:19Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409100/job/74470141238",
+            "queueDurationInSeconds": 34,
+            "durationInSeconds": 1005
+          },
+          {
+            "id": 74470141254,
+            "name": "E2E Ascend testing for RL training scenarios of LLM models using MindSpeed_LLM engine",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:42Z",
+            "completed_at": "2026-05-05T17:53:57Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409100/job/74470141254",
+            "queueDurationInSeconds": 42,
+            "durationInSeconds": 735
+          },
+          {
+            "id": 74470141297,
+            "name": "E2E Ascend testing for RL training scenarios of VLM models",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:28Z",
+            "completed_at": "2026-05-05T17:49:30Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409100/job/74470141297",
+            "queueDurationInSeconds": 28,
+            "durationInSeconds": 482
+          }
+        ]
       },
       {
         "id": 25392409144,
@@ -434,7 +2578,56 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141361,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:24Z",
+            "completed_at": "2026-05-05T17:41:33Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409144/job/74470141361",
+            "queueDurationInSeconds": 24,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 74470235459,
+            "name": "e2e_fully_async_policy_fsdp2",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:33Z",
+            "started_at": "2026-05-05T17:57:39Z",
+            "completed_at": "2026-05-05T18:00:59Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409144/job/74470235459",
+            "queueDurationInSeconds": 966,
+            "durationInSeconds": 200
+          },
+          {
+            "id": 74470235501,
+            "name": "e2e_fully_async_policy_megatron",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:33Z",
+            "started_at": "2026-05-05T17:56:33Z",
+            "completed_at": "2026-05-05T18:01:22Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409144/job/74470235501",
+            "queueDurationInSeconds": 900,
+            "durationInSeconds": 289
+          },
+          {
+            "id": 74473553819,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T18:01:00Z",
+            "started_at": "2026-05-05T18:01:03Z",
+            "completed_at": "2026-05-05T18:01:10Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409144/job/74473553819",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 7
+          }
+        ]
       },
       {
         "id": 25392409029,
@@ -453,7 +2646,56 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141274,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:22Z",
+            "completed_at": "2026-05-05T17:41:30Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409029/job/74470141274",
+            "queueDurationInSeconds": 22,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 74470228228,
+            "name": "e2e_ppo_trainer_megatron-qwen3",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:31Z",
+            "started_at": "2026-05-05T17:52:47Z",
+            "completed_at": "2026-05-05T18:01:55Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409029/job/74470228228",
+            "queueDurationInSeconds": 676,
+            "durationInSeconds": 548
+          },
+          {
+            "id": 74470228263,
+            "name": "e2e_ppo_trainer_megatron-deepseek",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:31Z",
+            "started_at": "2026-05-05T17:42:41Z",
+            "completed_at": "2026-05-05T17:54:48Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409029/job/74470228263",
+            "queueDurationInSeconds": 70,
+            "durationInSeconds": 727
+          },
+          {
+            "id": 74473720223,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T18:01:55Z",
+            "started_at": "2026-05-05T18:01:58Z",
+            "completed_at": "2026-05-05T18:02:02Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409029/job/74473720223",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          }
+        ]
       },
       {
         "id": 25392409041,
@@ -472,7 +2714,80 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141037,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:09Z",
+            "completed_at": "2026-05-05T17:41:16Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409041/job/74470141037",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 74470187382,
+            "name": "e2e_grpo_trainer_megatron-vlm",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-05T17:41:16Z",
+            "started_at": "2026-05-05T17:45:20Z",
+            "completed_at": "2026-05-05T17:50:15Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409041/job/74470187382",
+            "queueDurationInSeconds": 244,
+            "durationInSeconds": 295
+          },
+          {
+            "id": 74470187393,
+            "name": "e2e_grpo_trainer_fsdp-qwen2",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-05T17:41:16Z",
+            "started_at": "2026-05-05T17:42:10Z",
+            "completed_at": "2026-05-05T17:45:06Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409041/job/74470187393",
+            "queueDurationInSeconds": 54,
+            "durationInSeconds": 176
+          },
+          {
+            "id": 74470187394,
+            "name": "e2e_grpo_trainer_megatron-qwen2",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-05T17:41:16Z",
+            "started_at": "2026-05-05T18:00:05Z",
+            "completed_at": "2026-05-05T18:02:27Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409041/job/74470187394",
+            "queueDurationInSeconds": 1129,
+            "durationInSeconds": 142
+          },
+          {
+            "id": 74470187406,
+            "name": "trtllm_unit_tests",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-05T17:41:16Z",
+            "started_at": "2026-05-05T17:50:20Z",
+            "completed_at": "2026-05-05T18:00:00Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409041/job/74470187406",
+            "queueDurationInSeconds": 544,
+            "durationInSeconds": 580
+          },
+          {
+            "id": 74473816378,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T18:02:28Z",
+            "started_at": "2026-05-05T18:02:38Z",
+            "completed_at": "2026-05-05T18:02:43Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409041/job/74473816378",
+            "queueDurationInSeconds": 10,
+            "durationInSeconds": 5
+          }
+        ]
       },
       {
         "id": 25392409071,
@@ -491,7 +2806,56 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141322,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:03Z",
+            "completed_at": "2026-05-05T17:41:14Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409071/job/74470141322",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 11
+          },
+          {
+            "id": 74470180994,
+            "name": "e2e_ppo_trainer_megatron-deepseek",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:14Z",
+            "started_at": "2026-05-05T17:48:58Z",
+            "completed_at": "2026-05-05T18:09:06Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409071/job/74470180994",
+            "queueDurationInSeconds": 464,
+            "durationInSeconds": 1208
+          },
+          {
+            "id": 74470181027,
+            "name": "e2e_ppo_trainer_megatron-qwen3",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:14Z",
+            "started_at": "2026-05-05T17:47:21Z",
+            "completed_at": "2026-05-05T17:58:25Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409071/job/74470181027",
+            "queueDurationInSeconds": 367,
+            "durationInSeconds": 664
+          },
+          {
+            "id": 74474965189,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-05T18:09:06Z",
+            "started_at": "2026-05-05T18:09:15Z",
+            "completed_at": "2026-05-05T18:11:31Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409071/job/74474965189",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 136
+          }
+        ]
       },
       {
         "id": 25392409038,
@@ -510,7 +2874,68 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141315,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:23Z",
+            "completed_at": "2026-05-05T17:41:31Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409038/job/74470141315",
+            "queueDurationInSeconds": 23,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 74470231147,
+            "name": "e2e_ppo_trainer_megatron-moe-expert-parallel",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:32Z",
+            "started_at": "2026-05-05T17:42:18Z",
+            "completed_at": "2026-05-05T17:58:55Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409038/job/74470231147",
+            "queueDurationInSeconds": 46,
+            "durationInSeconds": 997
+          },
+          {
+            "id": 74470231159,
+            "name": "e2e_ppo_trainer_fsdp-qwen2_5vl-3b",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:32Z",
+            "started_at": "2026-05-05T17:44:23Z",
+            "completed_at": "2026-05-05T17:58:59Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409038/job/74470231159",
+            "queueDurationInSeconds": 171,
+            "durationInSeconds": 876
+          },
+          {
+            "id": 74470231166,
+            "name": "e2e_ppo_trainer_fsdp_vllm",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:32Z",
+            "started_at": "2026-05-05T17:52:00Z",
+            "completed_at": "2026-05-05T18:12:55Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409038/job/74470231166",
+            "queueDurationInSeconds": 628,
+            "durationInSeconds": 1255
+          },
+          {
+            "id": 74475611430,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T18:12:55Z",
+            "started_at": "2026-05-05T18:13:04Z",
+            "completed_at": "2026-05-05T18:13:10Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409038/job/74475611430",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 6
+          }
+        ]
       },
       {
         "id": 25392409044,
@@ -529,7 +2954,44 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141228,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:08Z",
+            "completed_at": "2026-05-05T17:41:16Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409044/job/74470141228",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 74470186555,
+            "name": "e2e_sft_llm",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-05T17:41:16Z",
+            "started_at": "2026-05-05T17:58:14Z",
+            "completed_at": "2026-05-05T18:05:00Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409044/job/74470186555",
+            "queueDurationInSeconds": 1018,
+            "durationInSeconds": 406
+          },
+          {
+            "id": 74474257462,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T18:05:00Z",
+            "started_at": "2026-05-05T18:05:09Z",
+            "completed_at": "2026-05-05T18:05:14Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409044/job/74474257462",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 5
+          }
+        ]
       },
       {
         "id": 25392409103,
@@ -548,7 +3010,304 @@
             "number": 6184
           }
         ],
-        "jobs": []
+        "jobs": [
+          {
+            "id": 74470141724,
+            "name": "setup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:00Z",
+            "started_at": "2026-05-05T17:41:17Z",
+            "completed_at": "2026-05-05T17:41:26Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409103/job/74470141724",
+            "queueDurationInSeconds": 17,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 74470216118,
+            "name": "e2e_ppo_trainer_fsdp_sglang",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:27Z",
+            "started_at": "2026-05-05T17:54:52Z",
+            "completed_at": "2026-05-05T17:57:07Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409103/job/74470216118",
+            "queueDurationInSeconds": 805,
+            "durationInSeconds": 135
+          },
+          {
+            "id": 74470216146,
+            "name": "e2e_ppo_trainer_fsdp-qwen2_5vl-3b",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T17:41:27Z",
+            "started_at": "2026-05-05T17:57:12Z",
+            "completed_at": "2026-05-05T18:06:04Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409103/job/74470216146",
+            "queueDurationInSeconds": 945,
+            "durationInSeconds": 532
+          },
+          {
+            "id": 74474448241,
+            "name": "cleanup",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-05T18:06:05Z",
+            "started_at": "2026-05-05T18:06:14Z",
+            "completed_at": "2026-05-05T18:06:19Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409103/job/74474448241",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 25392409065,
+        "name": "model_ascend",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "751a1f72aec6db80baf542006d97c4d10c240800",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-05T17:40:59Z",
+        "updated_at": "2026-05-06T00:56:09Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25392409065",
+        "durationInSeconds": 26110,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74520001692,
+            "name": "model_rmpad_ascend",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-05-05T23:00:13Z",
+            "started_at": "2026-05-05T23:00:13Z",
+            "completed_at": "2026-05-06T00:56:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409065/job/74520001692",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 6955
+          },
+          {
+            "id": 74520001728,
+            "name": "model_rmpad_fsdp2_unstable_ascend",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-05-05T23:00:13Z",
+            "started_at": "2026-05-05T23:00:13Z",
+            "completed_at": "2026-05-06T00:56:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409065/job/74520001728",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 6955
+          }
+        ]
+      },
+      {
+        "id": 25392409064,
+        "name": "vllm_ascend",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "751a1f72aec6db80baf542006d97c4d10c240800",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-05T17:40:59Z",
+        "updated_at": "2026-05-06T00:56:09Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25392409064",
+        "durationInSeconds": 26110,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74520452388,
+            "name": "vllm_ascend",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-05-05T23:04:12Z",
+            "started_at": "2026-05-05T23:04:12Z",
+            "completed_at": "2026-05-06T00:56:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409064/job/74520452388",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 6716
+          }
+        ]
+      },
+      {
+        "id": 25392409105,
+        "name": "e2e_ppo_trainer_megatron_vllm_2_ascend",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "751a1f72aec6db80baf542006d97c4d10c240800",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-05T17:40:59Z",
+        "updated_at": "2026-05-06T00:56:09Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25392409105",
+        "durationInSeconds": 26110,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74521752098,
+            "name": "e2e_ppo_trainer_fsdp-qwen2_5vl-3b_ascend",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-05-05T23:16:14Z",
+            "started_at": "2026-05-05T23:16:14Z",
+            "completed_at": "2026-05-06T00:56:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409105/job/74521752098",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 5994
+          },
+          {
+            "id": 74521752116,
+            "name": "e2e_ppo_trainer_fsdp_vllm_ascend",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-05-05T23:16:14Z",
+            "started_at": "2026-05-05T23:16:14Z",
+            "completed_at": "2026-05-06T00:56:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409105/job/74521752116",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 5994
+          }
+        ]
+      },
+      {
+        "id": 25392409007,
+        "name": "e2e_sft_llm_ascend",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "751a1f72aec6db80baf542006d97c4d10c240800",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-05T17:40:59Z",
+        "updated_at": "2026-05-06T00:56:09Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25392409007",
+        "durationInSeconds": 26110,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74517733424,
+            "name": "e2e_sft_llm_ascend",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-05-05T22:40:13Z",
+            "started_at": "2026-05-05T22:40:13Z",
+            "completed_at": "2026-05-06T00:56:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409007/job/74517733424",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 8155
+          }
+        ]
+      },
+      {
+        "id": 25392409030,
+        "name": "NPU unit tests",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "751a1f72aec6db80baf542006d97c4d10c240800",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-05T17:40:59Z",
+        "updated_at": "2026-05-06T00:56:09Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25392409030",
+        "durationInSeconds": 26110,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74518180287,
+            "name": "npu_unit_tests",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-05-05T22:44:13Z",
+            "started_at": "2026-05-05T22:44:13Z",
+            "completed_at": "2026-05-06T00:56:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409030/job/74518180287",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 7915
+          }
+        ]
+      },
+      {
+        "id": 25392409069,
+        "name": "e2e_ppo_trainer_veomni_vllm_ascend",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "751a1f72aec6db80baf542006d97c4d10c240800",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-05T17:40:59Z",
+        "updated_at": "2026-05-06T00:56:10Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25392409069",
+        "durationInSeconds": 26111,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74521315108,
+            "name": "e2e_ppo_trainer_veomni_vllm_ascend",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-05-05T23:12:13Z",
+            "started_at": "2026-05-05T23:12:13Z",
+            "completed_at": "2026-05-06T00:56:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409069/job/74521315108",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 6235
+          }
+        ]
+      },
+      {
+        "id": 25392409106,
+        "name": "reward_model_vllm_ascend",
+        "head_branch": "veomni/apply-monkey-patch-fused-kernels",
+        "head_sha": "751a1f72aec6db80baf542006d97c4d10c240800",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-05T17:40:59Z",
+        "updated_at": "2026-05-06T00:56:09Z",
+        "html_url": "https://github.com/verl-project/verl/actions/runs/25392409106",
+        "durationInSeconds": 26110,
+        "pull_requests": [
+          {
+            "number": 6184
+          }
+        ],
+        "jobs": [
+          {
+            "id": 74520882997,
+            "name": "reward_model_vllm_ascend",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-05-05T23:08:12Z",
+            "started_at": "2026-05-05T23:08:12Z",
+            "completed_at": "2026-05-06T00:56:08Z",
+            "html_url": "https://github.com/verl-project/verl/actions/runs/25392409106/job/74520882997",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 6476
+          }
+        ]
       },
       {
         "id": 25268539111,
