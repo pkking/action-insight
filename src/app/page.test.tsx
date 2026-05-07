@@ -375,6 +375,14 @@ describe('Dashboard PR view', () => {
     expect(screen.getByRole('checkbox', { name: /ci e2e sla/i })).toBeChecked();
   });
 
+  it('shows sample count suffix for metrics with data', async () => {
+    renderDashboard();
+
+    // Default mock has 1 PR per repo, so sampleCount = 1
+    const sampleCountElements = await screen.findAllByText(/\(n=1\)/);
+    expect(sampleCountElements.length).toBeGreaterThan(0);
+  });
+
   it('loads PR detail on demand and shows workflow rows', async () => {
     renderDashboard();
 
