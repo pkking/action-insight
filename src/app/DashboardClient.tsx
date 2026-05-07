@@ -81,6 +81,8 @@ const METRIC_OPTIONS: Array<{
   { key: 'ciE2ESlaRate', label: 'CI E2E SLA', stroke: '#7c3aed', yAxisId: 'rate' },
 ];
 
+const LOW_SAMPLE_THRESHOLD = 5;
+
 function formatDurationMinutes(seconds?: number) {
   if (seconds === undefined) {
     return 'N/A';
@@ -844,10 +846,30 @@ function DashboardContent({
                               <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{row.totalPrs} PRs in range</div>
                             </button>
                           </td>
-                          <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatMetricMinutes(row.prE2EP90Minutes)}</td>
-                          <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatMetricMinutes(row.ciE2EP90Minutes)}</td>
-                          <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatMetricMinutes(row.reviewP90Minutes)}</td>
-                          <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatRate(row.ciE2ESlaRate)}</td>
+                          <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">
+                            {formatMetricMinutes(row.prE2EP90Minutes)}
+                            {row.sampleCount > 0 && (
+                              <span className={`ml-1 text-xs ${row.sampleCount < LOW_SAMPLE_THRESHOLD ? 'text-amber-600 dark:text-amber-400' : ''}`}>(n={row.sampleCount})</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">
+                            {formatMetricMinutes(row.ciE2EP90Minutes)}
+                            {row.sampleCount > 0 && (
+                              <span className={`ml-1 text-xs ${row.sampleCount < LOW_SAMPLE_THRESHOLD ? 'text-amber-600 dark:text-amber-400' : ''}`}>(n={row.sampleCount})</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">
+                            {formatMetricMinutes(row.reviewP90Minutes)}
+                            {row.sampleCount > 0 && (
+                              <span className={`ml-1 text-xs ${row.sampleCount < LOW_SAMPLE_THRESHOLD ? 'text-amber-600 dark:text-amber-400' : ''}`}>(n={row.sampleCount})</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">
+                            {formatRate(row.ciE2ESlaRate)}
+                            {row.sampleCount > 0 && (
+                              <span className={`ml-1 text-xs ${row.sampleCount < LOW_SAMPLE_THRESHOLD ? 'text-amber-600 dark:text-amber-400' : ''}`}>(n={row.sampleCount})</span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}
