@@ -1,0 +1,842 @@
+{
+  "repo": "hiyouga/LlamaFactory",
+  "generated_at": "2026-05-08T07:32:54.224Z",
+  "pr": {
+    "number": 10430,
+    "title": "Add KTransformers AMX MoE SFT support via Accelerate",
+    "branch": "kt-ng",
+    "author": "JimmyPeilinLi",
+    "state": "closed",
+    "html_url": "https://github.com/hiyouga/LlamaFactory/pull/10430",
+    "created_at": "2026-04-25T06:34:06Z",
+    "ci_started_at": "2026-04-25T06:34:14Z",
+    "ci_completed_at": "2026-05-01T17:30:36Z",
+    "merged_at": "2026-04-30T17:47:58Z",
+    "partialCiHistory": false,
+    "timeToCiStartInSeconds": 8,
+    "ciDurationInSeconds": 557782,
+    "timeToMergeInSeconds": 472432,
+    "mergeLeadTimeInSeconds": 0,
+    "workflowCount": 12,
+    "successfulWorkflowCount": 10,
+    "conclusion": "cancelled",
+    "workflows": [
+      {
+        "id": 25147380994,
+        "name": "tests_cuda",
+        "head_branch": "kt-ng",
+        "head_sha": "e4c50ce42fd39a31cf738f1e2f67763851b50095",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-04-30T04:27:57Z",
+        "updated_at": "2026-05-01T17:30:36Z",
+        "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380994",
+        "durationInSeconds": 133359,
+        "pull_requests": [
+          {
+            "number": 10430
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73821712691,
+            "name": "tests (3.11, linux-x86_64-gpu-2)",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-04-30T17:30:35Z",
+            "started_at": "2026-04-30T17:30:35Z",
+            "completed_at": "2026-05-01T17:30:35Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380994/job/73821712691",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 86400
+          }
+        ]
+      },
+      {
+        "id": 25147380985,
+        "name": "docker",
+        "head_branch": "kt-ng",
+        "head_sha": "e4c50ce42fd39a31cf738f1e2f67763851b50095",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-30T04:27:57Z",
+        "updated_at": "2026-04-30T17:55:22Z",
+        "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380985",
+        "durationInSeconds": 48445,
+        "pull_requests": [
+          {
+            "number": 10430
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73821710683,
+            "name": "build (npu-a2)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-30T17:30:34Z",
+            "started_at": "2026-04-30T17:34:01Z",
+            "completed_at": "2026-04-30T17:55:21Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380985/job/73821710683",
+            "queueDurationInSeconds": 207,
+            "durationInSeconds": 1280
+          },
+          {
+            "id": 73821710714,
+            "name": "build (cuda)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-30T17:30:34Z",
+            "started_at": "2026-04-30T17:32:48Z",
+            "completed_at": "2026-04-30T17:38:30Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380985/job/73821710714",
+            "queueDurationInSeconds": 134,
+            "durationInSeconds": 342
+          },
+          {
+            "id": 73821710747,
+            "name": "build (npu-a3)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-30T17:30:34Z",
+            "started_at": "2026-04-30T17:34:03Z",
+            "completed_at": "2026-04-30T17:54:47Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380985/job/73821710747",
+            "queueDurationInSeconds": 209,
+            "durationInSeconds": 1244
+          }
+        ]
+      },
+      {
+        "id": 25147380991,
+        "name": "tests",
+        "head_branch": "kt-ng",
+        "head_sha": "e4c50ce42fd39a31cf738f1e2f67763851b50095",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-30T04:27:57Z",
+        "updated_at": "2026-04-30T17:44:54Z",
+        "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380991",
+        "durationInSeconds": 47817,
+        "pull_requests": [
+          {
+            "number": 10430
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73821711923,
+            "name": "tests (3.12, ubuntu-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-30T17:30:34Z",
+            "started_at": "2026-04-30T17:38:24Z",
+            "completed_at": "2026-04-30T17:42:18Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380991/job/73821711923",
+            "queueDurationInSeconds": 470,
+            "durationInSeconds": 234
+          },
+          {
+            "id": 73821711925,
+            "name": "tests (3.11, ubuntu-latest, 4.57.1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-30T17:30:34Z",
+            "started_at": "2026-04-30T17:37:41Z",
+            "completed_at": "2026-04-30T17:40:05Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380991/job/73821711925",
+            "queueDurationInSeconds": 427,
+            "durationInSeconds": 144
+          },
+          {
+            "id": 73821712005,
+            "name": "tests (3.11, windows-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-30T17:30:35Z",
+            "started_at": "2026-04-30T17:32:55Z",
+            "completed_at": "2026-04-30T17:43:16Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380991/job/73821712005",
+            "queueDurationInSeconds": 140,
+            "durationInSeconds": 621
+          },
+          {
+            "id": 73821712010,
+            "name": "tests (3.11, macos-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-30T17:30:35Z",
+            "started_at": "2026-04-30T17:35:08Z",
+            "completed_at": "2026-04-30T17:38:21Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380991/job/73821712010",
+            "queueDurationInSeconds": 273,
+            "durationInSeconds": 193
+          },
+          {
+            "id": 73821712022,
+            "name": "tests (3.12, windows-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-30T17:30:35Z",
+            "started_at": "2026-04-30T17:32:23Z",
+            "completed_at": "2026-04-30T17:38:43Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380991/job/73821712022",
+            "queueDurationInSeconds": 108,
+            "durationInSeconds": 380
+          },
+          {
+            "id": 73821712031,
+            "name": "tests (3.11, ubuntu-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-30T17:30:35Z",
+            "started_at": "2026-04-30T17:38:00Z",
+            "completed_at": "2026-04-30T17:41:35Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380991/job/73821712031",
+            "queueDurationInSeconds": 445,
+            "durationInSeconds": 215
+          },
+          {
+            "id": 73821712036,
+            "name": "tests (3.12, macos-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-30T17:30:35Z",
+            "started_at": "2026-04-30T17:34:28Z",
+            "completed_at": "2026-04-30T17:39:14Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380991/job/73821712036",
+            "queueDurationInSeconds": 233,
+            "durationInSeconds": 286
+          },
+          {
+            "id": 73821712052,
+            "name": "tests (3.13, ubuntu-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-30T17:30:35Z",
+            "started_at": "2026-04-30T17:38:32Z",
+            "completed_at": "2026-04-30T17:42:18Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380991/job/73821712052",
+            "queueDurationInSeconds": 477,
+            "durationInSeconds": 226
+          },
+          {
+            "id": 73821712071,
+            "name": "tests (3.13, macos-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-30T17:30:35Z",
+            "started_at": "2026-04-30T17:38:45Z",
+            "completed_at": "2026-04-30T17:42:47Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380991/job/73821712071",
+            "queueDurationInSeconds": 490,
+            "durationInSeconds": 242
+          },
+          {
+            "id": 73821712078,
+            "name": "tests (3.11, ubuntu-latest, 4.55.0)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-30T17:30:35Z",
+            "started_at": "2026-04-30T17:38:16Z",
+            "completed_at": "2026-04-30T17:40:09Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380991/job/73821712078",
+            "queueDurationInSeconds": 461,
+            "durationInSeconds": 113
+          },
+          {
+            "id": 73821712131,
+            "name": "tests (3.13, windows-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-30T17:30:35Z",
+            "started_at": "2026-04-30T17:38:24Z",
+            "completed_at": "2026-04-30T17:44:52Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380991/job/73821712131",
+            "queueDurationInSeconds": 469,
+            "durationInSeconds": 388
+          }
+        ]
+      },
+      {
+        "id": 25147380992,
+        "name": "tests_npu",
+        "head_branch": "kt-ng",
+        "head_sha": "e4c50ce42fd39a31cf738f1e2f67763851b50095",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-30T04:27:57Z",
+        "updated_at": "2026-04-30T17:46:49Z",
+        "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380992",
+        "durationInSeconds": 47932,
+        "pull_requests": [
+          {
+            "number": 10430
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73821712111,
+            "name": "tests (3.11, linux-aarch64-a2-4, 2.7.1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-30T17:30:35Z",
+            "started_at": "2026-04-30T17:30:57Z",
+            "completed_at": "2026-04-30T17:46:48Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/25147380992/job/73821712111",
+            "queueDurationInSeconds": 22,
+            "durationInSeconds": 951
+          }
+        ]
+      },
+      {
+        "id": 24961058385,
+        "name": "tests_npu",
+        "head_branch": "kt-ng",
+        "head_sha": "7f551e0303cb70e7b066194d470c3572d2465f98",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-26T16:08:44Z",
+        "updated_at": "2026-04-26T16:35:30Z",
+        "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058385",
+        "durationInSeconds": 1606,
+        "pull_requests": [
+          {
+            "number": 10430
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73088235854,
+            "name": "tests (3.11, linux-aarch64-a2-4, 2.7.1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T16:20:13Z",
+            "completed_at": "2026-04-26T16:35:30Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058385/job/73088235854",
+            "queueDurationInSeconds": 23,
+            "durationInSeconds": 917
+          }
+        ]
+      },
+      {
+        "id": 24961058383,
+        "name": "docker",
+        "head_branch": "kt-ng",
+        "head_sha": "7f551e0303cb70e7b066194d470c3572d2465f98",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-26T16:08:44Z",
+        "updated_at": "2026-04-26T16:42:15Z",
+        "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058383",
+        "durationInSeconds": 2011,
+        "pull_requests": [
+          {
+            "number": 10430
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73088235885,
+            "name": "build (cuda)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T16:19:52Z",
+            "completed_at": "2026-04-26T16:26:01Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058383/job/73088235885",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 369
+          },
+          {
+            "id": 73088235903,
+            "name": "build (npu-a3)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T16:19:52Z",
+            "completed_at": "2026-04-26T16:40:29Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058383/job/73088235903",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 1237
+          },
+          {
+            "id": 73088235918,
+            "name": "build (npu-a2)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T16:19:52Z",
+            "completed_at": "2026-04-26T16:42:14Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058383/job/73088235918",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 1342
+          }
+        ]
+      },
+      {
+        "id": 24961058386,
+        "name": "tests",
+        "head_branch": "kt-ng",
+        "head_sha": "7f551e0303cb70e7b066194d470c3572d2465f98",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-26T16:08:44Z",
+        "updated_at": "2026-04-26T16:26:40Z",
+        "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058386",
+        "durationInSeconds": 1076,
+        "pull_requests": [
+          {
+            "number": 10430
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73088235947,
+            "name": "tests (3.12, ubuntu-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T16:19:52Z",
+            "completed_at": "2026-04-26T16:23:28Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058386/job/73088235947",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 216
+          },
+          {
+            "id": 73088235954,
+            "name": "tests (3.13, macos-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T16:19:52Z",
+            "completed_at": "2026-04-26T16:23:16Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058386/job/73088235954",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 204
+          },
+          {
+            "id": 73088235961,
+            "name": "tests (3.13, windows-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T16:19:52Z",
+            "completed_at": "2026-04-26T16:25:43Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058386/job/73088235961",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 351
+          },
+          {
+            "id": 73088235969,
+            "name": "tests (3.11, ubuntu-latest, 4.55.0)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T16:19:52Z",
+            "completed_at": "2026-04-26T16:21:57Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058386/job/73088235969",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 125
+          },
+          {
+            "id": 73088235971,
+            "name": "tests (3.11, windows-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T16:19:52Z",
+            "completed_at": "2026-04-26T16:26:03Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058386/job/73088235971",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 371
+          },
+          {
+            "id": 73088235974,
+            "name": "tests (3.11, macos-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T16:19:52Z",
+            "completed_at": "2026-04-26T16:22:49Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058386/job/73088235974",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 177
+          },
+          {
+            "id": 73088235982,
+            "name": "tests (3.13, ubuntu-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T16:19:52Z",
+            "completed_at": "2026-04-26T16:23:44Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058386/job/73088235982",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 232
+          },
+          {
+            "id": 73088235986,
+            "name": "tests (3.12, macos-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T16:19:52Z",
+            "completed_at": "2026-04-26T16:23:55Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058386/job/73088235986",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 243
+          },
+          {
+            "id": 73088236002,
+            "name": "tests (3.12, windows-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T16:19:52Z",
+            "completed_at": "2026-04-26T16:26:39Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058386/job/73088236002",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 407
+          },
+          {
+            "id": 73088236003,
+            "name": "tests (3.11, ubuntu-latest, 4.57.1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T16:19:52Z",
+            "completed_at": "2026-04-26T16:22:07Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058386/job/73088236003",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 135
+          },
+          {
+            "id": 73088236042,
+            "name": "tests (3.11, ubuntu-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T16:19:52Z",
+            "completed_at": "2026-04-26T16:23:36Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058386/job/73088236042",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 224
+          }
+        ]
+      },
+      {
+        "id": 24961058390,
+        "name": "tests_cuda",
+        "head_branch": "kt-ng",
+        "head_sha": "7f551e0303cb70e7b066194d470c3572d2465f98",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-26T16:08:44Z",
+        "updated_at": "2026-04-26T18:45:46Z",
+        "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058390",
+        "durationInSeconds": 9422,
+        "pull_requests": [
+          {
+            "number": 10430
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73088235871,
+            "name": "tests (3.11, linux-x86_64-gpu-2)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T16:19:50Z",
+            "started_at": "2026-04-26T18:36:25Z",
+            "completed_at": "2026-04-26T18:45:45Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24961058390/job/73088235871",
+            "queueDurationInSeconds": 8195,
+            "durationInSeconds": 560
+          }
+        ]
+      },
+      {
+        "id": 24924775294,
+        "name": "tests_cuda",
+        "head_branch": "kt-ng",
+        "head_sha": "285a42b510d694c4a6ee4566a9bb867ad7af34f1",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-04-25T06:34:14Z",
+        "updated_at": "2026-04-26T16:19:51Z",
+        "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775294",
+        "durationInSeconds": 121537,
+        "pull_requests": [
+          {
+            "number": 10430
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73062261165,
+            "name": "tests (3.11, linux-x86_64-gpu-2)",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:30Z",
+            "completed_at": "2026-04-26T16:19:50Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775294/job/73062261165",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 30800
+          }
+        ]
+      },
+      {
+        "id": 24924775293,
+        "name": "docker",
+        "head_branch": "kt-ng",
+        "head_sha": "285a42b510d694c4a6ee4566a9bb867ad7af34f1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-25T06:34:14Z",
+        "updated_at": "2026-04-26T08:09:02Z",
+        "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775293",
+        "durationInSeconds": 92088,
+        "pull_requests": [
+          {
+            "number": 10430
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73062261177,
+            "name": "build (npu-a3)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:33Z",
+            "completed_at": "2026-04-26T08:09:01Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775293/job/73062261177",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 1348
+          },
+          {
+            "id": 73062261181,
+            "name": "build (cuda)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:32Z",
+            "completed_at": "2026-04-26T07:51:51Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775293/job/73062261181",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 319
+          },
+          {
+            "id": 73062261200,
+            "name": "build (npu-a2)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:32Z",
+            "completed_at": "2026-04-26T08:06:59Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775293/job/73062261200",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 1227
+          }
+        ]
+      },
+      {
+        "id": 24924775297,
+        "name": "tests",
+        "head_branch": "kt-ng",
+        "head_sha": "285a42b510d694c4a6ee4566a9bb867ad7af34f1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-25T06:34:14Z",
+        "updated_at": "2026-04-26T07:54:20Z",
+        "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775297",
+        "durationInSeconds": 91206,
+        "pull_requests": [
+          {
+            "number": 10430
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73062261158,
+            "name": "tests (3.11, ubuntu-latest, 4.57.1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:32Z",
+            "completed_at": "2026-04-26T07:48:39Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775297/job/73062261158",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 127
+          },
+          {
+            "id": 73062261160,
+            "name": "tests (3.13, macos-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:33Z",
+            "completed_at": "2026-04-26T07:50:02Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775297/job/73062261160",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 209
+          },
+          {
+            "id": 73062261161,
+            "name": "tests (3.11, macos-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:33Z",
+            "completed_at": "2026-04-26T07:50:01Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775297/job/73062261161",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 208
+          },
+          {
+            "id": 73062261162,
+            "name": "tests (3.12, macos-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:33Z",
+            "completed_at": "2026-04-26T07:50:22Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775297/job/73062261162",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 229
+          },
+          {
+            "id": 73062261183,
+            "name": "tests (3.12, ubuntu-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:32Z",
+            "completed_at": "2026-04-26T07:50:02Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775297/job/73062261183",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 210
+          },
+          {
+            "id": 73062261184,
+            "name": "tests (3.11, ubuntu-latest, 4.55.0)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:32Z",
+            "completed_at": "2026-04-26T07:48:33Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775297/job/73062261184",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 121
+          },
+          {
+            "id": 73062261185,
+            "name": "tests (3.13, ubuntu-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:32Z",
+            "completed_at": "2026-04-26T07:50:02Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775297/job/73062261185",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 210
+          },
+          {
+            "id": 73062261187,
+            "name": "tests (3.11, ubuntu-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:33Z",
+            "completed_at": "2026-04-26T07:50:34Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775297/job/73062261187",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 241
+          },
+          {
+            "id": 73062261188,
+            "name": "tests (3.11, windows-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:32Z",
+            "completed_at": "2026-04-26T07:54:20Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775297/job/73062261188",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 468
+          },
+          {
+            "id": 73062261202,
+            "name": "tests (3.12, windows-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:32Z",
+            "completed_at": "2026-04-26T07:52:23Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775297/job/73062261202",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 351
+          },
+          {
+            "id": 73062261208,
+            "name": "tests (3.13, windows-latest)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:32Z",
+            "completed_at": "2026-04-26T07:52:33Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775297/job/73062261208",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 361
+          }
+        ]
+      },
+      {
+        "id": 24924775295,
+        "name": "tests_npu",
+        "head_branch": "kt-ng",
+        "head_sha": "285a42b510d694c4a6ee4566a9bb867ad7af34f1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-04-25T06:34:14Z",
+        "updated_at": "2026-04-26T08:02:05Z",
+        "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775295",
+        "durationInSeconds": 91671,
+        "pull_requests": [
+          {
+            "number": 10430
+          }
+        ],
+        "jobs": [
+          {
+            "id": 73062261132,
+            "name": "tests (3.11, linux-aarch64-a2-4, 2.7.1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-04-26T07:46:30Z",
+            "started_at": "2026-04-26T07:46:52Z",
+            "completed_at": "2026-04-26T08:02:04Z",
+            "html_url": "https://github.com/hiyouga/LlamaFactory/actions/runs/24924775295/job/73062261132",
+            "queueDurationInSeconds": 22,
+            "durationInSeconds": 912
+          }
+        ]
+      }
+    ]
+  }
+}
