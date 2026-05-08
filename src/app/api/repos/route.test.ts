@@ -10,6 +10,8 @@ describe('/api/repos', () => {
     };
 
     expect(body.repos.map((repo) => repo.key)).toEqual([
+      'hiyouga/LlamaFactory',
+      'modelscope/ms-swift',
       'sgl-project/sglang',
       'tile-ai/tilelang-ascend',
       'triton-lang/triton-ascend',
