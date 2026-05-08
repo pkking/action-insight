@@ -4,19 +4,38 @@ Monitor GitHub Actions CI/CD metrics with a clean, interactive dashboard.
 
 ## Architecture
 
-This project uses a **split architecture**:
+This project uses a **unified architecture** where data and code reside in the same branch:
 
-- **`main` branch** — Next.js frontend deployed to Vercel, reads pre-collected data from the `data` branch via GitHub Raw URLs
-- **`data` branch** — ETL pipeline (GitHub Actions cron) that collects GitHub Actions runs/jobs data and writes daily JSON files
+- **`main` branch** — Next.js frontend + ETL pipeline + collected data
+  - **Frontend**: Deployed to Vercel, reads data via GitHub Raw URLs from `main` branch
+  - **ETL Pipeline**: GitHub Actions cron collects GitHub Actions runs/jobs data and writes daily JSON files to `data/` directory
+  - **Data**: Stored in `data/` directory, committed alongside code
 
 ```
-┌─────────────────────┐         ┌─────────────────────┐
-│  main branch        │         │  data branch        │
-│  (Vercel)           │◄────────│  (GitHub Actions)   │
-│  Next.js Dashboard  │  Raw    │  ETL Pipeline       │
-│  Read-only          │  JSON   │  Writes daily JSON  │
-└─────────────────────┘         └─────────────────────┘
+┌─────────────────────────────────────┐
+│           main branch               │
+│                                     │
+│  ┌─────────────────┐                │
+│  │  Next.js        │                │
+│  │  Dashboard      │  ◄─────────────┤
+│  │  (Vercel)       │     Raw URL    │
+│  └─────────────────┘                │
+│                                     │
+│  ┌─────────────────┐                │
+│  │  data/          │                │
+│  │  Daily JSON     │                │
+│  │  (ETL Output)   │                │
+│  └─────────────────┘                │
+│                                     │
+│  ┌─────────────────┐                │
+│  │  GitHub Actions │────────────────┤ Writes to data/
+│  │  ETL Pipeline   │                │
+│  └─────────────────┘                │
+└─────────────────────────────────────┘
 ```
+
+**Development Mode**: The frontend reads from local `data/` directory (`RAW_BASE = ""`).
+**Production Mode**: The frontend reads from `https://raw.githubusercontent.com/{owner}/{repo}/main/data/...`.
 
 ## Getting Started
 
@@ -29,9 +48,9 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-> **Note**: The frontend reads data from the `data` branch. If no data has been collected yet, you'll see an error. Run the ETL pipeline first or manually trigger the workflow.
+> **Note**: The frontend reads data from the `main` branch's `data/` directory. If no data has been collected yet, you'll see an error. Run the ETL pipeline first or manually trigger the workflow.
 
-### ETL Pipeline (data branch)
+### ETL Pipeline
 
 The ETL pipeline runs automatically every hour via GitHub Actions.
 
@@ -148,11 +167,16 @@ Deploy the `main` branch to Vercel:
 
 ## Data Format
 
-Data is stored as daily JSON files in the `data/` directory on the `data` branch:
+Data is stored as daily JSON files in the `data/` directory on the `main` branch:
 
 ```
 data/
-├── index.json          # Index of available dates per repo
-├── 2024-01-16.json     # Daily runs + jobs data
-└── 2024-01-15.json
+├── {owner}/
+│   └── {repo}/
+│       ├── index.json          # Index of available dates per repo
+│       ├── 2024-01-16.json     # Daily runs + jobs data
+│       ├── 2024-01-15.json
+│       └── prs/
+│           ├── index.json      # Index of PR artifacts
+│           └── {number}.json   # PR-specific metrics
 ```
