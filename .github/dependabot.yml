@@ -17,6 +17,11 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    ignore:
+      # ESLint 10 has breaking API changes incompatible with eslint-config-next
+      # Remove this when eslint-config-next officially supports ESLint 10
+      - dependency-name: "eslint"
+        versions: [">=10"]
     groups:
       production-deps:
         patterns:
