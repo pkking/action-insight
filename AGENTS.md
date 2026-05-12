@@ -24,7 +24,7 @@
     - 推送分支到 origin 并创建 PR
     - PR 标题使用 Conventional Commits 格式，PR 描述需说明变更内容、测试情况、相关文档链接
     - 等待审查通过后合并，合并后删除 feature 分支
-7.  **Gitignore 规范**：**AI 工具相关目录不应被加入 .gitignore**。例如 `.codex`、`.sisyphus`、`.serena/memories` 等目录包含有用的 AI 会话信息和上下文，应当保留在仓库中以便跨会话共享和延续上下文。只有临时缓存文件（如 `.serena/cache/`）和编译产物（如 `__pycache__/`）才应被忽略。
+    - **Gitignore 规范**：**AI 工具相关目录不应被加入 .gitignore**。例如 `.codex`、`.sisyphus`、`.serena/memories` 等目录包含有用的 AI 会话信息和上下文，应当保留在仓库中以便跨会话共享和延续上下文。只有临时缓存文件（如 `.serena/cache/`）和编译产物（如 `__pycache__/`）才应被忽略。
 
 ## 相关关联 (Relations)
 此仓库针对 `vllm-project/vllm-ascend` 等带有复杂 CI/CD 标签的仓库进行了专门的适配（例如针对 `npu` 或 `large-disk` 标签）。
