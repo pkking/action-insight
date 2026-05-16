@@ -1,0 +1,696 @@
+{
+  "repo": "sgl-project/sglang",
+  "generated_at": "2026-05-16T06:37:53.025Z",
+  "pr": {
+    "number": 24710,
+    "title": "[codex] Optimize hidden-size 512 RMSNorm dispatch",
+    "branch": "codex/h100-rmsnorm-half-kernel",
+    "author": "BBuf",
+    "state": "open",
+    "html_url": "https://github.com/sgl-project/sglang/pull/24710",
+    "created_at": "2026-05-08T16:22:35Z",
+    "ci_started_at": "2026-05-15T13:03:03Z",
+    "ci_completed_at": "2026-05-15T15:44:19Z",
+    "partialCiHistory": false,
+    "timeToCiStartInSeconds": 592828,
+    "ciDurationInSeconds": 9676,
+    "workflowCount": 11,
+    "successfulWorkflowCount": 8,
+    "conclusion": "failure",
+    "workflows": [
+      {
+        "id": 25919276112,
+        "name": "PR Test",
+        "head_branch": "codex/h100-rmsnorm-half-kernel",
+        "head_sha": "a596f629aebec62ed4fdae29d5236a9e7d6e85bc",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-15T13:03:06Z",
+        "updated_at": "2026-05-15T15:44:19Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919276112",
+        "durationInSeconds": 9673,
+        "pull_requests": [
+          {
+            "number": 24710
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25919275955,
+        "name": "PR Test Extra",
+        "head_branch": "codex/h100-rmsnorm-half-kernel",
+        "head_sha": "a596f629aebec62ed4fdae29d5236a9e7d6e85bc",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-05-15T13:03:05Z",
+        "updated_at": "2026-05-15T13:05:32Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275955",
+        "durationInSeconds": 147,
+        "pull_requests": [
+          {
+            "number": 24710
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76184102869,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:05:31Z",
+            "started_at": "2026-05-15T13:05:31Z",
+            "completed_at": "2026-05-15T13:05:31Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275955/job/76184102869",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76184103252,
+            "name": "extra-a-test-1-gpu-small",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:05:31Z",
+            "started_at": "2026-05-15T13:05:31Z",
+            "completed_at": "2026-05-15T13:05:31Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275955/job/76184103252",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76184103257,
+            "name": "sgl-kernel-build-wheels",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:05:31Z",
+            "started_at": "2026-05-15T13:05:31Z",
+            "completed_at": "2026-05-15T13:05:31Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275955/job/76184103257",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76184103459,
+            "name": "extra-b-test-deepep-8-gpu-h200",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:05:31Z",
+            "started_at": "2026-05-15T13:05:31Z",
+            "completed_at": "2026-05-15T13:05:31Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275955/job/76184103459",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76184103599,
+            "name": "extra-b-test-4-gpu-h100",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:05:31Z",
+            "started_at": "2026-05-15T13:05:31Z",
+            "completed_at": "2026-05-15T13:05:31Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275955/job/76184103599",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76184103677,
+            "name": "extra-b-test-8-gpu-h200",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:05:31Z",
+            "started_at": "2026-05-15T13:05:31Z",
+            "completed_at": "2026-05-15T13:05:31Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275955/job/76184103677",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76184103725,
+            "name": "extra-a-test-1-gpu-large",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:05:31Z",
+            "started_at": "2026-05-15T13:05:31Z",
+            "completed_at": "2026-05-15T13:05:31Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275955/job/76184103725",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76184103741,
+            "name": "extra-a-test-2-gpu-large",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:05:31Z",
+            "started_at": "2026-05-15T13:05:31Z",
+            "completed_at": "2026-05-15T13:05:31Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275955/job/76184103741",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76184103749,
+            "name": "extra-b-test-4-gpu-b200",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:05:31Z",
+            "started_at": "2026-05-15T13:05:31Z",
+            "completed_at": "2026-05-15T13:05:31Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275955/job/76184103749",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25919275911,
+        "name": "PR Test (MUSA)",
+        "head_branch": "codex/h100-rmsnorm-half-kernel",
+        "head_sha": "a596f629aebec62ed4fdae29d5236a9e7d6e85bc",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-15T13:03:05Z",
+        "updated_at": "2026-05-15T13:03:37Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275911",
+        "durationInSeconds": 32,
+        "pull_requests": [
+          {
+            "number": 24710
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76183742434,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:06Z",
+            "started_at": "2026-05-15T13:03:10Z",
+            "completed_at": "2026-05-15T13:03:22Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275911/job/76183742434",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 12
+          },
+          {
+            "id": 76183783135,
+            "name": "pr-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:22Z",
+            "started_at": "2026-05-15T13:03:24Z",
+            "completed_at": "2026-05-15T13:03:29Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275911/job/76183783135",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 5
+          },
+          {
+            "id": 76183800641,
+            "name": "pr-test-musa-finish",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:29Z",
+            "started_at": "2026-05-15T13:03:32Z",
+            "completed_at": "2026-05-15T13:03:36Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275911/job/76183800641",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          },
+          {
+            "id": 76183800682,
+            "name": "sgl-kernel-unit-test-musa",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:03:29Z",
+            "started_at": "2026-05-15T13:03:29Z",
+            "completed_at": "2026-05-15T13:03:29Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275911/job/76183800682",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76183800848,
+            "name": "multimodal-gen-test-1-gpu-musa",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:03:30Z",
+            "started_at": "2026-05-15T13:03:30Z",
+            "completed_at": "2026-05-15T13:03:29Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275911/job/76183800848",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76183800871,
+            "name": "multimodal-gen-layer-unit-test-musa",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:03:30Z",
+            "started_at": "2026-05-15T13:03:30Z",
+            "completed_at": "2026-05-15T13:03:29Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275911/job/76183800871",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76183800968,
+            "name": "multimodal-gen-test-2-gpu-musa",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:03:30Z",
+            "started_at": "2026-05-15T13:03:30Z",
+            "completed_at": "2026-05-15T13:03:29Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275911/job/76183800968",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25919275808,
+        "name": "Lint",
+        "head_branch": "codex/h100-rmsnorm-half-kernel",
+        "head_sha": "a596f629aebec62ed4fdae29d5236a9e7d6e85bc",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-15T13:03:05Z",
+        "updated_at": "2026-05-15T13:06:27Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275808",
+        "durationInSeconds": 202,
+        "pull_requests": [
+          {
+            "number": 24710
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76183742312,
+            "name": "lint",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:06Z",
+            "started_at": "2026-05-15T13:03:09Z",
+            "completed_at": "2026-05-15T13:06:26Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275808/job/76183742312",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 197
+          }
+        ]
+      },
+      {
+        "id": 25919275907,
+        "name": "PR Test (Arm64)",
+        "head_branch": "codex/h100-rmsnorm-half-kernel",
+        "head_sha": "a596f629aebec62ed4fdae29d5236a9e7d6e85bc",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-15T13:03:05Z",
+        "updated_at": "2026-05-15T13:12:19Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275907",
+        "durationInSeconds": 554,
+        "pull_requests": [
+          {
+            "number": 24710
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76183742326,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:06Z",
+            "started_at": "2026-05-15T13:03:15Z",
+            "completed_at": "2026-05-15T13:03:22Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275907/job/76183742326",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 7
+          },
+          {
+            "id": 76183784135,
+            "name": "pr-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:23Z",
+            "started_at": "2026-05-15T13:03:26Z",
+            "completed_at": "2026-05-15T13:03:30Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275907/job/76183784135",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 4
+          },
+          {
+            "id": 76183802727,
+            "name": "build-test",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:30Z",
+            "started_at": "2026-05-15T13:03:34Z",
+            "completed_at": "2026-05-15T13:12:18Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275907/job/76183802727",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 524
+          }
+        ]
+      },
+      {
+        "id": 25919275961,
+        "name": "PR Test (XPU)",
+        "head_branch": "codex/h100-rmsnorm-half-kernel",
+        "head_sha": "a596f629aebec62ed4fdae29d5236a9e7d6e85bc",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-15T13:03:05Z",
+        "updated_at": "2026-05-15T13:25:53Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275961",
+        "durationInSeconds": 1368,
+        "pull_requests": [
+          {
+            "number": 24710
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76183742543,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:06Z",
+            "started_at": "2026-05-15T13:03:08Z",
+            "completed_at": "2026-05-15T13:03:17Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275961/job/76183742543",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 76183770681,
+            "name": "pr-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:17Z",
+            "started_at": "2026-05-15T13:03:19Z",
+            "completed_at": "2026-05-15T13:03:24Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275961/job/76183770681",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 5
+          },
+          {
+            "id": 76183787085,
+            "name": "build-and-test",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:24Z",
+            "started_at": "2026-05-15T13:03:26Z",
+            "completed_at": "2026-05-15T13:25:41Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275961/job/76183787085",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 1335
+          },
+          {
+            "id": 76187204762,
+            "name": "finish",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:25:42Z",
+            "started_at": "2026-05-15T13:25:50Z",
+            "completed_at": "2026-05-15T13:25:52Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275961/job/76187204762",
+            "queueDurationInSeconds": 8,
+            "durationInSeconds": 2
+          }
+        ]
+      },
+      {
+        "id": 25919275981,
+        "name": "PR Test (NPU)",
+        "head_branch": "codex/h100-rmsnorm-half-kernel",
+        "head_sha": "a596f629aebec62ed4fdae29d5236a9e7d6e85bc",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-15T13:03:05Z",
+        "updated_at": "2026-05-15T13:43:55Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275981",
+        "durationInSeconds": 2450,
+        "pull_requests": [
+          {
+            "number": 24710
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76183742862,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:06Z",
+            "started_at": "2026-05-15T13:03:09Z",
+            "completed_at": "2026-05-15T13:03:17Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275981/job/76183742862",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 76183770669,
+            "name": "pr-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:17Z",
+            "started_at": "2026-05-15T13:03:20Z",
+            "completed_at": "2026-05-15T13:03:25Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275981/job/76183770669",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 5
+          },
+          {
+            "id": 76183790454,
+            "name": "stage-b-test-4-npu-a3",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:25Z",
+            "started_at": "2026-05-15T13:03:49Z",
+            "completed_at": "2026-05-15T13:43:47Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275981/job/76183790454",
+            "queueDurationInSeconds": 24,
+            "durationInSeconds": 2398
+          },
+          {
+            "id": 76183790472,
+            "name": "stage-b-test-16-npu-a3",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:25Z",
+            "started_at": "2026-05-15T13:06:40Z",
+            "completed_at": "2026-05-15T13:24:16Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275981/job/76183790472",
+            "queueDurationInSeconds": 195,
+            "durationInSeconds": 1056
+          },
+          {
+            "id": 76183790475,
+            "name": "stage-b-test-1-npu-a2 (0)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:25Z",
+            "started_at": "2026-05-15T13:04:03Z",
+            "completed_at": "2026-05-15T13:41:33Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275981/job/76183790475",
+            "queueDurationInSeconds": 38,
+            "durationInSeconds": 2250
+          },
+          {
+            "id": 76183790538,
+            "name": "stage-b-test-1-npu-a2 (1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:25Z",
+            "started_at": "2026-05-15T13:03:51Z",
+            "completed_at": "2026-05-15T13:35:12Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275981/job/76183790538",
+            "queueDurationInSeconds": 26,
+            "durationInSeconds": 1881
+          },
+          {
+            "id": 76183790550,
+            "name": "stage-b-test-2-npu-a2 (1)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:25Z",
+            "started_at": "2026-05-15T13:03:59Z",
+            "completed_at": "2026-05-15T13:23:13Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275981/job/76183790550",
+            "queueDurationInSeconds": 34,
+            "durationInSeconds": 1154
+          },
+          {
+            "id": 76183790570,
+            "name": "stage-b-test-2-npu-a2 (0)",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:25Z",
+            "started_at": "2026-05-15T13:06:09Z",
+            "completed_at": "2026-05-15T13:20:26Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275981/job/76183790570",
+            "queueDurationInSeconds": 164,
+            "durationInSeconds": 857
+          },
+          {
+            "id": 76183790976,
+            "name": "multimodal-gen-test-2-npu-a3",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:03:25Z",
+            "started_at": "2026-05-15T13:03:25Z",
+            "completed_at": "2026-05-15T13:03:25Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275981/job/76183790976",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76183791076,
+            "name": "multimodal-gen-test-1-npu-a3",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:03:25Z",
+            "started_at": "2026-05-15T13:03:25Z",
+            "completed_at": "2026-05-15T13:03:25Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275981/job/76183791076",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76183791331,
+            "name": "multimodal-gen-test-8-npu-a3",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-15T13:03:25Z",
+            "started_at": "2026-05-15T13:03:25Z",
+            "completed_at": "2026-05-15T13:03:25Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275981/job/76183791331",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76190168288,
+            "name": "pr-test-npu-finish",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:43:47Z",
+            "started_at": "2026-05-15T13:43:51Z",
+            "completed_at": "2026-05-15T13:43:54Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275981/job/76190168288",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 3
+          }
+        ]
+      },
+      {
+        "id": 25919275972,
+        "name": "PR Test (AMD)",
+        "head_branch": "codex/h100-rmsnorm-half-kernel",
+        "head_sha": "a596f629aebec62ed4fdae29d5236a9e7d6e85bc",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-15T13:03:05Z",
+        "updated_at": "2026-05-15T14:16:02Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275972",
+        "durationInSeconds": 4377,
+        "pull_requests": [
+          {
+            "number": 24710
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25919275908,
+        "name": "PR Test (Xeon)",
+        "head_branch": "codex/h100-rmsnorm-half-kernel",
+        "head_sha": "a596f629aebec62ed4fdae29d5236a9e7d6e85bc",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-15T13:03:05Z",
+        "updated_at": "2026-05-15T14:51:53Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919275908",
+        "durationInSeconds": 6528,
+        "pull_requests": [
+          {
+            "number": 24710
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25919274133,
+        "name": "PR States",
+        "head_branch": "codex/h100-rmsnorm-half-kernel",
+        "head_sha": "a596f629aebec62ed4fdae29d5236a9e7d6e85bc",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-15T13:03:03Z",
+        "updated_at": "2026-05-15T13:03:15Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919274133",
+        "durationInSeconds": 12,
+        "pull_requests": [
+          {
+            "number": 24710
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76183736699,
+            "name": "update-pr-body",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:04Z",
+            "started_at": "2026-05-15T13:03:07Z",
+            "completed_at": "2026-05-15T13:03:14Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919274133/job/76183736699",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 7
+          }
+        ]
+      },
+      {
+        "id": 25919274094,
+        "name": "Auto Label PRs",
+        "head_branch": "codex/h100-rmsnorm-half-kernel",
+        "head_sha": "a596f629aebec62ed4fdae29d5236a9e7d6e85bc",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-15T13:03:03Z",
+        "updated_at": "2026-05-15T13:03:18Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919274094",
+        "durationInSeconds": 15,
+        "pull_requests": [
+          {
+            "number": 24710
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76183736543,
+            "name": "label",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-15T13:03:04Z",
+            "started_at": "2026-05-15T13:03:13Z",
+            "completed_at": "2026-05-15T13:03:17Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25919274094/job/76183736543",
+            "queueDurationInSeconds": 9,
+            "durationInSeconds": 4
+          }
+        ]
+      }
+    ]
+  }
+}

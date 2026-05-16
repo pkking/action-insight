@@ -1,0 +1,671 @@
+{
+  "repo": "sgl-project/sglang",
+  "generated_at": "2026-05-16T06:37:53.025Z",
+  "pr": {
+    "number": 25335,
+    "title": "[Fix] Fix gpt oss triton kernels and upgrade flashinfer back to 0.6.11.post1",
+    "branch": "fix_flashinfer",
+    "author": "Fridge003",
+    "state": "closed",
+    "html_url": "https://github.com/sgl-project/sglang/pull/25335",
+    "created_at": "2026-05-15T02:14:19Z",
+    "ci_started_at": "2026-05-15T02:10:29Z",
+    "ci_completed_at": "2026-05-15T07:02:32Z",
+    "merged_at": "2026-05-15T08:04:57Z",
+    "partialCiHistory": false,
+    "ciDurationInSeconds": 17523,
+    "timeToMergeInSeconds": 21038,
+    "mergeLeadTimeInSeconds": 3745,
+    "workflowCount": 34,
+    "successfulWorkflowCount": 11,
+    "conclusion": "failure",
+    "workflows": [
+      {
+        "id": 25896774897,
+        "name": "CI Coverage Overview",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "c61ceea10f07a33faceeb310a6db22ffa53e2f83",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:21:35Z",
+        "updated_at": "2026-05-15T02:21:52Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896774897",
+        "durationInSeconds": 17,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896774954,
+        "name": "PR Test Extra",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "c61ceea10f07a33faceeb310a6db22ffa53e2f83",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:21:35Z",
+        "updated_at": "2026-05-15T02:21:37Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896774954",
+        "durationInSeconds": 2,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896774961,
+        "name": "PR Test (MUSA)",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "c61ceea10f07a33faceeb310a6db22ffa53e2f83",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:21:35Z",
+        "updated_at": "2026-05-15T02:22:08Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896774961",
+        "durationInSeconds": 33,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896774926,
+        "name": "Lint",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "c61ceea10f07a33faceeb310a6db22ffa53e2f83",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:21:35Z",
+        "updated_at": "2026-05-15T02:24:37Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896774926",
+        "durationInSeconds": 182,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896774972,
+        "name": "PR Test (AMD)",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "c61ceea10f07a33faceeb310a6db22ffa53e2f83",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:21:35Z",
+        "updated_at": "2026-05-15T03:51:54Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896774972",
+        "durationInSeconds": 5419,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896774953,
+        "name": "PR Test (Arm64)",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "c61ceea10f07a33faceeb310a6db22ffa53e2f83",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:21:35Z",
+        "updated_at": "2026-05-15T02:35:14Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896774953",
+        "durationInSeconds": 819,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896774986,
+        "name": "PR Test",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "c61ceea10f07a33faceeb310a6db22ffa53e2f83",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:21:35Z",
+        "updated_at": "2026-05-15T07:02:32Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896774986",
+        "durationInSeconds": 16857,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896774950,
+        "name": "PR Test (XPU)",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "c61ceea10f07a33faceeb310a6db22ffa53e2f83",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:21:35Z",
+        "updated_at": "2026-05-15T02:56:58Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896774950",
+        "durationInSeconds": 2123,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896774971,
+        "name": "PR Test (Xeon)",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "c61ceea10f07a33faceeb310a6db22ffa53e2f83",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:21:35Z",
+        "updated_at": "2026-05-15T03:03:17Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896774971",
+        "durationInSeconds": 2502,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896774999,
+        "name": "PR Test (NPU)",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "c61ceea10f07a33faceeb310a6db22ffa53e2f83",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:21:35Z",
+        "updated_at": "2026-05-15T02:49:03Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896774999",
+        "durationInSeconds": 1648,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896774552,
+        "name": "Auto Label PRs",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "c61ceea10f07a33faceeb310a6db22ffa53e2f83",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-15T02:21:34Z",
+        "updated_at": "2026-05-15T02:21:43Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896774552",
+        "durationInSeconds": 9,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896685190,
+        "name": "[rerun-test] registered/4-gpu-models/test_gpt_oss_4gpu.py",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "be5922ce8b301d7bfa71e337617827e6a1b6224e",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "workflow_dispatch",
+        "created_at": "2026-05-15T02:18:26Z",
+        "updated_at": "2026-05-15T03:56:50Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896685190",
+        "durationInSeconds": 5904,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896638080,
+        "name": "Cancel PR Workflows on Merge",
+        "head_branch": "bot/bump-kernel-version-to-sglang-0.4.2.post2-c64d",
+        "head_sha": "5536d8c3c913b95d806a69574213698ebbbc52cb",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request_target",
+        "created_at": "2026-05-15T02:16:45Z",
+        "updated_at": "2026-05-15T02:16:46Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896638080",
+        "durationInSeconds": 1,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896569751,
+        "name": "CI Coverage Overview",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "be5922ce8b301d7bfa71e337617827e6a1b6224e",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:14:23Z",
+        "updated_at": "2026-05-15T02:14:43Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896569751",
+        "durationInSeconds": 20,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896569843,
+        "name": "PR Test Extra",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "be5922ce8b301d7bfa71e337617827e6a1b6224e",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:14:23Z",
+        "updated_at": "2026-05-15T02:17:07Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896569843",
+        "durationInSeconds": 164,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896569836,
+        "name": "PR Test (MUSA)",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "be5922ce8b301d7bfa71e337617827e6a1b6224e",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:14:23Z",
+        "updated_at": "2026-05-15T02:17:26Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896569836",
+        "durationInSeconds": 183,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896569783,
+        "name": "Lint",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "be5922ce8b301d7bfa71e337617827e6a1b6224e",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:14:23Z",
+        "updated_at": "2026-05-15T02:18:09Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896569783",
+        "durationInSeconds": 226,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896569854,
+        "name": "PR Test (XPU)",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "be5922ce8b301d7bfa71e337617827e6a1b6224e",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:14:23Z",
+        "updated_at": "2026-05-15T02:21:43Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896569854",
+        "durationInSeconds": 440,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896569862,
+        "name": "PR Test (NPU)",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "be5922ce8b301d7bfa71e337617827e6a1b6224e",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:14:23Z",
+        "updated_at": "2026-05-15T02:21:52Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896569862",
+        "durationInSeconds": 449,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896569792,
+        "name": "PR Test (Xeon)",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "be5922ce8b301d7bfa71e337617827e6a1b6224e",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:14:23Z",
+        "updated_at": "2026-05-15T02:21:37Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896569792",
+        "durationInSeconds": 434,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896569856,
+        "name": "PR Test (AMD)",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "be5922ce8b301d7bfa71e337617827e6a1b6224e",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:14:23Z",
+        "updated_at": "2026-05-15T02:21:56Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896569856",
+        "durationInSeconds": 453,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896569867,
+        "name": "PR Test",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "be5922ce8b301d7bfa71e337617827e6a1b6224e",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:14:23Z",
+        "updated_at": "2026-05-15T02:22:52Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896569867",
+        "durationInSeconds": 509,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896569812,
+        "name": "PR Test (Arm64)",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "be5922ce8b301d7bfa71e337617827e6a1b6224e",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:14:23Z",
+        "updated_at": "2026-05-15T02:25:48Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896569812",
+        "durationInSeconds": 685,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896569068,
+        "name": "Auto Label PRs",
+        "head_branch": "fix_flashinfer",
+        "head_sha": "be5922ce8b301d7bfa71e337617827e6a1b6224e",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-15T02:14:22Z",
+        "updated_at": "2026-05-15T02:14:32Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896569068",
+        "durationInSeconds": 10,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896460516,
+        "name": "PR Test Extra",
+        "head_branch": "bot/bump-kernel-version-to-sglang-0.4.2.post2-c64d",
+        "head_sha": "5536d8c3c913b95d806a69574213698ebbbc52cb",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:10:29Z",
+        "updated_at": "2026-05-15T02:10:31Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896460516",
+        "durationInSeconds": 2,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896460361,
+        "name": "Auto Label PRs",
+        "head_branch": "bot/bump-kernel-version-to-sglang-0.4.2.post2-c64d",
+        "head_sha": "5536d8c3c913b95d806a69574213698ebbbc52cb",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-15T02:10:29Z",
+        "updated_at": "2026-05-15T02:10:36Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896460361",
+        "durationInSeconds": 7,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896460507,
+        "name": "PR Test (Arm64)",
+        "head_branch": "bot/bump-kernel-version-to-sglang-0.4.2.post2-c64d",
+        "head_sha": "5536d8c3c913b95d806a69574213698ebbbc52cb",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:10:29Z",
+        "updated_at": "2026-05-15T02:10:46Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896460507",
+        "durationInSeconds": 17,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896460519,
+        "name": "PR Test (XPU)",
+        "head_branch": "bot/bump-kernel-version-to-sglang-0.4.2.post2-c64d",
+        "head_sha": "5536d8c3c913b95d806a69574213698ebbbc52cb",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:10:29Z",
+        "updated_at": "2026-05-15T02:10:53Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896460519",
+        "durationInSeconds": 24,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896460484,
+        "name": "PR Test (NPU)",
+        "head_branch": "bot/bump-kernel-version-to-sglang-0.4.2.post2-c64d",
+        "head_sha": "5536d8c3c913b95d806a69574213698ebbbc52cb",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:10:29Z",
+        "updated_at": "2026-05-15T02:10:54Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896460484",
+        "durationInSeconds": 25,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896460515,
+        "name": "PR Test (AMD)",
+        "head_branch": "bot/bump-kernel-version-to-sglang-0.4.2.post2-c64d",
+        "head_sha": "5536d8c3c913b95d806a69574213698ebbbc52cb",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:10:29Z",
+        "updated_at": "2026-05-15T02:10:56Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896460515",
+        "durationInSeconds": 27,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896460528,
+        "name": "PR Test (MUSA)",
+        "head_branch": "bot/bump-kernel-version-to-sglang-0.4.2.post2-c64d",
+        "head_sha": "5536d8c3c913b95d806a69574213698ebbbc52cb",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:10:29Z",
+        "updated_at": "2026-05-15T02:10:51Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896460528",
+        "durationInSeconds": 22,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896460493,
+        "name": "PR Test (Xeon)",
+        "head_branch": "bot/bump-kernel-version-to-sglang-0.4.2.post2-c64d",
+        "head_sha": "5536d8c3c913b95d806a69574213698ebbbc52cb",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:10:29Z",
+        "updated_at": "2026-05-15T02:10:52Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896460493",
+        "durationInSeconds": 23,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896460534,
+        "name": "PR Test",
+        "head_branch": "bot/bump-kernel-version-to-sglang-0.4.2.post2-c64d",
+        "head_sha": "5536d8c3c913b95d806a69574213698ebbbc52cb",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:10:29Z",
+        "updated_at": "2026-05-15T02:10:59Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896460534",
+        "durationInSeconds": 30,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25896460412,
+        "name": "Lint",
+        "head_branch": "bot/bump-kernel-version-to-sglang-0.4.2.post2-c64d",
+        "head_sha": "5536d8c3c913b95d806a69574213698ebbbc52cb",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-15T02:10:29Z",
+        "updated_at": "2026-05-15T02:13:49Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25896460412",
+        "durationInSeconds": 200,
+        "pull_requests": [
+          {
+            "number": 25335
+          }
+        ],
+        "jobs": []
+      }
+    ]
+  }
+}
