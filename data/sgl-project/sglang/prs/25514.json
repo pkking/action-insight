@@ -1,0 +1,441 @@
+{
+  "repo": "sgl-project/sglang",
+  "generated_at": "2026-05-17T11:14:54.363Z",
+  "pr": {
+    "number": 25514,
+    "title": "[diffusion] Clean up VSA attention hot path",
+    "branch": "codex/diffusion-vsa-hotpath-cleanup",
+    "author": "BBuf",
+    "state": "open",
+    "html_url": "https://github.com/sgl-project/sglang/pull/25514",
+    "created_at": "2026-05-17T06:26:51Z",
+    "ci_started_at": "2026-05-17T06:26:54Z",
+    "ci_completed_at": "2026-05-17T08:03:43Z",
+    "partialCiHistory": false,
+    "timeToCiStartInSeconds": 3,
+    "ciDurationInSeconds": 5809,
+    "workflowCount": 22,
+    "successfulWorkflowCount": 14,
+    "conclusion": "failure",
+    "workflows": [
+      {
+        "id": 25984065351,
+        "name": "PR Test Extra",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "81db6b9a80bc178133e3a75c66b7a7df8286c612",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:58:27Z",
+        "updated_at": "2026-05-17T06:58:28Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25984065351",
+        "durationInSeconds": 1,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25984065375,
+        "name": "PR Test (Xeon)",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "81db6b9a80bc178133e3a75c66b7a7df8286c612",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:58:27Z",
+        "updated_at": "2026-05-17T06:58:37Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25984065375",
+        "durationInSeconds": 10,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25984065400,
+        "name": "PR Test (Arm64)",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "81db6b9a80bc178133e3a75c66b7a7df8286c612",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:58:27Z",
+        "updated_at": "2026-05-17T06:58:38Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25984065400",
+        "durationInSeconds": 11,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25984065340,
+        "name": "PR Test (XPU)",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "81db6b9a80bc178133e3a75c66b7a7df8286c612",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:58:27Z",
+        "updated_at": "2026-05-17T06:58:41Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25984065340",
+        "durationInSeconds": 14,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25984065320,
+        "name": "Lint",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "81db6b9a80bc178133e3a75c66b7a7df8286c612",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:58:27Z",
+        "updated_at": "2026-05-17T07:01:44Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25984065320",
+        "durationInSeconds": 197,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25984065354,
+        "name": "PR Test (NPU)",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "81db6b9a80bc178133e3a75c66b7a7df8286c612",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:58:27Z",
+        "updated_at": "2026-05-17T07:18:50Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25984065354",
+        "durationInSeconds": 1223,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25984065356,
+        "name": "PR Test (AMD)",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "81db6b9a80bc178133e3a75c66b7a7df8286c612",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:58:27Z",
+        "updated_at": "2026-05-17T07:54:59Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25984065356",
+        "durationInSeconds": 3392,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25984065388,
+        "name": "PR #25514 - [diffusion] Clean up VSA attention hot path",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "81db6b9a80bc178133e3a75c66b7a7df8286c612",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:58:27Z",
+        "updated_at": "2026-05-17T08:03:43Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25984065388",
+        "durationInSeconds": 3916,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25984065000,
+        "name": "Auto Label PRs",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "81db6b9a80bc178133e3a75c66b7a7df8286c612",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-17T06:58:26Z",
+        "updated_at": "2026-05-17T06:58:32Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25984065000",
+        "durationInSeconds": 6,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25984064981,
+        "name": "PR States",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "81db6b9a80bc178133e3a75c66b7a7df8286c612",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-17T06:58:26Z",
+        "updated_at": "2026-05-17T06:58:35Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25984064981",
+        "durationInSeconds": 9,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25983503932,
+        "name": "PR States",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "4157412b0fda1b132a26c2daa3fd97078647e88a",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-17T06:28:27Z",
+        "updated_at": "2026-05-17T06:28:35Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25983503932",
+        "durationInSeconds": 8,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25983476946,
+        "name": "PR States",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "4157412b0fda1b132a26c2daa3fd97078647e88a",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-17T06:26:54Z",
+        "updated_at": "2026-05-17T06:27:03Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25983476946",
+        "durationInSeconds": 9,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25983476944,
+        "name": "Auto Label PRs",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "4157412b0fda1b132a26c2daa3fd97078647e88a",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-17T06:26:54Z",
+        "updated_at": "2026-05-17T06:27:03Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25983476944",
+        "durationInSeconds": 9,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25983476978,
+        "name": "PR Test (Arm64)",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "4157412b0fda1b132a26c2daa3fd97078647e88a",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:26:54Z",
+        "updated_at": "2026-05-17T06:27:04Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25983476978",
+        "durationInSeconds": 10,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25983476981,
+        "name": "PR Test (Xeon)",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "4157412b0fda1b132a26c2daa3fd97078647e88a",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:26:54Z",
+        "updated_at": "2026-05-17T06:27:04Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25983476981",
+        "durationInSeconds": 10,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25983476996,
+        "name": "PR Test Extra",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "4157412b0fda1b132a26c2daa3fd97078647e88a",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:26:54Z",
+        "updated_at": "2026-05-17T06:26:56Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25983476996",
+        "durationInSeconds": 2,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25983477016,
+        "name": "PR Test (XPU)",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "4157412b0fda1b132a26c2daa3fd97078647e88a",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:26:54Z",
+        "updated_at": "2026-05-17T06:27:12Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25983477016",
+        "durationInSeconds": 18,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25983476945,
+        "name": "Lint",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "4157412b0fda1b132a26c2daa3fd97078647e88a",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:26:54Z",
+        "updated_at": "2026-05-17T06:29:36Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25983476945",
+        "durationInSeconds": 162,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25983477003,
+        "name": "PR Test (NPU)",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "4157412b0fda1b132a26c2daa3fd97078647e88a",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:26:54Z",
+        "updated_at": "2026-05-17T06:52:35Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25983477003",
+        "durationInSeconds": 1541,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25983476983,
+        "name": "PR Test (MUSA)",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "4157412b0fda1b132a26c2daa3fd97078647e88a",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:26:54Z",
+        "updated_at": "2026-05-17T06:58:35Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25983476983",
+        "durationInSeconds": 1901,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25983476993,
+        "name": "PR Test (AMD)",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "4157412b0fda1b132a26c2daa3fd97078647e88a",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:26:54Z",
+        "updated_at": "2026-05-17T06:58:49Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25983476993",
+        "durationInSeconds": 1915,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "id": 25983477049,
+        "name": "PR #25514 - [diffusion] Clean up VSA attention hot path",
+        "head_branch": "codex/diffusion-vsa-hotpath-cleanup",
+        "head_sha": "4157412b0fda1b132a26c2daa3fd97078647e88a",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-17T06:26:54Z",
+        "updated_at": "2026-05-17T06:58:52Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25983477049",
+        "durationInSeconds": 1918,
+        "pull_requests": [
+          {
+            "number": 25514
+          }
+        ],
+        "jobs": []
+      }
+    ]
+  }
+}
