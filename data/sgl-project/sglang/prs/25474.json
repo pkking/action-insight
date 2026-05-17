@@ -1,6 +1,6 @@
 {
   "repo": "sgl-project/sglang",
-  "generated_at": "2026-05-17T13:24:46.987Z",
+  "generated_at": "2026-05-17T15:10:13.894Z",
   "pr": {
     "number": 25474,
     "title": "[diffusion] optimize: speed up dit loading with distributed streaming for multi-gpus setup",
@@ -10,14 +10,418 @@
     "html_url": "https://github.com/sgl-project/sglang/pull/25474",
     "created_at": "2026-05-16T09:24:58Z",
     "ci_started_at": "2026-05-16T09:25:01Z",
-    "ci_completed_at": "2026-05-17T06:29:57Z",
+    "ci_completed_at": "2026-05-17T14:48:51Z",
     "partialCiHistory": false,
     "timeToCiStartInSeconds": 3,
-    "ciDurationInSeconds": 75896,
-    "workflowCount": 75,
-    "successfulWorkflowCount": 40,
+    "ciDurationInSeconds": 105830,
+    "workflowCount": 82,
+    "successfulWorkflowCount": 46,
     "conclusion": "failure",
     "workflows": [
+      {
+        "id": 25993946118,
+        "name": "PR Test Extra",
+        "head_branch": "codex/runai-distributed-dit-load-20260516",
+        "head_sha": "dfb189bf44c8ba2e4aa180de34f3e06c558bab80",
+        "status": "completed",
+        "conclusion": "skipped",
+        "event": "pull_request",
+        "created_at": "2026-05-17T14:45:12Z",
+        "updated_at": "2026-05-17T14:45:13Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946118",
+        "durationInSeconds": 1,
+        "pull_requests": [
+          {
+            "number": 25474
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76405020647,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-17T14:45:13Z",
+            "started_at": "2026-05-17T14:45:13Z",
+            "completed_at": "2026-05-17T14:45:13Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946118/job/76405020647",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76405020719,
+            "name": "extra-a-test-2-gpu-large",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-17T14:45:13Z",
+            "started_at": "2026-05-17T14:45:13Z",
+            "completed_at": "2026-05-17T14:45:13Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946118/job/76405020719",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76405020744,
+            "name": "sgl-kernel-build-wheels",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-17T14:45:13Z",
+            "started_at": "2026-05-17T14:45:13Z",
+            "completed_at": "2026-05-17T14:45:13Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946118/job/76405020744",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76405020841,
+            "name": "extra-b-test-deepep-8-gpu-h200",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-17T14:45:13Z",
+            "started_at": "2026-05-17T14:45:13Z",
+            "completed_at": "2026-05-17T14:45:13Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946118/job/76405020841",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76405026581,
+            "name": "extra-b-test-4-gpu-b200",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-17T14:45:18Z",
+            "started_at": "2026-05-17T14:45:18Z",
+            "completed_at": "2026-05-17T14:45:13Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946118/job/76405026581",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76405026720,
+            "name": "extra-b-test-4-gpu-h100",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-17T14:45:18Z",
+            "started_at": "2026-05-17T14:45:18Z",
+            "completed_at": "2026-05-17T14:45:13Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946118/job/76405026720",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76405028066,
+            "name": "extra-b-test-8-gpu-h200",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-17T14:45:20Z",
+            "started_at": "2026-05-17T14:45:20Z",
+            "completed_at": "2026-05-17T14:45:13Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946118/job/76405028066",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76405030272,
+            "name": "extra-a-test-1-gpu-large",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-17T14:45:22Z",
+            "started_at": "2026-05-17T14:45:22Z",
+            "completed_at": "2026-05-17T14:45:13Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946118/job/76405030272",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76405030768,
+            "name": "extra-a-test-1-gpu-small",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-17T14:45:22Z",
+            "started_at": "2026-05-17T14:45:22Z",
+            "completed_at": "2026-05-17T14:45:13Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946118/job/76405030768",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25993946112,
+        "name": "PR Test (Xeon)",
+        "head_branch": "codex/runai-distributed-dit-load-20260516",
+        "head_sha": "dfb189bf44c8ba2e4aa180de34f3e06c558bab80",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T14:45:12Z",
+        "updated_at": "2026-05-17T14:45:26Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946112",
+        "durationInSeconds": 14,
+        "pull_requests": [
+          {
+            "number": 25474
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76405020346,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-17T14:45:13Z",
+            "started_at": "2026-05-17T14:45:15Z",
+            "completed_at": "2026-05-17T14:45:24Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946112/job/76405020346",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 76405033747,
+            "name": "build-test",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-17T14:45:25Z",
+            "started_at": "2026-05-17T14:45:25Z",
+            "completed_at": "2026-05-17T14:45:25Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946112/job/76405033747",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76405033791,
+            "name": "pr-gate",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-17T14:45:25Z",
+            "started_at": "2026-05-17T14:45:25Z",
+            "completed_at": "2026-05-17T14:45:25Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946112/job/76405033791",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25993946107,
+        "name": "PR Test (XPU)",
+        "head_branch": "codex/runai-distributed-dit-load-20260516",
+        "head_sha": "dfb189bf44c8ba2e4aa180de34f3e06c558bab80",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T14:45:12Z",
+        "updated_at": "2026-05-17T14:45:31Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946107",
+        "durationInSeconds": 19,
+        "pull_requests": [
+          {
+            "number": 25474
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76405020370,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-17T14:45:13Z",
+            "started_at": "2026-05-17T14:45:16Z",
+            "completed_at": "2026-05-17T14:45:25Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946107/job/76405020370",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 76405034955,
+            "name": "finish",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-17T14:45:26Z",
+            "started_at": "2026-05-17T14:45:27Z",
+            "completed_at": "2026-05-17T14:45:30Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946107/job/76405034955",
+            "queueDurationInSeconds": 1,
+            "durationInSeconds": 3
+          },
+          {
+            "id": 76405035018,
+            "name": "build-and-test",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-17T14:45:26Z",
+            "started_at": "2026-05-17T14:45:26Z",
+            "completed_at": "2026-05-17T14:45:26Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946107/job/76405035018",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76405035020,
+            "name": "pr-gate",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-17T14:45:26Z",
+            "started_at": "2026-05-17T14:45:26Z",
+            "completed_at": "2026-05-17T14:45:26Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946107/job/76405035020",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25993946135,
+        "name": "PR Test (Arm64)",
+        "head_branch": "codex/runai-distributed-dit-load-20260516",
+        "head_sha": "dfb189bf44c8ba2e4aa180de34f3e06c558bab80",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T14:45:12Z",
+        "updated_at": "2026-05-17T14:45:26Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946135",
+        "durationInSeconds": 14,
+        "pull_requests": [
+          {
+            "number": 25474
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76405020319,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-17T14:45:13Z",
+            "started_at": "2026-05-17T14:45:15Z",
+            "completed_at": "2026-05-17T14:45:25Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946135/job/76405020319",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 10
+          },
+          {
+            "id": 76405035008,
+            "name": "build-test",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-17T14:45:26Z",
+            "started_at": "2026-05-17T14:45:26Z",
+            "completed_at": "2026-05-17T14:45:26Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946135/job/76405035008",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76405035014,
+            "name": "pr-gate",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-17T14:45:26Z",
+            "started_at": "2026-05-17T14:45:26Z",
+            "completed_at": "2026-05-17T14:45:26Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946135/job/76405035014",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 25993946065,
+        "name": "Lint",
+        "head_branch": "codex/runai-distributed-dit-load-20260516",
+        "head_sha": "dfb189bf44c8ba2e4aa180de34f3e06c558bab80",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T14:45:12Z",
+        "updated_at": "2026-05-17T14:48:51Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946065",
+        "durationInSeconds": 219,
+        "pull_requests": [
+          {
+            "number": 25474
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76405020187,
+            "name": "lint",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-17T14:45:13Z",
+            "started_at": "2026-05-17T14:45:14Z",
+            "completed_at": "2026-05-17T14:48:51Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993946065/job/76405020187",
+            "queueDurationInSeconds": 1,
+            "durationInSeconds": 217
+          }
+        ]
+      },
+      {
+        "id": 25993945660,
+        "name": "Auto Label PRs",
+        "head_branch": "codex/runai-distributed-dit-load-20260516",
+        "head_sha": "dfb189bf44c8ba2e4aa180de34f3e06c558bab80",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-17T14:45:11Z",
+        "updated_at": "2026-05-17T14:45:18Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993945660",
+        "durationInSeconds": 7,
+        "pull_requests": [
+          {
+            "number": 25474
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76405019244,
+            "name": "label",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-17T14:45:12Z",
+            "started_at": "2026-05-17T14:45:14Z",
+            "completed_at": "2026-05-17T14:45:17Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993945660/job/76405019244",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 3
+          }
+        ]
+      },
+      {
+        "id": 25993945633,
+        "name": "PR States",
+        "head_branch": "codex/runai-distributed-dit-load-20260516",
+        "head_sha": "dfb189bf44c8ba2e4aa180de34f3e06c558bab80",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-17T14:45:11Z",
+        "updated_at": "2026-05-17T14:45:21Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993945633",
+        "durationInSeconds": 10,
+        "pull_requests": [
+          {
+            "number": 25474
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76405019273,
+            "name": "update-pr-body",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-17T14:45:12Z",
+            "started_at": "2026-05-17T14:45:14Z",
+            "completed_at": "2026-05-17T14:45:20Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/25993945633/job/76405019273",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 6
+          }
+        ]
+      },
       {
         "id": 25982306659,
         "name": "PR Test (Arm64)",

@@ -1,0 +1,535 @@
+{
+  "repo": "modelscope/ms-swift",
+  "generated_at": "2026-05-17T14:55:55.472Z",
+  "pr": {
+    "number": 9366,
+    "title": "[fix] MiniCPM-V 4.6: Fix sliced image token splitting, supplement collator and vLLM paths",
+    "branch": "main",
+    "author": "tsjyma",
+    "state": "open",
+    "html_url": "https://github.com/modelscope/ms-swift/pull/9366",
+    "created_at": "2026-05-17T13:35:35Z",
+    "ci_started_at": "2026-05-17T13:35:41Z",
+    "ci_completed_at": "2026-05-17T14:52:34Z",
+    "partialCiHistory": false,
+    "timeToCiStartInSeconds": 6,
+    "ciDurationInSeconds": 4613,
+    "workflowCount": 16,
+    "successfulWorkflowCount": 5,
+    "conclusion": "failure",
+    "workflows": [
+      {
+        "id": 25994085107,
+        "name": "Lint test",
+        "head_branch": "main",
+        "head_sha": "b5f3f04b9bd9fa2f94361299a174279354c25dca",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T14:51:16Z",
+        "updated_at": "2026-05-17T14:52:34Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25994085107",
+        "durationInSeconds": 78,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76405397177,
+            "name": "lint",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-17T14:51:16Z",
+            "started_at": "2026-05-17T14:51:19Z",
+            "completed_at": "2026-05-17T14:52:33Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25994085107/job/76405397177",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 74
+          }
+        ]
+      },
+      {
+        "id": 25993940695,
+        "name": "citest",
+        "head_branch": "main",
+        "head_sha": "0445d9c272e2af7372442b5b05da2995441dae37",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-17T14:45:01Z",
+        "updated_at": "2026-05-17T14:45:19Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25993940695",
+        "durationInSeconds": 18,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76405006905,
+            "name": "unittest",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-17T14:45:01Z",
+            "started_at": "2026-05-17T14:45:02Z",
+            "completed_at": "2026-05-17T14:45:18Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25993940695/job/76405006905",
+            "queueDurationInSeconds": 1,
+            "durationInSeconds": 16
+          }
+        ]
+      },
+      {
+        "id": 25993940709,
+        "name": "Lint test",
+        "head_branch": "main",
+        "head_sha": "0445d9c272e2af7372442b5b05da2995441dae37",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T14:45:01Z",
+        "updated_at": "2026-05-17T14:46:19Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25993940709",
+        "durationInSeconds": 78,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76405006906,
+            "name": "lint",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-17T14:45:01Z",
+            "started_at": "2026-05-17T14:45:03Z",
+            "completed_at": "2026-05-17T14:46:18Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25993940709/job/76405006906",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 75
+          }
+        ]
+      },
+      {
+        "id": 25993940688,
+        "name": "citest-npu",
+        "head_branch": "main",
+        "head_sha": "0445d9c272e2af7372442b5b05da2995441dae37",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-17T14:45:01Z",
+        "updated_at": "2026-05-17T14:51:25Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25993940688",
+        "durationInSeconds": 384,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76405016042,
+            "name": "unittest",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-05-17T14:45:09Z",
+            "started_at": "2026-05-17T14:45:34Z",
+            "completed_at": "2026-05-17T14:51:24Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25993940688/job/76405016042",
+            "queueDurationInSeconds": 25,
+            "durationInSeconds": 350
+          }
+        ]
+      },
+      {
+        "id": 25993445210,
+        "name": "citest",
+        "head_branch": "main",
+        "head_sha": "3c54e387656f1a4256d25608de7b64bba90ceff8",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-17T14:23:33Z",
+        "updated_at": "2026-05-17T14:23:43Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25993445210",
+        "durationInSeconds": 10,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76403645679,
+            "name": "unittest",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-17T14:23:33Z",
+            "started_at": "2026-05-17T14:23:34Z",
+            "completed_at": "2026-05-17T14:23:42Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25993445210/job/76403645679",
+            "queueDurationInSeconds": 1,
+            "durationInSeconds": 8
+          }
+        ]
+      },
+      {
+        "id": 25993445208,
+        "name": "Lint test",
+        "head_branch": "main",
+        "head_sha": "3c54e387656f1a4256d25608de7b64bba90ceff8",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T14:23:33Z",
+        "updated_at": "2026-05-17T14:24:46Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25993445208",
+        "durationInSeconds": 73,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76403645630,
+            "name": "lint",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-17T14:23:33Z",
+            "started_at": "2026-05-17T14:23:35Z",
+            "completed_at": "2026-05-17T14:24:45Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25993445208/job/76403645630",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 70
+          }
+        ]
+      },
+      {
+        "id": 25993445207,
+        "name": "citest-npu",
+        "head_branch": "main",
+        "head_sha": "3c54e387656f1a4256d25608de7b64bba90ceff8",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-17T14:23:33Z",
+        "updated_at": "2026-05-17T14:45:10Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25993445207",
+        "durationInSeconds": 1297,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76403654018,
+            "name": "unittest",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-05-17T14:23:42Z",
+            "started_at": "2026-05-17T14:24:06Z",
+            "completed_at": "2026-05-17T14:45:09Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25993445207/job/76403654018",
+            "queueDurationInSeconds": 24,
+            "durationInSeconds": 1263
+          }
+        ]
+      },
+      {
+        "id": 25992788582,
+        "name": "citest",
+        "head_branch": "main",
+        "head_sha": "f2c6ac02eb19b23a630f92570f8060eb2796f531",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-17T13:54:35Z",
+        "updated_at": "2026-05-17T13:54:46Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992788582",
+        "durationInSeconds": 11,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76401864949,
+            "name": "unittest",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-17T13:54:36Z",
+            "started_at": "2026-05-17T13:54:36Z",
+            "completed_at": "2026-05-17T13:54:45Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992788582/job/76401864949",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 9
+          }
+        ]
+      },
+      {
+        "id": 25992788574,
+        "name": "Lint test",
+        "head_branch": "main",
+        "head_sha": "f2c6ac02eb19b23a630f92570f8060eb2796f531",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T13:54:35Z",
+        "updated_at": "2026-05-17T13:55:49Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992788574",
+        "durationInSeconds": 74,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76401864829,
+            "name": "lint",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-17T13:54:35Z",
+            "started_at": "2026-05-17T13:54:37Z",
+            "completed_at": "2026-05-17T13:55:48Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992788574/job/76401864829",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 71
+          }
+        ]
+      },
+      {
+        "id": 25992788599,
+        "name": "citest-npu",
+        "head_branch": "main",
+        "head_sha": "f2c6ac02eb19b23a630f92570f8060eb2796f531",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-17T13:54:35Z",
+        "updated_at": "2026-05-17T14:23:42Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992788599",
+        "durationInSeconds": 1747,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76401873554,
+            "name": "unittest",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-05-17T13:54:44Z",
+            "started_at": "2026-05-17T13:55:09Z",
+            "completed_at": "2026-05-17T14:23:41Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992788599/job/76401873554",
+            "queueDurationInSeconds": 25,
+            "durationInSeconds": 1712
+          }
+        ]
+      },
+      {
+        "id": 25992543966,
+        "name": "citest",
+        "head_branch": "main",
+        "head_sha": "c70e08b4a599ab573e1759c433396eb37a7f320f",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-17T13:43:41Z",
+        "updated_at": "2026-05-17T13:44:17Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992543966",
+        "durationInSeconds": 36,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76401226212,
+            "name": "unittest",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-17T13:43:56Z",
+            "started_at": "2026-05-17T13:43:56Z",
+            "completed_at": "2026-05-17T13:44:16Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992543966/job/76401226212",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 20
+          }
+        ]
+      },
+      {
+        "id": 25992543968,
+        "name": "Lint test",
+        "head_branch": "main",
+        "head_sha": "c70e08b4a599ab573e1759c433396eb37a7f320f",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-17T13:43:41Z",
+        "updated_at": "2026-05-17T13:44:49Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992543968",
+        "durationInSeconds": 68,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76401211263,
+            "name": "lint",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-17T13:43:41Z",
+            "started_at": "2026-05-17T13:43:43Z",
+            "completed_at": "2026-05-17T13:44:48Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992543968/job/76401211263",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 65
+          }
+        ]
+      },
+      {
+        "id": 25992543967,
+        "name": "citest-npu",
+        "head_branch": "main",
+        "head_sha": "c70e08b4a599ab573e1759c433396eb37a7f320f",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-17T13:43:41Z",
+        "updated_at": "2026-05-17T13:54:44Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992543967",
+        "durationInSeconds": 663,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76401220642,
+            "name": "unittest",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-05-17T13:43:50Z",
+            "started_at": "2026-05-17T13:44:11Z",
+            "completed_at": "2026-05-17T13:54:43Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992543967/job/76401220642",
+            "queueDurationInSeconds": 21,
+            "durationInSeconds": 632
+          }
+        ]
+      },
+      {
+        "id": 25992361197,
+        "name": "Lint test",
+        "head_branch": "main",
+        "head_sha": "a83c2ce53a3d7a81ca0c99815220a4e3017f9651",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-17T13:35:41Z",
+        "updated_at": "2026-05-17T13:36:57Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992361197",
+        "durationInSeconds": 76,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76400716766,
+            "name": "lint",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-17T13:35:42Z",
+            "started_at": "2026-05-17T13:35:43Z",
+            "completed_at": "2026-05-17T13:36:56Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992361197/job/76400716766",
+            "queueDurationInSeconds": 1,
+            "durationInSeconds": 73
+          }
+        ]
+      },
+      {
+        "id": 25992361202,
+        "name": "citest-npu",
+        "head_branch": "main",
+        "head_sha": "a83c2ce53a3d7a81ca0c99815220a4e3017f9651",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-17T13:35:41Z",
+        "updated_at": "2026-05-17T13:43:50Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992361202",
+        "durationInSeconds": 489,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76400716767,
+            "name": "unittest",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-05-17T13:35:42Z",
+            "started_at": "2026-05-17T13:36:04Z",
+            "completed_at": "2026-05-17T13:43:49Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992361202/job/76400716767",
+            "queueDurationInSeconds": 22,
+            "durationInSeconds": 465
+          }
+        ]
+      },
+      {
+        "id": 25992361200,
+        "name": "citest",
+        "head_branch": "main",
+        "head_sha": "a83c2ce53a3d7a81ca0c99815220a4e3017f9651",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "event": "pull_request",
+        "created_at": "2026-05-17T13:35:41Z",
+        "updated_at": "2026-05-17T13:43:56Z",
+        "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992361200",
+        "durationInSeconds": 495,
+        "pull_requests": [
+          {
+            "number": 9366
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76400716724,
+            "name": "unittest",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "created_at": "2026-05-17T13:35:42Z",
+            "started_at": "2026-05-17T13:35:43Z",
+            "completed_at": "2026-05-17T13:43:55Z",
+            "html_url": "https://github.com/modelscope/ms-swift/actions/runs/25992361200/job/76400716724",
+            "queueDurationInSeconds": 1,
+            "durationInSeconds": 492
+          }
+        ]
+      }
+    ]
+  }
+}
