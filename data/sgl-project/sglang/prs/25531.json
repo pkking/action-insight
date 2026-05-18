@@ -1,6 +1,6 @@
 {
   "repo": "sgl-project/sglang",
-  "generated_at": "2026-05-18T11:25:59.616Z",
+  "generated_at": "2026-05-18T15:40:21.072Z",
   "pr": {
     "number": 25531,
     "title": "[lora] Remove synchronous .any().item() guard in LoRA MoE prefill path",
@@ -10,14 +10,338 @@
     "html_url": "https://github.com/sgl-project/sglang/pull/25531",
     "created_at": "2026-05-17T15:22:22Z",
     "ci_started_at": "2026-05-17T15:22:25Z",
-    "ci_completed_at": "2026-05-18T05:22:00Z",
+    "ci_completed_at": "2026-05-18T15:06:24Z",
     "partialCiHistory": false,
     "timeToCiStartInSeconds": 3,
-    "ciDurationInSeconds": 50375,
-    "workflowCount": 14,
-    "successfulWorkflowCount": 6,
+    "ciDurationInSeconds": 85439,
+    "workflowCount": 20,
+    "successfulWorkflowCount": 12,
     "conclusion": "failure",
     "workflows": [
+      {
+        "id": 26040434197,
+        "name": "PR Test (XPU)",
+        "head_branch": "prefill-optimize-0",
+        "head_sha": "99acd287661d9885b55c91e4a8f9771a10ea81a1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-18T14:38:48Z",
+        "updated_at": "2026-05-18T15:06:24Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434197",
+        "durationInSeconds": 1656,
+        "pull_requests": [
+          {
+            "number": 25531
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76550209368,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-18T14:38:48Z",
+            "started_at": "2026-05-18T14:38:52Z",
+            "completed_at": "2026-05-18T14:39:00Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434197/job/76550209368",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 8
+          },
+          {
+            "id": 76550249334,
+            "name": "pr-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-18T14:39:00Z",
+            "started_at": "2026-05-18T14:39:04Z",
+            "completed_at": "2026-05-18T14:39:09Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434197/job/76550249334",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 5
+          },
+          {
+            "id": 76550280517,
+            "name": "build-and-test",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-18T14:39:09Z",
+            "started_at": "2026-05-18T14:39:50Z",
+            "completed_at": "2026-05-18T15:06:14Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434197/job/76550280517",
+            "queueDurationInSeconds": 41,
+            "durationInSeconds": 1584
+          },
+          {
+            "id": 76555793070,
+            "name": "finish",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-18T15:06:14Z",
+            "started_at": "2026-05-18T15:06:18Z",
+            "completed_at": "2026-05-18T15:06:23Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434197/job/76555793070",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 5
+          }
+        ]
+      },
+      {
+        "id": 26040434104,
+        "name": "PR Test (Arm64)",
+        "head_branch": "prefill-optimize-0",
+        "head_sha": "99acd287661d9885b55c91e4a8f9771a10ea81a1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-18T14:38:47Z",
+        "updated_at": "2026-05-18T14:48:10Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434104",
+        "durationInSeconds": 563,
+        "pull_requests": [
+          {
+            "number": 25531
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76550209056,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-18T14:38:48Z",
+            "started_at": "2026-05-18T14:38:53Z",
+            "completed_at": "2026-05-18T14:39:02Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434104/job/76550209056",
+            "queueDurationInSeconds": 5,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 76550258051,
+            "name": "pr-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-18T14:39:03Z",
+            "started_at": "2026-05-18T14:39:06Z",
+            "completed_at": "2026-05-18T14:39:12Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434104/job/76550258051",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 6
+          },
+          {
+            "id": 76550291765,
+            "name": "build-test",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-18T14:39:13Z",
+            "started_at": "2026-05-18T14:39:15Z",
+            "completed_at": "2026-05-18T14:48:09Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434104/job/76550291765",
+            "queueDurationInSeconds": 2,
+            "durationInSeconds": 534
+          }
+        ]
+      },
+      {
+        "id": 26040434149,
+        "name": "PR Test (MUSA)",
+        "head_branch": "prefill-optimize-0",
+        "head_sha": "99acd287661d9885b55c91e4a8f9771a10ea81a1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-18T14:38:47Z",
+        "updated_at": "2026-05-18T14:39:19Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434149",
+        "durationInSeconds": 32,
+        "pull_requests": [
+          {
+            "number": 25531
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76550209435,
+            "name": "check-changes",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-18T14:38:48Z",
+            "started_at": "2026-05-18T14:38:53Z",
+            "completed_at": "2026-05-18T14:39:02Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434149/job/76550209435",
+            "queueDurationInSeconds": 5,
+            "durationInSeconds": 9
+          },
+          {
+            "id": 76550255750,
+            "name": "pr-gate / pr-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-18T14:39:02Z",
+            "started_at": "2026-05-18T14:39:07Z",
+            "completed_at": "2026-05-18T14:39:12Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434149/job/76550255750",
+            "queueDurationInSeconds": 5,
+            "durationInSeconds": 5
+          },
+          {
+            "id": 76550290373,
+            "name": "pr-test-musa-finish",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-18T14:39:12Z",
+            "started_at": "2026-05-18T14:39:15Z",
+            "completed_at": "2026-05-18T14:39:18Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434149/job/76550290373",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 3
+          },
+          {
+            "id": 76550290508,
+            "name": "multimodal-gen-test-2-gpu-musa",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-18T14:39:12Z",
+            "started_at": "2026-05-18T14:39:12Z",
+            "completed_at": "2026-05-18T14:39:12Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434149/job/76550290508",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76550290690,
+            "name": "multimodal-gen-test-1-gpu-musa",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-18T14:39:12Z",
+            "started_at": "2026-05-18T14:39:12Z",
+            "completed_at": "2026-05-18T14:39:12Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434149/job/76550290690",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76550290774,
+            "name": "multimodal-gen-layer-unit-test-musa",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-18T14:39:12Z",
+            "started_at": "2026-05-18T14:39:12Z",
+            "completed_at": "2026-05-18T14:39:12Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434149/job/76550290774",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          },
+          {
+            "id": 76550290929,
+            "name": "sgl-kernel-unit-test-musa",
+            "status": "completed",
+            "conclusion": "skipped",
+            "created_at": "2026-05-18T14:39:12Z",
+            "started_at": "2026-05-18T14:39:12Z",
+            "completed_at": "2026-05-18T14:39:12Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434149/job/76550290929",
+            "queueDurationInSeconds": 0,
+            "durationInSeconds": 0
+          }
+        ]
+      },
+      {
+        "id": 26040434066,
+        "name": "Lint",
+        "head_branch": "prefill-optimize-0",
+        "head_sha": "99acd287661d9885b55c91e4a8f9771a10ea81a1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-18T14:38:47Z",
+        "updated_at": "2026-05-18T14:42:32Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434066",
+        "durationInSeconds": 225,
+        "pull_requests": [
+          {
+            "number": 25531
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76550209624,
+            "name": "lint",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-18T14:38:48Z",
+            "started_at": "2026-05-18T14:38:52Z",
+            "completed_at": "2026-05-18T14:42:31Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040434066/job/76550209624",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 219
+          }
+        ]
+      },
+      {
+        "id": 26040432099,
+        "name": "PR States",
+        "head_branch": "prefill-optimize-0",
+        "head_sha": "99acd287661d9885b55c91e4a8f9771a10ea81a1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-18T14:38:45Z",
+        "updated_at": "2026-05-18T14:39:02Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040432099",
+        "durationInSeconds": 17,
+        "pull_requests": [
+          {
+            "number": 25531
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76550202152,
+            "name": "update-pr-body",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-18T14:38:46Z",
+            "started_at": "2026-05-18T14:38:49Z",
+            "completed_at": "2026-05-18T14:39:02Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040432099/job/76550202152",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 13
+          }
+        ]
+      },
+      {
+        "id": 26040432113,
+        "name": "Auto Label PRs",
+        "head_branch": "prefill-optimize-0",
+        "head_sha": "99acd287661d9885b55c91e4a8f9771a10ea81a1",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request_target",
+        "created_at": "2026-05-18T14:38:45Z",
+        "updated_at": "2026-05-18T14:38:57Z",
+        "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040432113",
+        "durationInSeconds": 12,
+        "pull_requests": [
+          {
+            "number": 25531
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76550202094,
+            "name": "label",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-18T14:38:46Z",
+            "started_at": "2026-05-18T14:38:50Z",
+            "completed_at": "2026-05-18T14:38:56Z",
+            "html_url": "https://github.com/sgl-project/sglang/actions/runs/26040432113/job/76550202094",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 6
+          }
+        ]
+      },
       {
         "id": 26015092271,
         "name": "PR States",
