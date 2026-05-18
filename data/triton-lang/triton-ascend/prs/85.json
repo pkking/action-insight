@@ -1,6 +1,6 @@
 {
   "repo": "triton-lang/triton-ascend",
-  "generated_at": "2026-05-18T07:18:28.837Z",
+  "generated_at": "2026-05-18T11:30:13.397Z",
   "pr": {
     "number": 85,
     "title": "feat: enable TRITON_ALL_BLOCKS_PARALLEL by default, add blacklist for autoblockify",
@@ -10,14 +10,102 @@
     "html_url": "https://github.com/triton-lang/triton-ascend/pull/85",
     "created_at": "2026-05-18T06:49:16Z",
     "ci_started_at": "2026-05-18T06:56:12Z",
-    "ci_completed_at": "2026-05-18T07:01:06Z",
+    "ci_completed_at": "2026-05-18T09:12:26Z",
     "partialCiHistory": false,
     "timeToCiStartInSeconds": 416,
-    "ciDurationInSeconds": 294,
-    "workflowCount": 1,
-    "successfulWorkflowCount": 1,
-    "conclusion": "success",
+    "ciDurationInSeconds": 8174,
+    "workflowCount": 4,
+    "successfulWorkflowCount": 2,
+    "conclusion": "failure",
     "workflows": [
+      {
+        "id": 26023371886,
+        "name": "Integration Tests",
+        "head_branch": "release/3.2.2-autoblockify",
+        "head_sha": "5dc1236bcd0cf7fa89d01d04e8d6b6b6417ca05b",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-18T08:52:39Z",
+        "updated_at": "2026-05-18T09:12:26Z",
+        "html_url": "https://github.com/triton-lang/triton-ascend/actions/runs/26023371886",
+        "durationInSeconds": 1187,
+        "pull_requests": [
+          {
+            "number": 85
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76490346729,
+            "name": "runner-preparation / prepare",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-18T08:52:39Z",
+            "started_at": "2026-05-18T08:52:43Z",
+            "completed_at": "2026-05-18T08:52:46Z",
+            "html_url": "https://github.com/triton-lang/triton-ascend/actions/runs/26023371886/job/76490346729",
+            "queueDurationInSeconds": 4,
+            "durationInSeconds": 3
+          },
+          {
+            "id": 76490366285,
+            "name": "integration-tests-ascend / integration-tests-ascend (linux-aarch64-a3-4, py3.10)",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-18T08:52:47Z",
+            "started_at": "2026-05-18T08:53:11Z",
+            "completed_at": "2026-05-18T09:12:25Z",
+            "html_url": "https://github.com/triton-lang/triton-ascend/actions/runs/26023371886/job/76490366285",
+            "queueDurationInSeconds": 24,
+            "durationInSeconds": 1154
+          },
+          {
+            "id": 76490366402,
+            "name": "integration-tests-ascend / integration-tests-ascend (linux-aarch64-a3-4, py3.11)",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-18T08:52:47Z",
+            "started_at": "2026-05-18T08:53:19Z",
+            "completed_at": "2026-05-18T09:08:29Z",
+            "html_url": "https://github.com/triton-lang/triton-ascend/actions/runs/26023371886/job/76490366402",
+            "queueDurationInSeconds": 32,
+            "durationInSeconds": 910
+          }
+        ]
+      },
+      {
+        "id": 26023371695,
+        "name": "Ascend950 Wheels Build",
+        "head_branch": "release/3.2.2-autoblockify",
+        "head_sha": "5dc1236bcd0cf7fa89d01d04e8d6b6b6417ca05b",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "pull_request",
+        "created_at": "2026-05-18T08:52:38Z",
+        "updated_at": "2026-05-18T09:00:36Z",
+        "html_url": "https://github.com/triton-lang/triton-ascend/actions/runs/26023371695",
+        "durationInSeconds": 478,
+        "pull_requests": [
+          {
+            "number": 85
+          }
+        ],
+        "jobs": [
+          {
+            "id": 76490345912,
+            "name": "Build-Wheels",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-05-18T08:52:39Z",
+            "started_at": "2026-05-18T08:53:05Z",
+            "completed_at": "2026-05-18T09:00:35Z",
+            "html_url": "https://github.com/triton-lang/triton-ascend/actions/runs/26023371695/job/76490345912",
+            "queueDurationInSeconds": 26,
+            "durationInSeconds": 450
+          }
+        ]
+      },
       {
         "id": 26018351554,
         "name": "Ascend950 Wheels Build",
@@ -35,18 +123,61 @@
             "number": 85
           }
         ],
+        "jobs": []
+      },
+      {
+        "id": 26018351589,
+        "name": "Integration Tests",
+        "head_branch": "release/3.2.2-autoblockify",
+        "head_sha": "d220fc62744c4eb27e7d11857bce11c55142570d",
+        "status": "completed",
+        "conclusion": "failure",
+        "event": "pull_request",
+        "created_at": "2026-05-18T06:56:12Z",
+        "updated_at": "2026-05-18T07:23:34Z",
+        "html_url": "https://github.com/triton-lang/triton-ascend/actions/runs/26018351589",
+        "durationInSeconds": 1642,
+        "pull_requests": [
+          {
+            "number": 85
+          }
+        ],
         "jobs": [
           {
-            "id": 76473517612,
-            "name": "Build-Wheels",
+            "id": 76473577394,
+            "name": "runner-preparation / prepare",
             "status": "completed",
             "conclusion": "success",
-            "created_at": "2026-05-18T06:56:16Z",
-            "started_at": "2026-05-18T06:56:41Z",
-            "completed_at": "2026-05-18T07:01:05Z",
-            "html_url": "https://github.com/triton-lang/triton-ascend/actions/runs/26018351554/job/76473517612",
+            "created_at": "2026-05-18T06:56:46Z",
+            "started_at": "2026-05-18T06:56:49Z",
+            "completed_at": "2026-05-18T06:56:54Z",
+            "html_url": "https://github.com/triton-lang/triton-ascend/actions/runs/26018351589/job/76473577394",
+            "queueDurationInSeconds": 3,
+            "durationInSeconds": 5
+          },
+          {
+            "id": 76473595343,
+            "name": "integration-tests-ascend / integration-tests-ascend (linux-aarch64-a3-4, py3.11)",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-18T06:56:54Z",
+            "started_at": "2026-05-18T06:57:18Z",
+            "completed_at": "2026-05-18T07:23:34Z",
+            "html_url": "https://github.com/triton-lang/triton-ascend/actions/runs/26018351589/job/76473595343",
+            "queueDurationInSeconds": 24,
+            "durationInSeconds": 1576
+          },
+          {
+            "id": 76473595505,
+            "name": "integration-tests-ascend / integration-tests-ascend (linux-aarch64-a3-4, py3.10)",
+            "status": "completed",
+            "conclusion": "failure",
+            "created_at": "2026-05-18T06:56:54Z",
+            "started_at": "2026-05-18T06:57:19Z",
+            "completed_at": "2026-05-18T07:21:51Z",
+            "html_url": "https://github.com/triton-lang/triton-ascend/actions/runs/26018351589/job/76473595505",
             "queueDurationInSeconds": 25,
-            "durationInSeconds": 264
+            "durationInSeconds": 1472
           }
         ]
       }
