@@ -17,7 +17,7 @@ import {
   Share2,
   XCircle,
 } from 'lucide-react';
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { format } from 'date-fns';
 
 import { fetchIndex, fetchLatestRunsFromIndex, fetchRunsFromIndex } from '@/lib/data-fetcher';
@@ -36,6 +36,25 @@ import type {
 type JobSortField = 'queue' | 'duration' | 'name';
 type WorkflowSortField = 'date' | 'duration' | 'name';
 type WorkflowSortOrder = 'asc' | 'desc' | 'none';
+type PrLifecycleViewMode = 'pr' | 'workflow' | 'job';
+type WorkflowTimingData = {
+  id: number;
+  name: string;
+  queueTimeSeconds: number | undefined;
+  e2eTimeSeconds: number;
+  conclusion: string;
+  created_at: string;
+};
+type JobTimingData = {
+  id: number;
+  name: string;
+  workflowName: string;
+  workflowId: number;
+  queueTimeSeconds: number;
+  e2eTimeSeconds: number;
+  conclusion: string;
+  created_at: string;
+};
 type MetricKey = 'prE2EP90Minutes' | 'ciE2EP90Minutes' | 'reviewP90Minutes' | 'ciE2ESlaRate';
 type DashboardQueryState = {
   days: number;
@@ -166,6 +185,59 @@ function sortWorkflows(workflows: Run[], field: WorkflowSortField, order: Workfl
   });
 
   return result;
+}
+
+function calculateWorkflowQueueTime(run: Run): number | undefined {
+  if (!run.jobs || run.jobs.length === 0) {
+    return undefined;
+  }
+
+  let earliestStartedAt = Infinity;
+  for (const job of run.jobs) {
+    const startedMs = new Date(job.started_at || job.created_at || 0).getTime();
+    if (startedMs < earliestStartedAt) {
+      earliestStartedAt = startedMs;
+    }
+  }
+
+  if (earliestStartedAt === Infinity) {
+    return undefined;
+  }
+
+  const createdAtMs = new Date(run.created_at).getTime();
+  const queueTimeMs = earliestStartedAt - createdAtMs;
+  return Math.max(0, queueTimeMs / 1000);
+}
+
+function buildWorkflowTimingData(runs: Run[]): WorkflowTimingData[] {
+  return runs.map((run) => ({
+    id: run.id,
+    name: run.name,
+    queueTimeSeconds: calculateWorkflowQueueTime(run),
+    e2eTimeSeconds: run.durationInSeconds,
+    conclusion: run.conclusion,
+    created_at: run.created_at,
+  }));
+}
+
+function buildJobTimingData(runs: Run[]): JobTimingData[] {
+  const jobs: JobTimingData[] = [];
+  for (const run of runs) {
+    if (!run.jobs || run.jobs.length === 0) continue;
+    for (const job of run.jobs) {
+      jobs.push({
+        id: job.id,
+        name: job.name,
+        workflowName: run.name,
+        workflowId: run.id,
+        queueTimeSeconds: job.queueDurationInSeconds,
+        e2eTimeSeconds: job.durationInSeconds,
+        conclusion: job.conclusion,
+        created_at: job.created_at || job.started_at,
+      });
+    }
+  }
+  return jobs;
 }
 
 function StatusBadge({ conclusion }: { conclusion: string }) {
@@ -341,6 +413,52 @@ function JobDetailsView({ run }: { run: Run }) {
   );
 }
 
+function TimingChart<T extends { id: number; name: string; queueTimeSeconds: number | undefined; e2eTimeSeconds: number }>({
+  data,
+  label,
+}: {
+  data: T[];
+  label: string;
+}) {
+  if (data.length === 0) {
+    return (
+      <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-neutral-200 text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+        No {label.toLowerCase()} selected. Use checkboxes to select items.
+      </div>
+    );
+  }
+
+  const chartData = data.map((item) => ({
+    name: item.name.length > 24 ? `${item.name.slice(0, 22)}…` : item.name,
+    queueTime: item.queueTimeSeconds !== undefined ? Math.round(item.queueTimeSeconds / 60) : 0,
+    e2eTime: Math.round(item.e2eTimeSeconds / 60),
+    hasQueueTime: item.queueTimeSeconds !== undefined,
+  }));
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
+          {label} Timing Metrics ({data.length} selected)
+        </h4>
+      </div>
+      <div className="h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
+            <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} interval={0} angle={-30} textAnchor="end" height={60} />
+            <YAxis tick={{ fontSize: 12, fill: '#888' }} tickLine={false} axisLine={false} label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }} />
+            <Tooltip formatter={(value: unknown) => (typeof value === 'number' ? `${value}m` : String(value))} />
+            <Legend />
+            <Bar dataKey="queueTime" name="Queue Time" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="e2eTime" name="E2E Time" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 function DashboardContent({
   initialFailedRepoKeys,
   initialRepoIndexesByKey,
@@ -382,6 +500,12 @@ function DashboardContent({
   const [shareNotice, setShareNotice] = useState('');
   const [workflowSortField, setWorkflowSortField] = useState<WorkflowSortField>('date');
   const [workflowSortOrder, setWorkflowSortOrder] = useState<WorkflowSortOrder>('desc');
+  const [prLifecycleViewMode, setPrLifecycleViewMode] = useState<PrLifecycleViewMode>('pr');
+  const [selectedWorkflowIds, setSelectedWorkflowIds] = useState<Set<number>>(new Set());
+  const [selectedJobIds, setSelectedJobIds] = useState<Set<number>>(new Set());
+  const [allWorkflows, setAllWorkflows] = useState<Run[]>([]);
+  const [allWorkflowsLoading, setAllWorkflowsLoading] = useState(false);
+  const [allWorkflowsError, setAllWorkflowsError] = useState('');
   const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
   const workflowIndexCacheRef = useRef<Record<string, Index | Promise<Index>>>({});
   const debouncedFilterName = useDebouncedValue(filterName, 250);
@@ -434,6 +558,11 @@ function DashboardContent({
     setExpandedPrNumber(null);
     setExpandedWorkflowId(null);
     setError('');
+    setPrLifecycleViewMode('pr');
+    setSelectedWorkflowIds(new Set());
+    setSelectedJobIds(new Set());
+    setAllWorkflows([]);
+    setAllWorkflowsError('');
   }, [selectedRepoKey]);
 
   useEffect(() => {
@@ -583,6 +712,58 @@ function DashboardContent({
     };
   }, [dateRange.end, dateRange.start, selectedRepo, shouldLoadWorkflowFallback]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAllWorkflows = async () => {
+      if (!selectedRepo || (prLifecycleViewMode !== 'workflow' && prLifecycleViewMode !== 'job')) {
+        setAllWorkflows([]);
+        setAllWorkflowsLoading(false);
+        setAllWorkflowsError('');
+        return;
+      }
+
+      setAllWorkflowsLoading(true);
+      setAllWorkflowsError('');
+
+      try {
+        const cachedIndex =
+          workflowIndexCacheRef.current[selectedRepo.key] ??
+          fetchIndex(selectedRepo.owner, selectedRepo.repo);
+        workflowIndexCacheRef.current[selectedRepo.key] = cachedIndex;
+
+        const repoIndex = await cachedIndex;
+        workflowIndexCacheRef.current[selectedRepo.key] = repoIndex;
+        const runs = await fetchRunsFromIndex(selectedRepo.owner, selectedRepo.repo, repoIndex, {
+          startDate: format(dateRange.start, 'yyyy-MM-dd'),
+          endDate: format(dateRange.end, 'yyyy-MM-dd'),
+        });
+
+        if (!cancelled) {
+          setAllWorkflows(runs);
+        }
+      } catch (err) {
+        if (selectedRepo && workflowIndexCacheRef.current[selectedRepo.key] instanceof Promise) {
+          delete workflowIndexCacheRef.current[selectedRepo.key];
+        }
+        if (!cancelled) {
+          setAllWorkflows([]);
+          setAllWorkflowsError(err instanceof Error ? err.message : 'Failed to load workflows.');
+        }
+      } finally {
+        if (!cancelled) {
+          setAllWorkflowsLoading(false);
+        }
+      }
+    };
+
+    void loadAllWorkflows();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dateRange.end, dateRange.start, selectedRepo, prLifecycleViewMode]);
+
   const unsortedFallbackRuns = useMemo(() => {
     let result = fallbackRuns;
 
@@ -691,6 +872,81 @@ function DashboardContent({
 
       return [...current, metricKey];
     });
+  };
+
+  const toggleWorkflowSelection = (id: number) => {
+    setSelectedWorkflowIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleJobSelection = (id: number) => {
+    setSelectedJobIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllWorkflows = () => {
+    if (selectedWorkflowIds.size === sortedAllWorkflows.length && sortedAllWorkflows.length > 0) {
+      setSelectedWorkflowIds(new Set());
+    } else {
+      setSelectedWorkflowIds(new Set(sortedAllWorkflows.map((w) => w.id)));
+    }
+  };
+
+  const toggleAllJobs = () => {
+    if (selectedJobIds.size === allJobTimingData.length && allJobTimingData.length > 0) {
+      setSelectedJobIds(new Set());
+    } else {
+      setSelectedJobIds(new Set(allJobTimingData.map((j) => j.id)));
+    }
+  };
+
+  const sortedAllWorkflows = useMemo(() => {
+    let result = allWorkflows;
+    if (filterName) {
+      const query = filterName.toLowerCase();
+      result = result.filter((run) => `${run.name} ${run.head_branch}`.toLowerCase().includes(query));
+    }
+    return sortWorkflows(result, workflowSortField, workflowSortOrder);
+  }, [allWorkflows, filterName, workflowSortField, workflowSortOrder]);
+
+  const allWorkflowTimingData = useMemo(() => buildWorkflowTimingData(allWorkflows), [allWorkflows]);
+  const selectedWorkflowTimingData = useMemo(
+    () => allWorkflowTimingData.filter((w) => selectedWorkflowIds.has(w.id)),
+    [allWorkflowTimingData, selectedWorkflowIds]
+  );
+
+  const allJobTimingData = useMemo(() => buildJobTimingData(allWorkflows), [allWorkflows]);
+  const sortedAllJobTimingData = useMemo(() => {
+    let result = allJobTimingData;
+    if (filterName) {
+      const query = filterName.toLowerCase();
+      result = result.filter((job) => `${job.name} ${job.workflowName}`.toLowerCase().includes(query));
+    }
+    return result;
+  }, [allJobTimingData, filterName]);
+  const selectedJobTimingData = useMemo(
+    () => sortedAllJobTimingData.filter((j) => selectedJobIds.has(j.id)),
+    [sortedAllJobTimingData, selectedJobIds]
+  );
+
+  const handleViewModeChange = (mode: PrLifecycleViewMode) => {
+    setPrLifecycleViewMode(mode);
+    setSelectedWorkflowIds(new Set());
+    setSelectedJobIds(new Set());
   };
 
   if (!selectedRepo) {
@@ -949,212 +1205,374 @@ function DashboardContent({
                   <h2 className="text-lg font-bold">PR Lifecycle</h2>
                   <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Drill into PR and workflow details for {selectedRepo.key}.</p>
                 </div>
-                <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950">
-                  <Filter className="h-4 w-4 text-neutral-400 dark:text-neutral-500" />
-                  <input type="text" placeholder="Filter by PR, title, branch..." value={filterName} onChange={(event) => setFilterName(event.target.value)} className="w-48 bg-transparent outline-none" />
+                <div className="flex items-center gap-3">
+                  <div className="flex rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800">
+                    {([['pr', 'PR'], ['workflow', 'Workflow'], ['job', 'Job']] as [PrLifecycleViewMode, string][]).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => handleViewModeChange(mode)}
+                        className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                          prLifecycleViewMode === mode
+                            ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-900 dark:text-neutral-100'
+                            : 'text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950">
+                    <Filter className="h-4 w-4 text-neutral-400 dark:text-neutral-500" />
+                    <input
+                      type="text"
+                      placeholder={prLifecycleViewMode === 'pr' ? 'Filter by PR, title, branch...' : prLifecycleViewMode === 'workflow' ? 'Filter by workflow, branch...' : 'Filter by job, workflow...'}
+                      value={filterName}
+                      onChange={(event) => setFilterName(event.target.value)}
+                      className="w-48 bg-transparent outline-none"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {filteredPrs.length === 0 ? (
-                showWorkflowFallback ? (
-                  <div className="overflow-x-auto">
-                    <div className="border-b border-blue-100 bg-blue-50 px-6 py-4 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
-                      {fallbackRunsScope === 'latest-retained'
-                        ? `No PR metrics or workflow runs were found for ${selectedRepo.key} in the selected date range. Showing latest retained raw workflow runs instead.`
-                        : (selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution)
-                          ? `PR metrics are unavailable for ${selectedRepo.key}. Showing raw workflow runs for the selected date range instead.`
-                          : `No PR metrics were found for ${selectedRepo.key} in the selected date range. Showing raw workflow runs instead.`}
+              {prLifecycleViewMode === 'pr' ? (
+                /* ===== PR VIEW (existing behavior) ===== */
+                filteredPrs.length === 0 ? (
+                  showWorkflowFallback ? (
+                    <div className="overflow-x-auto">
+                      <div className="border-b border-blue-100 bg-blue-50 px-6 py-4 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+                        {fallbackRunsScope === 'latest-retained'
+                          ? `No PR metrics or workflow runs were found for ${selectedRepo.key} in the selected date range. Showing latest retained raw workflow runs instead.`
+                          : (selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution)
+                            ? `PR metrics are unavailable for ${selectedRepo.key}. Showing raw workflow runs for the selected date range instead.`
+                            : `No PR metrics were found for ${selectedRepo.key} in the selected date range. Showing raw workflow runs instead.`}
+                      </div>
+                      <table className="w-full text-left text-sm">
+                        <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+                          <tr>
+                            <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('name')}>Workflow</th>
+                            <th className="px-6 py-3">Branch</th>
+                            <th className="px-6 py-3">Status</th>
+                            <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('date')}>Created</th>
+                            <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('duration')}>Duration</th>
+                            <th className="px-6 py-3 text-right">Details</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                          {filteredFallbackRuns.map((workflow) => (
+                            <React.Fragment key={workflow.id}>
+                              <tr className="hover:bg-neutral-50 dark:hover:bg-neutral-950/50">
+                                <td className="px-6 py-4 font-medium text-neutral-900 dark:text-neutral-100">{workflow.name}</td>
+                                <td className="px-6 py-4 font-mono text-xs text-neutral-500 dark:text-neutral-400">{workflow.head_branch}</td>
+                                <td className="px-6 py-4"><StatusBadge conclusion={workflow.conclusion} /></td>
+                                <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(workflow.created_at), 'MMM dd, HH:mm')}</td>
+                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(workflow.durationInSeconds)}</td>
+                                <td className="px-6 py-4 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedWorkflowId((current) => current === workflow.id ? null : workflow.id)}
+                                    className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                                  >
+                                    {expandedWorkflowId === workflow.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                    Jobs
+                                  </button>
+                                  <a href={workflow.html_url} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+                                    <ExternalLink className="h-4 w-4" />
+                                  </a>
+                                </td>
+                              </tr>
+                              {expandedWorkflowId === workflow.id ? (
+                                <tr>
+                                  <td colSpan={6} className="p-0">
+                                    <JobDetailsView run={workflow} />
+                                  </td>
+                                </tr>
+                              ) : null}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
+                  ) : (
+                    <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">
+                      {emptyMetricsMessage}
+                      {shouldLoadWorkflowFallback && fallbackRunsLoading ? (
+                        <span className="mt-2 block text-xs text-neutral-400 dark:text-neutral-500">Loading raw workflow fallback...</span>
+                      ) : null}
+                      {shouldLoadWorkflowFallback && fallbackRunsError ? (
+                        <span className="mt-2 block text-xs text-neutral-400 dark:text-neutral-500">Raw workflow fallback is temporarily unavailable.</span>
+                      ) : null}
+                    </div>
+                  )
+                ) : (
+                  <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
                       <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
                         <tr>
-                          <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('name')}>Workflow</th>
-                          <th className="px-6 py-3">Branch</th>
+                          <th className="px-6 py-3">PR / Branch</th>
                           <th className="px-6 py-3">Status</th>
-                          <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('date')}>Created</th>
-                          <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('duration')}>Duration</th>
+                          <th className="px-6 py-3">T1 PR Created</th>
+                          <th className="px-6 py-3">T2 CI Started</th>
+                          <th className="px-6 py-3">T3 CI Completed</th>
+                          <th className="px-6 py-3">T4 PR Merged</th>
+                          <th className="px-6 py-3">Submit→CI Start</th>
+                          <th className="px-6 py-3">CI Start→CI End</th>
+                          <th className="px-6 py-3">Submit→Merge</th>
                           <th className="px-6 py-3 text-right">Details</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                        {filteredFallbackRuns.map((workflow) => (
-                          <React.Fragment key={workflow.id}>
-                            <tr className="hover:bg-neutral-50 dark:hover:bg-neutral-950/50">
-                              <td className="px-6 py-4 font-medium text-neutral-900 dark:text-neutral-100">{workflow.name}</td>
-                              <td className="px-6 py-4 font-mono text-xs text-neutral-500 dark:text-neutral-400">{workflow.head_branch}</td>
-                              <td className="px-6 py-4"><StatusBadge conclusion={workflow.conclusion} /></td>
-                              <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(workflow.created_at), 'MMM dd, HH:mm')}</td>
-                              <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(workflow.durationInSeconds)}</td>
-                              <td className="px-6 py-4 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedWorkflowId((current) => current === workflow.id ? null : workflow.id)}
-                                  className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-                                >
-                                  {expandedWorkflowId === workflow.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                  Jobs
-                                </button>
-                                <a href={workflow.html_url} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
-                                  <ExternalLink className="h-4 w-4" />
-                                </a>
-                              </td>
-                            </tr>
-                            {expandedWorkflowId === workflow.id ? (
-                              <tr>
-                                <td colSpan={6} className="p-0">
-                                  <JobDetailsView run={workflow} />
+                        {filteredPrs.map((pr) => {
+                          const detail = detailsByNumber[pr.number];
+                          const workflows = detail ? getSortedWorkflows(detail.workflows) : [];
+
+                          return (
+                            <React.Fragment key={pr.number}>
+                              <tr className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-950/50">
+                                <td className="px-6 py-4">
+                                  <div className="font-medium text-neutral-900 dark:text-neutral-100">PR #{pr.number}</div>
+                                  <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{pr.title}</div>
+                                  <div className="mt-1 font-mono text-xs text-neutral-500 dark:text-neutral-400">{pr.branch}</div>
+                                </td>
+                                <td className="px-6 py-4"><StatusBadge conclusion={pr.conclusion} /></td>
+                                <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(pr.created_at), 'MMM dd, HH:mm')}</td>
+                                <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{pr.ci_started_at ? format(new Date(pr.ci_started_at), 'MMM dd, HH:mm') : 'N/A'}</td>
+                                <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{pr.ci_completed_at ? format(new Date(pr.ci_completed_at), 'MMM dd, HH:mm') : 'N/A'}</td>
+                                <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{pr.merged_at ? format(new Date(pr.merged_at), 'MMM dd, HH:mm') : 'N/A'}</td>
+                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.timeToCiStartInSeconds)}</td>
+                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.ciDurationInSeconds)}</td>
+                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.timeToMergeInSeconds)}</td>
+                                <td className="px-6 py-4 text-right">
+                                  <button type="button" onClick={() => void loadDetail(pr.number)} className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100">
+                                    {expandedPrNumber === pr.number ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                    {loadingDetailNumber === pr.number ? 'Loading...' : 'Workflows'}
+                                  </button>
+                                  <a href={pr.html_url} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300" title="View PR on GitHub">
+                                    <ExternalLink className="h-4 w-4" />
+                                  </a>
                                 </td>
                               </tr>
-                            ) : null}
-                          </React.Fragment>
-                        ))}
+
+                              {expandedPrNumber === pr.number && detail && (
+                                <>
+                                  <tr className="bg-neutral-50 dark:bg-neutral-950/50">
+                                    <td colSpan={10} className="p-6">
+                                      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                                        <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                                          <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Workflows</div>
+                                          <div className="mt-2 text-2xl font-bold text-neutral-900 dark:text-neutral-100">{detail.workflowCount}</div>
+                                        </div>
+                                        <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                                          <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Successful</div>
+                                          <div className="mt-2 text-2xl font-bold text-neutral-900 dark:text-neutral-100">{detail.successfulWorkflowCount}</div>
+                                          <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">{detail.successfulWorkflowCount} / {detail.workflowCount} successful workflows</div>
+                                        </div>
+                                        <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                                          <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">CI Duration</div>
+                                          <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{formatDurationMinutes(detail.ciDurationInSeconds)}</div>
+                                        </div>
+                                        <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                                          <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">PR E2E</div>
+                                          <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{formatDurationMinutes(detail.timeToMergeInSeconds)}</div>
+                                          {detail.partialCiHistory ? (
+                                            <div className="mt-2 text-xs text-amber-600 dark:text-amber-400">Partial CI history</div>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  <tr>
+                                    <td colSpan={10} className="p-0">
+                                      <div className="overflow-x-auto">
+                                        <table className="w-full text-left text-sm">
+                                          <thead className="bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+                                            <tr>
+                                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('name')}>Workflow</th>
+                                              <th className="px-6 py-3">Status</th>
+                                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('date')}>Created</th>
+                                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('duration')}>Duration</th>
+                                              <th className="px-6 py-3 text-right">Details</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                                            {workflows.map((workflow) => (
+                                              <React.Fragment key={workflow.id}>
+                                                <tr className="hover:bg-neutral-50 dark:hover:bg-neutral-950/50">
+                                                  <td className="px-6 py-4 font-medium text-neutral-900 dark:text-neutral-100">{workflow.name}</td>
+                                                  <td className="px-6 py-4"><StatusBadge conclusion={workflow.conclusion} /></td>
+                                                  <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(workflow.created_at), 'MMM dd, HH:mm')}</td>
+                                                  <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(workflow.durationInSeconds)}</td>
+                                                  <td className="px-6 py-4 text-right">
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setExpandedWorkflowId((current) => current === workflow.id ? null : workflow.id)}
+                                                      className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                                                    >
+                                                      {expandedWorkflowId === workflow.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                                      Jobs
+                                                    </button>
+                                                    <a href={workflow.html_url} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+                                                      <ExternalLink className="h-4 w-4" />
+                                                    </a>
+                                                  </td>
+                                                </tr>
+                                                {expandedWorkflowId === workflow.id ? (
+                                                  <tr>
+                                                    <td colSpan={5} className="p-0">
+                                                      <JobDetailsView run={workflow} />
+                                                    </td>
+                                                  </tr>
+                                                ) : null}
+                                              </React.Fragment>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                </>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
-                ) : (
-                  <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">
-                    {emptyMetricsMessage}
-                    {shouldLoadWorkflowFallback && fallbackRunsLoading ? (
-                      <span className="mt-2 block text-xs text-neutral-400 dark:text-neutral-500">Loading raw workflow fallback...</span>
-                    ) : null}
-                    {shouldLoadWorkflowFallback && fallbackRunsError ? (
-                      <span className="mt-2 block text-xs text-neutral-400 dark:text-neutral-500">Raw workflow fallback is temporarily unavailable.</span>
-                    ) : null}
-                  </div>
                 )
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
-                      <tr>
-                        <th className="px-6 py-3">PR / Branch</th>
-                        <th className="px-6 py-3">Status</th>
-                        <th className="px-6 py-3">T1 PR Created</th>
-                        <th className="px-6 py-3">T2 CI Started</th>
-                        <th className="px-6 py-3">T3 CI Completed</th>
-                        <th className="px-6 py-3">T4 PR Merged</th>
-                        <th className="px-6 py-3">Submit→CI Start</th>
-                        <th className="px-6 py-3">CI Start→CI End</th>
-                        <th className="px-6 py-3">Submit→Merge</th>
-                        <th className="px-6 py-3 text-right">Details</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                      {filteredPrs.map((pr) => {
-                        const detail = detailsByNumber[pr.number];
-                        const workflows = detail ? getSortedWorkflows(detail.workflows) : [];
-
-                        return (
-                          <React.Fragment key={pr.number}>
-                            <tr className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-950/50">
-                              <td className="px-6 py-4">
-                                <div className="font-medium text-neutral-900 dark:text-neutral-100">PR #{pr.number}</div>
-                                <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{pr.title}</div>
-                                <div className="mt-1 font-mono text-xs text-neutral-500 dark:text-neutral-400">{pr.branch}</div>
-                              </td>
-                              <td className="px-6 py-4"><StatusBadge conclusion={pr.conclusion} /></td>
-                              <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(pr.created_at), 'MMM dd, HH:mm')}</td>
-                              <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{pr.ci_started_at ? format(new Date(pr.ci_started_at), 'MMM dd, HH:mm') : 'N/A'}</td>
-                              <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{pr.ci_completed_at ? format(new Date(pr.ci_completed_at), 'MMM dd, HH:mm') : 'N/A'}</td>
-                              <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{pr.merged_at ? format(new Date(pr.merged_at), 'MMM dd, HH:mm') : 'N/A'}</td>
-                              <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.timeToCiStartInSeconds)}</td>
-                              <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.ciDurationInSeconds)}</td>
-                              <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.timeToMergeInSeconds)}</td>
-                              <td className="px-6 py-4 text-right">
-                                <button type="button" onClick={() => void loadDetail(pr.number)} className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100">
-                                  {expandedPrNumber === pr.number ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                  {loadingDetailNumber === pr.number ? 'Loading...' : 'Workflows'}
-                                </button>
-                                <a href={pr.html_url} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300" title="View PR on GitHub">
-                                  <ExternalLink className="h-4 w-4" />
-                                </a>
-                              </td>
+              ) : prLifecycleViewMode === 'workflow' ? (
+                /* ===== WORKFLOW VIEW ===== */
+                <div>
+                  {allWorkflowsError ? (
+                    <div className="p-8 text-center text-sm text-red-500 dark:text-red-400">{allWorkflowsError}</div>
+                  ) : allWorkflowsLoading ? (
+                    <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">Loading workflows...</div>
+                  ) : sortedAllWorkflows.length === 0 ? (
+                    <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">No workflows found for the selected date range.</div>
+                  ) : (
+                    <>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                          <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+                            <tr>
+                              <th className="px-4 py-3">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedWorkflowIds.size === sortedAllWorkflows.length && sortedAllWorkflows.length > 0}
+                                  onChange={toggleAllWorkflows}
+                                  aria-label="Select all workflows"
+                                />
+                              </th>
+                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('name')}>Workflow</th>
+                              <th className="px-6 py-3">Branch</th>
+                              <th className="px-6 py-3">Status</th>
+                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('date')}>Created</th>
+                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('duration')}>Duration</th>
+                              <th className="px-6 py-3">Queue Time</th>
+                              <th className="px-6 py-3">E2E Time</th>
+                              <th className="px-6 py-3 text-right">Link</th>
                             </tr>
-
-                            {expandedPrNumber === pr.number && detail && (
-                              <>
-                                <tr className="bg-neutral-50 dark:bg-neutral-950/50">
-                                  <td colSpan={10} className="p-6">
-                                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Workflows</div>
-                                        <div className="mt-2 text-2xl font-bold text-neutral-900 dark:text-neutral-100">{detail.workflowCount}</div>
-                                      </div>
-                                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Successful</div>
-                                        <div className="mt-2 text-2xl font-bold text-neutral-900 dark:text-neutral-100">{detail.successfulWorkflowCount}</div>
-                                        <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">{detail.successfulWorkflowCount} / {detail.workflowCount} successful workflows</div>
-                                      </div>
-                                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">CI Duration</div>
-                                        <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{formatDurationMinutes(detail.ciDurationInSeconds)}</div>
-                                      </div>
-                                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">PR E2E</div>
-                                        <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{formatDurationMinutes(detail.timeToMergeInSeconds)}</div>
-                                        {detail.partialCiHistory ? (
-                                          <div className="mt-2 text-xs text-amber-600 dark:text-amber-400">Partial CI history</div>
-                                        ) : null}
-                                      </div>
-                                    </div>
+                          </thead>
+                          <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                            {sortedAllWorkflows.map((workflow) => {
+                              const queueTime = calculateWorkflowQueueTime(workflow);
+                              return (
+                                <tr key={workflow.id} className={`hover:bg-neutral-50 dark:hover:bg-neutral-950/50 ${selectedWorkflowIds.has(workflow.id) ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
+                                  <td className="px-4 py-4">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedWorkflowIds.has(workflow.id)}
+                                      onChange={() => toggleWorkflowSelection(workflow.id)}
+                                      aria-label={`Select ${workflow.name}`}
+                                    />
+                                  </td>
+                                  <td className="px-6 py-4 font-medium text-neutral-900 dark:text-neutral-100">{workflow.name}</td>
+                                  <td className="px-6 py-4 font-mono text-xs text-neutral-500 dark:text-neutral-400">{workflow.head_branch}</td>
+                                  <td className="px-6 py-4"><StatusBadge conclusion={workflow.conclusion} /></td>
+                                  <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(workflow.created_at), 'MMM dd, HH:mm')}</td>
+                                  <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(workflow.durationInSeconds)}</td>
+                                  <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{queueTime !== undefined ? formatDurationMinutes(queueTime) : 'N/A'}</td>
+                                  <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(workflow.durationInSeconds)}</td>
+                                  <td className="px-6 py-4 text-right">
+                                    <a href={workflow.html_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+                                      <ExternalLink className="h-4 w-4" />
+                                    </a>
                                   </td>
                                 </tr>
-                                <tr>
-                                  <td colSpan={10} className="p-0">
-                                    <div className="overflow-x-auto">
-                                      <table className="w-full text-left text-sm">
-                                        <thead className="bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
-                                          <tr>
-                                            <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('name')}>Workflow</th>
-                                            <th className="px-6 py-3">Status</th>
-                                            <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('date')}>Created</th>
-                                            <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('duration')}>Duration</th>
-                                            <th className="px-6 py-3 text-right">Details</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                                          {workflows.map((workflow) => (
-                                            <React.Fragment key={workflow.id}>
-                                              <tr className="hover:bg-neutral-50 dark:hover:bg-neutral-950/50">
-                                                <td className="px-6 py-4 font-medium text-neutral-900 dark:text-neutral-100">{workflow.name}</td>
-                                                <td className="px-6 py-4"><StatusBadge conclusion={workflow.conclusion} /></td>
-                                                <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(workflow.created_at), 'MMM dd, HH:mm')}</td>
-                                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(workflow.durationInSeconds)}</td>
-                                                <td className="px-6 py-4 text-right">
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => setExpandedWorkflowId((current) => current === workflow.id ? null : workflow.id)}
-                                                    className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-                                                  >
-                                                    {expandedWorkflowId === workflow.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                                    Jobs
-                                                  </button>
-                                                  <a href={workflow.html_url} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
-                                                    <ExternalLink className="h-4 w-4" />
-                                                  </a>
-                                                </td>
-                                              </tr>
-                                              {expandedWorkflowId === workflow.id ? (
-                                                <tr>
-                                                  <td colSpan={5} className="p-0">
-                                                    <JobDetailsView run={workflow} />
-                                                  </td>
-                                                </tr>
-                                              ) : null}
-                                            </React.Fragment>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </td>
-                                </tr>
-                              </>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="border-t border-neutral-100 p-6 dark:border-neutral-800">
+                        <TimingChart data={selectedWorkflowTimingData} label="Workflow" />
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                /* ===== JOB VIEW ===== */
+                <div>
+                  {allWorkflowsError ? (
+                    <div className="p-8 text-center text-sm text-red-500 dark:text-red-400">{allWorkflowsError}</div>
+                  ) : allWorkflowsLoading ? (
+                    <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">Loading jobs...</div>
+                  ) : sortedAllJobTimingData.length === 0 ? (
+                    <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">No jobs found for the selected date range.</div>
+                  ) : (
+                    <>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                          <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+                            <tr>
+                              <th className="px-4 py-3">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedJobIds.size === sortedAllJobTimingData.length && sortedAllJobTimingData.length > 0}
+                                  onChange={toggleAllJobs}
+                                  aria-label="Select all jobs"
+                                />
+                              </th>
+                              <th className="px-6 py-3">Job Name</th>
+                              <th className="px-6 py-3">Workflow</th>
+                              <th className="px-6 py-3">Status</th>
+                              <th className="px-6 py-3">Created</th>
+                              <th className="px-6 py-3">Queue Time</th>
+                              <th className="px-6 py-3">E2E Time</th>
+                              <th className="px-6 py-3 text-right">Link</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                            {sortedAllJobTimingData.map((job) => (
+                              <tr key={job.id} className={`hover:bg-neutral-50 dark:hover:bg-neutral-950/50 ${selectedJobIds.has(job.id) ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
+                                <td className="px-4 py-4">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedJobIds.has(job.id)}
+                                    onChange={() => toggleJobSelection(job.id)}
+                                    aria-label={`Select ${job.name}`}
+                                  />
+                                </td>
+                                <td className="px-6 py-4 font-medium text-neutral-900 dark:text-neutral-100">{job.name}</td>
+                                <td className="px-6 py-4 text-xs text-neutral-500 dark:text-neutral-400">{job.workflowName}</td>
+                                <td className="px-6 py-4"><StatusBadge conclusion={job.conclusion} /></td>
+                                <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(job.created_at), 'MMM dd, HH:mm')}</td>
+                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(job.queueTimeSeconds)}</td>
+                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(job.e2eTimeSeconds)}</td>
+                                <td className="px-6 py-4 text-right">
+                                  <a href={`https://github.com/${selectedRepo.owner}/${selectedRepo.repo}/actions/runs/${job.workflowId}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+                                    <ExternalLink className="h-4 w-4" />
+                                  </a>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="border-t border-neutral-100 p-6 dark:border-neutral-800">
+                        <TimingChart data={selectedJobTimingData} label="Job" />
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
         </section>
