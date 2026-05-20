@@ -15,6 +15,7 @@ import {
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
 import { isGitHubRateLimitError, getRateLimitDetails, checkRateLimitBudget, type GitHubRequestErrorLike, type RateLimitDetails } from './github.ts';
+import { writeRunsToSupabase } from './supabase-storage.ts';
 
 const { buildCollectionWindows, mergeCollectedDates, splitCollectionWindow, toCreatedRange } = collectionWindows;
 
@@ -281,14 +282,14 @@ export class RateLimitAbortError extends Error {
   }
 }
 
-function persistCollectedRuns(
+async function persistCollectedRuns(
   storage: StorageAdapter,
   repo: string,
   index: Index,
   runs: Run[],
   retentionDays: number,
   queriedWindows: CollectionWindow[] = [],
-): Index {
+): Promise<Index> {
   const runsByDate: Record<string, Run[]> = {};
   for (const run of runs) {
     const date = format(new Date(run.created_at), 'yyyy-MM-dd');
@@ -330,6 +331,7 @@ function persistCollectedRuns(
     }
 
     storage.writeDayData(repo, { date, repo, runs: Array.from(runMap.values()) });
+    await writeRunsToSupabase(repo, Array.from(runMap.values()), date);
   }
 
   const cutoffDate = startOfDay(subDays(new Date(), retentionDays));
@@ -617,7 +619,7 @@ export async function collectRepo(
         for (const run of err.partialRuns) {
           allRunsMap.set(run.id, run);
         }
-        const persistedIndex = persistCollectedRuns(storage, repo, index, Array.from(allRunsMap.values()), retentionDays, completedWindows);
+        const persistedIndex = await persistCollectedRuns(storage, repo, index, Array.from(allRunsMap.values()), retentionDays, completedWindows);
         await rebuildPullRequestArtifacts({
           octokit,
           owner,
@@ -636,7 +638,7 @@ export async function collectRepo(
 
   const allRuns = Array.from(allRunsMap.values());
   log(`Total completed runs collected: ${allRuns.length}`);
-  const persistedIndex = persistCollectedRuns(storage, repo, index, allRuns, retentionDays, completedWindows);
+  const persistedIndex = await persistCollectedRuns(storage, repo, index, allRuns, retentionDays, completedWindows);
   await rebuildPullRequestArtifacts({
     octokit,
     owner,

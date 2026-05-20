@@ -4,6 +4,7 @@ import path from 'node:path';
 import * as prMetricsModule from '../../src/lib/pr-metrics';
 import type { PullRequestRef, PullRequestSnapshot, Run } from '../../src/lib/types';
 import { isGitHubRateLimitError, checkRateLimitBudget } from './github';
+import { writePrMetricsToSupabase } from './supabase-storage';
 
 const prMetricsInterop =
   ('buildPullRequestIndex' in prMetricsModule && typeof prMetricsModule.buildPullRequestIndex === 'function')
@@ -362,6 +363,8 @@ export async function rebuildPullRequestArtifacts({
   result.index.skippedPrShaCount = skippedPrShaCount;
 
   writeFileSync(path.join(prDir, 'index.json'), JSON.stringify(result.index, null, 2));
+
+  await writePrMetricsToSupabase(repoKey, result.index.prs);
 
   const staleEntries = new Set(readdirSync(prDir).filter((entry) => entry !== 'index.json' && entry !== 'sha-map.json'));
   for (const [number, detail] of result.details.entries()) {

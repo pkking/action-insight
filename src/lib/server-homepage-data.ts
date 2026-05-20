@@ -3,9 +3,10 @@ import 'server-only';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { cache } from 'react';
+import { createClient } from '@supabase/supabase-js';
 
 import { parseTrackedReposYaml } from './tracked-repos.js';
-import type { PullRequestIndexFile } from './types';
+import type { PullRequestIndexFile, PullRequestMetricsSummary } from './types';
 
 export type RepoOption = {
   owner: string;
@@ -21,6 +22,15 @@ function toRepoOption(entry: { owner: string; repo: string; slug: string }): Rep
   };
 }
 
+function getSupabase() {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+  }
+  return createClient(supabaseUrl, supabaseKey);
+}
+
 export const getTrackedRepoOptions = cache(async (): Promise<RepoOption[]> => {
   const reposConfigPath = path.join(process.cwd(), 'etl', 'repos.yaml');
   const content = await readFile(reposConfigPath, 'utf-8');
@@ -30,31 +40,78 @@ export const getTrackedRepoOptions = cache(async (): Promise<RepoOption[]> => {
     .sort((left, right) => left.key.localeCompare(right.key));
 });
 
+async function getRepoId(owner: string, repo: string): Promise<number | null> {
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from('repos')
+    .select('id')
+    .eq('owner', owner)
+    .eq('repo', repo)
+    .single();
+
+  return data?.id || null;
+}
+
+function mapPrSummary(row: Record<string, unknown>): PullRequestMetricsSummary {
+  return {
+    number: Number(row.pr_number),
+    title: row.title as string,
+    branch: row.branch as string,
+    author: (row.author as string) || '',
+    state: row.state as string,
+    html_url: row.html_url as string,
+    created_at: row.created_at as string,
+    ci_started_at: (row.ci_started_at as string) || undefined,
+    ci_completed_at: (row.ci_completed_at as string) || undefined,
+    merged_at: (row.merged_at as string) || undefined,
+    partialCiHistory: Boolean(row.partial_ci_history),
+    timeToCiStartInSeconds: row.time_to_ci_start_seconds ? Number(row.time_to_ci_start_seconds) : undefined,
+    ciDurationInSeconds: row.ci_duration_seconds ? Number(row.ci_duration_seconds) : undefined,
+    timeToMergeInSeconds: row.time_to_merge_seconds ? Number(row.time_to_merge_seconds) : undefined,
+    mergeLeadTimeInSeconds: row.merge_lead_time_seconds ? Number(row.merge_lead_time_seconds) : undefined,
+    workflowCount: Number(row.workflow_count),
+    successfulWorkflowCount: Number(row.successful_workflow_count),
+    conclusion: (row.conclusion as string) || '',
+  };
+}
+
 const getPullRequestIndex = cache(async (owner: string, repo: string): Promise<PullRequestIndexFile> => {
-  const filePath = path.join(process.cwd(), 'data', owner, repo, 'prs', 'index.json');
+  const repoId = await getRepoId(owner, repo);
 
-  try {
-    const content = await readFile(filePath, 'utf-8');
-    return JSON.parse(content) as PullRequestIndexFile;
-  } catch (error) {
-    const errorCode =
-      typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : undefined;
-
-    if (errorCode === 'ENOENT') {
-      return {
-        repo: `${owner}/${repo}`,
-        generated_at: new Date().toISOString(),
-        prs: [],
-        missingPrArtifact: true,
-      };
-    }
-
-    if (error instanceof SyntaxError) {
-      console.error(`[server-homepage-data] Failed to parse index.json for ${owner}/${repo}:`, error.message);
-    }
-
-    throw error;
+  if (!repoId) {
+    return {
+      repo: `${owner}/${repo}`,
+      generated_at: new Date().toISOString(),
+      prs: [],
+      missingPrArtifact: true,
+    };
   }
+
+  const supabase = getSupabase();
+  const { data: prs, error } = await supabase
+    .from('pr_metrics')
+    .select('*')
+    .eq('repo_id', repoId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to fetch PR index for ${owner}/${repo}: ${error.message}`);
+  }
+
+  if (!prs || prs.length === 0) {
+    return {
+      repo: `${owner}/${repo}`,
+      generated_at: new Date().toISOString(),
+      prs: [],
+      missingPrArtifact: true,
+    };
+  }
+
+  return {
+    repo: `${owner}/${repo}`,
+    generated_at: new Date().toISOString(),
+    prs: prs.map(mapPrSummary),
+  };
 });
 
 export async function getHomepageData() {

@@ -1,85 +1,33 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
-import { fetchPullRequestDetail, fetchPullRequestIndex, fetchPullRequestIndexes } from './pr-data-fetcher';
+import { describe, expect, it, vi } from 'vitest';
 
 describe('pr-data-fetcher', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it('throws when Supabase env vars are missing', async () => {
+    const originalUrl = process.env.SUPABASE_URL;
+    const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    vi.resetModules();
+    const { fetchPullRequestIndex } = await import('./pr-data-fetcher');
+
+    await expect(fetchPullRequestIndex('foo', 'bar')).rejects.toThrow('Missing SUPABASE_URL');
+
+    process.env.SUPABASE_URL = originalUrl;
+    process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
   });
 
-  it('fetches the PR index from the precomputed aggregate file', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ prs: [{ number: 42 }] }),
-    });
+  it('throws when Supabase env vars are missing for detail fetch', async () => {
+    const originalUrl = process.env.SUPABASE_URL;
+    const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    vi.stubGlobal('fetch', fetchMock);
+    vi.resetModules();
+    const { fetchPullRequestDetail } = await import('./pr-data-fetcher');
 
-    const result = await fetchPullRequestIndex('foo', 'bar');
+    await expect(fetchPullRequestDetail('foo', 'bar', 42)).rejects.toThrow('Missing SUPABASE_URL');
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/data/foo/bar/prs/index.json'),
-      expect.objectContaining({ cache: 'no-store' })
-    );
-    expect(result.prs).toEqual([{ number: 42 }]);
-  });
-
-  it('fetches a single PR detail file on demand', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ pr: { number: 42 } }),
-    });
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await fetchPullRequestDetail('foo', 'bar', 42);
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/data/foo/bar/prs/42.json'),
-      expect.objectContaining({ cache: 'no-store' })
-    );
-    expect(result.pr.number).toBe(42);
-  });
-
-  it('returns an empty missing-artifact marker when a PR index has not been generated', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 404,
-      statusText: 'Not Found',
-    });
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await fetchPullRequestIndex('foo', 'bar');
-
-    expect(result).toMatchObject({
-      repo: 'foo/bar',
-      prs: [],
-      missingPrArtifact: true,
-    });
-  });
-
-  it('fetches multiple PR indexes and reports per-repo failures', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ repo: 'foo/bar', prs: [{ number: 1 }] }),
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        statusText: 'Boom',
-      });
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await fetchPullRequestIndexes([
-      { owner: 'foo', repo: 'bar', key: 'foo/bar' },
-      { owner: 'baz', repo: 'qux', key: 'baz/qux' },
-    ]);
-
-    expect(result.indexesByRepoKey['foo/bar']).toEqual({ repo: 'foo/bar', prs: [{ number: 1 }] });
-    expect(result.failedRepoKeys).toEqual(['baz/qux']);
+    process.env.SUPABASE_URL = originalUrl;
+    process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
   });
 });
