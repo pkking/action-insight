@@ -54,6 +54,7 @@ type JobTimingData = {
   e2eTimeSeconds: number;
   conclusion: string;
   created_at: string;
+  html_url: string;
 };
 type MetricKey = 'prE2EP90Minutes' | 'ciE2EP90Minutes' | 'reviewP90Minutes' | 'ciE2ESlaRate';
 type DashboardQueryState = {
@@ -234,6 +235,7 @@ function buildJobTimingData(runs: Run[]): JobTimingData[] {
         e2eTimeSeconds: job.durationInSeconds,
         conclusion: job.conclusion,
         created_at: job.created_at || job.started_at,
+        html_url: job.html_url,
       });
     }
   }
@@ -506,6 +508,8 @@ function DashboardContent({
   const [allWorkflows, setAllWorkflows] = useState<Run[]>([]);
   const [allWorkflowsLoading, setAllWorkflowsLoading] = useState(false);
   const [allWorkflowsError, setAllWorkflowsError] = useState('');
+  const [jobSortField, setJobSortField] = useState<JobSortField>('duration');
+  const [jobSortOrder, setJobSortOrder] = useState<'asc' | 'desc'>('desc');
   const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
   const workflowIndexCacheRef = useRef<Record<string, Index | Promise<Index>>>({});
   const debouncedFilterName = useDebouncedValue(filterName, 250);
@@ -931,13 +935,20 @@ function DashboardContent({
 
   const allJobTimingData = useMemo(() => buildJobTimingData(allWorkflows), [allWorkflows]);
   const sortedAllJobTimingData = useMemo(() => {
-    let result = allJobTimingData;
+    let result = [...allJobTimingData];
     if (filterName) {
       const query = filterName.toLowerCase();
       result = result.filter((job) => `${job.name} ${job.workflowName}`.toLowerCase().includes(query));
     }
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (jobSortField === 'name') comparison = a.name.localeCompare(b.name);
+      else if (jobSortField === 'queue') comparison = a.queueTimeSeconds - b.queueTimeSeconds;
+      else if (jobSortField === 'duration') comparison = a.e2eTimeSeconds - b.e2eTimeSeconds;
+      return jobSortOrder === 'asc' ? comparison : -comparison;
+    });
     return result;
-  }, [allJobTimingData, filterName]);
+  }, [allJobTimingData, filterName, jobSortField, jobSortOrder]);
   const selectedJobTimingData = useMemo(
     () => sortedAllJobTimingData.filter((j) => selectedJobIds.has(j.id)),
     [sortedAllJobTimingData, selectedJobIds]
@@ -947,6 +958,15 @@ function DashboardContent({
     setPrLifecycleViewMode(mode);
     setSelectedWorkflowIds(new Set());
     setSelectedJobIds(new Set());
+  };
+
+  const toggleJobSort = (field: JobSortField) => {
+    if (jobSortField === field) {
+      setJobSortOrder(jobSortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setJobSortField(field);
+      setJobSortOrder('desc');
+    }
   };
 
   if (!selectedRepo) {
@@ -1532,12 +1552,12 @@ function DashboardContent({
                                   aria-label="Select all jobs"
                                 />
                               </th>
-                              <th className="px-6 py-3">Job Name</th>
+                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleJobSort('name')}>Job Name</th>
                               <th className="px-6 py-3">Workflow</th>
                               <th className="px-6 py-3">Status</th>
                               <th className="px-6 py-3">Created</th>
-                              <th className="px-6 py-3">Queue Time</th>
-                              <th className="px-6 py-3">E2E Time</th>
+                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleJobSort('queue')}>Queue Time</th>
+                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleJobSort('duration')}>E2E Time</th>
                               <th className="px-6 py-3 text-right">Link</th>
                             </tr>
                           </thead>
@@ -1559,7 +1579,7 @@ function DashboardContent({
                                 <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(job.queueTimeSeconds)}</td>
                                 <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(job.e2eTimeSeconds)}</td>
                                 <td className="px-6 py-4 text-right">
-                                  <a href={`https://github.com/${selectedRepo.owner}/${selectedRepo.repo}/actions/runs/${job.workflowId}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+                                  <a href={job.html_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
                                     <ExternalLink className="h-4 w-4" />
                                   </a>
                                 </td>
