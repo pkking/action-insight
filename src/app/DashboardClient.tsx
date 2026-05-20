@@ -914,10 +914,10 @@ function DashboardContent({
   };
 
   const toggleAllJobs = () => {
-    if (selectedJobIds.size === allJobTimingData.length && allJobTimingData.length > 0) {
+    if (selectedJobIds.size === sortedAllJobTimingData.length && sortedAllJobTimingData.length > 0) {
       setSelectedJobIds(new Set());
     } else {
-      setSelectedJobIds(new Set(allJobTimingData.map((j) => j.id)));
+      setSelectedJobIds(new Set(sortedAllJobTimingData.map((j) => j.id)));
     }
   };
 
