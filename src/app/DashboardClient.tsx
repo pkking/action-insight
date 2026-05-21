@@ -649,12 +649,10 @@ function DashboardContent({
   useEffect(() => {
     let cancelled = false;
 
+    const controller = new AbortController();
+
     const loadFallbackRuns = async () => {
       if (!selectedRepo || !shouldLoadWorkflowFallback) {
-        setFallbackRuns([]);
-        setFallbackRunsError('');
-        setFallbackRunsLoading(false);
-        setFallbackRunsScope('selected-range');
         return;
       }
 
@@ -668,7 +666,7 @@ function DashboardContent({
           repo: selectedRepo.repo,
           startDate: format(dateRange.start, 'yyyy-MM-dd'),
           endDate: format(dateRange.end, 'yyyy-MM-dd'),
-        });
+        }, controller.signal);
 
         if (cancelled) {
           return;
@@ -683,7 +681,7 @@ function DashboardContent({
         const latestRuns = await callApi<Run[]>('fetchLatestRuns', {
           owner: selectedRepo.owner,
           repo: selectedRepo.repo,
-        });
+        }, controller.signal);
 
         if (cancelled) {
           return;
@@ -709,11 +707,14 @@ function DashboardContent({
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [dateRange.end, dateRange.start, selectedRepo, shouldLoadWorkflowFallback]);
 
   useEffect(() => {
     let cancelled = false;
+
+    const controller = new AbortController();
 
     const loadAllWorkflows = async () => {
       if (!selectedRepo || (prLifecycleViewMode !== 'workflow' && prLifecycleViewMode !== 'job')) {
@@ -732,7 +733,7 @@ function DashboardContent({
           repo: selectedRepo.repo,
           startDate: format(dateRange.start, 'yyyy-MM-dd'),
           endDate: format(dateRange.end, 'yyyy-MM-dd'),
-        });
+        }, controller.signal);
 
         if (!cancelled) {
           setAllWorkflows(runs);
@@ -754,6 +755,7 @@ function DashboardContent({
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [dateRange.end, dateRange.start, selectedRepo, prLifecycleViewMode]);
 
