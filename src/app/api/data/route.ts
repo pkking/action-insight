@@ -54,6 +54,10 @@ export async function POST(request: Request) {
         if (!body.startDate || !body.endDate) {
           return NextResponse.json({ error: 'Missing required fields: startDate, endDate' }, { status: 400 });
         }
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(body.startDate) || !dateRegex.test(body.endDate)) {
+          return NextResponse.json({ error: 'Invalid date format: use YYYY-MM-DD' }, { status: 400 });
+        }
         const runs = await fetchRuns(body.owner, body.repo, {
           startDate: body.startDate,
           endDate: body.endDate,
