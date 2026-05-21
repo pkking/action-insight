@@ -1,18 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseClient } from './supabase';
 import type { Index, DayData, Run, Job } from './types';
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-function getSupabase() {
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Database connection not configured. Please set up environment variables.');
-  }
-  return createClient(supabaseUrl, supabaseKey);
-}
-
 async function getRepoId(owner: string, repo: string): Promise<number> {
-  const supabase = getSupabase();
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('repos')
     .select('id')
@@ -68,7 +58,7 @@ export interface FetchRunsOptions {
 
 export async function fetchIndex(owner: string, repo: string): Promise<Index> {
   const repoId = await getRepoId(owner, repo);
-  const supabase = getSupabase();
+  const supabase = getSupabaseClient();
 
   const { data: dates, error } = await supabase
     .from('runs')
@@ -77,6 +67,7 @@ export async function fetchIndex(owner: string, repo: string): Promise<Index> {
     .order('date', { ascending: false });
 
   if (error) {
+    console.error('Supabase error fetching index:', error);
     throw new Error(`Failed to fetch index for ${owner}/${repo}: database query failed`);
   }
 
@@ -97,7 +88,7 @@ export async function fetchIndex(owner: string, repo: string): Promise<Index> {
 export async function fetchDay(owner: string, repo: string, fileName: string): Promise<DayData> {
   const date = fileName.replace('.json', '');
   const repoId = await getRepoId(owner, repo);
-  const supabase = getSupabase();
+  const supabase = getSupabaseClient();
 
   const { data: runs, error } = await supabase
     .from('runs')
@@ -106,6 +97,7 @@ export async function fetchDay(owner: string, repo: string, fileName: string): P
     .eq('date', date);
 
   if (error) {
+    console.error('Supabase error fetching day data:', error);
     throw new Error(`Failed to fetch data for ${fileName}: database query failed`);
   }
 
@@ -121,7 +113,7 @@ export async function fetchDay(owner: string, repo: string, fileName: string): P
 }
 
 async function fetchRunsFromDb(repoId: number, dateFilter: { startDate?: string; endDate?: string; limit?: number }): Promise<Run[]> {
-  const supabase = getSupabase();
+  const supabase = getSupabaseClient();
 
   let query = supabase
     .from('runs')
@@ -140,6 +132,7 @@ async function fetchRunsFromDb(repoId: number, dateFilter: { startDate?: string;
   const { data: runs, error } = await query;
 
   if (error) {
+    console.error('Supabase error fetching runs:', error);
     throw new Error(`Failed to fetch runs: database query failed`);
   }
 

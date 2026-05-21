@@ -701,6 +701,7 @@ function DashboardContent({
           delete workflowIndexCacheRef.current[selectedRepo.key];
         }
         if (!cancelled) {
+          console.error('Failed to load workflow fallback runs:', err);
           setFallbackRuns([]);
           setFallbackRunsError('Failed to load workflow runs.');
           setFallbackRunsScope('selected-range');
@@ -754,6 +755,7 @@ function DashboardContent({
           delete workflowIndexCacheRef.current[selectedRepo.key];
         }
         if (!cancelled) {
+          console.error('Failed to load workflows:', err);
           setAllWorkflows([]);
           setAllWorkflowsError('Failed to load workflows.');
         }
@@ -849,6 +851,7 @@ function DashboardContent({
         setExpandedWorkflowId(null);
       }
     } catch (err) {
+      console.error('Failed to load PR detail:', err);
       setError(`Failed to load PR #${number}`);
     } finally {
       setLoadingDetailNumber(null);

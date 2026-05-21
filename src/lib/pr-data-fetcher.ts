@@ -1,18 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseClient } from './supabase';
 import type { PullRequestDetailFile, PullRequestIndexFile, PullRequestMetricsSummary, Run } from './types';
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-function getSupabase() {
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Database connection not configured. Please set up environment variables.');
-  }
-  return createClient(supabaseUrl, supabaseKey);
-}
-
 async function getRepoId(owner: string, repo: string): Promise<number> {
-  const supabase = getSupabase();
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('repos')
     .select('id')
@@ -69,7 +59,7 @@ function mapRunRow(row: Record<string, unknown>): Run {
 
 export async function fetchPullRequestIndex(owner: string, repo: string): Promise<PullRequestIndexFile> {
   const repoId = await getRepoId(owner, repo);
-  const supabase = getSupabase();
+  const supabase = getSupabaseClient();
 
   const { data: prs, error } = await supabase
     .from('pr_metrics')
@@ -78,6 +68,7 @@ export async function fetchPullRequestIndex(owner: string, repo: string): Promis
     .order('created_at', { ascending: false });
 
   if (error) {
+    console.error('Supabase error fetching PR index:', error);
     throw new Error(`Failed to fetch PR index for ${owner}/${repo}: database query failed`);
   }
 
@@ -99,7 +90,7 @@ export async function fetchPullRequestIndex(owner: string, repo: string): Promis
 
 export async function fetchPullRequestDetail(owner: string, repo: string, number: number): Promise<PullRequestDetailFile> {
   const repoId = await getRepoId(owner, repo);
-  const supabase = getSupabase();
+  const supabase = getSupabaseClient();
 
   const { data: prData, error } = await supabase
     .from('pr_metrics')
