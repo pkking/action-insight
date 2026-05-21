@@ -755,7 +755,7 @@ function DashboardContent({
           delete workflowIndexCacheRef.current[selectedRepo.key];
         }
         if (!cancelled) {
-          console.error('Failed to load workflows');
+          console.error('Failed to load workflows', err);
           setAllWorkflows([]);
           setAllWorkflowsError('Failed to load workflows.');
         }
