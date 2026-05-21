@@ -8,7 +8,6 @@ import type { PullRequestIndexFile } from '@/lib/types';
 const replaceMock = vi.fn();
 const useSearchParamsMock = vi.fn();
 const fetchPullRequestDetailMock = vi.fn();
-const fetchIndexMock = vi.fn();
 const fetchRunsFromIndexMock = vi.fn();
 const fetchLatestRunsFromIndexMock = vi.fn();
 
@@ -47,8 +46,6 @@ function mockFetch() {
     if (url === '/api/data' && init?.method === 'POST') {
       const body = JSON.parse(init.body as string);
       switch (body.action) {
-        case 'fetchIndex':
-          return new Response(JSON.stringify({ data: await fetchIndexMock(body.owner, body.repo) }));
         case 'fetchRuns':
           return new Response(JSON.stringify({ data: await fetchRunsFromIndexMock(body.owner, body.repo, {}, { startDate: body.startDate, endDate: body.endDate }) }));
         case 'fetchLatestRuns':
@@ -157,12 +154,10 @@ describe('Dashboard PR view', () => {
   beforeEach(() => {
     replaceMock.mockReset();
     fetchPullRequestDetailMock.mockReset();
-    fetchIndexMock.mockReset();
     fetchRunsFromIndexMock.mockReset();
     fetchLatestRunsFromIndexMock.mockReset();
     useSearchParamsMock.mockReturnValue(new URLSearchParams(''));
     mockFetch();
-    fetchIndexMock.mockResolvedValue({ files: [] });
     fetchRunsFromIndexMock.mockResolvedValue([]);
     fetchLatestRunsFromIndexMock.mockResolvedValue([]);
     fetchPullRequestDetailMock.mockResolvedValue({
@@ -530,8 +525,6 @@ describe('Dashboard PR view', () => {
 
   it('falls back to latest retained workflow runs when the selected range is empty', async () => {
     useSearchParamsMock.mockReturnValue(new URLSearchParams('repo=openai/action-insight'));
-    const repoIndex = { files: ['2026-04-12.json'] };
-    fetchIndexMock.mockResolvedValue(repoIndex);
     fetchRunsFromIndexMock.mockResolvedValue([]);
     fetchLatestRunsFromIndexMock.mockResolvedValue([
       {
@@ -570,10 +563,8 @@ describe('Dashboard PR view', () => {
     expect(screen.getByText(/Showing latest retained raw workflow runs instead/)).toBeInTheDocument();
   });
 
-  it('reuses the raw workflow index when the fallback date range changes', async () => {
+  it('re-fetches runs when the fallback date range changes', async () => {
     useSearchParamsMock.mockReturnValue(new URLSearchParams('repo=openai/action-insight'));
-    const repoIndex = { files: ['2026-04-12.json'] };
-    fetchIndexMock.mockResolvedValue(repoIndex);
     fetchRunsFromIndexMock.mockResolvedValue([]);
     fetchLatestRunsFromIndexMock.mockResolvedValue([]);
 
