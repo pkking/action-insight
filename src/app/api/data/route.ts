@@ -102,8 +102,8 @@ export async function POST(request: Request) {
       }
 
       case 'fetchPullRequestDetail': {
-        if (typeof body.number !== 'number') {
-          return NextResponse.json({ error: 'Missing required field: number' }, { status: 400 });
+        if (typeof body.number !== "number" || !Number.isInteger(body.number) || body.number <= 0) {
+          return NextResponse.json({ error: "Invalid or missing required field: number (must be a positive integer)" }, { status: 400 });
         }
         const detail = await fetchPullRequestDetail(body.owner, body.repo, body.number);
         return NextResponse.json({ data: detail });
