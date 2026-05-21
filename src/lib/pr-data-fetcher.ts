@@ -6,7 +6,7 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 function getSupabase() {
   if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+    throw new Error('Database connection not configured. Please set up environment variables.');
   }
   return createClient(supabaseUrl, supabaseKey);
 }
@@ -78,7 +78,7 @@ export async function fetchPullRequestIndex(owner: string, repo: string): Promis
     .order('created_at', { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to fetch PR index for ${owner}/${repo}: ${error.message}`);
+    throw new Error(`Failed to fetch PR index for ${owner}/${repo}: database query failed`);
   }
 
   if (!prs || prs.length === 0) {

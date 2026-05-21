@@ -6,7 +6,7 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 function getSupabase() {
   if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+    throw new Error('Database connection not configured. Please set up environment variables.');
   }
   return createClient(supabaseUrl, supabaseKey);
 }
@@ -77,7 +77,7 @@ export async function fetchIndex(owner: string, repo: string): Promise<Index> {
     .order('date', { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to fetch index for ${owner}/${repo}: ${error.message}`);
+    throw new Error(`Failed to fetch index for ${owner}/${repo}: database query failed`);
   }
 
   const uniqueDates = [...new Set(dates.map((d) => `${d.date}`))];
@@ -106,7 +106,7 @@ export async function fetchDay(owner: string, repo: string, fileName: string): P
     .eq('date', date);
 
   if (error) {
-    throw new Error(`Failed to fetch data for ${fileName}: ${error.message}`);
+    throw new Error(`Failed to fetch data for ${fileName}: database query failed`);
   }
 
   const mappedRuns: Run[] = (runs || []).map((row) => {
@@ -140,7 +140,7 @@ async function fetchRunsFromDb(repoId: number, dateFilter: { startDate?: string;
   const { data: runs, error } = await query;
 
   if (error) {
-    throw new Error(`Failed to fetch runs: ${error.message}`);
+    throw new Error(`Failed to fetch runs: database query failed`);
   }
 
   return (runs || []).map((row) => {
