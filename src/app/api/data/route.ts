@@ -1,12 +1,6 @@
 import { NextResponse } from 'next/server';
-import { fetchIndex, fetchRuns, fetchLatestRuns } from '@/lib/data-fetcher';
+import { fetchRuns, fetchLatestRuns } from '@/lib/data-fetcher';
 import { fetchPullRequestDetail } from '@/lib/pr-data-fetcher';
-
-type FetchIndexRequest = {
-  action: 'fetchIndex';
-  owner: string;
-  repo: string;
-};
 
 type FetchRunsRequest = {
   action: 'fetchRuns';
@@ -31,7 +25,6 @@ type FetchPullRequestDetailRequest = {
 };
 
 type DataRequest =
-  | FetchIndexRequest
   | FetchRunsRequest
   | FetchLatestRunsRequest
   | FetchPullRequestDetailRequest;
@@ -57,11 +50,6 @@ export async function POST(request: Request) {
     }
 
     switch (body.action) {
-      case 'fetchIndex': {
-        const index = await fetchIndex(body.owner, body.repo);
-        return NextResponse.json({ data: index });
-      }
-
       case 'fetchRuns': {
         if (!body.startDate || !body.endDate) {
           return NextResponse.json({ error: 'Missing required fields: startDate, endDate' }, { status: 400 });
