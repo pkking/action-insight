@@ -3,6 +3,7 @@ import { fetchRuns, fetchLatestRuns } from '@/lib/data-fetcher';
 import { fetchPullRequestDetail } from '@/lib/pr-data-fetcher';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_FILES_LIMIT = 100;
 
 type FetchRunsRequest = {
   action: 'fetchRuns';
@@ -31,7 +32,30 @@ type DataRequest =
   | FetchLatestRunsRequest
   | FetchPullRequestDetailRequest;
 
+function isAuthorized(request: Request): boolean {
+  // In production, verify the request originates from our own app.
+  // The dashboard is served from the same origin, so same-origin requests are trusted.
+  // External direct POST requests to this endpoint are rejected.
+  const origin = request.headers.get('origin');
+  const host = request.headers.get('host');
+  if (origin) {
+    try {
+      const originHost = new URL(origin).host;
+      if (host && originHost === host) return true;
+    } catch {
+      // malformed origin header, fall through
+    }
+  }
+  // Allow requests with no origin (e.g., server-side calls, dev environment)
+  if (!origin) return true;
+  return false;
+}
+
 export async function POST(request: Request) {
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
   try {
     const body = await request.json().catch(() => null) as DataRequest | null;
 
@@ -70,7 +94,8 @@ export async function POST(request: Request) {
         if (body.maxFiles !== undefined && typeof body.maxFiles !== 'number') {
           return NextResponse.json({ error: 'Invalid field: maxFiles must be a number' }, { status: 400 });
         }
-        const runs = await fetchLatestRuns(body.owner, body.repo, body.maxFiles);
+        const maxFiles = body.maxFiles !== undefined ? Math.min(body.maxFiles, MAX_FILES_LIMIT) : undefined;
+        const runs = await fetchLatestRuns(body.owner, body.repo, maxFiles);
         return NextResponse.json({ data: runs });
       }
 

@@ -1,10 +1,11 @@
 export type ApiAction = 'fetchRuns' | 'fetchLatestRuns' | 'fetchPullRequestDetail';
 
-export async function callApi<T>(action: ApiAction, params: Record<string, unknown>): Promise<T> {
+export async function callApi<T>(action: ApiAction, params: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
   const response = await fetch('/api/data', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action, ...params }),
+    signal,
   });
 
   const result = await response.json().catch(() => ({ error: `Invalid response from server (status ${response.status})` }));
