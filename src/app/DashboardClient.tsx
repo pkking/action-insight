@@ -851,7 +851,7 @@ function DashboardContent({
         setExpandedWorkflowId(null);
       }
     } catch (err) {
-      console.error('Failed to load PR detail');
+      console.error('Failed to load PR detail', err);
       setError(`Failed to load PR #${number}`);
     } finally {
       setLoadingDetailNumber(null);
