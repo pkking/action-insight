@@ -43,6 +43,10 @@ async function callApi<T>(action: string, params: Record<string, unknown>): Prom
     throw new Error(result.error || `API request failed with status ${response.status}`);
   }
 
+  if (!('data' in result)) {
+    throw new Error(result.error || `Invalid response from server: missing data field (status ${response.status})`);
+  }
+
   return result.data;
 }
 

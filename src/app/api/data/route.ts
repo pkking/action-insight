@@ -38,7 +38,11 @@ type DataRequest =
 
 export async function POST(request: Request) {
   try {
-    const body: DataRequest = await request.json();
+    const body = await request.json().catch(() => null) as DataRequest | null;
+
+    if (!body) {
+      return NextResponse.json({ error: 'Invalid or missing JSON body' }, { status: 400 });
+    }
 
     if (!body.action || typeof body.action !== 'string') {
       return NextResponse.json({ error: 'Missing required field: action' }, { status: 400 });
