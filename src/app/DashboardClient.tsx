@@ -701,8 +701,9 @@ function DashboardContent({
           delete workflowIndexCacheRef.current[selectedRepo.key];
         }
         if (!cancelled) {
+          console.error('Failed to load workflow fallback runs', err);
           setFallbackRuns([]);
-          setFallbackRunsError(err instanceof Error ? err.message : 'Failed to load workflow runs.');
+          setFallbackRunsError('Failed to load workflow runs.');
           setFallbackRunsScope('selected-range');
         }
       } finally {
@@ -754,8 +755,9 @@ function DashboardContent({
           delete workflowIndexCacheRef.current[selectedRepo.key];
         }
         if (!cancelled) {
+          console.error('Failed to load workflows', err);
           setAllWorkflows([]);
-          setAllWorkflowsError(err instanceof Error ? err.message : 'Failed to load workflows.');
+          setAllWorkflowsError('Failed to load workflows.');
         }
       } finally {
         if (!cancelled) {
@@ -849,7 +851,8 @@ function DashboardContent({
         setExpandedWorkflowId(null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to load PR #${number}`);
+      console.error('Failed to load PR detail', err);
+      setError(`Failed to load PR #${number}`);
     } finally {
       setLoadingDetailNumber(null);
     }
@@ -1466,7 +1469,7 @@ function DashboardContent({
                 /* ===== WORKFLOW VIEW ===== */
                 <div>
                   {allWorkflowsError ? (
-                    <div className="p-8 text-center text-sm text-red-500 dark:text-red-400">{allWorkflowsError}</div>
+                    <div className="p-8 text-center text-sm text-red-500 dark:text-red-400">Failed to load workflows. Please try again later.</div>
                   ) : allWorkflowsLoading ? (
                     <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">Loading workflows...</div>
                   ) : sortedAllWorkflows.length === 0 ? (
@@ -1536,7 +1539,7 @@ function DashboardContent({
                 /* ===== JOB VIEW ===== */
                 <div>
                   {allWorkflowsError ? (
-                    <div className="p-8 text-center text-sm text-red-500 dark:text-red-400">{allWorkflowsError}</div>
+                    <div className="p-8 text-center text-sm text-red-500 dark:text-red-400">Failed to load jobs. Please try again later.</div>
                   ) : allWorkflowsLoading ? (
                     <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">Loading jobs...</div>
                   ) : sortedAllJobTimingData.length === 0 ? (

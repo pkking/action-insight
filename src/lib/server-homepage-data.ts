@@ -3,8 +3,8 @@ import 'server-only';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { cache } from 'react';
-import { createClient } from '@supabase/supabase-js';
 
+import { getSupabaseClient } from './supabase';
 import { parseTrackedReposYaml } from './tracked-repos.js';
 import type { PullRequestIndexFile, PullRequestMetricsSummary } from './types';
 
@@ -22,15 +22,6 @@ function toRepoOption(entry: { owner: string; repo: string; slug: string }): Rep
   };
 }
 
-function getSupabase() {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
-  }
-  return createClient(supabaseUrl, supabaseKey);
-}
-
 export const getTrackedRepoOptions = cache(async (): Promise<RepoOption[]> => {
   const reposConfigPath = path.join(process.cwd(), 'etl', 'repos.yaml');
   const content = await readFile(reposConfigPath, 'utf-8');
@@ -41,7 +32,7 @@ export const getTrackedRepoOptions = cache(async (): Promise<RepoOption[]> => {
 });
 
 async function getRepoId(owner: string, repo: string): Promise<number | null> {
-  const supabase = getSupabase();
+  const supabase = getSupabaseClient();
   const { data } = await supabase
     .from('repos')
     .select('id')
@@ -87,7 +78,7 @@ const getPullRequestIndex = cache(async (owner: string, repo: string): Promise<P
     };
   }
 
-  const supabase = getSupabase();
+  const supabase = getSupabaseClient();
   const { data: prs, error } = await supabase
     .from('pr_metrics')
     .select('*')
@@ -95,7 +86,8 @@ const getPullRequestIndex = cache(async (owner: string, repo: string): Promise<P
     .order('created_at', { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to fetch PR index for ${owner}/${repo}: ${error.message}`);
+    console.error('Supabase error fetching PR index:', error);
+    throw new Error(`Failed to fetch PR index for ${owner}/${repo}: database query failed`);
   }
 
   if (!prs || prs.length === 0) {

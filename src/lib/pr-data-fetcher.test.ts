@@ -10,7 +10,7 @@ describe('pr-data-fetcher', () => {
     vi.resetModules();
     const { fetchPullRequestIndex } = await import('./pr-data-fetcher');
 
-    await expect(fetchPullRequestIndex('foo', 'bar')).rejects.toThrow('Missing SUPABASE_URL');
+    await expect(fetchPullRequestIndex('foo', 'bar')).rejects.toThrow('Database connection not configured');
 
     process.env.SUPABASE_URL = originalUrl;
     process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
@@ -25,7 +25,7 @@ describe('pr-data-fetcher', () => {
     vi.resetModules();
     const { fetchPullRequestDetail } = await import('./pr-data-fetcher');
 
-    await expect(fetchPullRequestDetail('foo', 'bar', 42)).rejects.toThrow('Missing SUPABASE_URL');
+    await expect(fetchPullRequestDetail('foo', 'bar', 42)).rejects.toThrow('Database connection not configured');
 
     process.env.SUPABASE_URL = originalUrl;
     process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
