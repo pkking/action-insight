@@ -37,10 +37,10 @@ async function callApi<T>(action: string, params: Record<string, unknown>): Prom
     body: JSON.stringify({ action, ...params }),
   });
 
-  const result = await response.json();
+  const result = await response.json().catch(() => ({ error: `Invalid response from server (status ${response.status})` }));
 
   if (!response.ok) {
-    throw new Error(result.error || 'API request failed');
+    throw new Error(result.error || `API request failed with status ${response.status}`);
   }
 
   return result.data;

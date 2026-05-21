@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchIndex, fetchRuns, fetchLatestRuns, fetchRunsFromIndex, fetchLatestRunsFromIndex } from '@/lib/data-fetcher';
+import { fetchIndex, fetchRuns, fetchLatestRuns } from '@/lib/data-fetcher';
 import { fetchPullRequestDetail } from '@/lib/pr-data-fetcher';
 
 type FetchIndexRequest = {
@@ -40,6 +40,18 @@ export async function POST(request: Request) {
   try {
     const body: DataRequest = await request.json();
 
+    if (!body.action || typeof body.action !== 'string') {
+      return NextResponse.json({ error: 'Missing required field: action' }, { status: 400 });
+    }
+
+    if (!body.owner || typeof body.owner !== 'string') {
+      return NextResponse.json({ error: 'Missing required field: owner' }, { status: 400 });
+    }
+
+    if (!body.repo || typeof body.repo !== 'string') {
+      return NextResponse.json({ error: 'Missing required field: repo' }, { status: 400 });
+    }
+
     switch (body.action) {
       case 'fetchIndex': {
         const index = await fetchIndex(body.owner, body.repo);
@@ -47,6 +59,9 @@ export async function POST(request: Request) {
       }
 
       case 'fetchRunsFromIndex': {
+        if (!body.startDate || !body.endDate) {
+          return NextResponse.json({ error: 'Missing required fields: startDate, endDate' }, { status: 400 });
+        }
         const runs = await fetchRuns(body.owner, body.repo, {
           startDate: body.startDate,
           endDate: body.endDate,
@@ -60,6 +75,9 @@ export async function POST(request: Request) {
       }
 
       case 'fetchPullRequestDetail': {
+        if (typeof body.number !== 'number') {
+          return NextResponse.json({ error: 'Missing required field: number' }, { status: 400 });
+        }
         const detail = await fetchPullRequestDetail(body.owner, body.repo, body.number);
         return NextResponse.json({ data: detail });
       }
