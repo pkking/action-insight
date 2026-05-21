@@ -6,16 +6,6 @@ import { getTrackedRepoOptions } from '@/lib/server-homepage-data';
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_FILES_LIMIT = 100;
 
-let _trackedReposCache: Map<string, boolean> | null = null;
-
-async function getTrackedReposSet(): Promise<Map<string, boolean>> {
-  if (!_trackedReposCache) {
-    const repos = await getTrackedRepoOptions();
-    _trackedReposCache = new Map(repos.map((r) => [`${r.owner}/${r.repo}`, true]));
-  }
-  return _trackedReposCache;
-}
-
 type FetchRunsRequest = {
   action: 'fetchRuns';
   owner: string;
@@ -46,16 +36,13 @@ type DataRequest =
 function isSameOrigin(request: Request): boolean {
   const origin = request.headers.get('origin');
   const host = request.headers.get('host');
-  if (origin) {
-    try {
-      const originHost = new URL(origin).host;
-      if (host && originHost === host) return true;
-    } catch {
-      // malformed origin header, fall through
-    }
+  if (!origin) return false;
+  try {
+    const originHost = new URL(origin).host;
+    return !!(host && originHost === host);
+  } catch {
+    return false;
   }
-  if (!origin) return true;
-  return false;
 }
 
 export async function POST(request: Request) {
@@ -82,8 +69,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required field: repo' }, { status: 400 });
     }
 
-    const trackedRepos = await getTrackedReposSet();
-    if (!trackedRepos.has(`${body.owner}/${body.repo}`)) {
+    const repos = await getTrackedRepoOptions();
+    const repoKey = `${body.owner}/${body.repo}`;
+    if (!repos.some((r) => r.key === repoKey)) {
       return NextResponse.json({ error: 'Repository not found' }, { status: 404 });
     }
 
