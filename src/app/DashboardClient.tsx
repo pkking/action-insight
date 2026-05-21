@@ -20,16 +20,14 @@ import {
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { format } from 'date-fns';
 
-import { fetchIndex, fetchLatestRunsFromIndex, fetchRunsFromIndex } from '@/lib/data-fetcher';
 import { buildDailyTrend, buildRepoOverviewRows, createDateRange, filterByDateRange } from '@/lib/overview-metrics';
-import { fetchPullRequestDetail } from '@/lib/pr-data-fetcher';
+import { callApi } from '@/lib/api-client';
 import type { RepoOption } from '@/lib/server-homepage-data';
 import type {
   DailyTrendPoint,
   PullRequestDetailFile,
   PullRequestIndexFile,
   RepoOverviewRow,
-  Index,
   Run,
 } from '@/lib/types';
 
@@ -514,7 +512,7 @@ function DashboardContent({
   const [jobSortField, setJobSortField] = useState<JobSortField>('duration');
   const [jobSortOrder, setJobSortOrder] = useState<'asc' | 'desc'>('desc');
   const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
-  const workflowIndexCacheRef = useRef<Record<string, Index | Promise<Index>>>({});
+  const detailAbortControllerRef = useRef<AbortController | null>(null);
   const debouncedFilterName = useDebouncedValue(filterName, 250);
 
   const selectedRepo = useMemo(() => {
@@ -560,6 +558,8 @@ function DashboardContent({
     }
 
     previousSelectedRepoKeyRef.current = selectedRepoKey;
+    detailAbortControllerRef.current?.abort();
+    detailAbortControllerRef.current = null;
     setDetailsByNumber({});
     setLoadingDetailNumber(null);
     setExpandedPrNumber(null);
@@ -652,12 +652,16 @@ function DashboardContent({
   useEffect(() => {
     let cancelled = false;
 
+    const controller = new AbortController();
+
     const loadFallbackRuns = async () => {
       if (!selectedRepo || !shouldLoadWorkflowFallback) {
-        setFallbackRuns([]);
-        setFallbackRunsError('');
-        setFallbackRunsLoading(false);
-        setFallbackRunsScope('selected-range');
+        if (!cancelled) {
+          setFallbackRuns([]);
+          setFallbackRunsLoading(false);
+          setFallbackRunsError('');
+          setFallbackRunsScope('selected-range');
+        }
         return;
       }
 
@@ -666,17 +670,12 @@ function DashboardContent({
       setFallbackRunsScope('selected-range');
 
       try {
-        const cachedIndex =
-          workflowIndexCacheRef.current[selectedRepo.key] ??
-          fetchIndex(selectedRepo.owner, selectedRepo.repo);
-        workflowIndexCacheRef.current[selectedRepo.key] = cachedIndex;
-
-        const repoIndex = await cachedIndex;
-        workflowIndexCacheRef.current[selectedRepo.key] = repoIndex;
-        const runs = await fetchRunsFromIndex(selectedRepo.owner, selectedRepo.repo, repoIndex, {
+        const runs = await callApi<Run[]>('fetchRuns', {
+          owner: selectedRepo.owner,
+          repo: selectedRepo.repo,
           startDate: format(dateRange.start, 'yyyy-MM-dd'),
           endDate: format(dateRange.end, 'yyyy-MM-dd'),
-        });
+        }, controller.signal);
 
         if (cancelled) {
           return;
@@ -688,7 +687,10 @@ function DashboardContent({
           return;
         }
 
-        const latestRuns = await fetchLatestRunsFromIndex(selectedRepo.owner, selectedRepo.repo, repoIndex);
+        const latestRuns = await callApi<Run[]>('fetchLatestRuns', {
+          owner: selectedRepo.owner,
+          repo: selectedRepo.repo,
+        }, controller.signal);
 
         if (cancelled) {
           return;
@@ -697,9 +699,7 @@ function DashboardContent({
         setFallbackRuns(latestRuns);
         setFallbackRunsScope(latestRuns.length > 0 ? 'latest-retained' : 'selected-range');
       } catch (err) {
-        if (selectedRepo && workflowIndexCacheRef.current[selectedRepo.key] instanceof Promise) {
-          delete workflowIndexCacheRef.current[selectedRepo.key];
-        }
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         if (!cancelled) {
           console.error('Failed to load workflow fallback runs', err);
           setFallbackRuns([]);
@@ -717,11 +717,14 @@ function DashboardContent({
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [dateRange.end, dateRange.start, selectedRepo, shouldLoadWorkflowFallback]);
 
   useEffect(() => {
     let cancelled = false;
+
+    const controller = new AbortController();
 
     const loadAllWorkflows = async () => {
       if (!selectedRepo || (prLifecycleViewMode !== 'workflow' && prLifecycleViewMode !== 'job')) {
@@ -735,25 +738,18 @@ function DashboardContent({
       setAllWorkflowsError('');
 
       try {
-        const cachedIndex =
-          workflowIndexCacheRef.current[selectedRepo.key] ??
-          fetchIndex(selectedRepo.owner, selectedRepo.repo);
-        workflowIndexCacheRef.current[selectedRepo.key] = cachedIndex;
-
-        const repoIndex = await cachedIndex;
-        workflowIndexCacheRef.current[selectedRepo.key] = repoIndex;
-        const runs = await fetchRunsFromIndex(selectedRepo.owner, selectedRepo.repo, repoIndex, {
+        const runs = await callApi<Run[]>('fetchRuns', {
+          owner: selectedRepo.owner,
+          repo: selectedRepo.repo,
           startDate: format(dateRange.start, 'yyyy-MM-dd'),
           endDate: format(dateRange.end, 'yyyy-MM-dd'),
-        });
+        }, controller.signal);
 
         if (!cancelled) {
           setAllWorkflows(runs);
         }
       } catch (err) {
-        if (selectedRepo && workflowIndexCacheRef.current[selectedRepo.key] instanceof Promise) {
-          delete workflowIndexCacheRef.current[selectedRepo.key];
-        }
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         if (!cancelled) {
           console.error('Failed to load workflows', err);
           setAllWorkflows([]);
@@ -770,6 +766,7 @@ function DashboardContent({
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [dateRange.end, dateRange.start, selectedRepo, prLifecycleViewMode]);
 
@@ -841,9 +838,16 @@ function DashboardContent({
       return;
     }
 
+    detailAbortControllerRef.current?.abort();
+    detailAbortControllerRef.current = new AbortController();
+
     setLoadingDetailNumber(number);
     try {
-      const detail = await fetchPullRequestDetail(selectedRepo.owner, selectedRepo.repo, number);
+      const detail = await callApi<PullRequestDetailFile>('fetchPullRequestDetail', {
+        owner: selectedRepo.owner,
+        repo: selectedRepo.repo,
+        number,
+      }, detailAbortControllerRef.current.signal);
 
       if (previousSelectedRepoKeyRef.current === selectedRepo.key) {
         setDetailsByNumber((current) => ({ ...current, [number]: detail.pr }));
@@ -851,6 +855,7 @@ function DashboardContent({
         setExpandedWorkflowId(null);
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       console.error('Failed to load PR detail', err);
       setError(`Failed to load PR #${number}`);
     } finally {

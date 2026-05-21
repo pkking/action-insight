@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DashboardClient from './DashboardClient';
 import type { PullRequestIndexFile } from '@/lib/types';
@@ -8,7 +8,6 @@ import type { PullRequestIndexFile } from '@/lib/types';
 const replaceMock = vi.fn();
 const useSearchParamsMock = vi.fn();
 const fetchPullRequestDetailMock = vi.fn();
-const fetchIndexMock = vi.fn();
 const fetchRunsFromIndexMock = vi.fn();
 const fetchLatestRunsFromIndexMock = vi.fn();
 
@@ -40,15 +39,26 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => useSearchParamsMock(),
 }));
 
-vi.mock('@/lib/pr-data-fetcher', () => ({
-  fetchPullRequestDetail: (...args: unknown[]) => fetchPullRequestDetailMock(...args),
-}));
+const originalFetch = global.fetch;
 
-vi.mock('@/lib/data-fetcher', () => ({
-  fetchIndex: (...args: unknown[]) => fetchIndexMock(...args),
-  fetchRunsFromIndex: (...args: unknown[]) => fetchRunsFromIndexMock(...args),
-  fetchLatestRunsFromIndex: (...args: unknown[]) => fetchLatestRunsFromIndexMock(...args),
-}));
+function mockFetch() {
+  vi.spyOn(global, 'fetch').mockImplementation(async (url: string | URL | Request, init?: RequestInit) => {
+    if (url === '/api/data' && init?.method === 'POST') {
+      const body = JSON.parse(init.body as string);
+      switch (body.action) {
+        case 'fetchRuns':
+          return new Response(JSON.stringify({ data: await fetchRunsFromIndexMock(body.owner, body.repo, {}, { startDate: body.startDate, endDate: body.endDate }) }));
+        case 'fetchLatestRuns':
+          return new Response(JSON.stringify({ data: await fetchLatestRunsFromIndexMock(body.owner, body.repo, {}, body.maxFiles) }));
+        case 'fetchPullRequestDetail':
+          return new Response(JSON.stringify({ data: await fetchPullRequestDetailMock(body.owner, body.repo, body.number) }));
+        default:
+          return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400 });
+      }
+    }
+    return originalFetch(url, init);
+  });
+}
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -144,11 +154,10 @@ describe('Dashboard PR view', () => {
   beforeEach(() => {
     replaceMock.mockReset();
     fetchPullRequestDetailMock.mockReset();
-    fetchIndexMock.mockReset();
     fetchRunsFromIndexMock.mockReset();
     fetchLatestRunsFromIndexMock.mockReset();
     useSearchParamsMock.mockReturnValue(new URLSearchParams(''));
-    fetchIndexMock.mockResolvedValue({ files: [] });
+    mockFetch();
     fetchRunsFromIndexMock.mockResolvedValue([]);
     fetchLatestRunsFromIndexMock.mockResolvedValue([]);
     fetchPullRequestDetailMock.mockResolvedValue({
@@ -204,6 +213,10 @@ describe('Dashboard PR view', () => {
         ],
       },
     });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('defaults to the first available repo from server-provided data', async () => {
@@ -512,8 +525,6 @@ describe('Dashboard PR view', () => {
 
   it('falls back to latest retained workflow runs when the selected range is empty', async () => {
     useSearchParamsMock.mockReturnValue(new URLSearchParams('repo=openai/action-insight'));
-    const repoIndex = { files: ['2026-04-12.json'] };
-    fetchIndexMock.mockResolvedValue(repoIndex);
     fetchRunsFromIndexMock.mockResolvedValue([]);
     fetchLatestRunsFromIndexMock.mockResolvedValue([
       {
@@ -547,16 +558,13 @@ describe('Dashboard PR view', () => {
     });
 
     expect(await screen.findByText('nightly-e2e')).toBeInTheDocument();
-    expect(fetchIndexMock).toHaveBeenCalledWith('openai', 'action-insight');
-    expect(fetchRunsFromIndexMock).toHaveBeenCalledWith('openai', 'action-insight', repoIndex, expect.any(Object));
-    expect(fetchLatestRunsFromIndexMock).toHaveBeenCalledWith('openai', 'action-insight', repoIndex);
+    expect(fetchRunsFromIndexMock).toHaveBeenCalledWith('openai', 'action-insight', {}, expect.any(Object));
+    expect(fetchLatestRunsFromIndexMock).toHaveBeenCalledWith('openai', 'action-insight', {}, undefined);
     expect(screen.getByText(/Showing latest retained raw workflow runs instead/)).toBeInTheDocument();
   });
 
-  it('reuses the raw workflow index when the fallback date range changes', async () => {
+  it('re-fetches runs when the fallback date range changes', async () => {
     useSearchParamsMock.mockReturnValue(new URLSearchParams('repo=openai/action-insight'));
-    const repoIndex = { files: ['2026-04-12.json'] };
-    fetchIndexMock.mockResolvedValue(repoIndex);
     fetchRunsFromIndexMock.mockResolvedValue([]);
     fetchLatestRunsFromIndexMock.mockResolvedValue([]);
 
@@ -586,7 +594,6 @@ describe('Dashboard PR view', () => {
       expect(fetchRunsFromIndexMock).toHaveBeenCalledTimes(2);
     });
 
-    expect(fetchIndexMock).toHaveBeenCalledTimes(1);
-    expect(fetchRunsFromIndexMock).toHaveBeenLastCalledWith('openai', 'action-insight', repoIndex, expect.any(Object));
+    expect(fetchRunsFromIndexMock).toHaveBeenLastCalledWith('openai', 'action-insight', {}, expect.any(Object));
   });
 });
