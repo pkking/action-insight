@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchIndex, fetchRunsFromIndex, fetchLatestRunsFromIndex } from '@/lib/data-fetcher';
+import { fetchIndex, fetchRuns, fetchRunsFromIndex, fetchLatestRunsFromIndex } from '@/lib/data-fetcher';
 import { fetchPullRequestDetail } from '@/lib/pr-data-fetcher';
 
 type FetchIndexRequest = {
@@ -37,9 +37,9 @@ type DataRequest =
   | FetchPullRequestDetailRequest;
 
 export async function POST(request: Request) {
-  const body: DataRequest = await request.json();
-
   try {
+    const body: DataRequest = await request.json();
+
     switch (body.action) {
       case 'fetchIndex': {
         const index = await fetchIndex(body.owner, body.repo);
@@ -47,8 +47,7 @@ export async function POST(request: Request) {
       }
 
       case 'fetchRunsFromIndex': {
-        const repoIndex = await fetchIndex(body.owner, body.repo);
-        const runs = await fetchRunsFromIndex(body.owner, body.repo, repoIndex, {
+        const runs = await fetchRuns(body.owner, body.repo, {
           startDate: body.startDate,
           endDate: body.endDate,
         });

@@ -565,7 +565,6 @@ describe('Dashboard PR view', () => {
     });
 
     expect(await screen.findByText('nightly-e2e')).toBeInTheDocument();
-    expect(fetchIndexMock).toHaveBeenCalledWith('openai', 'action-insight');
     expect(fetchRunsFromIndexMock).toHaveBeenCalledWith('openai', 'action-insight', {}, expect.any(Object));
     expect(fetchLatestRunsFromIndexMock).toHaveBeenCalledWith('openai', 'action-insight', {}, undefined);
     expect(screen.getByText(/Showing latest retained raw workflow runs instead/)).toBeInTheDocument();
@@ -604,7 +603,6 @@ describe('Dashboard PR view', () => {
       expect(fetchRunsFromIndexMock).toHaveBeenCalledTimes(2);
     });
 
-    expect(fetchIndexMock).toHaveBeenCalledTimes(1);
     expect(fetchRunsFromIndexMock).toHaveBeenLastCalledWith('openai', 'action-insight', {}, expect.any(Object));
   });
 });
