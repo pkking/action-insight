@@ -20,9 +20,7 @@ import {
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { format } from 'date-fns';
 
-import { fetchIndex, fetchLatestRunsFromIndex, fetchRunsFromIndex } from '@/lib/data-fetcher';
 import { buildDailyTrend, buildRepoOverviewRows, createDateRange, filterByDateRange } from '@/lib/overview-metrics';
-import { fetchPullRequestDetail } from '@/lib/pr-data-fetcher';
 import type { RepoOption } from '@/lib/server-homepage-data';
 import type {
   DailyTrendPoint,
@@ -32,6 +30,22 @@ import type {
   Index,
   Run,
 } from '@/lib/types';
+
+async function callApi<T>(action: string, params: Record<string, unknown>): Promise<T> {
+  const response = await fetch('/api/data', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...params }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'API request failed');
+  }
+
+  const result = await response.json();
+  return result.data;
+}
 
 type JobSortField = 'queue' | 'duration' | 'name';
 type WorkflowSortField = 'date' | 'duration' | 'name';
@@ -668,12 +682,14 @@ function DashboardContent({
       try {
         const cachedIndex =
           workflowIndexCacheRef.current[selectedRepo.key] ??
-          fetchIndex(selectedRepo.owner, selectedRepo.repo);
+          callApi<Index>('fetchIndex', { owner: selectedRepo.owner, repo: selectedRepo.repo });
         workflowIndexCacheRef.current[selectedRepo.key] = cachedIndex;
 
         const repoIndex = await cachedIndex;
         workflowIndexCacheRef.current[selectedRepo.key] = repoIndex;
-        const runs = await fetchRunsFromIndex(selectedRepo.owner, selectedRepo.repo, repoIndex, {
+        const runs = await callApi<Run[]>('fetchRunsFromIndex', {
+          owner: selectedRepo.owner,
+          repo: selectedRepo.repo,
           startDate: format(dateRange.start, 'yyyy-MM-dd'),
           endDate: format(dateRange.end, 'yyyy-MM-dd'),
         });
@@ -688,7 +704,10 @@ function DashboardContent({
           return;
         }
 
-        const latestRuns = await fetchLatestRunsFromIndex(selectedRepo.owner, selectedRepo.repo, repoIndex);
+        const latestRuns = await callApi<Run[]>('fetchLatestRunsFromIndex', {
+          owner: selectedRepo.owner,
+          repo: selectedRepo.repo,
+        });
 
         if (cancelled) {
           return;
@@ -737,12 +756,14 @@ function DashboardContent({
       try {
         const cachedIndex =
           workflowIndexCacheRef.current[selectedRepo.key] ??
-          fetchIndex(selectedRepo.owner, selectedRepo.repo);
+          callApi<Index>('fetchIndex', { owner: selectedRepo.owner, repo: selectedRepo.repo });
         workflowIndexCacheRef.current[selectedRepo.key] = cachedIndex;
 
         const repoIndex = await cachedIndex;
         workflowIndexCacheRef.current[selectedRepo.key] = repoIndex;
-        const runs = await fetchRunsFromIndex(selectedRepo.owner, selectedRepo.repo, repoIndex, {
+        const runs = await callApi<Run[]>('fetchRunsFromIndex', {
+          owner: selectedRepo.owner,
+          repo: selectedRepo.repo,
           startDate: format(dateRange.start, 'yyyy-MM-dd'),
           endDate: format(dateRange.end, 'yyyy-MM-dd'),
         });
@@ -843,7 +864,11 @@ function DashboardContent({
 
     setLoadingDetailNumber(number);
     try {
-      const detail = await fetchPullRequestDetail(selectedRepo.owner, selectedRepo.repo, number);
+      const detail = await callApi<PullRequestDetailFile>('fetchPullRequestDetail', {
+        owner: selectedRepo.owner,
+        repo: selectedRepo.repo,
+        number,
+      });
 
       if (previousSelectedRepoKeyRef.current === selectedRepo.key) {
         setDetailsByNumber((current) => ({ ...current, [number]: detail.pr }));
