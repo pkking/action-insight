@@ -36,7 +36,9 @@ type DataRequest =
 function isSameOrigin(request: Request): boolean {
   const origin = request.headers.get('origin');
   const host = request.headers.get('host');
-  if (!origin) return false;
+  // Same-origin fetch() typically doesn't send Origin header.
+  // Cross-origin requests always do — validate when present.
+  if (!origin) return true;
   try {
     const originHost = new URL(origin).host;
     return !!(host && originHost === host);

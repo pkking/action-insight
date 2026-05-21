@@ -512,6 +512,7 @@ function DashboardContent({
   const [jobSortField, setJobSortField] = useState<JobSortField>('duration');
   const [jobSortOrder, setJobSortOrder] = useState<'asc' | 'desc'>('desc');
   const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
+  const detailAbortControllerRef = useRef<AbortController | null>(null);
   const debouncedFilterName = useDebouncedValue(filterName, 250);
 
   const selectedRepo = useMemo(() => {
@@ -557,6 +558,8 @@ function DashboardContent({
     }
 
     previousSelectedRepoKeyRef.current = selectedRepoKey;
+    detailAbortControllerRef.current?.abort();
+    detailAbortControllerRef.current = null;
     setDetailsByNumber({});
     setLoadingDetailNumber(null);
     setExpandedPrNumber(null);
@@ -653,6 +656,12 @@ function DashboardContent({
 
     const loadFallbackRuns = async () => {
       if (!selectedRepo || !shouldLoadWorkflowFallback) {
+        if (!cancelled) {
+          setFallbackRuns([]);
+          setFallbackRunsLoading(false);
+          setFallbackRunsError('');
+          setFallbackRunsScope('selected-range');
+        }
         return;
       }
 
@@ -690,6 +699,7 @@ function DashboardContent({
         setFallbackRuns(latestRuns);
         setFallbackRunsScope(latestRuns.length > 0 ? 'latest-retained' : 'selected-range');
       } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         if (!cancelled) {
           console.error('Failed to load workflow fallback runs', err);
           setFallbackRuns([]);
@@ -739,6 +749,7 @@ function DashboardContent({
           setAllWorkflows(runs);
         }
       } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         if (!cancelled) {
           console.error('Failed to load workflows', err);
           setAllWorkflows([]);
@@ -827,13 +838,16 @@ function DashboardContent({
       return;
     }
 
+    detailAbortControllerRef.current?.abort();
+    detailAbortControllerRef.current = new AbortController();
+
     setLoadingDetailNumber(number);
     try {
       const detail = await callApi<PullRequestDetailFile>('fetchPullRequestDetail', {
         owner: selectedRepo.owner,
         repo: selectedRepo.repo,
         number,
-      });
+      }, detailAbortControllerRef.current.signal);
 
       if (previousSelectedRepoKeyRef.current === selectedRepo.key) {
         setDetailsByNumber((current) => ({ ...current, [number]: detail.pr }));
@@ -841,6 +855,7 @@ function DashboardContent({
         setExpandedWorkflowId(null);
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       console.error('Failed to load PR detail', err);
       setError(`Failed to load PR #${number}`);
     } finally {
