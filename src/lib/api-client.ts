@@ -1,6 +1,11 @@
-export type ApiAction = 'fetchRuns' | 'fetchLatestRuns' | 'fetchPullRequestDetail';
+type FetchRunsParams = { owner: string; repo: string; startDate: string; endDate: string };
+type FetchLatestRunsParams = { owner: string; repo: string; maxFiles?: number };
+type FetchPullRequestDetailParams = { owner: string; repo: string; number: number };
 
-export async function callApi<T>(action: ApiAction, params: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
+export async function callApi<T>(action: 'fetchRuns', params: FetchRunsParams, signal?: AbortSignal): Promise<T>;
+export async function callApi<T>(action: 'fetchLatestRuns', params: FetchLatestRunsParams, signal?: AbortSignal): Promise<T>;
+export async function callApi<T>(action: 'fetchPullRequestDetail', params: FetchPullRequestDetailParams, signal?: AbortSignal): Promise<T>;
+export async function callApi<T>(action: string, params: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
   const response = await fetch('/api/data', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

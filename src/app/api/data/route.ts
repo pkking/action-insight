@@ -1,9 +1,20 @@
 import { NextResponse } from 'next/server';
 import { fetchRuns, fetchLatestRuns } from '@/lib/data-fetcher';
 import { fetchPullRequestDetail } from '@/lib/pr-data-fetcher';
+import { getTrackedRepoOptions } from '@/lib/server-homepage-data';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_FILES_LIMIT = 100;
+
+let _trackedReposCache: Map<string, boolean> | null = null;
+
+async function getTrackedReposSet(): Promise<Map<string, boolean>> {
+  if (!_trackedReposCache) {
+    const repos = await getTrackedRepoOptions();
+    _trackedReposCache = new Map(repos.map((r) => [`${r.owner}/${r.repo}`, true]));
+  }
+  return _trackedReposCache;
+}
 
 type FetchRunsRequest = {
   action: 'fetchRuns';
@@ -32,10 +43,7 @@ type DataRequest =
   | FetchLatestRunsRequest
   | FetchPullRequestDetailRequest;
 
-function isAuthorized(request: Request): boolean {
-  // In production, verify the request originates from our own app.
-  // The dashboard is served from the same origin, so same-origin requests are trusted.
-  // External direct POST requests to this endpoint are rejected.
+function isSameOrigin(request: Request): boolean {
   const origin = request.headers.get('origin');
   const host = request.headers.get('host');
   if (origin) {
@@ -46,13 +54,12 @@ function isAuthorized(request: Request): boolean {
       // malformed origin header, fall through
     }
   }
-  // Allow requests with no origin (e.g., server-side calls, dev environment)
   if (!origin) return true;
   return false;
 }
 
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) {
+  if (!isSameOrigin(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
@@ -73,6 +80,11 @@ export async function POST(request: Request) {
 
     if (!body.repo || typeof body.repo !== 'string') {
       return NextResponse.json({ error: 'Missing required field: repo' }, { status: 400 });
+    }
+
+    const trackedRepos = await getTrackedReposSet();
+    if (!trackedRepos.has(`${body.owner}/${body.repo}`)) {
+      return NextResponse.json({ error: 'Repository not found' }, { status: 404 });
     }
 
     switch (body.action) {
