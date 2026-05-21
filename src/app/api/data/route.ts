@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { fetchRuns, fetchLatestRuns } from '@/lib/data-fetcher';
 import { fetchPullRequestDetail } from '@/lib/pr-data-fetcher';
 
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
 type FetchRunsRequest = {
   action: 'fetchRuns';
   owner: string;
@@ -54,8 +56,7 @@ export async function POST(request: Request) {
         if (!body.startDate || !body.endDate) {
           return NextResponse.json({ error: 'Missing required fields: startDate, endDate' }, { status: 400 });
         }
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!dateRegex.test(body.startDate) || !dateRegex.test(body.endDate)) {
+        if (!DATE_REGEX.test(body.startDate) || !DATE_REGEX.test(body.endDate)) {
           return NextResponse.json({ error: 'Invalid date format: use YYYY-MM-DD' }, { status: 400 });
         }
         const runs = await fetchRuns(body.owner, body.repo, {
