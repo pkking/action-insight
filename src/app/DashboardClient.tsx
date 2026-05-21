@@ -701,7 +701,7 @@ function DashboardContent({
           delete workflowIndexCacheRef.current[selectedRepo.key];
         }
         if (!cancelled) {
-          console.error('Failed to load workflow fallback runs');
+          console.error('Failed to load workflow fallback runs', err);
           setFallbackRuns([]);
           setFallbackRunsError('Failed to load workflow runs.');
           setFallbackRunsScope('selected-range');
