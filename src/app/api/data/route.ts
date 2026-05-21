@@ -8,16 +8,16 @@ type FetchIndexRequest = {
   repo: string;
 };
 
-type FetchRunsFromIndexRequest = {
-  action: 'fetchRunsFromIndex';
+type FetchRunsRequest = {
+  action: 'fetchRuns';
   owner: string;
   repo: string;
   startDate: string;
   endDate: string;
 };
 
-type FetchLatestRunsFromIndexRequest = {
-  action: 'fetchLatestRunsFromIndex';
+type FetchLatestRunsRequest = {
+  action: 'fetchLatestRuns';
   owner: string;
   repo: string;
   maxFiles?: number;
@@ -32,8 +32,8 @@ type FetchPullRequestDetailRequest = {
 
 type DataRequest =
   | FetchIndexRequest
-  | FetchRunsFromIndexRequest
-  | FetchLatestRunsFromIndexRequest
+  | FetchRunsRequest
+  | FetchLatestRunsRequest
   | FetchPullRequestDetailRequest;
 
 export async function POST(request: Request) {
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ data: index });
       }
 
-      case 'fetchRunsFromIndex': {
+      case 'fetchRuns': {
         if (!body.startDate || !body.endDate) {
           return NextResponse.json({ error: 'Missing required fields: startDate, endDate' }, { status: 400 });
         }
@@ -73,7 +73,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ data: runs });
       }
 
-      case 'fetchLatestRunsFromIndex': {
+      case 'fetchLatestRuns': {
+        if (body.maxFiles !== undefined && typeof body.maxFiles !== 'number') {
+          return NextResponse.json({ error: 'Invalid field: maxFiles must be a number' }, { status: 400 });
+        }
         const runs = await fetchLatestRuns(body.owner, body.repo, body.maxFiles);
         return NextResponse.json({ data: runs });
       }
@@ -90,7 +93,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Internal server error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('API error:', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

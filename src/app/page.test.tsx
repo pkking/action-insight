@@ -49,9 +49,9 @@ function mockFetch() {
       switch (body.action) {
         case 'fetchIndex':
           return new Response(JSON.stringify({ data: await fetchIndexMock(body.owner, body.repo) }));
-        case 'fetchRunsFromIndex':
+        case 'fetchRuns':
           return new Response(JSON.stringify({ data: await fetchRunsFromIndexMock(body.owner, body.repo, {}, { startDate: body.startDate, endDate: body.endDate }) }));
-        case 'fetchLatestRunsFromIndex':
+        case 'fetchLatestRuns':
           return new Response(JSON.stringify({ data: await fetchLatestRunsFromIndexMock(body.owner, body.repo, {}, body.maxFiles) }));
         case 'fetchPullRequestDetail':
           return new Response(JSON.stringify({ data: await fetchPullRequestDetailMock(body.owner, body.repo, body.number) }));

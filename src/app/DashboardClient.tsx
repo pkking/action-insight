@@ -682,7 +682,7 @@ function DashboardContent({
       setFallbackRunsScope('selected-range');
 
       try {
-        const runs = await callApi<Run[]>('fetchRunsFromIndex', {
+        const runs = await callApi<Run[]>('fetchRuns', {
           owner: selectedRepo.owner,
           repo: selectedRepo.repo,
           startDate: format(dateRange.start, 'yyyy-MM-dd'),
@@ -699,7 +699,7 @@ function DashboardContent({
           return;
         }
 
-        const latestRuns = await callApi<Run[]>('fetchLatestRunsFromIndex', {
+        const latestRuns = await callApi<Run[]>('fetchLatestRuns', {
           owner: selectedRepo.owner,
           repo: selectedRepo.repo,
         });
@@ -746,7 +746,7 @@ function DashboardContent({
       setAllWorkflowsError('');
 
       try {
-        const runs = await callApi<Run[]>('fetchRunsFromIndex', {
+        const runs = await callApi<Run[]>('fetchRuns', {
           owner: selectedRepo.owner,
           repo: selectedRepo.repo,
           startDate: format(dateRange.start, 'yyyy-MM-dd'),
