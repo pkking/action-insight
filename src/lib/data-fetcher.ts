@@ -67,7 +67,7 @@ export async function fetchIndex(owner: string, repo: string): Promise<Index> {
     .order('date', { ascending: false });
 
   if (error) {
-    if (typeof window === 'undefined') console.error('Supabase error fetching index:', error);
+    console.error('Supabase error fetching index:', error);
     throw new Error(`Failed to fetch index for ${owner}/${repo}: database query failed`);
   }
 
