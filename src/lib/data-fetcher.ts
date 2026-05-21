@@ -67,7 +67,7 @@ export async function fetchIndex(owner: string, repo: string): Promise<Index> {
     .order('date', { ascending: false });
 
   if (error) {
-    console.error('Supabase error fetching index:', error);
+    if (typeof window === 'undefined') console.error('Supabase error fetching index:', error);
     throw new Error(`Failed to fetch index for ${owner}/${repo}: database query failed`);
   }
 
@@ -97,7 +97,7 @@ export async function fetchDay(owner: string, repo: string, fileName: string): P
     .eq('date', date);
 
   if (error) {
-    console.error('Supabase error fetching day data:', error);
+    if (typeof window === 'undefined') console.error('Supabase error fetching day data:', error);
     throw new Error(`Failed to fetch data for ${fileName}: database query failed`);
   }
 
@@ -132,7 +132,7 @@ async function fetchRunsFromDb(repoId: number, dateFilter: { startDate?: string;
   const { data: runs, error } = await query;
 
   if (error) {
-    console.error('Supabase error fetching runs:', error);
+    if (typeof window === 'undefined') console.error('Supabase error fetching runs:', error);
     throw new Error(`Failed to fetch runs: database query failed`);
   }
 

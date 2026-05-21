@@ -68,7 +68,7 @@ export async function fetchPullRequestIndex(owner: string, repo: string): Promis
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Supabase error fetching PR index:', error);
+    if (typeof window === 'undefined') console.error('Supabase error fetching PR index:', error);
     throw new Error(`Failed to fetch PR index for ${owner}/${repo}: database query failed`);
   }
 
