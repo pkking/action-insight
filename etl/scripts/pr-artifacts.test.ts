@@ -68,7 +68,7 @@ describe('rebuildPullRequestArtifacts', () => {
       owner: 'acme',
       repo: 'widgets',
       repoKey: 'acme/widgets',
-      files: ['2026-04-18.json'],
+      collectedDates: ['2026-04-18.json'],
       runs: [
         {
           id: 101,
@@ -135,7 +135,7 @@ describe('rebuildPullRequestArtifacts', () => {
       owner: 'acme',
       repo: 'widgets',
       repoKey: 'acme/widgets',
-      files: ['2026-04-18.json'],
+      collectedDates: ['2026-04-18.json'],
       runs: [
         {
           id: 101,
@@ -215,7 +215,7 @@ describe('rebuildPullRequestArtifacts', () => {
       owner: 'acme',
       repo: 'widgets',
       repoKey: 'acme/widgets',
-      files: ['2026-04-18.json'],
+      collectedDates: ['2026-04-18.json'],
       runs: [
         {
           id: 101,
@@ -280,7 +280,7 @@ describe('rebuildPullRequestArtifacts', () => {
         owner: 'acme',
         repo: 'widgets',
         repoKey: 'acme/widgets',
-        files: ['2026-04-18.json'],
+        collectedDates: ['2026-04-18.json'],
         runs: [
           {
             id: 101,
@@ -336,7 +336,7 @@ describe('rebuildPullRequestArtifacts', () => {
       owner: 'acme',
       repo: 'widgets',
       repoKey: 'acme/widgets',
-      files: ['2026-04-18.json'],
+      collectedDates: ['2026-04-18.json'],
       runs: [
         {
           id: 101,
@@ -394,7 +394,7 @@ describe('rebuildPullRequestArtifacts', () => {
       owner: 'acme',
       repo: 'widgets',
       repoKey: 'acme/widgets',
-      files: ['2026-04-18.json'],
+      collectedDates: ['2026-04-18.json'],
       runs: [
         {
           id: 101,
@@ -484,7 +484,7 @@ describe('rebuildPullRequestArtifacts', () => {
         owner: 'acme',
         repo: 'widgets',
         repoKey: 'acme/widgets',
-        files: ['2026-04-18.json'],
+        collectedDates: ['2026-04-18.json'],
         runs: [
           {
             id: 101,

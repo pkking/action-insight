@@ -75,6 +75,12 @@ async function ensureRepo(owner: string, repo: string): Promise<number | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
 
+  // Upsert with ignoreDuplicates to avoid race condition when concurrent
+  // workflows try to register the same repo simultaneously.
+  await supabase
+    .from('repos')
+    .upsert({ owner, repo }, { onConflict: 'owner,repo', ignoreDuplicates: true });
+
   const { data } = await supabase
     .from('repos')
     .select('id')
@@ -82,16 +88,7 @@ async function ensureRepo(owner: string, repo: string): Promise<number | null> {
     .eq('repo', repo)
     .single();
 
-  if (data) return data.id;
-
-  const { data: inserted, error } = await supabase
-    .from('repos')
-    .insert({ owner, repo })
-    .select('id')
-    .single();
-
-  if (error) return null;
-  return inserted.id;
+  return data?.id ?? null;
 }
 
 export async function writeRunsToSupabase(repo: string, runs: Run[], date: string): Promise<void> {
@@ -275,4 +272,88 @@ export async function writePrMetricsToSupabase(repo: string, prs: PrMetricsSumma
   if (error) {
     console.error(`  [Supabase] Error inserting PR metrics: ${error.message}`);
   }
+}
+
+export interface CollectionState {
+  backfillCursor: string | null;
+  historyComplete: boolean;
+  latestDate: string | null;
+  retentionDays: number;
+  lastUpdated: string | null;
+}
+
+export async function readCollectionState(repo: string): Promise<CollectionState | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return null;
+
+  const { data, error } = await supabase
+    .from('collection_state')
+    .select('*')
+    .eq('repo_id', repoId)
+    .single();
+
+  if (error) {
+    if (error.code !== 'PGRST116') {
+      console.error(`  [Supabase] Error reading collection state: ${error.message}`);
+    }
+    return null;
+  }
+
+  return {
+    backfillCursor: data.backfill_cursor,
+    historyComplete: data.history_complete ?? false,
+    latestDate: data.latest_date,
+    retentionDays: data.retention_days ?? 90,
+    lastUpdated: data.last_updated,
+  };
+}
+
+export async function writeCollectionState(
+  repo: string,
+  state: CollectionState,
+): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return;
+
+  const { error } = await supabase
+    .from('collection_state')
+    .upsert({
+      repo_id: repoId,
+      backfill_cursor: state.backfillCursor,
+      history_complete: state.historyComplete,
+      latest_date: state.latestDate,
+      retention_days: state.retentionDays,
+      last_updated: state.lastUpdated ?? new Date().toISOString(),
+    }, { onConflict: 'repo_id' });
+
+  if (error) {
+    console.error(`  [Supabase] Error writing collection state: ${error.message}`);
+  }
+}
+
+export async function getCollectedDatesFromSupabase(repo: string): Promise<string[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return [];
+
+  const { data, error } = await supabase
+    .rpc('get_distinct_dates', { p_repo_id: repoId });
+
+  if (error) {
+    console.error(`  [Supabase] Error fetching collected dates: ${error.message}`);
+    return [];
+  }
+
+  return (data || []).map((row: { date: string }) => row.date);
 }

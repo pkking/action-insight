@@ -23,7 +23,7 @@ interface RebuildPullRequestArtifactsOptions {
   owner: string;
   repo: string;
   repoKey: string;
-  files: string[];
+  collectedDates: string[];
   runs: Run[];
   log?: (...args: unknown[]) => void;
   warn?: (...args: unknown[]) => void;
@@ -170,7 +170,7 @@ export async function rebuildPullRequestArtifacts({
   owner,
   repo,
   repoKey,
-  files,
+  collectedDates,
   runs,
   log = () => {},
   warn = () => {},
@@ -255,7 +255,7 @@ export async function rebuildPullRequestArtifacts({
   const pullRequests = octokit
     ? await fetchPullRequestSnapshots(octokit, owner, repo, prNumbers, warn)
     : new Map<number, PullRequestSnapshot>();
-  const retentionStartDate = files.map((file) => file.replace(/\.json$/, '')).sort()[0];
+  const retentionStartDate = collectedDates.sort()[0];
   const result = buildPullRequestIndex({
     repo: repoKey,
     runs: normalizedRuns,

@@ -84,3 +84,30 @@ CREATE TABLE IF NOT EXISTS pr_workflows (
 );
 
 CREATE INDEX IF NOT EXISTS idx_pr_workflows_pr ON pr_workflows(pr_metric_id);
+
+-- 6. Collection state table (replaces local index.json)
+CREATE TABLE IF NOT EXISTS collection_state (
+  id SERIAL PRIMARY KEY,
+  repo_id INTEGER NOT NULL REFERENCES repos(id),
+  backfill_cursor DATE,
+  history_complete BOOLEAN NOT NULL DEFAULT false,
+  latest_date DATE,
+  retention_days INTEGER NOT NULL DEFAULT 90,
+  last_updated TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(repo_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_collection_state_repo ON collection_state(repo_id);
+
+-- 7. RPC: Get distinct dates for a repo (server-side DISTINCT)
+-- Usage: SELECT * FROM get_distinct_dates(repo_id);
+CREATE OR REPLACE FUNCTION get_distinct_dates(p_repo_id INTEGER)
+RETURNS TABLE(date DATE) AS $$
+BEGIN
+  RETURN QUERY
+    SELECT DISTINCT r.date
+    FROM runs r
+    WHERE r.repo_id = p_repo_id
+    ORDER BY r.date DESC;
+END;
+$$ LANGUAGE plpgsql;

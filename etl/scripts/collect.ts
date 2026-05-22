@@ -15,9 +15,16 @@ import {
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
 import { isGitHubRateLimitError, getRateLimitDetails, checkRateLimitBudget, type GitHubRequestErrorLike, type RateLimitDetails } from './github.ts';
-import { writeRunsToSupabase, getExistingRunIdsFromSupabase } from './supabase-storage.ts';
+import {
+  writeRunsToSupabase,
+  getExistingRunIdsFromSupabase,
+  readCollectionState,
+  writeCollectionState,
+  getCollectedDatesFromSupabase,
+  type CollectionState,
+} from './supabase-storage.ts';
 
-const { buildCollectionWindows, mergeCollectedDates, splitCollectionWindow, toCreatedRange } = collectionWindows;
+const { buildCollectionWindows, splitCollectionWindow, toCreatedRange } = collectionWindows;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -112,32 +119,16 @@ interface GitHubJobPayload {
   html_url: string;
 }
 
-interface Index {
-  version: number;
-  latest: string;
-  files: string[];
-  retention_days: number;
-  last_updated: string;
-  history_complete?: boolean;
-  backfill_cursor?: string;
-}
-
-interface DayData {
-  date: string;
-  repo: string;
-  runs: Run[];
-}
-
 interface ReposConfig {
   repos: string[];
 }
 
-interface StorageAdapter {
-  readIndex: (repo: string) => Index;
-  writeIndex: (repo: string, index: Index) => void;
-  readDayData: (repo: string, date: string) => DayData;
-  writeDayData: (repo: string, data: DayData) => void;
-  deleteDayData: (repo: string, date: string) => void;
+interface RepoCollectionState {
+  latest: string;
+  collectedDates: string[];
+  historyComplete: boolean;
+  backfillCursor: string | undefined;
+  retentionDays: number;
 }
 
 interface RunCollectionOptions {
@@ -151,79 +142,7 @@ interface RunCollectionOptions {
 
 
 const ETL_DIR = path.join(__dirname, '..');
-const DATA_DIR = path.join(__dirname, '../../data');
 const REPOS_CONFIG_PATH = path.join(ETL_DIR, 'repos.yaml');
-
-function getRepoDir(repo: string): string {
-  const [owner, name] = repo.split('/');
-  return path.join(DATA_DIR, owner, name);
-}
-
-function getIndexPath(repo: string): string {
-  return path.join(getRepoDir(repo), 'index.json');
-}
-
-function readIndex(repo: string): Index {
-  const indexPath = getIndexPath(repo);
-  try {
-    const content = fs.readFileSync(indexPath, 'utf-8');
-    const data = JSON.parse(content);
-    if (data.repos && data.repos[repo]) {
-      return {
-        version: 1,
-        latest: data.repos[repo].latest,
-        files: data.repos[repo].files,
-        retention_days: data.repos[repo].retention_days,
-        last_updated: data.last_updated,
-        backfill_cursor: data.repos[repo].backfill_cursor,
-      };
-    }
-    return data;
-  } catch {
-    log('No existing index found, starting fresh');
-    return { version: 1, latest: '', files: [], retention_days: 90, last_updated: '' };
-  }
-}
-
-function getRetentionStartDate(retentionDays: number, now: Date = new Date()): string {
-  return format(subDays(now, retentionDays), 'yyyy-MM-dd');
-}
-
-function computeBackfillCursor(
-  files: string[],
-  retentionDays: number,
-  historyComplete: boolean,
-  now: Date = new Date()
-): string | undefined {
-  if (historyComplete) {
-    return undefined;
-  }
-
-  const availableDates = new Set(files.map(file => file.replace('.json', '')));
-  const today = format(now, 'yyyy-MM-dd');
-  let cursor = parseISO(getRetentionStartDate(retentionDays, now));
-  const todayDate = parseISO(today);
-
-  while (cursor <= todayDate) {
-    const date = format(cursor, 'yyyy-MM-dd');
-    if (!availableDates.has(date)) {
-      return date;
-    }
-
-    cursor = addDays(cursor, 1);
-  }
-
-  return undefined;
-}
-
-function writeIndex(repo: string, index: Index) {
-  const repoDir = getRepoDir(repo);
-  if (!fs.existsSync(repoDir)) {
-    fs.mkdirSync(repoDir, { recursive: true });
-  }
-  fs.writeFileSync(getIndexPath(repo), JSON.stringify(index, null, 2));
-  log(`Index written for ${repo}`);
-}
 
 function readReposConfig(): string[] {
   try {
@@ -240,14 +159,65 @@ function readReposConfig(): string[] {
   }
 }
 
-function createSupabaseStorageAdapter(): StorageAdapter {
+function computeBackfillCursor(
+  retainedDates: string[],
+  retentionStart: string,
+  today: string,
+): { backfillCursor: string | undefined; historyComplete: boolean } {
+  const availableDates = new Set(retainedDates);
+  let cursor = parseISO(retentionStart);
+  const todayDate = parseISO(today);
+  let backfillCursor: string | undefined;
+
+  while (cursor <= todayDate) {
+    const date = format(cursor, 'yyyy-MM-dd');
+    if (!availableDates.has(date)) {
+      backfillCursor = date;
+      break;
+    }
+    cursor = addDays(cursor, 1);
+  }
+
   return {
-    readIndex,
-    writeIndex,
-    readDayData: (_repo: string, _date: string) => ({ date: _date, repo: _repo, runs: [] }),
-    writeDayData: () => {},
-    deleteDayData: () => {},
+    backfillCursor,
+    historyComplete: !backfillCursor,
   };
+}
+
+async function loadRepoState(repo: string, retentionDays: number, now: Date): Promise<RepoCollectionState> {
+  const dbState = await readCollectionState(repo);
+  const collectedDates = await getCollectedDatesFromSupabase(repo);
+
+  const retentionStart = format(subDays(now, retentionDays), 'yyyy-MM-dd');
+  const retainedDates = collectedDates.filter(d => d >= retentionStart);
+  const today = format(now, 'yyyy-MM-dd');
+
+  let backfillCursor: string | undefined;
+  let historyComplete = dbState?.historyComplete ?? false;
+
+  if (!historyComplete) {
+    const result = computeBackfillCursor(retainedDates, retentionStart, today);
+    backfillCursor = result.backfillCursor;
+    historyComplete = result.historyComplete;
+  }
+
+  return {
+    latest: dbState?.latestDate ?? '',
+    collectedDates: retainedDates,
+    historyComplete,
+    backfillCursor,
+    retentionDays: dbState?.retentionDays ?? retentionDays,
+  };
+}
+
+async function saveRepoState(repo: string, state: RepoCollectionState): Promise<void> {
+  await writeCollectionState(repo, {
+    backfillCursor: state.backfillCursor ?? null,
+    historyComplete: state.historyComplete,
+    latestDate: state.latest || null,
+    retentionDays: state.retentionDays,
+    lastUpdated: new Date().toISOString(),
+  });
 }
 
 
@@ -264,13 +234,13 @@ export class RateLimitAbortError extends Error {
 }
 
 async function persistCollectedRuns(
-  storage: StorageAdapter,
   repo: string,
-  index: Index,
+  state: RepoCollectionState,
   runs: Run[],
   retentionDays: number,
   queriedWindows: CollectionWindow[] = [],
-): Promise<Index> {
+  now: Date = new Date(),
+): Promise<RepoCollectionState> {
   const runsByDate: Record<string, Run[]> = {};
   for (const run of runs) {
     const date = format(new Date(run.created_at), 'yyyy-MM-dd');
@@ -285,7 +255,6 @@ async function persistCollectedRuns(
     log('No completed runs found for this repo');
   }
 
-  // Track queried dates for backfill cursor computation
   const queriedDates = new Set<string>();
   for (const window of queriedWindows) {
     let d = parseISO(window.start);
@@ -295,41 +264,34 @@ async function persistCollectedRuns(
       d = addDays(d, 1);
     }
   }
-  const emptyDates = Array.from(queriedDates).filter(date => !runsByDate[date] && !index.files.includes(`${date}.json`)).sort();
+  const existingDateSet = new Set(state.collectedDates);
+  const emptyDates = Array.from(queriedDates).filter(date => !runsByDate[date] && !existingDateSet.has(date)).sort();
 
-  const files = mergeCollectedDates(index.files, [...dates, ...emptyDates]);
+  const allDates = Array.from(new Set([...state.collectedDates, ...dates, ...emptyDates])).sort().reverse();
 
-  // Write directly to Supabase (upsert handles deduplication)
   for (const date of dates) {
     console.log(`  Writing ${date} to Supabase (${runsByDate[date].length} runs)`);
     await writeRunsToSupabase(repo, runsByDate[date], date);
   }
 
-  // Compute retention window for index tracking (no file deletion needed)
-  const cutoffDate = startOfDay(subDays(new Date(), retentionDays));
-  const filesAfterRetention = files.filter(file => {
-    const fileDate = parseISO(file.replace('.json', ''));
-    return !isBefore(fileDate, cutoffDate);
-  });
+  const cutoffDate = startOfDay(subDays(now, retentionDays));
+  const retainedDates = allDates.filter(d => !isBefore(parseISO(d), cutoffDate));
 
-  // Derive history_complete from actual file gaps
-  const backfillCursor = computeBackfillCursor(filesAfterRetention, retentionDays, false);
+  const retentionStart = format(subDays(now, retentionDays), 'yyyy-MM-dd');
+  const today = format(now, 'yyyy-MM-dd');
+  const { backfillCursor, historyComplete } = computeBackfillCursor(retainedDates, retentionStart, today);
 
-  const updatedIndex: Index = {
-    version: 1,
-    latest: '',
-    files: filesAfterRetention,
-    retention_days: retentionDays,
-    last_updated: new Date().toISOString(),
-    history_complete: !backfillCursor,
-    backfill_cursor: backfillCursor,
+  const newState: RepoCollectionState = {
+    latest: retainedDates[0] || state.latest || '',
+    collectedDates: retainedDates,
+    historyComplete,
+    backfillCursor,
+    retentionDays,
   };
 
-  updatedIndex.latest = updatedIndex.files[0]?.replace('.json', '') || index.latest || '';
-
-  storage.writeIndex(repo, updatedIndex);
-  console.log(`  Index updated: ${updatedIndex.files.length} files, latest: ${updatedIndex.latest}`);
-  return updatedIndex;
+  await saveRepoState(repo, newState);
+  console.log(`  State updated: ${retainedDates.length} dates, latest: ${newState.latest}`);
+  return newState;
 }
 
 export async function collectRepo(
@@ -337,7 +299,6 @@ export async function collectRepo(
   repo: string,
   retentionDays: number,
   options: CollectCliOptions,
-  storage: StorageAdapter = createSupabaseStorageAdapter()
 ) {
   console.log(`Processing ${repo}...`);
   const [owner, repoName] = repo.split('/');
@@ -347,8 +308,9 @@ export async function collectRepo(
 
   log(`Owner: ${owner}, Repo: ${repoName}`);
 
-  const index = storage.readIndex(repo);
-  log(`Index state: latest=${index.latest}, files=${index.files.length}`);
+  const now = new Date();
+  const state = await loadRepoState(repo, retentionDays, now);
+  log(`State: latest=${state.latest}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
 
   const existingRunIds = await getExistingRunIdsFromSupabase(repo);
   log(`Existing runs from Supabase: ${existingRunIds.size}`);
@@ -541,10 +503,10 @@ export async function collectRepo(
   }
 
   const windows = buildCollectionWindows({
-    latest: index.latest,
-    existingFileCount: index.files.length,
-    historyComplete: index.history_complete,
-    backfillCursor: index.backfill_cursor,
+    latest: state.latest,
+    existingFileCount: state.collectedDates.length,
+    historyComplete: state.historyComplete,
+    backfillCursor: state.backfillCursor,
     retentionDays,
     forceFullBackfill: options.forceFullBackfill,
     reverse: options.reverse,
@@ -565,13 +527,13 @@ export async function collectRepo(
         for (const run of err.partialRuns) {
           allRunsMap.set(run.id, run);
         }
-        const persistedIndex = await persistCollectedRuns(storage, repo, index, Array.from(allRunsMap.values()), retentionDays, completedWindows);
+        const persistedState = await persistCollectedRuns(repo, state, Array.from(allRunsMap.values()), retentionDays, completedWindows, now);
         await rebuildPullRequestArtifacts({
           octokit,
           owner,
           repo: repoName,
           repoKey: repo,
-          files: persistedIndex.files,
+          collectedDates: persistedState.collectedDates,
           runs: Array.from(allRunsMap.values()),
           log,
           warn,
@@ -583,13 +545,13 @@ export async function collectRepo(
 
   const allRuns = Array.from(allRunsMap.values());
   log(`Total completed runs collected: ${allRuns.length}`);
-  const persistedIndex = await persistCollectedRuns(storage, repo, index, allRuns, retentionDays, completedWindows);
+  const persistedState = await persistCollectedRuns(repo, state, allRuns, retentionDays, completedWindows, now);
   await rebuildPullRequestArtifacts({
     octokit,
     owner,
     repo: repoName,
     repoKey: repo,
-    files: persistedIndex.files,
+    collectedDates: persistedState.collectedDates,
     runs: allRuns,
     log,
     warn,
@@ -681,7 +643,7 @@ export async function main() {
   log(`Target repos: ${targetRepos.join(', ') || '(none)'}`);
   log(`Node version: ${process.version}`);
   log(`ETL_DIR: ${ETL_DIR}`);
-  log(`DATA_DIR: ${DATA_DIR}`);
+  log(`State storage: Supabase collection_state table`);
 
   await runCollection({
     token,
