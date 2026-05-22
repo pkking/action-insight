@@ -16,7 +16,7 @@ on:
         type: boolean
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   collect:
@@ -48,6 +48,13 @@ jobs:
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
           WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - if: always()
+        run: |
+          git config user.name "action-insight-bot"
+          git config user.email "bot@action-insight.local"
+          git add data/verl-project/verl/index.json
+          git diff --staged --quiet || git commit -m "data: update index verl-project/verl $(date -u +%Y-%m-%d)"
+          git push origin HEAD:main
       - if: always() && steps.collect.outcome == 'failure'
         run: |
           echo "Collection completed with partial failures. Data was written to Supabase."

@@ -1,4 +1,4 @@
-// ETL script: fetches GitHub Actions runs/jobs and writes daily JSON files
+// ETL script: fetches GitHub Actions runs/jobs and writes to Supabase
 import { Octokit } from '@octokit/core';
 import { addDays, format, subDays, parseISO, isBefore, startOfDay } from 'date-fns';
 import * as fs from 'fs';
