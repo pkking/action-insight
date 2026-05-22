@@ -75,6 +75,12 @@ async function ensureRepo(owner: string, repo: string): Promise<number | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
 
+  // Upsert with ignoreDuplicates to avoid race condition when concurrent
+  // workflows try to register the same repo simultaneously.
+  await supabase
+    .from('repos')
+    .upsert({ owner, repo }, { onConflict: 'owner,repo', ignoreDuplicates: true });
+
   const { data } = await supabase
     .from('repos')
     .select('id')
@@ -82,16 +88,7 @@ async function ensureRepo(owner: string, repo: string): Promise<number | null> {
     .eq('repo', repo)
     .single();
 
-  if (data) return data.id;
-
-  const { data: inserted, error } = await supabase
-    .from('repos')
-    .insert({ owner, repo })
-    .select('id')
-    .single();
-
-  if (error) return null;
-  return inserted.id;
+  return data?.id ?? null;
 }
 
 export async function writeRunsToSupabase(repo: string, runs: Run[], date: string): Promise<void> {
@@ -334,7 +331,7 @@ export async function writeCollectionState(
       history_complete: state.historyComplete,
       latest_date: state.latestDate,
       retention_days: state.retentionDays,
-      last_updated: new Date().toISOString(),
+      last_updated: state.lastUpdated ?? new Date().toISOString(),
     }, { onConflict: 'repo_id' });
 
   if (error) {

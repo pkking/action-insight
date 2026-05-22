@@ -216,7 +216,7 @@ async function saveRepoState(repo: string, state: RepoCollectionState): Promise<
     historyComplete: state.historyComplete,
     latestDate: state.latest || null,
     retentionDays: state.retentionDays,
-    lastUpdated: null,
+    lastUpdated: new Date().toISOString(),
   });
 }
 
