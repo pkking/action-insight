@@ -240,35 +240,6 @@ function readReposConfig(): string[] {
   }
 }
 
-function readDayData(repo: string, date: string): DayData {
-  const filePath = path.join(getRepoDir(repo), `${date}.json`);
-  try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-  } catch {
-    return { date, repo, runs: [] };
-  }
-}
-
-function writeDayData(repo: string, data: DayData) {
-  const repoDir = getRepoDir(repo);
-  if (!fs.existsSync(repoDir)) {
-    fs.mkdirSync(repoDir, { recursive: true });
-  }
-  const filePath = path.join(repoDir, `${data.date}.json`);
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-  log(`Day data written: ${filePath}`);
-}
-
-function deleteDayData(repo: string, date: string) {
-  const filePath = path.join(getRepoDir(repo), `${date}.json`);
-  if (!fs.existsSync(filePath)) {
-    return;
-  }
-
-  fs.unlinkSync(filePath);
-  log(`Day data removed: ${filePath}`);
-}
-
 function createSupabaseStorageAdapter(): StorageAdapter {
   return {
     readIndex,
