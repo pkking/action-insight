@@ -39,7 +39,7 @@ This project uses **Supabase as the primary data store** with per-repo GitHub Ac
 Each repository has its own workflow file (`.github/workflows/collect-<owner>-<repo>.yml`) with its own GitHub token secret to reduce rate limit issues.
 
 **Required secrets** (configure in repository Settings → Secrets):
-- `GITHUB_TOKEN_<OWNER>_<REPO>` — GitHub token for each repo's workflow (uppercase, hyphens → underscores)
+- `GH_TOKEN_<OWNER>_<REPO>` — GitHub token for each repo's workflow (uppercase, hyphens → underscores)
 - `SUPABASE_URL` — Supabase project URL
 - `SUPABASE_SERVICE_ROLE_KEY` — Supabase service role key
 
@@ -117,5 +117,5 @@ Data is stored in Supabase with the following tables (see `supabase/schema.sql`)
 
 1. Add the repo to `etl/repos.yaml`.
 2. Create a new workflow file: copy `.github/workflows/collect-repo-template.yml` and replace `{{OWNER}}/{{REPO}}`, `{{REPO_SLUG}}`, and `{{TOKEN_SECRET_NAME}}`.
-3. Add the corresponding `GITHUB_TOKEN_<OWNER>_<REPO>` secret to the repository.
+3. Add the corresponding `GH_TOKEN_<OWNER>_<REPO>` secret to the repository.
 4. The Supabase `repos` table is auto-populated on first collection.
