@@ -1,6 +1,8 @@
 import DashboardClient from './DashboardClient';
 import { getHomepageData } from '@/lib/server-homepage-data';
 
+export const dynamic = 'force-dynamic';
+
 type SearchParams = Record<string, string | string[] | undefined>;
 
 type DashboardPageProps = {
