@@ -159,34 +159,46 @@ function readReposConfig(): string[] {
   }
 }
 
-async function loadRepoState(repo: string, retentionDays: number): Promise<RepoCollectionState> {
+function computeBackfillCursor(
+  retainedDates: string[],
+  retentionStart: string,
+  today: string,
+): { backfillCursor: string | undefined; historyComplete: boolean } {
+  const availableDates = new Set(retainedDates);
+  let cursor = parseISO(retentionStart);
+  const todayDate = parseISO(today);
+  let backfillCursor: string | undefined;
+
+  while (cursor <= todayDate) {
+    const date = format(cursor, 'yyyy-MM-dd');
+    if (!availableDates.has(date)) {
+      backfillCursor = date;
+      break;
+    }
+    cursor = addDays(cursor, 1);
+  }
+
+  return {
+    backfillCursor,
+    historyComplete: !backfillCursor,
+  };
+}
+
+async function loadRepoState(repo: string, retentionDays: number, now: Date): Promise<RepoCollectionState> {
   const dbState = await readCollectionState(repo);
   const collectedDates = await getCollectedDatesFromSupabase(repo);
 
-  const retentionStart = format(subDays(new Date(), retentionDays), 'yyyy-MM-dd');
+  const retentionStart = format(subDays(now, retentionDays), 'yyyy-MM-dd');
   const retainedDates = collectedDates.filter(d => d >= retentionStart);
+  const today = format(now, 'yyyy-MM-dd');
 
   let backfillCursor: string | undefined;
   let historyComplete = dbState?.historyComplete ?? false;
 
   if (!historyComplete) {
-    const availableDates = new Set(retainedDates);
-    const today = format(new Date(), 'yyyy-MM-dd');
-    let cursor = parseISO(retentionStart);
-    const todayDate = parseISO(today);
-
-    while (cursor <= todayDate) {
-      const date = format(cursor, 'yyyy-MM-dd');
-      if (!availableDates.has(date)) {
-        backfillCursor = date;
-        break;
-      }
-      cursor = addDays(cursor, 1);
-    }
-
-    if (!backfillCursor) {
-      historyComplete = true;
-    }
+    const result = computeBackfillCursor(retainedDates, retentionStart, today);
+    backfillCursor = result.backfillCursor;
+    historyComplete = result.historyComplete;
   }
 
   return {
@@ -227,6 +239,7 @@ async function persistCollectedRuns(
   runs: Run[],
   retentionDays: number,
   queriedWindows: CollectionWindow[] = [],
+  now: Date = new Date(),
 ): Promise<RepoCollectionState> {
   const runsByDate: Record<string, Run[]> = {};
   for (const run of runs) {
@@ -261,30 +274,12 @@ async function persistCollectedRuns(
     await writeRunsToSupabase(repo, runsByDate[date], date);
   }
 
-  const cutoffDate = startOfDay(subDays(new Date(), retentionDays));
+  const cutoffDate = startOfDay(subDays(now, retentionDays));
   const retainedDates = allDates.filter(d => !isBefore(parseISO(d), cutoffDate));
 
-  let backfillCursor: string | undefined;
-  let historyComplete = false;
-
-  const availableDates = new Set(retainedDates);
-  const retentionStart = format(subDays(new Date(), retentionDays), 'yyyy-MM-dd');
-  const today = format(new Date(), 'yyyy-MM-dd');
-  let cursor = parseISO(retentionStart);
-  const todayDate = parseISO(today);
-
-  while (cursor <= todayDate) {
-    const date = format(cursor, 'yyyy-MM-dd');
-    if (!availableDates.has(date)) {
-      backfillCursor = date;
-      break;
-    }
-    cursor = addDays(cursor, 1);
-  }
-
-  if (!backfillCursor) {
-    historyComplete = true;
-  }
+  const retentionStart = format(subDays(now, retentionDays), 'yyyy-MM-dd');
+  const today = format(now, 'yyyy-MM-dd');
+  const { backfillCursor, historyComplete } = computeBackfillCursor(retainedDates, retentionStart, today);
 
   const newState: RepoCollectionState = {
     latest: retainedDates[0] || state.latest || '',
@@ -313,7 +308,8 @@ export async function collectRepo(
 
   log(`Owner: ${owner}, Repo: ${repoName}`);
 
-  const state = await loadRepoState(repo, retentionDays);
+  const now = new Date();
+  const state = await loadRepoState(repo, retentionDays, now);
   log(`State: latest=${state.latest}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
 
   const existingRunIds = await getExistingRunIdsFromSupabase(repo);
@@ -531,7 +527,7 @@ export async function collectRepo(
         for (const run of err.partialRuns) {
           allRunsMap.set(run.id, run);
         }
-        const persistedState = await persistCollectedRuns(repo, state, Array.from(allRunsMap.values()), retentionDays, completedWindows);
+        const persistedState = await persistCollectedRuns(repo, state, Array.from(allRunsMap.values()), retentionDays, completedWindows, now);
         await rebuildPullRequestArtifacts({
           octokit,
           owner,
@@ -549,7 +545,7 @@ export async function collectRepo(
 
   const allRuns = Array.from(allRunsMap.values());
   log(`Total completed runs collected: ${allRuns.length}`);
-  const persistedState = await persistCollectedRuns(repo, state, allRuns, retentionDays, completedWindows);
+  const persistedState = await persistCollectedRuns(repo, state, allRuns, retentionDays, completedWindows, now);
   await rebuildPullRequestArtifacts({
     octokit,
     owner,

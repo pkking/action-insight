@@ -345,6 +345,9 @@ export async function getCollectedDatesFromSupabase(repo: string): Promise<strin
   const repoId = await ensureRepo(owner, repoName);
   if (!repoId) return [];
 
+  // NOTE: PostgREST does not support DISTINCT, so we fetch all rows and deduplicate
+  // in memory via a Set. For repos with very large run counts, consider creating a
+  // database view or RPC (stored procedure) that returns DISTINCT dates server-side.
   const { data, error } = await supabase
     .from('runs')
     .select('date')
