@@ -174,6 +174,69 @@ export async function writeRunsToSupabase(repo: string, runs: Run[], date: strin
   }
 }
 
+export async function getExistingRunIdsFromSupabase(repo: string): Promise<Set<number>> {
+  const supabase = getSupabase();
+  if (!supabase) return new Set();
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return new Set();
+
+  const { data, error } = await supabase
+    .from('runs')
+    .select('id')
+    .eq('repo_id', repoId);
+
+  if (error) {
+    console.error(`  [Supabase] Error fetching existing run IDs: ${error.message}`);
+    return new Set();
+  }
+
+  return new Set((data || []).map((row: { id: number }) => row.id));
+}
+
+export async function writePrWorkflowsToSupabase(repo: string, prWorkflows: Map<number, number[]>): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  if (prWorkflows.size === 0) return;
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return;
+
+  const { data: prMetrics, error: lookupError } = await supabase
+    .from('pr_metrics')
+    .select('id, pr_number')
+    .eq('repo_id', repoId)
+    .in('pr_number', Array.from(prWorkflows.keys()));
+
+  if (lookupError) {
+    console.error(`  [Supabase] Error looking up PR metric IDs: ${lookupError.message}`);
+    return;
+  }
+
+  const prNumberToId = new Map((prMetrics || []).map((row: { id: number; pr_number: number }) => [row.pr_number, row.id]));
+
+  const workflowRows: { pr_metric_id: number; run_id: number }[] = [];
+  for (const [prNumber, runIds] of prWorkflows.entries()) {
+    const prMetricId = prNumberToId.get(prNumber);
+    if (!prMetricId) continue;
+    for (const runId of runIds) {
+      workflowRows.push({ pr_metric_id: prMetricId, run_id: runId });
+    }
+  }
+
+  if (workflowRows.length === 0) return;
+
+  const { error } = await supabase
+    .from('pr_workflows')
+    .upsert(workflowRows, { onConflict: 'pr_metric_id,run_id' });
+
+  if (error) {
+    console.error(`  [Supabase] Error inserting PR workflows: ${error.message}`);
+  }
+}
+
 export async function writePrMetricsToSupabase(repo: string, prs: PrMetricsSummary[]): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;

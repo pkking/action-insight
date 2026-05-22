@@ -15,7 +15,7 @@ import {
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
 import { isGitHubRateLimitError, getRateLimitDetails, checkRateLimitBudget, type GitHubRequestErrorLike, type RateLimitDetails } from './github.ts';
-import { writeRunsToSupabase } from './supabase-storage.ts';
+import { writeRunsToSupabase, getExistingRunIdsFromSupabase } from './supabase-storage.ts';
 
 const { buildCollectionWindows, mergeCollectedDates, splitCollectionWindow, toCreatedRange } = collectionWindows;
 
@@ -269,6 +269,16 @@ function deleteDayData(repo: string, date: string) {
   log(`Day data removed: ${filePath}`);
 }
 
+function createSupabaseStorageAdapter(): StorageAdapter {
+  return {
+    readIndex,
+    writeIndex,
+    readDayData: (_repo: string, _date: string) => ({ date: _date, repo: _repo, runs: [] }),
+    writeDayData: () => {},
+    deleteDayData: () => {},
+  };
+}
+
 
 export class RateLimitAbortError extends Error {
   partialRuns: Run[];
@@ -304,8 +314,7 @@ async function persistCollectedRuns(
     log('No completed runs found for this repo');
   }
 
-  // Create empty files for dates that were queried but had no runs
-  // This prevents computeBackfillCursor from treating empty days as unscanned gaps
+  // Track queried dates for backfill cursor computation
   const queriedDates = new Set<string>();
   for (const window of queriedWindows) {
     let d = parseISO(window.start);
@@ -316,42 +325,23 @@ async function persistCollectedRuns(
     }
   }
   const emptyDates = Array.from(queriedDates).filter(date => !runsByDate[date] && !index.files.includes(`${date}.json`)).sort();
-  for (const date of emptyDates) {
-    storage.writeDayData(repo, { date, repo, runs: [] });
-  }
 
   const files = mergeCollectedDates(index.files, [...dates, ...emptyDates]);
 
+  // Write directly to Supabase (upsert handles deduplication)
   for (const date of dates) {
-    console.log(`  Writing ${date}.json (${runsByDate[date].length} runs)`);
-    const existing = storage.readDayData(repo, date);
-    const runMap = new Map(existing.runs.map(r => [r.id, r]));
-    for (const run of runsByDate[date]) {
-      runMap.set(run.id, run);
-    }
-
-    storage.writeDayData(repo, { date, repo, runs: Array.from(runMap.values()) });
-    await writeRunsToSupabase(repo, Array.from(runMap.values()), date);
+    console.log(`  Writing ${date} to Supabase (${runsByDate[date].length} runs)`);
+    await writeRunsToSupabase(repo, runsByDate[date], date);
   }
 
+  // Compute retention window for index tracking (no file deletion needed)
   const cutoffDate = startOfDay(subDays(new Date(), retentionDays));
   const filesAfterRetention = files.filter(file => {
     const fileDate = parseISO(file.replace('.json', ''));
     return !isBefore(fileDate, cutoffDate);
   });
 
-  if (files.length - filesAfterRetention.length > 0) {
-    log(`Removing ${files.length - filesAfterRetention.length} old files`);
-  }
-
-  for (const file of files) {
-    if (!filesAfterRetention.includes(file)) {
-      console.log(`  Removing old file: ${file}`);
-      storage.deleteDayData(repo, file.replace('.json', ''));
-    }
-  }
-
-  // Derive history_complete from actual file gaps, not from the caller's parameter
+  // Derive history_complete from actual file gaps
   const backfillCursor = computeBackfillCursor(filesAfterRetention, retentionDays, false);
 
   const updatedIndex: Index = {
@@ -376,13 +366,7 @@ export async function collectRepo(
   repo: string,
   retentionDays: number,
   options: CollectCliOptions,
-  storage: StorageAdapter = {
-    readIndex,
-    writeIndex,
-    readDayData,
-    writeDayData,
-    deleteDayData,
-  }
+  storage: StorageAdapter = createSupabaseStorageAdapter()
 ) {
   console.log(`Processing ${repo}...`);
   const [owner, repoName] = repo.split('/');
@@ -395,17 +379,8 @@ export async function collectRepo(
   const index = storage.readIndex(repo);
   log(`Index state: latest=${index.latest}, files=${index.files.length}`);
 
-  const existingRunIds = new Set<number>();
-  for (const file of index.files) {
-    const date = file.replace('.json', '');
-    const dayData = storage.readDayData(repo, date);
-    for (const run of dayData.runs) {
-      if (run.jobs && run.jobs.length > 0) {
-        existingRunIds.add(run.id);
-      }
-    }
-  }
-  log(`Existing runs with jobs: ${existingRunIds.size}`);
+  const existingRunIds = await getExistingRunIdsFromSupabase(repo);
+  log(`Existing runs from Supabase: ${existingRunIds.size}`);
 
   function toCreatedParam(window: CollectionWindow): string {
     return toCreatedRange(window);
@@ -625,9 +600,8 @@ export async function collectRepo(
           owner,
           repo: repoName,
           repoKey: repo,
-          repoDir: getRepoDir(repo),
           files: persistedIndex.files,
-          storage,
+          runs: Array.from(allRunsMap.values()),
           log,
           warn,
         });
@@ -644,9 +618,8 @@ export async function collectRepo(
     owner,
     repo: repoName,
     repoKey: repo,
-    repoDir: getRepoDir(repo),
     files: persistedIndex.files,
-    storage,
+    runs: allRuns,
     log,
     warn,
   });

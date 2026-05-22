@@ -152,14 +152,6 @@ describe('collect rate limit handling', () => {
 
     expect(writes).toEqual([
       {
-        kind: 'day',
-        payload: expect.objectContaining({
-          date: '2026-04-14',
-          repo,
-          runs: expect.arrayContaining([expect.objectContaining({ id: 101, head_sha: 'sha-101' })]),
-        }),
-      },
-      {
         kind: 'index',
         payload: expect.objectContaining({
           latest: '2026-04-14',
@@ -516,14 +508,6 @@ describe('collect rate limit handling', () => {
 
     expect(writes).toEqual([
       {
-        kind: 'day',
-        payload: expect.objectContaining({
-          date: '2026-04-10',
-          repo,
-          runs: expect.arrayContaining([expect.objectContaining({ id: 101 })]),
-        }),
-      },
-      {
         kind: 'index',
         payload: expect.objectContaining({
           latest: '2026-04-13',
@@ -533,19 +517,15 @@ describe('collect rate limit handling', () => {
     ]);
   });
 
-  it('removes expired day files through the storage adapter instead of direct fs deletion', async () => {
+  it('does not delete expired day files since Supabase is source of truth', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-16T00:00:00Z'));
 
     const repo = 'adapter-cleanup-test/widgets';
     const deleteDayData = vi.fn();
     const expiredDate = '2026-04-13';
-    const expiredFilePath = path.join(process.cwd(), 'data', 'adapter-cleanup-test', 'widgets', `${expiredDate}.json`);
 
     try {
-      fs.mkdirSync(path.dirname(expiredFilePath), { recursive: true });
-      fs.writeFileSync(expiredFilePath, JSON.stringify({ date: expiredDate, repo, runs: [] }));
-
       const octokit = {
         request: vi
           .fn()
@@ -598,11 +578,9 @@ describe('collect rate limit handling', () => {
         deleteDayData,
       });
 
-      expect(deleteDayData).toHaveBeenCalledWith(repo, expiredDate);
-      expect(fs.existsSync(expiredFilePath)).toBe(true);
+      expect(deleteDayData).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
-      fs.rmSync(path.join(process.cwd(), 'data', 'adapter-cleanup-test'), { recursive: true, force: true });
     }
   });
 

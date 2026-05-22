@@ -52,6 +52,13 @@ __pycache__/
 /data/acme/
 /data/boundary-retention-test/
 
+# Daily JSON data files (Supabase is source of truth; only index.json is tracked)
+/data/*/*.json
+!/data/*/index.json
+
+# PR JSON files (Supabase is source of truth)
+/data/*/prs/*.json
+
 # AI assistant session files (should not be tracked)
 .sisyphus/
 .omo/run-continuation/

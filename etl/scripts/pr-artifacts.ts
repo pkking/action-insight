@@ -1,10 +1,7 @@
-import { readdirSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-
 import * as prMetricsModule from '../../src/lib/pr-metrics';
 import type { PullRequestRef, PullRequestSnapshot, Run } from '../../src/lib/types';
 import { isGitHubRateLimitError, checkRateLimitBudget } from './github';
-import { writePrMetricsToSupabase } from './supabase-storage';
+import { writePrMetricsToSupabase, writePrWorkflowsToSupabase } from './supabase-storage';
 
 const prMetricsInterop =
   ('buildPullRequestIndex' in prMetricsModule && typeof prMetricsModule.buildPullRequestIndex === 'function')
@@ -17,10 +14,6 @@ const { buildPullRequestIndex } = prMetricsInterop as {
   buildPullRequestIndex: typeof import('../../src/lib/pr-metrics').buildPullRequestIndex;
 };
 
-interface StorageAdapter {
-  readDayData: (repo: string, date: string) => { runs: Run[] };
-}
-
 interface OctokitLike {
   request: (route: string, params: Record<string, unknown>) => Promise<{ data: unknown }>;
 }
@@ -30,61 +23,15 @@ interface RebuildPullRequestArtifactsOptions {
   owner: string;
   repo: string;
   repoKey: string;
-  repoDir: string;
   files: string[];
-  storage: StorageAdapter;
+  runs: Run[];
   log?: (...args: unknown[]) => void;
   warn?: (...args: unknown[]) => void;
-}
-
-interface ShaMapFile {
-  version: 1;
-  generated_at: string;
-  mappings: Record<string, number>;
 }
 
 const DEFAULT_SHA_RESOLUTION_LIMIT = 250;
 const DEFAULT_SEARCH_RESOLUTION_LIMIT = 25;
 const DEFAULT_RATE_LIMIT_RESERVE = 10;
-
-function getPrDir(repoDir: string): string {
-  return path.join(repoDir, 'prs');
-}
-
-function getShaMapPath(repoDir: string): string {
-  return path.join(getPrDir(repoDir), 'sha-map.json');
-}
-
-function readShaMap(repoDir: string): Map<string, number> {
-  const shaMapPath = getShaMapPath(repoDir);
-  if (!existsSync(shaMapPath)) {
-    return new Map();
-  }
-
-  try {
-    const data = JSON.parse(readFileSync(shaMapPath, 'utf8')) as Partial<ShaMapFile>;
-    return new Map(
-      Object.entries(data.mappings ?? {}).filter((entry): entry is [string, number] => typeof entry[1] === 'number')
-    );
-  } catch {
-    return new Map();
-  }
-}
-
-function writeShaMap(repoDir: string, mappings: Map<string, number>): void {
-  writeFileSync(
-    getShaMapPath(repoDir),
-    JSON.stringify(
-      {
-        version: 1,
-        generated_at: new Date().toISOString(),
-        mappings: Object.fromEntries([...mappings.entries()].sort(([left], [right]) => left.localeCompare(right))),
-      } satisfies ShaMapFile,
-      null,
-      2
-    )
-  );
-}
 
 function getShaResolutionLimit(): number {
   const value = Number.parseInt(process.env.PR_ARTIFACT_SHA_RESOLUTION_LIMIT ?? '', 10);
@@ -99,18 +46,6 @@ function getRateLimitReserve(): number {
 function getSearchResolutionLimit(): number {
   const value = Number.parseInt(process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT ?? '', 10);
   return Number.isFinite(value) && value >= 0 ? value : DEFAULT_SEARCH_RESOLUTION_LIMIT;
-}
-
-function readRetainedRuns(repoKey: string, files: string[], storage: StorageAdapter): Run[] {
-  const runs: Run[] = [];
-
-  for (const file of files) {
-    const day = file.replace(/\.json$/, '');
-    const data = storage.readDayData(repoKey, day);
-    runs.push(...data.runs);
-  }
-
-  return runs;
 }
 
 function isPullRequestLikeEvent(event?: string): boolean {
@@ -235,22 +170,15 @@ export async function rebuildPullRequestArtifacts({
   owner,
   repo,
   repoKey,
-  repoDir,
   files,
-  storage,
+  runs,
   log = () => {},
   warn = () => {},
 }: RebuildPullRequestArtifactsOptions): Promise<void> {
-  const runs = readRetainedRuns(repoKey, files, storage);
-  const prDir = getPrDir(repoDir);
-  if (!existsSync(prDir)) {
-    mkdirSync(prDir, { recursive: true });
-  }
-
   const runsWithoutPr = runs.filter((run) => (!run.pull_requests || run.pull_requests.length === 0) && run.head_sha && isPullRequestLikeEvent(run.event));
   const uniqueShas = new Set(runsWithoutPr.map((run) => run.head_sha as string));
-  const cachedPullRequestsBySha = readShaMap(repoDir);
-  const unresolvedShas = [...uniqueShas].filter((sha) => !cachedPullRequestsBySha.has(sha));
+  const cachedPullRequestsBySha = new Map<string, number>();
+  const unresolvedShas = [...uniqueShas];
   const allPrNumbers = Array.from(
     new Set(
       runs
@@ -290,7 +218,6 @@ export async function rebuildPullRequestArtifacts({
   for (const [sha, number] of newlyResolvedPullRequestsBySha.entries()) {
     cachedPullRequestsBySha.set(sha, number);
   }
-  writeShaMap(repoDir, cachedPullRequestsBySha);
 
   const normalizedRuns = runs.map((run) => {
     if (run.pull_requests && run.pull_requests.length > 0) {
@@ -320,29 +247,7 @@ export async function rebuildPullRequestArtifacts({
   const partialPrResolution = skippedPrShaCount > 0 || newlyResolvedPullRequestsBySha.size < shasToResolve.length;
 
   if (prNumbers.length === 0) {
-    writeFileSync(
-      path.join(prDir, 'index.json'),
-      JSON.stringify(
-        {
-          repo: repoKey,
-          generated_at: new Date().toISOString(),
-          prs: [],
-          partialPrResolution,
-          resolvedPrShaCount: resolvedRelevantShaCount,
-          unresolvedPrShaCount: uniqueShas.size - resolvedRelevantShaCount,
-          skippedPrShaCount,
-        },
-        null,
-        2
-      )
-    );
-
-    for (const entry of readdirSync(prDir)) {
-      if (entry !== 'index.json' && entry !== 'sha-map.json') {
-        rmSync(path.join(prDir, entry), { force: true });
-      }
-    }
-
+    await writePrMetricsToSupabase(repoKey, []);
     return;
   }
 
@@ -362,18 +267,11 @@ export async function rebuildPullRequestArtifacts({
   result.index.unresolvedPrShaCount = uniqueShas.size - resolvedRelevantShaCount;
   result.index.skippedPrShaCount = skippedPrShaCount;
 
-  writeFileSync(path.join(prDir, 'index.json'), JSON.stringify(result.index, null, 2));
-
   await writePrMetricsToSupabase(repoKey, result.index.prs);
 
-  const staleEntries = new Set(readdirSync(prDir).filter((entry) => entry !== 'index.json' && entry !== 'sha-map.json'));
-  for (const [number, detail] of result.details.entries()) {
-    const fileName = `${number}.json`;
-    staleEntries.delete(fileName);
-    writeFileSync(path.join(prDir, fileName), JSON.stringify(detail, null, 2));
+  const prWorkflowsMap = new Map<number, number[]>();
+  for (const [prNumber, detail] of result.details.entries()) {
+    prWorkflowsMap.set(prNumber, detail.pr.workflows.map((w) => w.id));
   }
-
-  for (const entry of staleEntries) {
-    rmSync(path.join(prDir, entry), { force: true });
-  }
+  await writePrWorkflowsToSupabase(repoKey, prWorkflowsMap);
 }

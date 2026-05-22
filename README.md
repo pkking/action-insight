@@ -4,38 +4,44 @@ Monitor GitHub Actions CI/CD metrics with a clean, interactive dashboard.
 
 ## Architecture
 
-This project uses a **unified architecture** where data and code reside in the same branch:
+This project uses **Supabase as the primary data store** with per-repo GitHub Actions for data collection:
 
-- **`main` branch** — Next.js frontend + ETL pipeline + collected data
-  - **Frontend**: Deployed to Vercel, reads data via GitHub Raw URLs from `main` branch
-  - **ETL Pipeline**: GitHub Actions cron collects GitHub Actions runs/jobs data and writes daily JSON files to `data/` directory
-  - **Data**: Stored in `data/` directory, committed alongside code
+- **Frontend**: Deployed to Vercel, reads data from Supabase
+- **ETL Pipeline**: Per-repo GitHub Actions collect runs/jobs data and write directly to Supabase
+- **Data**: Stored in Supabase (runs, jobs, pr_metrics tables)
+- **Index tracking**: `data/<owner>/<repo>/index.json` tracks backfill cursor state (committed to git)
 
 ```
-┌─────────────────────────────────────┐
-│           main branch               │
-│                                     │
-│  ┌─────────────────┐                │
-│  │  Next.js        │                │
-│  │  Dashboard      │  ◄─────────────┤
-│  │  (Vercel)       │     Raw URL    │
-│  └─────────────────┘                │
-│                                     │
-│  ┌─────────────────┐                │
-│  │  data/          │                │
-│  │  Daily JSON     │                │
-│  │  (ETL Output)   │                │
-│  └─────────────────┘                │
-│                                     │
-│  ┌─────────────────┐                │
-│  │  GitHub Actions │────────────────┤ Writes to data/
-│  │  ETL Pipeline   │                │
-│  └─────────────────┘                │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                  main branch                        │
+│                                                     │
+│  ┌─────────────────┐                                │
+│  │  Next.js        │                                │
+│  │  Dashboard      │  ◄─────────────────────────┐   │
+│  │  (Vercel)       │                            │   │
+│  └─────────────────┘                            │   │
+│                                                  │   │
+│  ┌─────────────────┐   ┌─────────────────┐      │   │
+│  │  collect-xxx    │   │  collect-yyy    │      │   │
+│  │  (per-repo)     │   │  (per-repo)     │      │   │
+│  └────────┬────────┘   └────────┬────────┘      │   │
+│           │                     │                │   │
+│           └──────────┬──────────┘                │   │
+│                      │                            │   │
+│              ┌───────▼────────┐                   │   │
+│              │    Supabase    │───────────────────┘   │
+│              │  (runs, jobs,  │                       │
+│              │  pr_metrics)   │                       │
+│              └────────────────┘                       │
+└─────────────────────────────────────────────────────┘
 ```
 
-**Development Mode**: The frontend reads from local `data/` directory (`RAW_BASE = ""`).
-**Production Mode**: The frontend reads from `https://raw.githubusercontent.com/{owner}/{repo}/main/data/...`.
+Each repository has its own workflow file (`.github/workflows/collect-<owner>-<repo>.yml`) with its own GitHub token secret to reduce rate limit issues.
+
+**Required secrets** (configure in repository Settings → Secrets):
+- `GITHUB_TOKEN_<OWNER>_<REPO>` — GitHub token for each repo's workflow (uppercase, hyphens → underscores)
+- `SUPABASE_URL` — Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY` — Supabase service role key
 
 ## Getting Started
 
@@ -48,113 +54,45 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-> **Note**: The frontend reads data from the `main` branch's `data/` directory. If no data has been collected yet, you'll see an error. Run the ETL pipeline first or manually trigger the workflow.
+> **Note**: The frontend reads data from Supabase. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`.
 
 ### ETL Pipeline
 
-The ETL pipeline runs automatically every hour via GitHub Actions.
+Each repository has its own scheduled workflow that runs hourly. Workflows are named `collect-<owner>-<repo>.yml`.
 
 ### Default collection behavior
 
-With the current collector, history backfill is **oldest-first by default**.
+History backfill is **oldest-first by default**.
 
-- If a repo has missing history inside the retained window, collection resumes from the earliest missing retained day and keeps moving toward today.
+- If a repo has missing history inside the retained window, collection resumes from the earliest missing retained day.
 - Progress is persisted in `data/<owner>/<repo>/index.json` through `backfill_cursor`.
-- This makes large repositories practical to fill in over multiple workflow runs without re-scanning the newest windows first.
-- If history is already complete, normal incremental collection continues using the existing index metadata.
+- If history is already complete, normal incremental collection continues.
 
-### Run the workflow manually
+### Run a workflow manually
 
-1. Go to **Actions** → **Collect CI Data**.
+1. Go to **Actions** → **Collect CI Data - \<repo\>**.
 2. Click **Run workflow**.
 3. Optionally fill the workflow inputs:
-   - `repo_name`: collect only one `owner/repo`
    - `force`: restart history backfill from the earliest retained day
    - `reverse`: collect from today backward instead of oldest-first
 
-### Recommended ways to backfill history in GitHub Actions
-
-For a very large repo, let the scheduled workflow do the work gradually first.
-
-#### Method 1: Let schedule fill history progressively
-
-Use the default scheduled workflow with no extra flags.
-
-- Add the target repo to `etl/repos.yaml`.
-- Let the hourly workflow keep running.
-- Each run will continue from the earliest missing day until the retained window is filled up to today.
-
-This is the safest default because it naturally spreads GitHub API usage over time.
-
-#### Method 2: Focus on one large repo
-
-Use **Run workflow** and set only `repo_name`.
-
-This is useful when one repository has much more Actions volume than the rest and you want the workflow budget spent on that repo alone.
-
-#### Method 3: Restart a repo's retained backfill from the beginning
-
-Use **Run workflow** with:
-
-- `repo_name`: `owner/repo`
-- `force`: `true`
-
-This tells the collector to restart from the earliest day inside `RETENTION_DAYS` and walk forward again. Use it when you changed collection logic, deleted some retained files, or want to rebuild the retained window for a single repo.
-
-#### Method 4: Temporarily prioritize newest data first
-
-Use **Run workflow** with:
-
-- `repo_name`: `owner/repo`
-- `reverse`: `true`
-
-This makes the collector start from today and walk backward. Use it when the immediate goal is to inspect recent failures quickly instead of completing the oldest missing history first.
-
-### Recommended rollout for a newly added high-volume repository
-
-If you are onboarding a repository with very dense GitHub Actions history, use this sequence:
-
-1. Add the repo to `etl/repos.yaml`.
-2. For the first few runs, use **Run workflow** with `repo_name=owner/repo` and leave `reverse=false`.
-3. Let the workflow continue oldest-first until the retained window is mostly filled.
-4. Only use `force=true` if you intentionally want to restart retained backfill for that repo.
-5. Only use `reverse=true` when you temporarily care more about recent runs than historical completeness.
-6. After the repo is mostly caught up, remove the manual `repo_name` focus and let the scheduled workflow maintain it normally.
-
-In practice, this means:
-
-- first access: `repo_name` only
-- rebuild retained history: `repo_name` + `force=true`
-- urgent recent data: `repo_name` + `reverse=true`
-- steady-state maintenance: no manual flags
-
 ### Run locally
-
-Install dependencies and run the collector directly:
 
 ```bash
 npm install
-GITHUB_TOKEN=your_token TARGET_REPOS="owner/repo" RETENTION_DAYS=90 npx tsx etl/scripts/collect.ts
-```
-
-#### Local examples
-
-Collect one repo with the default oldest-first history backfill behavior:
-
-```bash
-GITHUB_TOKEN=your_token npx tsx etl/scripts/collect.ts --repo owner/repo
+GITHUB_TOKEN=your_token SUPABASE_URL=your_url SUPABASE_SERVICE_ROLE_KEY=your_key npx tsx etl/scripts/collect.ts --repo owner/repo
 ```
 
 Restart retained backfill from the earliest day:
 
 ```bash
-GITHUB_TOKEN=your_token npx tsx etl/scripts/collect.ts --repo owner/repo --force-full-backfill
+GITHUB_TOKEN=your_token SUPABASE_URL=your_url SUPABASE_SERVICE_ROLE_KEY=your_key npx tsx etl/scripts/collect.ts --repo owner/repo --force-full-backfill
 ```
 
 Collect from today backward:
 
 ```bash
-GITHUB_TOKEN=your_token npx tsx etl/scripts/collect.ts --repo owner/repo --reverse
+GITHUB_TOKEN=your_token SUPABASE_URL=your_url SUPABASE_SERVICE_ROLE_KEY=your_key npx tsx etl/scripts/collect.ts --repo owner/repo --reverse
 ```
 
 ## Deploy on Vercel
@@ -163,20 +101,21 @@ Deploy the `main` branch to Vercel:
 
 1. Connect your repository to [Vercel](https://vercel.com/new)
 2. Set the deploy branch to `main`
-3. Deploy
+3. Configure environment variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
 
-## Data Format
+## Database Schema
 
-Data is stored as daily JSON files in the `data/` directory on the `main` branch:
+Data is stored in Supabase with the following tables (see `supabase/schema.sql`):
 
-```
-data/
-├── {owner}/
-│   └── {repo}/
-│       ├── index.json          # Index of available dates per repo
-│       ├── 2024-01-16.json     # Daily runs + jobs data
-│       ├── 2024-01-15.json
-│       └── prs/
-│           ├── index.json      # Index of PR artifacts
-│           └── {number}.json   # PR-specific metrics
-```
+- **repos** — Repository registry (owner, repo)
+- **runs** — Workflow runs (GitHub run ID, name, branch, status, duration, date)
+- **jobs** — Individual jobs within runs (queue duration, execution duration)
+- **pr_metrics** — PR-level CI metrics summaries
+- **pr_workflows** — Linking table between PR metrics and runs
+
+### Adding a new repository
+
+1. Add the repo to `etl/repos.yaml`.
+2. Create a new workflow file: copy `.github/workflows/collect-repo-template.yml` and replace `{{OWNER}}/{{REPO}}`, `{{REPO_SLUG}}`, and `{{TOKEN_SECRET_NAME}}`.
+3. Add the corresponding `GITHUB_TOKEN_<OWNER>_<REPO>` secret to the repository.
+4. The Supabase `repos` table is auto-populated on first collection.
