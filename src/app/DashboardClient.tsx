@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useId, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Activity,
@@ -18,6 +18,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import type { LegendPayload } from 'recharts';
 import { format } from 'date-fns';
 
 import { buildDailyTrend, buildRepoOverviewRows, createDateRange, filterByDateRange } from '@/lib/overview-metrics';
@@ -98,6 +99,46 @@ const METRIC_OPTIONS: Array<{
   { key: 'reviewP90Minutes', label: 'PR Review P90', stroke: '#ea580c', yAxisId: 'minutes' },
   { key: 'ciE2ESlaRate', label: 'CI E2E SLA', stroke: '#7c3aed', yAxisId: 'rate' },
 ];
+
+const METRIC_DEFINITIONS: Record<MetricKey, string> = {
+  prE2EP90Minutes: 'P90 (90th percentile) time from PR creation to merge — 90% of PRs merge faster than this value.',
+  ciE2EP90Minutes: 'P90 (90th percentile) CI end-to-end duration — 90% of PRs complete CI faster than this value.',
+  reviewP90Minutes: 'P90 (90th percentile) merge lead time — time from CI completion to PR merge. 90% of PRs merge faster than this value after CI passes.',
+  ciE2ESlaRate: 'CI SLA compliance rate — percentage of PRs where CI completed within 1 hour.',
+};
+
+function MetricTooltip({ definition }: { definition: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const tooltipId = useId();
+
+  return (
+    <span className="group relative inline-flex">
+      <span
+        role="button"
+        tabIndex={0}
+        aria-label="Metric definition"
+        aria-describedby={isOpen ? tooltipId : undefined}
+        onClick={() => setIsOpen((v) => !v)}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsOpen(false);
+        }}
+        className="inline-flex cursor-help items-center justify-center rounded-full bg-neutral-200 text-[10px] font-bold leading-none text-neutral-500 hover:bg-neutral-300 hover:text-neutral-700 focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 dark:bg-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-600 dark:hover:text-neutral-100"
+        style={{ width: '14px', height: '14px' }}
+      >
+        ?
+      </span>
+      <span
+        id={tooltipId}
+        role="tooltip"
+        className={`pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-xs text-neutral-700 shadow-md transition-opacity dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 ${
+          isOpen ? 'pointer-events-auto opacity-100' : 'opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'
+        }`}
+      >
+        {definition}
+      </span>
+    </span>
+  );
+}
 
 const LOW_SAMPLE_THRESHOLD = 5;
 
@@ -1102,10 +1143,18 @@ function DashboardContent({
                   <thead className="bg-neutral-50 text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
                     <tr>
                       <th className="px-6 py-3">Repo</th>
-                      <th className="px-6 py-3">PR E2E P90</th>
-                      <th className="px-6 py-3">CI E2E P90</th>
-                      <th className="px-6 py-3">PR Review P90</th>
-                      <th className="px-6 py-3">CI E2E SLA</th>
+                      <th className="px-6 py-3">
+                        <span className="inline-flex items-center gap-1.5">PR E2E P90<MetricTooltip definition={METRIC_DEFINITIONS.prE2EP90Minutes} /></span>
+                      </th>
+                      <th className="px-6 py-3">
+                        <span className="inline-flex items-center gap-1.5">CI E2E P90<MetricTooltip definition={METRIC_DEFINITIONS.ciE2EP90Minutes} /></span>
+                      </th>
+                      <th className="px-6 py-3">
+                        <span className="inline-flex items-center gap-1.5">PR Review P90<MetricTooltip definition={METRIC_DEFINITIONS.reviewP90Minutes} /></span>
+                      </th>
+                      <th className="px-6 py-3">
+                        <span className="inline-flex items-center gap-1.5">CI E2E SLA<MetricTooltip definition={METRIC_DEFINITIONS.ciE2ESlaRate} /></span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
@@ -1183,7 +1232,10 @@ function DashboardContent({
                         onChange={() => toggleMetric(metric.key)}
                         aria-label={metric.label}
                       />
-                      {metric.label}
+                      <span className="inline-flex items-center gap-1.5">
+                        {metric.label}
+                        <MetricTooltip definition={METRIC_DEFINITIONS[metric.key]} />
+                      </span>
                     </label>
                   ))}
                 </div>
@@ -1208,7 +1260,26 @@ function DashboardContent({
                       <YAxis yAxisId="minutes" tick={{ fontSize: 12, fill: '#888' }} tickLine={false} axisLine={false} />
                       <YAxis yAxisId="rate" orientation="right" domain={[0, 100]} tick={{ fontSize: 12, fill: '#888' }} tickLine={false} axisLine={false} />
                       <Tooltip />
-                      <Legend />
+                      <Legend
+                        content={({ payload }) => {
+                          if (!payload || payload.length === 0) return null;
+                          return (
+                            <div className="flex items-center justify-center gap-4 pt-2">
+                              {payload.map((entry: LegendPayload, index: number) => {
+                                const metricKey = entry.dataKey as MetricKey;
+                                const definition = METRIC_DEFINITIONS[metricKey];
+                                return (
+                                  <span key={`item-${index}`} className="inline-flex items-center gap-1.5 text-sm text-neutral-600 dark:text-neutral-300">
+                                    <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: entry.color }} />
+                                    <span>{entry.value}</span>
+                                    {definition && <MetricTooltip definition={definition} />}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          );
+                        }}
+                      />
                       {activeMetricOptions.map((metric) => (
                         <Line
                           key={metric.key}
