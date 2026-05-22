@@ -299,7 +299,12 @@ export async function readCollectionState(repo: string): Promise<CollectionState
     .eq('repo_id', repoId)
     .single();
 
-  if (error) return null;
+  if (error) {
+    if (error.code !== 'PGRST116') {
+      console.error(`  [Supabase] Error reading collection state: ${error.message}`);
+    }
+    return null;
+  }
 
   return {
     backfillCursor: data.backfill_cursor,
@@ -345,26 +350,13 @@ export async function getCollectedDatesFromSupabase(repo: string): Promise<strin
   const repoId = await ensureRepo(owner, repoName);
   if (!repoId) return [];
 
-  // NOTE: PostgREST does not support DISTINCT, so we fetch all rows and deduplicate
-  // in memory via a Set. For repos with very large run counts, consider creating a
-  // database view or RPC (stored procedure) that returns DISTINCT dates server-side.
   const { data, error } = await supabase
-    .from('runs')
-    .select('date')
-    .eq('repo_id', repoId);
+    .rpc('get_distinct_dates', { p_repo_id: repoId });
 
   if (error) {
     console.error(`  [Supabase] Error fetching collected dates: ${error.message}`);
     return [];
   }
 
-  const dates = new Set<string>();
-  for (const row of data || []) {
-    if (row.date) {
-      const dateStr = typeof row.date === 'string' ? row.date : new Date(row.date).toISOString().slice(0, 10);
-      dates.add(dateStr);
-    }
-  }
-
-  return Array.from(dates).sort().reverse();
+  return (data || []).map((row: { date: string }) => row.date);
 }

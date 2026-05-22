@@ -98,3 +98,16 @@ CREATE TABLE IF NOT EXISTS collection_state (
 );
 
 CREATE INDEX IF NOT EXISTS idx_collection_state_repo ON collection_state(repo_id);
+
+-- 7. RPC: Get distinct dates for a repo (server-side DISTINCT)
+-- Usage: SELECT * FROM get_distinct_dates(repo_id);
+CREATE OR REPLACE FUNCTION get_distinct_dates(p_repo_id INTEGER)
+RETURNS TABLE(date DATE) AS $$
+BEGIN
+  RETURN QUERY
+    SELECT DISTINCT r.date
+    FROM runs r
+    WHERE r.repo_id = p_repo_id
+    ORDER BY r.date DESC;
+END;
+$$ LANGUAGE plpgsql;
