@@ -9,7 +9,7 @@ This project uses **Supabase as the primary data store** with per-repo GitHub Ac
 - **Frontend**: Deployed to Vercel, reads data from Supabase
 - **ETL Pipeline**: Per-repo GitHub Actions collect runs/jobs data and write directly to Supabase
 - **Data**: Stored in Supabase (runs, jobs, pr_metrics tables)
-- **Index tracking**: `data/<owner>/<repo>/index.json` tracks backfill cursor state (committed to git)
+- **Collection state**: Tracked in Supabase `collection_state` table (backfill cursor, history completion)
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -65,7 +65,7 @@ Each repository has its own scheduled workflow that runs hourly. Workflows are n
 History backfill is **oldest-first by default**.
 
 - If a repo has missing history inside the retained window, collection resumes from the earliest missing retained day.
-- Progress is persisted in `data/<owner>/<repo>/index.json` through `backfill_cursor`.
+- Progress is persisted in the Supabase `collection_state` table through `backfill_cursor`.
 - If history is already complete, normal incremental collection continues.
 
 ### Run a workflow manually
@@ -112,6 +112,7 @@ Data is stored in Supabase with the following tables (see `supabase/schema.sql`)
 - **jobs** — Individual jobs within runs (queue duration, execution duration)
 - **pr_metrics** — PR-level CI metrics summaries
 - **pr_workflows** — Linking table between PR metrics and runs
+- **collection_state** — Per-repo collection state (backfill cursor, history completion, latest date)
 
 ### Adding a new repository
 

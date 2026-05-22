@@ -84,3 +84,17 @@ CREATE TABLE IF NOT EXISTS pr_workflows (
 );
 
 CREATE INDEX IF NOT EXISTS idx_pr_workflows_pr ON pr_workflows(pr_metric_id);
+
+-- 6. Collection state table (replaces local index.json)
+CREATE TABLE IF NOT EXISTS collection_state (
+  id SERIAL PRIMARY KEY,
+  repo_id INTEGER NOT NULL REFERENCES repos(id),
+  backfill_cursor DATE,
+  history_complete BOOLEAN NOT NULL DEFAULT false,
+  latest_date DATE,
+  retention_days INTEGER NOT NULL DEFAULT 90,
+  last_updated TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(repo_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_collection_state_repo ON collection_state(repo_id);

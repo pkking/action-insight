@@ -4,21 +4,12 @@ import path from 'node:path';
 import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts';
-import { getExistingRunIdsFromSupabase } from './supabase-storage';
+import { getCollectedDatesFromSupabase } from './supabase-storage';
 import { createClient } from '@supabase/supabase-js';
 import type { Run } from '../../src/lib/types';
 
-interface IndexFile {
-  files?: unknown;
-}
-
 interface ReposConfig {
   repos?: unknown;
-}
-
-function getRepoDir(repo: string): string {
-  const [owner, name] = repo.split('/');
-  return path.join(__dirname, '../../data', owner, name);
 }
 
 function readReposConfig(): string[] {
@@ -31,21 +22,6 @@ function readReposConfig(): string[] {
   const config = yaml.load(content) as ReposConfig | null;
 
   return Array.isArray(config?.repos) ? config.repos.filter((entry): entry is string => typeof entry === 'string') : [];
-}
-
-function readIndex(repo: string): string[] {
-  const indexPath = path.join(getRepoDir(repo), 'index.json');
-  try {
-    if (!fs.existsSync(indexPath)) {
-      return [];
-    }
-
-    const index = JSON.parse(fs.readFileSync(indexPath, 'utf8')) as IndexFile;
-    return Array.isArray(index.files) ? index.files.filter((entry): entry is string => typeof entry === 'string') : [];
-  } catch (error) {
-    console.warn(`Warning: Failed to read index for ${repo}:`, error instanceof Error ? error.message : error);
-    return [];
-  }
 }
 
 function parseTargetRepos(argv: string[]): string[] {
@@ -146,23 +122,20 @@ async function main() {
       continue;
     }
 
-    const repoDir = getRepoDir(repoKey);
-    const files = readIndex(repoKey);
-    if (files.length === 0) {
-      console.warn(`Skipping ${repoKey}: no retained files in index.json`);
-      continue;
-    }
-
     try {
-      const dates = files.map((f) => f.replace(/\.json$/, ''));
+      const dates = await getCollectedDatesFromSupabase(repoKey);
+      if (dates.length === 0) {
+        console.warn(`Skipping ${repoKey}: no collected dates in Supabase`);
+        continue;
+      }
+
       const runs = await fetchRunsFromSupabase(repoKey, dates);
 
       await rebuildPullRequestArtifacts({
         owner,
         repo,
         repoKey,
-        repoDir,
-        files,
+        collectedDates: dates,
         runs,
         log: (...args: unknown[]) => console.log(...args),
         warn: (...args: unknown[]) => console.warn(...args),

@@ -276,3 +276,92 @@ export async function writePrMetricsToSupabase(repo: string, prs: PrMetricsSumma
     console.error(`  [Supabase] Error inserting PR metrics: ${error.message}`);
   }
 }
+
+export interface CollectionState {
+  backfillCursor: string | null;
+  historyComplete: boolean;
+  latestDate: string | null;
+  retentionDays: number;
+  lastUpdated: string | null;
+}
+
+export async function readCollectionState(repo: string): Promise<CollectionState | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return null;
+
+  const { data, error } = await supabase
+    .from('collection_state')
+    .select('*')
+    .eq('repo_id', repoId)
+    .single();
+
+  if (error) return null;
+
+  return {
+    backfillCursor: data.backfill_cursor,
+    historyComplete: data.history_complete ?? false,
+    latestDate: data.latest_date,
+    retentionDays: data.retention_days ?? 90,
+    lastUpdated: data.last_updated,
+  };
+}
+
+export async function writeCollectionState(
+  repo: string,
+  state: CollectionState,
+): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return;
+
+  const { error } = await supabase
+    .from('collection_state')
+    .upsert({
+      repo_id: repoId,
+      backfill_cursor: state.backfillCursor,
+      history_complete: state.historyComplete,
+      latest_date: state.latestDate,
+      retention_days: state.retentionDays,
+      last_updated: new Date().toISOString(),
+    }, { onConflict: 'repo_id' });
+
+  if (error) {
+    console.error(`  [Supabase] Error writing collection state: ${error.message}`);
+  }
+}
+
+export async function getCollectedDatesFromSupabase(repo: string): Promise<string[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return [];
+
+  const { data, error } = await supabase
+    .from('runs')
+    .select('date')
+    .eq('repo_id', repoId);
+
+  if (error) {
+    console.error(`  [Supabase] Error fetching collected dates: ${error.message}`);
+    return [];
+  }
+
+  const dates = new Set<string>();
+  for (const row of data || []) {
+    if (row.date) {
+      const dateStr = typeof row.date === 'string' ? row.date : new Date(row.date).toISOString().slice(0, 10);
+      dates.add(dateStr);
+    }
+  }
+
+  return Array.from(dates).sort().reverse();
+}

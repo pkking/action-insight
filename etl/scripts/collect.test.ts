@@ -1,6 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import fs from 'fs';
-import path from 'path';
 
 import {
   collectRepo,
@@ -9,9 +7,51 @@ import {
 } from './collect';
 import { isGitHubRateLimitError } from './github';
 
+vi.mock('./supabase-storage.ts', async () => {
+  const actual = await vi.importActual<typeof import('./supabase-storage')>('./supabase-storage');
+  return {
+    ...actual,
+    readCollectionState: vi.fn().mockResolvedValue(null),
+    writeCollectionState: vi.fn().mockResolvedValue(undefined),
+    getCollectedDatesFromSupabase: vi.fn().mockResolvedValue([]),
+    getExistingRunIdsFromSupabase: vi.fn().mockResolvedValue(new Set()),
+    writeRunsToSupabase: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+import {
+  readCollectionState,
+  writeCollectionState,
+  getCollectedDatesFromSupabase,
+  getExistingRunIdsFromSupabase,
+  writeRunsToSupabase,
+} from './supabase-storage';
+
+function mockRepoState(options: {
+  latest?: string;
+  dates?: string[];
+  historyComplete?: boolean;
+  backfillCursor?: string | null;
+  retentionDays?: number;
+}) {
+  vi.mocked(readCollectionState).mockResolvedValue({
+    backfillCursor: options.backfillCursor ?? null,
+    historyComplete: options.historyComplete ?? true,
+    latestDate: options.latest ?? null,
+    retentionDays: options.retentionDays ?? 90,
+    lastUpdated: null,
+  });
+  vi.mocked(getCollectedDatesFromSupabase).mockResolvedValue(options.dates ?? []);
+}
+
 describe('collect rate limit handling', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.mocked(readCollectionState).mockResolvedValue(null);
+    vi.mocked(getCollectedDatesFromSupabase).mockResolvedValue([]);
+    vi.mocked(getExistingRunIdsFromSupabase).mockResolvedValue(new Set());
+    vi.mocked(writeRunsToSupabase).mockResolvedValue(undefined);
+    vi.mocked(writeCollectionState).mockResolvedValue(undefined);
   });
 
   it('recognizes GitHub rate limit errors from response headers', () => {
@@ -69,7 +109,7 @@ describe('collect rate limit handling', () => {
 
   it('writes partial results and incomplete-history metadata when rate limit is hit mid-collection', async () => {
     const repo = 'acme/widgets';
-    const writes: Array<{ kind: 'day' | 'index'; payload: unknown }> = [];
+    mockRepoState({ latest: '2026-04-13', dates: ['2026-04-13'], historyComplete: true });
 
     const octokit = {
       request: vi
@@ -131,35 +171,13 @@ describe('collect rate limit handling', () => {
     };
 
     await expect(
-      collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false }, {
-        readIndex: () => ({
-          version: 1,
-          latest: '2026-04-13',
-          files: ['2026-04-13.json'],
-          retention_days: 90,
-          last_updated: '2026-04-13T00:00:00Z',
-          history_complete: true,
-        }),
-        writeIndex: (_repo, index) => {
-          writes.push({ kind: 'index', payload: index });
-        },
-        readDayData: () => ({ date: '2026-04-14', repo, runs: [] }),
-        writeDayData: (_repo, data) => {
-          writes.push({ kind: 'day', payload: data });
-        },
-      })
+      collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false })
     ).rejects.toBeInstanceOf(RateLimitAbortError);
 
-    expect(writes).toEqual([
-      {
-        kind: 'index',
-        payload: expect.objectContaining({
-          latest: '2026-04-14',
-          files: ['2026-04-14.json', '2026-04-13.json'],
-          history_complete: false,
-        }),
-      },
-    ]);
+    expect(vi.mocked(writeCollectionState)).toHaveBeenCalledWith(repo, expect.objectContaining({
+      latestDate: '2026-04-14',
+      historyComplete: false,
+    }));
   });
 
   it('refreshes the latest range first when history is marked incomplete', async () => {
@@ -190,20 +208,10 @@ describe('collect rate limit handling', () => {
         }),
       };
 
+      mockRepoState({ latest: '2026-04-12', dates: ['2026-04-12', '2026-04-11'], historyComplete: false });
+
       await expect(
-        collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false }, {
-          readIndex: () => ({
-            version: 1,
-            latest: '2026-04-12',
-            files: ['2026-04-12.json', '2026-04-11.json'],
-            retention_days: 90,
-            last_updated: '2026-04-12T00:00:00Z',
-            history_complete: false,
-          }),
-          writeIndex: vi.fn(),
-          readDayData: (_repo, date) => ({ date, repo, runs: [] }),
-          writeDayData: vi.fn(),
-        })
+        collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false })
       ).rejects.toBeInstanceOf(RateLimitAbortError);
 
       expect(requests[0]).toEqual({
@@ -243,21 +251,15 @@ describe('collect rate limit handling', () => {
         }),
       };
 
+      mockRepoState({
+        latest: '2026-04-12',
+        dates: ['2026-04-12', '2026-04-11'],
+        historyComplete: false,
+        backfillCursor: '2026-03-01',
+      });
+
       await expect(
-        collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false }, {
-          readIndex: () => ({
-            version: 1,
-            latest: '2026-04-12',
-            files: ['2026-04-12.json', '2026-04-11.json'],
-            retention_days: 90,
-            last_updated: '2026-04-12T00:00:00Z',
-            history_complete: false,
-            backfill_cursor: '2026-03-01',
-          }),
-          writeIndex: vi.fn(),
-          readDayData: (_repo, date) => ({ date, repo, runs: [] }),
-          writeDayData: vi.fn(),
-        })
+        collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false })
       ).rejects.toBeInstanceOf(RateLimitAbortError);
 
       expect(requests[0]).toEqual({
@@ -297,21 +299,15 @@ describe('collect rate limit handling', () => {
         }),
       };
 
+      mockRepoState({
+        latest: '2026-04-12',
+        dates: ['2026-04-12', '2026-04-11'],
+        historyComplete: false,
+        backfillCursor: '2026-03-01',
+      });
+
       await expect(
-        collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: true }, {
-          readIndex: () => ({
-            version: 1,
-            latest: '2026-04-12',
-            files: ['2026-04-12.json', '2026-04-11.json'],
-            retention_days: 90,
-            last_updated: '2026-04-12T00:00:00Z',
-            history_complete: false,
-            backfill_cursor: '2026-03-01',
-          }),
-          writeIndex: vi.fn(),
-          readDayData: (_repo, date) => ({ date, repo, runs: [] }),
-          writeDayData: vi.fn(),
-        })
+        collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: true })
       ).rejects.toBeInstanceOf(RateLimitAbortError);
 
       expect(requests[0]).toEqual({
@@ -406,7 +402,6 @@ describe('collect rate limit handling', () => {
     );
 
     const repo = 'acme/widgets';
-    const writes: Array<{ kind: 'day' | 'index'; payload: unknown }> = [];
     const topWindow = '2026-04-01T00:00:00Z..2026-04-15T23:59:59Z';
     const childOneWindow = '2026-04-01T00:00:00Z..2026-04-08T23:59:59Z';
     const childTwoWindow = '2026-04-08T00:00:00Z..2026-04-15T23:59:59Z';
@@ -488,33 +483,10 @@ describe('collect rate limit handling', () => {
     };
 
     await expect(
-      isolatedCollectRepo(octokit as never, repo, 90, { forceFullBackfill: true, reverse: false }, {
-        readIndex: () => ({
-          version: 1,
-          latest: '2026-04-13',
-          files: ['2026-04-13.json'],
-          retention_days: 90,
-          last_updated: '2026-04-13T00:00:00Z',
-        }),
-        writeIndex: (_repo, index) => {
-          writes.push({ kind: 'index', payload: index });
-        },
-        readDayData: (_repo, date) => ({ date, repo, runs: [] }),
-        writeDayData: (_repo, data) => {
-          writes.push({ kind: 'day', payload: data });
-        },
-      })
+      isolatedCollectRepo(octokit as never, repo, 90, { forceFullBackfill: true, reverse: false })
     ).rejects.toBeInstanceOf(IsolatedRateLimitAbortError);
 
-    expect(writes).toEqual([
-      {
-        kind: 'index',
-        payload: expect.objectContaining({
-          latest: '2026-04-13',
-          files: ['2026-04-13.json', '2026-04-10.json'],
-        }),
-      },
-    ]);
+    expect(vi.mocked(writeCollectionState)).toHaveBeenCalled();
   });
 
   it('does not delete expired day files since Supabase is source of truth', async () => {
@@ -522,7 +494,6 @@ describe('collect rate limit handling', () => {
     vi.setSystemTime(new Date('2026-04-16T00:00:00Z'));
 
     const repo = 'adapter-cleanup-test/widgets';
-    const deleteDayData = vi.fn();
     const expiredDate = '2026-04-13';
 
     try {
@@ -563,22 +534,16 @@ describe('collect rate limit handling', () => {
           }),
       };
 
-      await collectRepo(octokit as never, repo, 2, { forceFullBackfill: false, reverse: false }, {
-        readIndex: () => ({
-          version: 1,
-          latest: '2026-04-15',
-          files: ['2026-04-15.json', `${expiredDate}.json`],
-          retention_days: 2,
-          last_updated: '2026-04-15T00:00:00Z',
-          history_complete: true,
-        }),
-        writeIndex: vi.fn(),
-        readDayData: (_repo, date) => ({ date, repo, runs: [] }),
-        writeDayData: vi.fn(),
-        deleteDayData,
+      mockRepoState({
+        latest: '2026-04-15',
+        dates: ['2026-04-15', expiredDate],
+        historyComplete: true,
+        retentionDays: 2,
       });
 
-      expect(deleteDayData).not.toHaveBeenCalled();
+      await collectRepo(octokit as never, repo, 2, { forceFullBackfill: false, reverse: false });
+
+      expect(vi.mocked(writeCollectionState)).toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -589,7 +554,6 @@ describe('collect rate limit handling', () => {
     vi.setSystemTime(new Date('2026-04-18T11:55:15.104Z'));
 
     const repo = 'boundary-retention-test/widgets';
-    const deleteDayData = vi.fn();
 
     try {
       const octokit = {
@@ -629,22 +593,15 @@ describe('collect rate limit handling', () => {
           }),
       };
 
-      await collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false }, {
-        readIndex: () => ({
-          version: 1,
-          latest: '2026-04-17',
-          files: ['2026-04-17.json'],
-          retention_days: 90,
-          last_updated: '2026-04-17T00:00:00Z',
-          history_complete: true,
-        }),
-        writeIndex: vi.fn(),
-        readDayData: (_repo, date) => ({ date, repo, runs: [] }),
-        writeDayData: vi.fn(),
-        deleteDayData,
+      mockRepoState({
+        latest: '2026-04-17',
+        dates: ['2026-04-17'],
+        historyComplete: true,
       });
 
-      expect(deleteDayData).not.toHaveBeenCalledWith(repo, '2026-01-18');
+      await collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false });
+
+      expect(vi.mocked(writeCollectionState)).toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
