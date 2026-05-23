@@ -85,7 +85,20 @@ CREATE TABLE IF NOT EXISTS pr_workflows (
 
 CREATE INDEX IF NOT EXISTS idx_pr_workflows_pr ON pr_workflows(pr_metric_id);
 
--- 6. Collection state table (replaces local index.json)
+-- 6. PR resolution cache (commit SHA -> PR number)
+CREATE TABLE IF NOT EXISTS pr_resolution_cache (
+  id SERIAL PRIMARY KEY,
+  repo_id INTEGER NOT NULL REFERENCES repos(id),
+  head_sha TEXT NOT NULL,
+  pr_number INTEGER NOT NULL,
+  source TEXT NOT NULL DEFAULT 'commits_api',
+  resolved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(repo_id, head_sha)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pr_resolution_cache_repo_sha ON pr_resolution_cache(repo_id, head_sha);
+
+-- 7. Collection state table (replaces local index.json)
 CREATE TABLE IF NOT EXISTS collection_state (
   id SERIAL PRIMARY KEY,
   repo_id INTEGER NOT NULL REFERENCES repos(id),
@@ -99,7 +112,7 @@ CREATE TABLE IF NOT EXISTS collection_state (
 
 CREATE INDEX IF NOT EXISTS idx_collection_state_repo ON collection_state(repo_id);
 
--- 7. RPC: Get distinct dates for a repo (server-side DISTINCT)
+-- 8. RPC: Get distinct dates for a repo (server-side DISTINCT)
 -- Usage: SELECT * FROM get_distinct_dates(repo_id);
 CREATE OR REPLACE FUNCTION get_distinct_dates(p_repo_id INTEGER)
 RETURNS TABLE(date DATE) AS $$

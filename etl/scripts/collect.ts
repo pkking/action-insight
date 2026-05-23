@@ -17,7 +17,7 @@ import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
 import { isGitHubRateLimitError, getRateLimitDetails, checkRateLimitBudget, type GitHubRequestErrorLike, type RateLimitDetails } from './github.ts';
 import {
   writeRunsToSupabase,
-  getExistingRunIdsFromSupabase,
+  getExistingRunIdsWithJobsFromSupabase,
   readCollectionState,
   writeCollectionState,
   getCollectedDatesFromSupabase,
@@ -312,8 +312,8 @@ export async function collectRepo(
   const state = await loadRepoState(repo, retentionDays, now);
   log(`State: latest=${state.latest}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
 
-  const existingRunIds = await getExistingRunIdsFromSupabase(repo);
-  log(`Existing runs from Supabase: ${existingRunIds.size}`);
+  const existingRunIdsWithJobs = await getExistingRunIdsWithJobsFromSupabase(repo);
+  log(`Existing runs with cached jobs from Supabase: ${existingRunIdsWithJobs.size}`);
 
   function toCreatedParam(window: CollectionWindow): string {
     return toCreatedRange(window);
@@ -374,7 +374,7 @@ export async function collectRepo(
         const runId = run.id;
         let jobs: Job[] = [];
 
-        if (existingRunIds.has(runId)) {
+        if (existingRunIdsWithJobs.has(runId)) {
           skippedJobsCount++;
           log(`Skipping jobs for run #${runId} - already cached`);
         } else {

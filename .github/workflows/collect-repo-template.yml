@@ -31,7 +31,12 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js
+      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
+      - name: Apply Supabase migrations
+        run: npm run migrate:supabase
+        env:
+          AUTO_MIGRATE_SUPABASE: 1
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       - id: collect
         continue-on-error: true
         run: |

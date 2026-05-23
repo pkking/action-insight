@@ -55,7 +55,14 @@ interface PrMetricsSummary {
   conclusion: string;
 }
 
+export interface PullRequestResolutionCacheEntry {
+  head_sha: string;
+  pr_number: number;
+  source?: string;
+}
+
 let cachedClient: ReturnType<typeof createClient> | null = null;
+const SUPABASE_PAGE_SIZE = 1000;
 
 function getSupabase() {
   if (cachedClient) return cachedClient;
@@ -190,6 +197,112 @@ export async function getExistingRunIdsFromSupabase(repo: string): Promise<Set<n
   }
 
   return new Set((data || []).map((row: { id: number }) => row.id));
+}
+
+export async function getExistingRunIdsWithJobsFromSupabase(repo: string): Promise<Set<number>> {
+  const supabase = getSupabase();
+  if (!supabase) return new Set();
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return new Set();
+
+  const runIds = new Set<number>();
+  let from = 0;
+
+  while (true) {
+    const to = from + SUPABASE_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from('runs')
+      .select('id, jobs!inner(id)')
+      .eq('repo_id', repoId)
+      .range(from, to);
+
+    if (error) {
+      console.error(`  [Supabase] Error fetching existing run IDs with jobs: ${error.message}`);
+      return runIds;
+    }
+
+    for (const row of data || []) {
+      runIds.add(Number(row.id));
+    }
+
+    if (!data || data.length < SUPABASE_PAGE_SIZE) {
+      break;
+    }
+
+    from += SUPABASE_PAGE_SIZE;
+  }
+
+  return runIds;
+}
+
+export async function readPullRequestResolutionCacheFromSupabase(
+  repo: string,
+  shas: string[],
+): Promise<Map<string, number>> {
+  const supabase = getSupabase();
+  if (!supabase || shas.length === 0) return new Map();
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return new Map();
+
+  const resolved = new Map<string, number>();
+  const uniqueShas = Array.from(new Set(shas));
+
+  for (let i = 0; i < uniqueShas.length; i += 100) {
+    const batch = uniqueShas.slice(i, i + 100);
+    const { data, error } = await supabase
+      .from('pr_resolution_cache')
+      .select('head_sha, pr_number')
+      .eq('repo_id', repoId)
+      .in('head_sha', batch);
+
+    if (error) {
+      console.error(`  [Supabase] Error reading PR resolution cache: ${error.message}`);
+      continue;
+    }
+
+    for (const row of data || []) {
+      if (typeof row.head_sha === 'string' && typeof row.pr_number === 'number') {
+        resolved.set(row.head_sha, row.pr_number);
+      }
+    }
+  }
+
+  return resolved;
+}
+
+export async function writePullRequestResolutionCacheToSupabase(
+  repo: string,
+  entries: PullRequestResolutionCacheEntry[],
+): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase || entries.length === 0) return;
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return;
+
+  const uniqueEntries = Array.from(
+    new Map(entries.map((entry) => [entry.head_sha, entry])).values()
+  );
+  const rows = uniqueEntries.map((entry) => ({
+    repo_id: repoId,
+    head_sha: entry.head_sha,
+    pr_number: entry.pr_number,
+    source: entry.source ?? 'commits_api',
+    resolved_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase
+    .from('pr_resolution_cache')
+    .upsert(rows, { onConflict: 'repo_id,head_sha' });
+
+  if (error) {
+    console.error(`  [Supabase] Error writing PR resolution cache: ${error.message}`);
+  }
 }
 
 export async function writePrWorkflowsToSupabase(repo: string, prWorkflows: Map<number, number[]>): Promise<void> {

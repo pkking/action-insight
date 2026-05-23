@@ -5,11 +5,25 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('./supabase-storage.ts', () => ({
+  readPullRequestResolutionCacheFromSupabase: vi.fn().mockResolvedValue(new Map()),
+  writePullRequestResolutionCacheToSupabase: vi.fn().mockResolvedValue(undefined),
+  writePrMetricsToSupabase: vi.fn().mockResolvedValue(undefined),
+  writePrWorkflowsToSupabase: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { rebuildPullRequestArtifacts } from './pr-artifacts';
+import {
+  readPullRequestResolutionCacheFromSupabase,
+  writePullRequestResolutionCacheToSupabase,
+} from './supabase-storage';
 
 const tempDirs: string[] = [];
 
 afterEach(() => {
+  vi.mocked(readPullRequestResolutionCacheFromSupabase).mockResolvedValue(new Map());
+  vi.mocked(writePullRequestResolutionCacheToSupabase).mockClear();
+
   for (const dir of tempDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -162,6 +176,8 @@ describe('rebuildPullRequestArtifacts', () => {
   });
 
   it('falls back to issue search when commit-to-PR resolution returns no matches', async () => {
+    const previousLimit = process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT;
+    process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT = '1';
 
     const request = vi.fn().mockImplementation((route: string) => {
       if (route === 'GET /rate_limit') {
@@ -210,30 +226,38 @@ describe('rebuildPullRequestArtifacts', () => {
       throw new Error(`Unexpected route: ${route}`);
     });
 
-    await rebuildPullRequestArtifacts({
-      octokit: { request },
-      owner: 'acme',
-      repo: 'widgets',
-      repoKey: 'acme/widgets',
-      collectedDates: ['2026-04-18.json'],
-      runs: [
-        {
-          id: 101,
-          name: 'lint',
-          head_branch: 'main',
-          head_sha: 'abc123',
-          status: 'completed',
-          conclusion: 'success',
-          event: 'pull_request',
-          created_at: '2026-04-18T01:05:00Z',
-          updated_at: '2026-04-18T01:15:00Z',
-          html_url: 'https://github.com/acme/widgets/actions/runs/101',
-          durationInSeconds: 600,
-          pull_requests: [],
-          jobs: [],
-        },
-      ],
-    });
+    try {
+      await rebuildPullRequestArtifacts({
+        octokit: { request },
+        owner: 'acme',
+        repo: 'widgets',
+        repoKey: 'acme/widgets',
+        collectedDates: ['2026-04-18.json'],
+        runs: [
+          {
+            id: 101,
+            name: 'lint',
+            head_branch: 'main',
+            head_sha: 'abc123',
+            status: 'completed',
+            conclusion: 'success',
+            event: 'pull_request',
+            created_at: '2026-04-18T01:05:00Z',
+            updated_at: '2026-04-18T01:15:00Z',
+            html_url: 'https://github.com/acme/widgets/actions/runs/101',
+            durationInSeconds: 600,
+            pull_requests: [],
+            jobs: [],
+          },
+        ],
+      });
+    } finally {
+      if (previousLimit === undefined) {
+        delete process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT;
+      } else {
+        process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT = previousLimit;
+      }
+    }
 
     expect(request).toHaveBeenCalledWith(
       'GET /search/issues',
@@ -325,6 +349,71 @@ describe('rebuildPullRequestArtifacts', () => {
 
     const commitCalls = request.mock.calls.filter(call => call[0] === 'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls');
     expect(commitCalls.length).toBe(15);
+  });
+
+  it('uses cached SHA to PR resolutions before calling GitHub', async () => {
+    vi.mocked(readPullRequestResolutionCacheFromSupabase).mockResolvedValue(new Map([['abc123', 42]]));
+
+    const request = vi.fn().mockImplementation((route: string) => {
+      if (route === 'GET /rate_limit') {
+        return Promise.resolve({
+          data: {
+            resources: {
+              core: {
+                remaining: 100,
+              },
+            },
+          },
+        });
+      }
+
+      if (route === 'GET /repos/{owner}/{repo}/pulls/{pull_number}') {
+        return Promise.resolve({
+          data: {
+            number: 42,
+            title: 'Cached PR',
+            state: 'closed',
+            created_at: '2026-04-18T01:00:00Z',
+            merged_at: '2026-04-18T02:15:00Z',
+            html_url: 'https://github.com/acme/widgets/pull/42',
+            user: { login: 'octocat' },
+          },
+        });
+      }
+
+      throw new Error(`Unexpected route: ${route}`);
+    });
+
+    await rebuildPullRequestArtifacts({
+      octokit: { request },
+      owner: 'acme',
+      repo: 'widgets',
+      repoKey: 'acme/widgets',
+      collectedDates: ['2026-04-18.json'],
+      runs: [
+        {
+          id: 101,
+          name: 'lint',
+          head_branch: 'main',
+          head_sha: 'abc123',
+          status: 'completed',
+          conclusion: 'success',
+          event: 'pull_request',
+          created_at: '2026-04-18T01:05:00Z',
+          updated_at: '2026-04-18T01:15:00Z',
+          html_url: 'https://github.com/acme/widgets/actions/runs/101',
+          durationInSeconds: 600,
+          pull_requests: [],
+          jobs: [],
+        },
+      ],
+    });
+
+    expect(request).not.toHaveBeenCalledWith(
+      'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
+      expect.anything()
+    );
+    expect(request).not.toHaveBeenCalledWith('GET /search/issues', expect.anything());
   });
 
   it('can rebuild artifacts locally without GitHub API access when runs already include PR refs', async () => {
@@ -572,9 +661,17 @@ describe('rebuildPullRequestArtifacts', () => {
       'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
       expect.objectContaining({ commit_sha: 'sha-one' })
     );
-    expect(request).not.toHaveBeenCalledWith(
+    expect(request).toHaveBeenCalledWith(
       'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
       expect.objectContaining({ commit_sha: 'sha-two' })
+    );
+    expect(request).toHaveBeenCalledWith(
+      'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
+      expect.objectContaining({ commit_sha: 'sha-three' })
+    );
+    expect(request).not.toHaveBeenCalledWith(
+      'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
+      expect.objectContaining({ commit_sha: 'sha-four' })
     );
   });
 });
