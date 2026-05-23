@@ -1034,7 +1034,7 @@ function DashboardContent({
 
   return (
     <div className="flex min-h-screen flex-col bg-neutral-50 p-4 font-sans text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100 md:p-8">
-      <div className="mx-auto w-full max-w-7xl flex-1 space-y-6 overflow-x-auto">
+      <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col space-y-6">
         <header className="flex flex-col items-start justify-between gap-4 rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900 md:flex-row md:items-center">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold">
