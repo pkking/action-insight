@@ -93,7 +93,7 @@ async function resolvePullRequestsFromHeadSha(
       if (isGitHubRateLimitError(error)) {
         coreRateLimited = true;
         warn(`Core API rate limit reached while resolving PRs for ${owner}/${repo}. ${resolved.size} PRs resolved so far.`);
-        continue;
+        break;
       }
       warn(`Failed to resolve PR for commit ${sha} in ${owner}/${repo}:`, error);
     }
