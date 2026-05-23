@@ -43,6 +43,7 @@ Each repository has its own workflow file (`.github/workflows/collect-<owner>-<r
 - `SUPABASE_URL` — Supabase project URL
 - `SUPABASE_SERVICE_ROLE_KEY` — Supabase service role key
 - `SUPABASE_DB_URL` — PostgreSQL connection string for automatic schema migrations before ETL collection and production builds. If absent, the migration script also checks `DATABASE_URL`, `POSTGRES_URL_NON_POOLING`, `POSTGRES_URL`, and `POSTGRES_PRISMA_URL`.
+- `SUPABASE_DB_SSL` — Optional migration SSL mode. Use `no-verify` when the database connection presents a self-signed certificate chain in CI.
 
 ## Getting Started
 
@@ -83,7 +84,7 @@ History backfill is **oldest-first by default**.
 
 ```bash
 npm install
-SUPABASE_DB_URL=postgresql://... npm run migrate:supabase
+SUPABASE_DB_URL=postgresql://... SUPABASE_DB_SSL=no-verify npm run migrate:supabase
 GITHUB_TOKEN=your_token SUPABASE_URL=your_url SUPABASE_SERVICE_ROLE_KEY=your_key npx tsx etl/scripts/collect.ts --repo owner/repo
 ```
 
@@ -121,7 +122,7 @@ Data is stored in Supabase with the following tables (see `supabase/schema.sql`)
 
 ### Database migrations
 
-Per-repo collection workflows run `npm run migrate:supabase` before collection. `npm run build` also runs the same migration automatically through `prebuild`, so production deployments can apply schema changes before the app starts serving new code. In protected runtimes such as GitHub Actions or Vercel, the script only runs when `AUTO_MIGRATE_SUPABASE=1` and the runtime is `main` or production; PR previews skip migration by default. Use `FORCE_SUPABASE_MIGRATION=1` only for explicit manual overrides.
+Per-repo collection workflows run `npm run migrate:supabase` before collection. `npm run build` also runs the same migration automatically through `prebuild`, so production deployments can apply schema changes before the app starts serving new code. In protected runtimes such as GitHub Actions or Vercel, the script only runs when `AUTO_MIGRATE_SUPABASE=1` and the runtime is `main` or production; PR previews skip migration by default. Use `FORCE_SUPABASE_MIGRATION=1` only for explicit manual overrides. Set `SUPABASE_DB_SSL=no-verify` only for CI environments that cannot validate the database certificate chain.
 
 ### Adding a new repository
 
