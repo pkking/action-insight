@@ -20,6 +20,7 @@
 4.  **成本意识**：避免无意义地频繁调用 GitHub API 列表，尽可能重用现有的离线/本地缓存策略，对于长链路的数据解析，采用二级查询 + 本地脚本离线筛选方案。
 5.  **Git 规范**：所有修改在得到确认后，应当立即使用 [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#specification) 规范进行 commit 并推送到 origin。提交信息应遵循 `type(scope): description` 或 `type: description` 格式，常用类型包括 `feat`、`fix`、`ci`、`docs`、`test`、`refactor`、`chore`。
 6.  **PR 工作流**：**禁止直接推送到 `main` 分支**。所有变更必须通过 feature 分支 → Pull Request → 合并流程：
+    - **创建分支前必须先切换到 `main` 并同步远端代码**：`git fetch origin main && git checkout -B main origin/main`，确保 feature 分支基于最新的 `main`。
     - 从 `main` 创建 feature 分支，命名格式：`feat/<descriptive-name>` 或 `fix/<descriptive-name>`
     - 推送分支到 origin 并创建 PR
     - PR 标题使用 Conventional Commits 格式，PR 描述需说明变更内容、测试情况、相关文档链接
