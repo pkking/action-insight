@@ -79,6 +79,8 @@ interface PullRequestRef {
   number: number;
 }
 
+type GitHubApiPayload = Record<string, unknown>;
+
 interface Run {
   id: number;
   name: string;
@@ -93,6 +95,7 @@ interface Run {
   durationInSeconds: number;
   pull_requests?: PullRequestRef[];
   jobs?: Job[];
+  githubPayload?: GitHubApiPayload;
 }
 
 interface Job {
@@ -106,9 +109,10 @@ interface Job {
   html_url: string;
   queueDurationInSeconds: number;
   durationInSeconds: number;
+  githubPayload?: GitHubApiPayload;
 }
 
-interface GitHubJobPayload {
+interface GitHubJobPayload extends GitHubApiPayload {
   id: number;
   name: string;
   status: string;
@@ -417,6 +421,7 @@ export async function collectRepo(
               html_url: j.html_url,
               queueDurationInSeconds: Math.max(0, (startedMs - createdMs) / 1000),
               durationInSeconds: Math.max(0, (completedMs - startedMs) / 1000),
+              githubPayload: j,
             };
           });
         }
@@ -441,6 +446,7 @@ export async function collectRepo(
                 .filter((pullRequest: PullRequestRef | null): pullRequest is PullRequestRef => pullRequest !== null)
             : [],
           jobs,
+          githubPayload: run as GitHubApiPayload,
         });
       }
 

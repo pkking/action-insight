@@ -6,7 +6,7 @@ import yaml from 'js-yaml';
 import { rebuildPullRequestArtifacts } from './pr-artifacts';
 import { getCollectedDatesFromSupabase } from './supabase-storage';
 import { createClient } from '@supabase/supabase-js';
-import type { Run } from '../../src/lib/types';
+import type { GitHubApiPayload, PullRequestRef, Run } from '../../src/lib/types';
 
 interface ReposConfig {
   repos?: unknown;
@@ -36,6 +36,27 @@ function parseTargetRepos(argv: string[]): string[] {
   }
 
   return explicitRepos.length > 0 ? explicitRepos : readReposConfig();
+}
+
+function readPullRequestsFromPayload(payload: GitHubApiPayload | null): PullRequestRef[] {
+  const pullRequests = payload?.pull_requests;
+  if (!Array.isArray(pullRequests)) {
+    return [];
+  }
+
+  return pullRequests
+    .map((pullRequest) => {
+      if (
+        typeof pullRequest === 'object' &&
+        pullRequest !== null &&
+        typeof (pullRequest as { number?: unknown }).number === 'number'
+      ) {
+        return { number: (pullRequest as { number: number }).number };
+      }
+
+      return null;
+    })
+    .filter((pullRequest): pullRequest is PullRequestRef => pullRequest !== null);
 }
 
 async function fetchRunsFromSupabase(repo: string, dates: string[]): Promise<Run[]> {
@@ -75,6 +96,7 @@ async function fetchRunsFromSupabase(repo: string, dates: string[]): Promise<Run
     }
 
     for (const row of runs || []) {
+      const githubPayload = (row.github_payload ?? null) as GitHubApiPayload | null;
       const run: Run = {
         id: Number(row.id),
         name: row.name as string,
@@ -87,7 +109,8 @@ async function fetchRunsFromSupabase(repo: string, dates: string[]): Promise<Run
         updated_at: row.updated_at as string,
         html_url: row.html_url as string,
         durationInSeconds: Number(row.duration_seconds),
-        pull_requests: [],
+        pull_requests: readPullRequestsFromPayload(githubPayload),
+        githubPayload: githubPayload ?? undefined,
         jobs: (row.jobs || []).map((j: Record<string, unknown>) => ({
           id: Number(j.id),
           name: j.name as string,
@@ -99,6 +122,7 @@ async function fetchRunsFromSupabase(repo: string, dates: string[]): Promise<Run
           html_url: j.html_url as string,
           queueDurationInSeconds: Number(j.queue_duration_seconds),
           durationInSeconds: Number(j.duration_seconds),
+          githubPayload: (j.github_payload as GitHubApiPayload | null) ?? undefined,
         })),
       };
       allRuns.push(run);
