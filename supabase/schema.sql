@@ -112,7 +112,24 @@ CREATE TABLE IF NOT EXISTS collection_state (
 
 CREATE INDEX IF NOT EXISTS idx_collection_state_repo ON collection_state(repo_id);
 
--- 8. RPC: Get distinct dates for a repo (server-side DISTINCT)
+-- 8. RPC: Get run IDs that already have jobs for a repo (server-side EXISTS)
+-- Usage: SELECT * FROM get_run_ids_with_jobs(repo_id);
+CREATE OR REPLACE FUNCTION get_run_ids_with_jobs(p_repo_id INTEGER)
+RETURNS TABLE(run_id BIGINT) AS $$
+BEGIN
+  RETURN QUERY
+    SELECT r.id
+    FROM runs r
+    WHERE r.repo_id = p_repo_id
+      AND EXISTS (
+        SELECT 1
+        FROM jobs j
+        WHERE j.run_id = r.id
+      );
+END;
+$$ LANGUAGE plpgsql;
+
+-- 9. RPC: Get distinct dates for a repo (server-side DISTINCT)
 -- Usage: SELECT * FROM get_distinct_dates(repo_id);
 CREATE OR REPLACE FUNCTION get_distinct_dates(p_repo_id INTEGER)
 RETURNS TABLE(date DATE) AS $$

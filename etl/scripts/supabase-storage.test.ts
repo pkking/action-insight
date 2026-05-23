@@ -1,0 +1,161 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+afterEach(() => {
+  vi.resetModules();
+  vi.unstubAllEnvs();
+  vi.clearAllMocks();
+});
+
+function mockSupabaseClient(options: {
+  cacheRows?: Array<{ head_sha: string; pr_number: number; source: string }>;
+  rpcRows?: Array<{ run_id: number | string }>;
+  rpcError?: { message: string } | null;
+}) {
+  const upsertedCacheRows: unknown[] = [];
+  const fromCalls: string[] = [];
+
+  const repoSelectBuilder = {
+    eq: vi.fn(() => ({
+      eq: vi.fn(() => ({
+        single: vi.fn().mockResolvedValue({ data: { id: 7 }, error: null }),
+      })),
+    })),
+  };
+
+  const cacheSelectBuilder = {
+    eq: vi.fn(() => ({
+      in: vi.fn().mockResolvedValue({ data: options.cacheRows ?? [], error: null }),
+    })),
+  };
+
+  const runsSelectBuilder = {
+    eq: vi.fn(() => ({
+      range: vi.fn().mockResolvedValue({ data: [], error: null }),
+    })),
+  };
+
+  const supabase = {
+    rpc: vi.fn().mockResolvedValue({
+      data: options.rpcRows ?? [],
+      error: options.rpcError ?? null,
+    }),
+    from: vi.fn((table: string) => {
+      fromCalls.push(table);
+
+      if (table === 'repos') {
+        return {
+          upsert: vi.fn().mockResolvedValue({ error: null }),
+          select: vi.fn(() => repoSelectBuilder),
+        };
+      }
+
+      if (table === 'pr_resolution_cache') {
+        return {
+          select: vi.fn(() => cacheSelectBuilder),
+          upsert: vi.fn((rows: unknown[]) => {
+            upsertedCacheRows.push(...rows);
+            return Promise.resolve({ error: null });
+          }),
+        };
+      }
+
+      if (table === 'runs') {
+        return {
+          select: vi.fn(() => runsSelectBuilder),
+        };
+      }
+
+      throw new Error(`Unexpected table: ${table}`);
+    }),
+  };
+
+  return { supabase, upsertedCacheRows, fromCalls };
+}
+
+async function importStorageWithSupabase(supabase: unknown) {
+  vi.stubEnv('SUPABASE_URL', 'https://example.supabase.co');
+  vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-role-key');
+  vi.doMock('@supabase/supabase-js', () => ({
+    createClient: vi.fn(() => supabase),
+  }));
+
+  return import('./supabase-storage');
+}
+
+describe('supabase-storage', () => {
+  it('uses the server-side RPC to read run IDs with jobs', async () => {
+    const { supabase, fromCalls } = mockSupabaseClient({
+      rpcRows: [{ run_id: '101' }, { run_id: 102 }],
+    });
+    const { getExistingRunIdsWithJobsFromSupabase } = await importStorageWithSupabase(supabase);
+
+    const runIds = await getExistingRunIdsWithJobsFromSupabase('acme/widgets');
+
+    expect(runIds).toEqual(new Set([101, 102]));
+    expect(supabase.rpc).toHaveBeenCalledWith('get_run_ids_with_jobs', { p_repo_id: 7 });
+    expect(fromCalls).not.toContain('runs');
+  });
+
+  it('does not overwrite higher-confidence PR resolution cache entries with run payload refs', async () => {
+    const { supabase, upsertedCacheRows } = mockSupabaseClient({
+      cacheRows: [
+        {
+          head_sha: 'sha-existing',
+          pr_number: 42,
+          source: 'commits_api',
+        },
+      ],
+    });
+    const { writePullRequestResolutionCacheToSupabase } = await importStorageWithSupabase(supabase);
+
+    await writePullRequestResolutionCacheToSupabase('acme/widgets', [
+      {
+        head_sha: 'sha-existing',
+        pr_number: 99,
+        source: 'run_payload',
+      },
+      {
+        head_sha: 'sha-new',
+        pr_number: 100,
+        source: 'run_payload',
+      },
+    ]);
+
+    expect(upsertedCacheRows).toEqual([
+      expect.objectContaining({
+        head_sha: 'sha-new',
+        pr_number: 100,
+        source: 'run_payload',
+      }),
+    ]);
+  });
+
+  it('allows higher-confidence commits API resolutions to replace search fallback entries', async () => {
+    const { supabase, upsertedCacheRows } = mockSupabaseClient({
+      cacheRows: [
+        {
+          head_sha: 'sha-existing',
+          pr_number: 42,
+          source: 'search_api',
+        },
+      ],
+    });
+    const { writePullRequestResolutionCacheToSupabase } = await importStorageWithSupabase(supabase);
+
+    await writePullRequestResolutionCacheToSupabase('acme/widgets', [
+      {
+        head_sha: 'sha-existing',
+        pr_number: 43,
+        source: 'commits_api',
+      },
+    ]);
+
+    expect(upsertedCacheRows).toEqual([
+      expect.objectContaining({
+        head_sha: 'sha-existing',
+        pr_number: 43,
+        source: 'commits_api',
+      }),
+    ]);
+  });
+});

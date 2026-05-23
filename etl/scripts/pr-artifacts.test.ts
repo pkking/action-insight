@@ -263,6 +263,16 @@ describe('rebuildPullRequestArtifacts', () => {
       'GET /search/issues',
       expect.objectContaining({ q: 'abc123 repo:acme/widgets type:pr', per_page: 1 })
     );
+    expect(writePullRequestResolutionCacheToSupabase).toHaveBeenCalledWith(
+      'acme/widgets',
+      expect.arrayContaining([
+        expect.objectContaining({
+          head_sha: 'abc123',
+          pr_number: 42,
+          source: 'search_api',
+        }),
+      ])
+    );
   });
 
   it('caps issue search fallback attempts to avoid exhausting Search API quota', async () => {

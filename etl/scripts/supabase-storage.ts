@@ -63,6 +63,12 @@ export interface PullRequestResolutionCacheEntry {
 
 let cachedClient: ReturnType<typeof createClient> | null = null;
 const SUPABASE_PAGE_SIZE = 1000;
+const PR_RESOLUTION_SOURCE_PRIORITY: Record<string, number> = {
+  run_payload: 1,
+  workflow_run: 1,
+  search_api: 2,
+  commits_api: 3,
+};
 
 function getSupabase() {
   if (cachedClient) return cachedClient;
@@ -76,6 +82,10 @@ function getSupabase() {
 
   cachedClient = createClient(supabaseUrl, supabaseKey);
   return cachedClient;
+}
+
+function getPrResolutionSourcePriority(source?: string): number {
+  return PR_RESOLUTION_SOURCE_PRIORITY[source ?? 'commits_api'] ?? 0;
 }
 
 async function ensureRepo(owner: string, repo: string): Promise<number | null> {
@@ -207,6 +217,17 @@ export async function getExistingRunIdsWithJobsFromSupabase(repo: string): Promi
   const repoId = await ensureRepo(owner, repoName);
   if (!repoId) return new Set();
 
+  const { data: rpcData, error: rpcError } = await supabase
+    .rpc('get_run_ids_with_jobs', { p_repo_id: repoId });
+
+  if (!rpcError) {
+    return new Set((rpcData || []).map((row: { run_id: number | string }) => Number(row.run_id)));
+  }
+
+  console.warn(
+    `  [Supabase] RPC get_run_ids_with_jobs unavailable, falling back to paginated join: ${rpcError.message}`
+  );
+
   const runIds = new Set<number>();
   let from = 0;
 
@@ -285,16 +306,60 @@ export async function writePullRequestResolutionCacheToSupabase(
   const repoId = await ensureRepo(owner, repoName);
   if (!repoId) return;
 
-  const uniqueEntries = Array.from(
-    new Map(entries.map((entry) => [entry.head_sha, entry])).values()
-  );
-  const rows = uniqueEntries.map((entry) => ({
-    repo_id: repoId,
-    head_sha: entry.head_sha,
-    pr_number: entry.pr_number,
-    source: entry.source ?? 'commits_api',
-    resolved_at: new Date().toISOString(),
-  }));
+  const entriesBySha = new Map<string, PullRequestResolutionCacheEntry>();
+  for (const entry of entries) {
+    const existing = entriesBySha.get(entry.head_sha);
+    if (
+      !existing ||
+      getPrResolutionSourcePriority(entry.source) >= getPrResolutionSourcePriority(existing.source)
+    ) {
+      entriesBySha.set(entry.head_sha, entry);
+    }
+  }
+  const uniqueEntries = Array.from(entriesBySha.values());
+  const existingEntries = new Map<string, { source: string }>();
+  const uniqueShas = uniqueEntries.map((entry) => entry.head_sha);
+
+  for (let i = 0; i < uniqueShas.length; i += 100) {
+    const batch = uniqueShas.slice(i, i + 100);
+    const { data, error } = await supabase
+      .from('pr_resolution_cache')
+      .select('head_sha, pr_number, source')
+      .eq('repo_id', repoId)
+      .in('head_sha', batch);
+
+    if (error) {
+      console.error(`  [Supabase] Error checking PR resolution cache priority: ${error.message}`);
+      continue;
+    }
+
+    for (const row of data || []) {
+      if (
+        typeof row.head_sha === 'string' &&
+        typeof row.pr_number === 'number' &&
+        typeof row.source === 'string'
+      ) {
+        existingEntries.set(row.head_sha, { source: row.source });
+      }
+    }
+  }
+
+  const rows = uniqueEntries
+    .filter((entry) => {
+      const existing = existingEntries.get(entry.head_sha);
+      if (!existing) return true;
+
+      return getPrResolutionSourcePriority(entry.source) >= getPrResolutionSourcePriority(existing.source);
+    })
+    .map((entry) => ({
+      repo_id: repoId,
+      head_sha: entry.head_sha,
+      pr_number: entry.pr_number,
+      source: entry.source ?? 'commits_api',
+      resolved_at: new Date().toISOString(),
+    }));
+
+  if (rows.length === 0) return;
 
   const { error } = await supabase
     .from('pr_resolution_cache')

@@ -35,8 +35,9 @@ interface RebuildPullRequestArtifactsOptions {
 }
 
 const DEFAULT_SHA_RESOLUTION_LIMIT = 250;
-const DEFAULT_SEARCH_RESOLUTION_LIMIT = 0;
+const DEFAULT_SEARCH_RESOLUTION_LIMIT = 5;
 const DEFAULT_RATE_LIMIT_RESERVE = 10;
+const RUN_PAYLOAD_PR_SOURCE = 'run_payload';
 
 function getShaResolutionLimit(): number {
   const value = Number.parseInt(process.env.PR_ARTIFACT_SHA_RESOLUTION_LIMIT ?? '', 10);
@@ -63,8 +64,8 @@ async function resolvePullRequestsFromHeadSha(
   repo: string,
   shas: string[],
   warn: (...args: unknown[]) => void
-): Promise<Map<string, number>> {
-  const resolved = new Map<string, number>();
+): Promise<Map<string, { number: number; source: string }>> {
+  const resolved = new Map<string, { number: number; source: string }>();
   let searchRateLimited = false;
   let coreRateLimited = false;
   let searchAttempts = 0;
@@ -85,7 +86,7 @@ async function resolvePullRequestsFromHeadSha(
       const data = response.data as Array<{ number?: number }>;
       const number = data.find((pullRequest) => typeof pullRequest.number === 'number')?.number;
       if (typeof number === 'number') {
-        resolved.set(sha, number);
+        resolved.set(sha, { number, source: 'commits_api' });
         continue;
       }
     } catch (error) {
@@ -111,7 +112,7 @@ async function resolvePullRequestsFromHeadSha(
         )?.number;
 
         if (typeof searchNumber === 'number') {
-          resolved.set(sha, searchNumber);
+          resolved.set(sha, { number: searchNumber, source: 'search_api' });
           continue;
         }
       } catch (error) {
@@ -203,7 +204,7 @@ export async function rebuildPullRequestArtifacts({
       cacheEntriesToWrite.push({
         head_sha: run.head_sha,
         pr_number: prNumber,
-        source: 'workflow_run',
+        source: RUN_PAYLOAD_PR_SOURCE,
       });
     }
   }
@@ -252,13 +253,13 @@ export async function rebuildPullRequestArtifacts({
   const shasToResolve = unresolvedShas.slice(0, shaResolutionBudget);
   const newlyResolvedPullRequestsBySha = octokit
     ? await resolvePullRequestsFromHeadSha(octokit, owner, repo, shasToResolve, warn)
-    : new Map<string, number>();
-  for (const [sha, number] of newlyResolvedPullRequestsBySha.entries()) {
-    cachedPullRequestsBySha.set(sha, number);
+    : new Map<string, { number: number; source: string }>();
+  for (const [sha, resolution] of newlyResolvedPullRequestsBySha.entries()) {
+    cachedPullRequestsBySha.set(sha, resolution.number);
     cacheEntriesToWrite.push({
       head_sha: sha,
-      pr_number: number,
-      source: 'commits_api',
+      pr_number: resolution.number,
+      source: resolution.source,
     });
   }
   await writePullRequestResolutionCacheToSupabase(repoKey, cacheEntriesToWrite);

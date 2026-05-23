@@ -68,6 +68,8 @@ History backfill is **oldest-first by default**.
 - If a repo has missing history inside the retained window, collection resumes from the earliest missing retained day.
 - Progress is persisted in the Supabase `collection_state` table through `backfill_cursor`.
 - If history is already complete, normal incremental collection continues.
+- Runs with cached jobs in Supabase skip the per-run jobs API call; missing jobs are refetched even when the run row already exists.
+- PR artifact rebuilding resolves missing run-to-PR links from, in order: run payload refs, Supabase's `pr_resolution_cache`, the commits API, and a small Search API fallback. Set `PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT` to tune the fallback budget; the default is `5`.
 
 ### Run a workflow manually
 
