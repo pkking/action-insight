@@ -60,17 +60,19 @@ async function resolvePullRequestsFromHeadSha(
   warn: (...args: unknown[]) => void
 ): Promise<Map<string, number>> {
   const resolved = new Map<string, number>();
-  let rateLimited = false;
+  let searchRateLimited = false;
+  let coreRateLimited = false;
   let searchAttempts = 0;
   const searchResolutionLimit = getSearchResolutionLimit();
 
   for (const sha of shas) {
-    if (rateLimited) {
-      warn(`Skipping PR resolution for commit ${sha}: rate limit reached`);
-      continue;
+    if (coreRateLimited) {
+      warn(`Skipping PR resolution for commit ${sha}: core rate limit reached`);
+      break;
     }
 
-    if (searchAttempts < searchResolutionLimit) {
+    if (!searchRateLimited && searchAttempts < searchResolutionLimit) {
+      searchAttempts += 1;
       try {
         const searchResponse = await octokit.request('GET /search/issues', {
           q: `${sha} repo:${owner}/${repo} type:pr`,
@@ -84,16 +86,15 @@ async function resolvePullRequestsFromHeadSha(
 
         if (typeof searchNumber === 'number') {
           resolved.set(sha, searchNumber);
-          searchAttempts += 1;
           continue;
         }
       } catch (error) {
         if (isGitHubRateLimitError(error)) {
-          rateLimited = true;
-          warn(`Rate limit reached while resolving PRs for ${owner}/${repo}. ${resolved.size} PRs resolved so far.`);
-          continue;
+          searchRateLimited = true;
+          warn(`Search API rate limit reached for ${owner}/${repo}. Falling back to commits API. ${resolved.size} PRs resolved so far.`);
+        } else {
+          warn(`Search API failed for commit ${sha} in ${owner}/${repo}:`, error);
         }
-        warn(`Search API failed for commit ${sha} in ${owner}/${repo}:`, error);
       }
     }
 
@@ -111,8 +112,8 @@ async function resolvePullRequestsFromHeadSha(
       }
     } catch (error) {
       if (isGitHubRateLimitError(error)) {
-        rateLimited = true;
-        warn(`Rate limit reached while resolving PR for commit ${sha}.`);
+        coreRateLimited = true;
+        warn(`Core API rate limit reached while resolving PR for commit ${sha}.`);
         continue;
       }
       warn(`Failed to resolve PR for commit ${sha} in ${owner}/${repo}:`, error);

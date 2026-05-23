@@ -246,7 +246,8 @@ describe('rebuildPullRequestArtifacts', () => {
     process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT = '1';
 
     const warn = vi.fn();
-    const request = vi.fn().mockImplementation((route: string) => {
+    let searchCallCount = 0;
+    const request = vi.fn().mockImplementation((route: string, params: Record<string, unknown> = {}) => {
       if (route === 'GET /rate_limit') {
         return Promise.resolve({
           data: {
@@ -264,11 +265,21 @@ describe('rebuildPullRequestArtifacts', () => {
       }
 
       if (route === 'GET /search/issues') {
-        return Promise.resolve({
-          data: {
-            items: [],
-          },
-        });
+        searchCallCount += 1;
+        if (searchCallCount === 1) {
+          return Promise.resolve({
+            data: {
+              items: [],
+            },
+          });
+        }
+        const error: any = new Error('rate limit exceeded');
+        error.status = 403;
+        error.response = {
+          headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-limit': '30' },
+          data: { message: 'API rate limit exceeded' },
+        };
+        throw error;
       }
 
       throw new Error(`Unexpected route: ${route}`);
@@ -309,8 +320,11 @@ describe('rebuildPullRequestArtifacts', () => {
       }
     }
 
-    expect(request).toHaveBeenCalledWith('GET /search/issues', expect.anything());
-    expect(request).toHaveBeenCalledWith('GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls', expect.anything());
+    const searchCalls = request.mock.calls.filter(call => call[0] === 'GET /search/issues');
+    expect(searchCalls.length).toBe(1);
+
+    const commitCalls = request.mock.calls.filter(call => call[0] === 'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls');
+    expect(commitCalls.length).toBe(15);
   });
 
   it('can rebuild artifacts locally without GitHub API access when runs already include PR refs', async () => {
