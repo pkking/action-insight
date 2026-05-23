@@ -1034,7 +1034,7 @@ function DashboardContent({
 
   return (
     <div className="flex min-h-screen flex-col bg-neutral-50 p-4 font-sans text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100 md:p-8">
-      <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col space-y-6">
+      <div className="mx-auto w-full max-w-7xl flex-1 space-y-6 overflow-x-auto">
         <header className="flex flex-col items-start justify-between gap-4 rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900 md:flex-row md:items-center">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold">
@@ -1131,7 +1131,7 @@ function DashboardContent({
           </div>
         ) : null}
 
-        <section className="overflow-hidden rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <section className="overflow-x-auto rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
               <div className="border-b border-neutral-100 p-6 dark:border-neutral-800">
                 <h2 className="text-lg font-bold">Repository Overview</h2>
                 <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
@@ -1301,7 +1301,7 @@ function DashboardContent({
               )}
         </section>
 
-        <section className="overflow-hidden rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <section className="overflow-x-auto rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
               <div className="flex flex-col gap-4 border-b border-neutral-100 p-6 dark:border-neutral-800 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h2 className="text-lg font-bold">PR Lifecycle</h2>
