@@ -9,10 +9,20 @@ afterEach(() => {
 function mockSupabaseClient(options: {
   cacheRows?: Array<{ head_sha: string; pr_number: number; source: string }>;
   rpcRows?: Array<{ run_id: number | string }>;
+  rpcPages?: Array<Array<{ run_id: number | string }>>;
   rpcError?: { message: string } | null;
 }) {
   const upsertedCacheRows: unknown[] = [];
   const fromCalls: string[] = [];
+  const rpcRange = vi.fn((from: number, to: number) => {
+    const pageIndex = Math.floor(from / (to - from + 1));
+    const rows = options.rpcPages?.[pageIndex] ?? options.rpcRows ?? [];
+
+    return Promise.resolve({
+      data: rows,
+      error: options.rpcError ?? null,
+    });
+  });
 
   const repoSelectBuilder = {
     eq: vi.fn(() => ({
@@ -35,10 +45,9 @@ function mockSupabaseClient(options: {
   };
 
   const supabase = {
-    rpc: vi.fn().mockResolvedValue({
-      data: options.rpcRows ?? [],
-      error: options.rpcError ?? null,
-    }),
+    rpc: vi.fn(() => ({
+      range: rpcRange,
+    })),
     from: vi.fn((table: string) => {
       fromCalls.push(table);
 
@@ -69,7 +78,7 @@ function mockSupabaseClient(options: {
     }),
   };
 
-  return { supabase, upsertedCacheRows, fromCalls };
+  return { supabase, upsertedCacheRows, fromCalls, rpcRange };
 }
 
 async function importStorageWithSupabase(supabase: unknown) {
@@ -84,7 +93,7 @@ async function importStorageWithSupabase(supabase: unknown) {
 
 describe('supabase-storage', () => {
   it('uses the server-side RPC to read run IDs with jobs', async () => {
-    const { supabase, fromCalls } = mockSupabaseClient({
+    const { supabase, fromCalls, rpcRange } = mockSupabaseClient({
       rpcRows: [{ run_id: '101' }, { run_id: 102 }],
     });
     const { getExistingRunIdsWithJobsFromSupabase } = await importStorageWithSupabase(supabase);
@@ -93,7 +102,24 @@ describe('supabase-storage', () => {
 
     expect(runIds).toEqual(new Set([101, 102]));
     expect(supabase.rpc).toHaveBeenCalledWith('get_run_ids_with_jobs', { p_repo_id: 7 });
+    expect(rpcRange).toHaveBeenCalledWith(0, 999);
     expect(fromCalls).not.toContain('runs');
+  });
+
+  it('paginates the server-side RPC when reading run IDs with jobs', async () => {
+    const firstPage = Array.from({ length: 1000 }, (_, i) => ({ run_id: i + 1 }));
+    const { supabase, rpcRange } = mockSupabaseClient({
+      rpcPages: [firstPage, [{ run_id: '1001' }]],
+    });
+    const { getExistingRunIdsWithJobsFromSupabase } = await importStorageWithSupabase(supabase);
+
+    const runIds = await getExistingRunIdsWithJobsFromSupabase('acme/widgets');
+
+    expect(runIds.size).toBe(1001);
+    expect(runIds.has(1)).toBe(true);
+    expect(runIds.has(1001)).toBe(true);
+    expect(rpcRange).toHaveBeenCalledWith(0, 999);
+    expect(rpcRange).toHaveBeenCalledWith(1000, 1999);
   });
 
   it('does not overwrite higher-confidence PR resolution cache entries with run payload refs', async () => {

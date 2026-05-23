@@ -217,35 +217,39 @@ export async function getExistingRunIdsWithJobsFromSupabase(repo: string): Promi
   const repoId = await ensureRepo(owner, repoName);
   if (!repoId) return new Set();
 
-  const { data: rpcData, error: rpcError } = await supabase
-    .rpc('get_run_ids_with_jobs', { p_repo_id: repoId });
-
-  if (!rpcError) {
-    return new Set((rpcData || []).map((row: { run_id: number | string }) => Number(row.run_id)));
-  }
-
-  console.warn(
-    `  [Supabase] RPC get_run_ids_with_jobs unavailable, falling back to paginated join: ${rpcError.message}`
-  );
-
   const runIds = new Set<number>();
   let from = 0;
+  let useRpc = true;
 
   while (true) {
     const to = from + SUPABASE_PAGE_SIZE - 1;
-    const { data, error } = await supabase
-      .from('runs')
-      .select('id, jobs!inner(id)')
-      .eq('repo_id', repoId)
-      .range(from, to);
+    const { data, error } = useRpc
+      ? await supabase
+          .rpc('get_run_ids_with_jobs', { p_repo_id: repoId })
+          .range(from, to)
+      : await supabase
+          .from('runs')
+          .select('id, jobs!inner(id)')
+          .eq('repo_id', repoId)
+          .range(from, to);
 
     if (error) {
+      if (useRpc) {
+        console.warn(
+          `  [Supabase] RPC get_run_ids_with_jobs unavailable, falling back to paginated join: ${error.message}`
+        );
+        useRpc = false;
+        from = 0;
+        runIds.clear();
+        continue;
+      }
+
       console.error(`  [Supabase] Error fetching existing run IDs with jobs: ${error.message}`);
       return runIds;
     }
 
     for (const row of data || []) {
-      runIds.add(Number(row.id));
+      runIds.add(Number(useRpc ? row.run_id : row.id));
     }
 
     if (!data || data.length < SUPABASE_PAGE_SIZE) {

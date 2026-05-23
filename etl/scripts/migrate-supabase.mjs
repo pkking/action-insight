@@ -9,7 +9,12 @@ const __dirname = path.dirname(__filename);
 const schemaPath = path.resolve(__dirname, '../../supabase/schema.sql');
 
 function isTruthy(value) {
-  return value === '1' || value === 'true' || value === 'yes';
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes';
 }
 
 function isProtectedRuntime() {
@@ -85,8 +90,13 @@ async function main() {
 
   await client.connect();
   try {
+    await client.query('BEGIN');
     await client.query(schema);
+    await client.query('COMMIT');
     console.log(`Supabase migration applied from ${path.relative(process.cwd(), schemaPath)}.`);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
   } finally {
     await client.end();
   }

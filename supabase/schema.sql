@@ -125,7 +125,8 @@ BEGIN
         SELECT 1
         FROM jobs j
         WHERE j.run_id = r.id
-      );
+      )
+    ORDER BY r.id;
 END;
 $$ LANGUAGE plpgsql;
 
