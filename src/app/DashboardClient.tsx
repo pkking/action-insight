@@ -1432,7 +1432,9 @@ function DashboardContent({
                             <React.Fragment key={pr.number}>
                               <tr className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-950/50">
                                 <td className="px-6 py-4">
-                                  <div className="font-medium text-neutral-900 dark:text-neutral-100">PR #{pr.number}</div>
+                                  <a href={pr.html_url} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline dark:text-blue-400">
+                                    PR #{pr.number}
+                                  </a>
                                   <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{pr.title}</div>
                                   <div className="mt-1 font-mono text-xs text-neutral-500 dark:text-neutral-400">{pr.branch}</div>
                                 </td>
@@ -1449,9 +1451,6 @@ function DashboardContent({
                                     {expandedPrNumber === pr.number ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                     {loadingDetailNumber === pr.number ? 'Loading...' : 'Workflows'}
                                   </button>
-                                  <a href={pr.html_url} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300" title="View PR on GitHub">
-                                    <ExternalLink className="h-4 w-4" />
-                                  </a>
                                 </td>
                               </tr>
 
