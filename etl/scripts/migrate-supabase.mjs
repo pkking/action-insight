@@ -50,14 +50,18 @@ function getConnectionString() {
 }
 
 function normalizeConnectionString(connectionString) {
-  if (process.env.SUPABASE_DB_SSL === 'verify-full') {
+  if (process.env.SUPABASE_DB_SSL !== 'no-verify') {
     return connectionString;
   }
 
-  const url = new URL(connectionString);
-  url.searchParams.delete('sslmode');
-  url.searchParams.set('sslmode', 'no-verify');
-  return url.toString();
+  try {
+    const url = new URL(connectionString);
+    url.searchParams.delete('sslmode');
+    url.searchParams.set('sslmode', 'no-verify');
+    return url.toString();
+  } catch {
+    return connectionString;
+  }
 }
 
 async function main() {
@@ -76,7 +80,7 @@ async function main() {
   const schema = fs.readFileSync(schemaPath, 'utf8');
   const client = new pg.Client({
     connectionString: normalizeConnectionString(connectionString),
-    ssl: process.env.SUPABASE_DB_SSL === 'disable' ? false : { rejectUnauthorized: false },
+    ssl: process.env.SUPABASE_DB_SSL === 'disable' ? false : { rejectUnauthorized: process.env.SUPABASE_DB_SSL !== 'no-verify' },
   });
 
   await client.connect();
