@@ -5,9 +5,9 @@ import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts';
 import { getCollectedDatesFromSupabase } from './supabase-storage';
-import { readPullRequestsFromPayload } from './github-utils';
+import { readPullRequestsFromPayload } from './github-utils.ts';
 import { createClient } from '@supabase/supabase-js';
-import type { GitHubApiPayload, Run } from '../../src/lib/types';
+import type { GitHubApiPayload, Run } from '../../src/lib/types.ts';
 
 interface ReposConfig {
   repos?: unknown;
@@ -102,7 +102,7 @@ async function fetchRunsFromSupabase(repo: string, dates: string[]): Promise<Run
           html_url: j.html_url as string,
           queueDurationInSeconds: Number(j.queue_duration_seconds),
           durationInSeconds: Number(j.duration_seconds),
-          githubPayload: (j.github_payload as GitHubApiPayload | null) ?? undefined,
+          githubPayload: (j['github_payload'] as GitHubApiPayload | null) ?? undefined,
         })),
       };
       allRuns.push(run);
