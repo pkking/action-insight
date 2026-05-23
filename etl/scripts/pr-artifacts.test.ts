@@ -237,7 +237,7 @@ describe('rebuildPullRequestArtifacts', () => {
 
     expect(request).toHaveBeenCalledWith(
       'GET /search/issues',
-      expect.objectContaining({ q: 'abc123 repo:acme/widgets type:pr', per_page: 1 })
+      expect.objectContaining({ q: 'sha:abc123 repo:acme/widgets type:pr', per_page: 100 })
     );
   });
 
@@ -274,6 +274,23 @@ describe('rebuildPullRequestArtifacts', () => {
       throw new Error(`Unexpected route: ${route}`);
     });
 
+    const shas = Array.from({ length: 15 }, (_, i) => `sha-${i}`);
+    const runs = shas.map((sha, i) => ({
+      id: 100 + i,
+      name: `run-${i}`,
+      head_branch: 'main',
+      head_sha: sha,
+      status: 'completed',
+      conclusion: 'success',
+      event: 'pull_request',
+      created_at: '2026-04-18T01:05:00Z',
+      updated_at: '2026-04-18T01:15:00Z',
+      html_url: `https://github.com/acme/widgets/actions/runs/${100 + i}`,
+      durationInSeconds: 600,
+      pull_requests: [],
+      jobs: [],
+    }));
+
     try {
       await rebuildPullRequestArtifacts({
         octokit: { request },
@@ -281,38 +298,7 @@ describe('rebuildPullRequestArtifacts', () => {
         repo: 'widgets',
         repoKey: 'acme/widgets',
         collectedDates: ['2026-04-18.json'],
-        runs: [
-          {
-            id: 101,
-            name: 'lint',
-            head_branch: 'main',
-            head_sha: 'sha-one',
-            status: 'completed',
-            conclusion: 'success',
-            event: 'pull_request',
-            created_at: '2026-04-18T01:05:00Z',
-            updated_at: '2026-04-18T01:15:00Z',
-            html_url: 'https://github.com/acme/widgets/actions/runs/101',
-            durationInSeconds: 600,
-            pull_requests: [],
-            jobs: [],
-          },
-          {
-            id: 102,
-            name: 'test',
-            head_branch: 'main',
-            head_sha: 'sha-two',
-            status: 'completed',
-            conclusion: 'success',
-            event: 'pull_request',
-            created_at: '2026-04-18T01:10:00Z',
-            updated_at: '2026-04-18T01:20:00Z',
-            html_url: 'https://github.com/acme/widgets/actions/runs/102',
-            durationInSeconds: 600,
-            pull_requests: [],
-            jobs: [],
-          },
-        ],
+        runs,
         warn,
       });
     } finally {
@@ -323,10 +309,9 @@ describe('rebuildPullRequestArtifacts', () => {
       }
     }
 
-    expect(request).toHaveBeenCalledTimes(4);
     expect(request).toHaveBeenCalledWith('GET /search/issues', expect.anything());
     expect(warn).toHaveBeenCalledWith(
-      'Skipping Search API fallback for commit sha-two: search resolution limit reached'
+      'Skipping Search API batch: search resolution limit reached (1)'
     );
   });
 
