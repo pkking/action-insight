@@ -61,54 +61,41 @@ async function resolvePullRequestsFromHeadSha(
 ): Promise<Map<string, number>> {
   const resolved = new Map<string, number>();
   let rateLimited = false;
-  const BATCH_SIZE = 10;
   let searchAttempts = 0;
   const searchResolutionLimit = getSearchResolutionLimit();
 
-  for (let i = 0; i < shas.length; i += BATCH_SIZE) {
+  for (const sha of shas) {
     if (rateLimited) {
-      warn(`Skipping PR resolution for remaining ${shas.length - i} commits: rate limit reached`);
-      break;
+      warn(`Skipping PR resolution for commit ${sha}: rate limit reached`);
+      continue;
     }
 
-    if (searchAttempts >= searchResolutionLimit) {
-      warn(`Skipping Search API batch: search resolution limit reached (${searchResolutionLimit})`);
-      break;
-    }
+    if (searchAttempts < searchResolutionLimit) {
+      try {
+        const searchResponse = await octokit.request('GET /search/issues', {
+          q: `${sha} repo:${owner}/${repo} type:pr`,
+          per_page: 1,
+        });
 
-    const batchShas = shas.slice(i, i + BATCH_SIZE);
-    searchAttempts += 1;
+        const searchData = searchResponse.data as { items?: Array<{ number?: number; pull_request?: unknown }> };
+        const searchNumber = searchData.items?.find(
+          (item) => item.pull_request && typeof item.number === 'number'
+        )?.number;
 
-    try {
-      const shaQuery = batchShas.map(sha => `sha:${sha}`).join(' OR ');
-      const searchResponse = await octokit.request('GET /search/issues', {
-        q: `${shaQuery} repo:${owner}/${repo} type:pr`,
-        per_page: 100,
-      });
-
-      const searchData = searchResponse.data as {
-        total_count?: number;
-        items?: Array<{ number?: number; pull_request?: unknown; url?: string }>;
-      };
-
-      for (const item of searchData.items || []) {
-        if (item.pull_request && typeof item.number === 'number') {
-          resolved.set(item.url || String(item.number), item.number);
+        if (typeof searchNumber === 'number') {
+          resolved.set(sha, searchNumber);
+          searchAttempts += 1;
+          continue;
         }
+      } catch (error) {
+        if (isGitHubRateLimitError(error)) {
+          rateLimited = true;
+          warn(`Rate limit reached while resolving PRs for ${owner}/${repo}. ${resolved.size} PRs resolved so far.`);
+          continue;
+        }
+        warn(`Search API failed for commit ${sha} in ${owner}/${repo}:`, error);
       }
-    } catch (error) {
-      if (isGitHubRateLimitError(error)) {
-        rateLimited = true;
-        warn(`Rate limit reached while batch resolving PRs for ${owner}/${repo}. ${resolved.size} PRs resolved so far.`);
-        break;
-      }
-      warn(`Failed to batch resolve PRs for ${batchShas.length} commits in ${owner}/${repo}:`, error);
     }
-  }
-
-  const unresolvedShas = shas.filter(sha => !resolved.has(sha));
-  for (const sha of unresolvedShas) {
-    if (rateLimited) break;
 
     try {
       const response = await octokit.request('GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls', {
@@ -120,12 +107,13 @@ async function resolvePullRequestsFromHeadSha(
       const number = data.find((pullRequest) => typeof pullRequest.number === 'number')?.number;
       if (typeof number === 'number') {
         resolved.set(sha, number);
+        continue;
       }
     } catch (error) {
       if (isGitHubRateLimitError(error)) {
         rateLimited = true;
         warn(`Rate limit reached while resolving PR for commit ${sha}.`);
-        break;
+        continue;
       }
       warn(`Failed to resolve PR for commit ${sha} in ${owner}/${repo}:`, error);
     }

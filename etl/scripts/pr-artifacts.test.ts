@@ -237,7 +237,7 @@ describe('rebuildPullRequestArtifacts', () => {
 
     expect(request).toHaveBeenCalledWith(
       'GET /search/issues',
-      expect.objectContaining({ q: 'sha:abc123 repo:acme/widgets type:pr', per_page: 100 })
+      expect.objectContaining({ q: 'abc123 repo:acme/widgets type:pr', per_page: 1 })
     );
   });
 
@@ -310,9 +310,7 @@ describe('rebuildPullRequestArtifacts', () => {
     }
 
     expect(request).toHaveBeenCalledWith('GET /search/issues', expect.anything());
-    expect(warn).toHaveBeenCalledWith(
-      'Skipping Search API batch: search resolution limit reached (1)'
-    );
+    expect(request).toHaveBeenCalledWith('GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls', expect.anything());
   });
 
   it('can rebuild artifacts locally without GitHub API access when runs already include PR refs', async () => {
