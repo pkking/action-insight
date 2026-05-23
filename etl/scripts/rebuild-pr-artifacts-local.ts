@@ -5,8 +5,9 @@ import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts';
 import { getCollectedDatesFromSupabase } from './supabase-storage';
+import { readPullRequestsFromPayload } from './github-utils';
 import { createClient } from '@supabase/supabase-js';
-import type { GitHubApiPayload, PullRequestRef, Run } from '../../src/lib/types';
+import type { GitHubApiPayload, Run } from '../../src/lib/types';
 
 interface ReposConfig {
   repos?: unknown;
@@ -36,27 +37,6 @@ function parseTargetRepos(argv: string[]): string[] {
   }
 
   return explicitRepos.length > 0 ? explicitRepos : readReposConfig();
-}
-
-function readPullRequestsFromPayload(payload: GitHubApiPayload | null): PullRequestRef[] {
-  const pullRequests = payload?.pull_requests;
-  if (!Array.isArray(pullRequests)) {
-    return [];
-  }
-
-  return pullRequests
-    .map((pullRequest) => {
-      if (
-        typeof pullRequest === 'object' &&
-        pullRequest !== null &&
-        typeof (pullRequest as { number?: unknown }).number === 'number'
-      ) {
-        return { number: (pullRequest as { number: number }).number };
-      }
-
-      return null;
-    })
-    .filter((pullRequest): pullRequest is PullRequestRef => pullRequest !== null);
 }
 
 async function fetchRunsFromSupabase(repo: string, dates: string[]): Promise<Run[]> {

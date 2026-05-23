@@ -23,6 +23,8 @@ import {
   getCollectedDatesFromSupabase,
   type CollectionState,
 } from './supabase-storage.ts';
+import { readPullRequestsFromPayload } from './github-utils.ts';
+import type { GitHubApiPayload, PullRequestRef } from '../../src/lib/types.ts';
 
 const { buildCollectionWindows, splitCollectionWindow, toCreatedRange } = collectionWindows;
 
@@ -74,12 +76,6 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelayMs = 
   }
   throw lastErr;
 }
-
-interface PullRequestRef {
-  number: number;
-}
-
-type GitHubApiPayload = Record<string, unknown>;
 
 interface Run {
   id: number;
@@ -438,13 +434,7 @@ export async function collectRepo(
           updated_at: run.updated_at,
           html_url: run.html_url,
           durationInSeconds: (new Date(run.updated_at).getTime() - new Date(run.created_at).getTime()) / 1000,
-          pull_requests: Array.isArray(run.pull_requests)
-            ? run.pull_requests
-                .map((pullRequest: { number?: number }) =>
-                  typeof pullRequest.number === 'number' ? { number: pullRequest.number } : null
-                )
-                .filter((pullRequest: PullRequestRef | null): pullRequest is PullRequestRef => pullRequest !== null)
-            : [],
+          pull_requests: readPullRequestsFromPayload(run as GitHubApiPayload),
           jobs,
           githubPayload: run as GitHubApiPayload,
         });

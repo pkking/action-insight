@@ -4,8 +4,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-
-type GitHubApiPayload = Record<string, unknown>;
+import type { GitHubApiPayload } from '../../src/lib/types.ts';
 
 interface Job {
   id: number;
