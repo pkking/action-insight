@@ -1131,7 +1131,7 @@ function DashboardContent({
           </div>
         ) : null}
 
-        <section className="overflow-x-auto rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <section className="overflow-hidden rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
               <div className="border-b border-neutral-100 p-6 dark:border-neutral-800">
                 <h2 className="text-lg font-bold">Repository Overview</h2>
                 <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
