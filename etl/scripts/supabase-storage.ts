@@ -131,11 +131,10 @@ async function requireRepoIdForWrite(repo: string): Promise<number> {
 }
 
 export async function writeRunsToSupabase(repo: string, runs: Run[], date: string): Promise<void> {
-  const supabase = requireSupabaseForWrite(repo);
-
-  const repoId = await requireRepoIdForWrite(repo);
-
   if (runs.length === 0) return;
+
+  const supabase = requireSupabaseForWrite(repo);
+  const repoId = await requireRepoIdForWrite(repo);
 
   const runRows = runs.map((run) => ({
     id: run.id,
