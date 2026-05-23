@@ -1432,7 +1432,7 @@ function DashboardContent({
                             <React.Fragment key={pr.number}>
                               <tr className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-950/50">
                                 <td className="px-6 py-4">
-                                  <a href={pr.html_url} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline dark:text-blue-400">
+                                  <a href={pr.html_url} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline dark:text-blue-400" title="View PR on GitHub">
                                     PR #{pr.number}
                                   </a>
                                   <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{pr.title}</div>
