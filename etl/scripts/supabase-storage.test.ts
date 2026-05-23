@@ -11,6 +11,8 @@ function mockSupabaseClient(options: {
   rpcRows?: Array<{ run_id: number | string }>;
   rpcPages?: Array<Array<{ run_id: number | string }>>;
   rpcError?: { message: string } | null;
+  runUpsertError?: { message: string } | null;
+  jobUpsertError?: { message: string } | null;
 }) {
   const upsertedCacheRows: unknown[] = [];
   const upsertedRunRows: unknown[] = [];
@@ -74,7 +76,7 @@ function mockSupabaseClient(options: {
         return {
           upsert: vi.fn((rows: unknown[]) => {
             upsertedRunRows.push(...rows);
-            return Promise.resolve({ error: null });
+            return Promise.resolve({ error: options.runUpsertError ?? null });
           }),
           select: vi.fn(() => runsSelectBuilder),
         };
@@ -84,7 +86,7 @@ function mockSupabaseClient(options: {
         return {
           upsert: vi.fn((rows: unknown[]) => {
             upsertedJobRows.push(...rows);
-            return Promise.resolve({ error: null });
+            return Promise.resolve({ error: options.jobUpsertError ?? null });
           }),
         };
       }
@@ -169,6 +171,35 @@ describe('supabase-storage', () => {
         }),
       }),
     ]);
+  });
+
+  it('throws when run upsert fails so collection state is not advanced', async () => {
+    const { supabase } = mockSupabaseClient({
+      runUpsertError: {
+        message: "Could not find the 'github_payload' column of 'runs' in the schema cache",
+      },
+    });
+    const { writeRunsToSupabase } = await importStorageWithSupabase(supabase);
+
+    await expect(
+      writeRunsToSupabase('acme/widgets', [
+        {
+          id: 101,
+          name: 'CI',
+          head_branch: 'main',
+          status: 'completed',
+          conclusion: 'success',
+          event: 'push',
+          created_at: '2026-05-01T00:00:00Z',
+          updated_at: '2026-05-01T00:10:00Z',
+          html_url: 'https://example.com/runs/101',
+          durationInSeconds: 600,
+          jobs: [],
+        },
+      ], '2026-05-01')
+    ).rejects.toThrow(
+      "Failed to insert runs for acme/widgets into Supabase: Could not find the 'github_payload' column of 'runs' in the schema cache"
+    );
   });
 
   it('uses the server-side RPC to read run IDs with jobs', async () => {

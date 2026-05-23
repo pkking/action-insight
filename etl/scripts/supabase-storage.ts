@@ -91,6 +91,15 @@ function getPrResolutionSourcePriority(source?: string): number {
   return PR_RESOLUTION_SOURCE_PRIORITY[source ?? 'commits_api'] ?? 0;
 }
 
+function requireSupabaseForWrite(repo: string) {
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new Error(`Supabase is not configured for ${repo}`);
+  }
+
+  return supabase;
+}
+
 async function ensureRepo(owner: string, repo: string): Promise<number | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
@@ -111,13 +120,20 @@ async function ensureRepo(owner: string, repo: string): Promise<number | null> {
   return data?.id ?? null;
 }
 
-export async function writeRunsToSupabase(repo: string, runs: Run[], date: string): Promise<void> {
-  const supabase = getSupabase();
-  if (!supabase) return;
-
+async function requireRepoIdForWrite(repo: string): Promise<number> {
   const [owner, repoName] = repo.split('/');
   const repoId = await ensureRepo(owner, repoName);
-  if (!repoId) return;
+  if (!repoId) {
+    throw new Error(`Failed to ensure repository ${repo} in Supabase`);
+  }
+
+  return repoId;
+}
+
+export async function writeRunsToSupabase(repo: string, runs: Run[], date: string): Promise<void> {
+  const supabase = requireSupabaseForWrite(repo);
+
+  const repoId = await requireRepoIdForWrite(repo);
 
   if (runs.length === 0) return;
 
@@ -143,8 +159,7 @@ export async function writeRunsToSupabase(repo: string, runs: Run[], date: strin
     .upsert(runRows, { onConflict: 'id' });
 
   if (runError) {
-    console.error(`  [Supabase] Error inserting runs: ${runError.message}`);
-    return;
+    throw new Error(`Failed to insert runs for ${repo} into Supabase: ${runError.message}`);
   }
 
   const jobRows: {
@@ -189,7 +204,7 @@ export async function writeRunsToSupabase(repo: string, runs: Run[], date: strin
       .upsert(jobRows, { onConflict: 'id' });
 
     if (jobError) {
-      console.error(`  [Supabase] Error inserting jobs: ${jobError.message}`);
+      throw new Error(`Failed to insert jobs for ${repo} into Supabase: ${jobError.message}`);
     }
   }
 }
@@ -309,12 +324,10 @@ export async function writePullRequestResolutionCacheToSupabase(
   repo: string,
   entries: PullRequestResolutionCacheEntry[],
 ): Promise<void> {
-  const supabase = getSupabase();
-  if (!supabase || entries.length === 0) return;
+  if (entries.length === 0) return;
 
-  const [owner, repoName] = repo.split('/');
-  const repoId = await ensureRepo(owner, repoName);
-  if (!repoId) return;
+  const supabase = requireSupabaseForWrite(repo);
+  const repoId = await requireRepoIdForWrite(repo);
 
   const entriesBySha = new Map<string, PullRequestResolutionCacheEntry>();
   for (const entry of entries) {
@@ -377,19 +390,16 @@ export async function writePullRequestResolutionCacheToSupabase(
       .upsert(batch, { onConflict: 'repo_id,head_sha' });
 
     if (error) {
-      console.error(`  [Supabase] Error writing PR resolution cache: ${error.message}`);
+      throw new Error(`Failed to write PR resolution cache for ${repo} into Supabase: ${error.message}`);
     }
   }
 }
 
 export async function writePrWorkflowsToSupabase(repo: string, prWorkflows: Map<number, number[]>): Promise<void> {
-  const supabase = getSupabase();
-  if (!supabase) return;
   if (prWorkflows.size === 0) return;
 
-  const [owner, repoName] = repo.split('/');
-  const repoId = await ensureRepo(owner, repoName);
-  if (!repoId) return;
+  const supabase = requireSupabaseForWrite(repo);
+  const repoId = await requireRepoIdForWrite(repo);
 
   const { data: prMetrics, error: lookupError } = await supabase
     .from('pr_metrics')
@@ -398,8 +408,7 @@ export async function writePrWorkflowsToSupabase(repo: string, prWorkflows: Map<
     .in('pr_number', Array.from(prWorkflows.keys()));
 
   if (lookupError) {
-    console.error(`  [Supabase] Error looking up PR metric IDs: ${lookupError.message}`);
-    return;
+    throw new Error(`Failed to look up PR metric IDs for ${repo} in Supabase: ${lookupError.message}`);
   }
 
   const prNumberToId = new Map((prMetrics || []).map((row: { id: number; pr_number: number }) => [row.pr_number, row.id]));
@@ -420,18 +429,15 @@ export async function writePrWorkflowsToSupabase(repo: string, prWorkflows: Map<
     .upsert(workflowRows, { onConflict: 'pr_metric_id,run_id' });
 
   if (error) {
-    console.error(`  [Supabase] Error inserting PR workflows: ${error.message}`);
+    throw new Error(`Failed to insert PR workflows for ${repo} into Supabase: ${error.message}`);
   }
 }
 
 export async function writePrMetricsToSupabase(repo: string, prs: PrMetricsSummary[]): Promise<void> {
-  const supabase = getSupabase();
-  if (!supabase) return;
   if (prs.length === 0) return;
 
-  const [owner, repoName] = repo.split('/');
-  const repoId = await ensureRepo(owner, repoName);
-  if (!repoId) return;
+  const supabase = requireSupabaseForWrite(repo);
+  const repoId = await requireRepoIdForWrite(repo);
 
   const prRows = prs.map((pr) => ({
     repo_id: repoId,
@@ -460,7 +466,7 @@ export async function writePrMetricsToSupabase(repo: string, prs: PrMetricsSumma
     .upsert(prRows, { onConflict: 'repo_id,pr_number' });
 
   if (error) {
-    console.error(`  [Supabase] Error inserting PR metrics: ${error.message}`);
+    throw new Error(`Failed to insert PR metrics for ${repo} into Supabase: ${error.message}`);
   }
 }
 
@@ -506,12 +512,9 @@ export async function writeCollectionState(
   repo: string,
   state: CollectionState,
 ): Promise<void> {
-  const supabase = getSupabase();
-  if (!supabase) return;
+  const supabase = requireSupabaseForWrite(repo);
 
-  const [owner, repoName] = repo.split('/');
-  const repoId = await ensureRepo(owner, repoName);
-  if (!repoId) return;
+  const repoId = await requireRepoIdForWrite(repo);
 
   const { error } = await supabase
     .from('collection_state')
@@ -525,7 +528,7 @@ export async function writeCollectionState(
     }, { onConflict: 'repo_id' });
 
   if (error) {
-    console.error(`  [Supabase] Error writing collection state: ${error.message}`);
+    throw new Error(`Failed to write collection state for ${repo} into Supabase: ${error.message}`);
   }
 }
 
