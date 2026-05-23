@@ -360,17 +360,19 @@ export async function writePullRequestResolutionCacheToSupabase(
       head_sha: entry.head_sha,
       pr_number: entry.pr_number,
       source: entry.source ?? 'commits_api',
-      resolved_at: new Date().toISOString(),
     }));
 
   if (rows.length === 0) return;
 
-  const { error } = await supabase
-    .from('pr_resolution_cache')
-    .upsert(rows, { onConflict: 'repo_id,head_sha' });
+  for (let i = 0; i < rows.length; i += 100) {
+    const batch = rows.slice(i, i + 100);
+    const { error } = await supabase
+      .from('pr_resolution_cache')
+      .upsert(batch, { onConflict: 'repo_id,head_sha' });
 
-  if (error) {
-    console.error(`  [Supabase] Error writing PR resolution cache: ${error.message}`);
+    if (error) {
+      console.error(`  [Supabase] Error writing PR resolution cache: ${error.message}`);
+    }
   }
 }
 

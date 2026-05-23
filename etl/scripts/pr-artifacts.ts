@@ -118,7 +118,7 @@ async function resolvePullRequestsFromHeadSha(
       } catch (error) {
         if (isGitHubRateLimitError(error)) {
           searchRateLimited = true;
-          warn(`Search API rate limit reached for ${owner}/${repo}. Falling back to commits API. ${resolved.size} PRs resolved so far.`);
+          warn(`Search API rate limit reached for ${owner}/${repo}. Disabling search fallback for remaining commits. ${resolved.size} PRs resolved so far.`);
         } else {
           warn(`Search API failed for commit ${sha} in ${owner}/${repo}:`, error);
         }
