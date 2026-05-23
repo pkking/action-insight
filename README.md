@@ -42,6 +42,7 @@ Each repository has its own workflow file (`.github/workflows/collect-<owner>-<r
 - `<OWNER>_<REPO>` — GitHub token for each repo's workflow (uppercase, hyphens → underscores)
 - `SUPABASE_URL` — Supabase project URL
 - `SUPABASE_SERVICE_ROLE_KEY` — Supabase service role key
+- `SUPABASE_DB_URL` — PostgreSQL connection string for automatic schema migrations before ETL collection and production builds. If absent, the migration script also checks `DATABASE_URL`, `POSTGRES_URL_NON_POOLING`, `POSTGRES_URL`, and `POSTGRES_PRISMA_URL`.
 
 ## Getting Started
 
@@ -67,6 +68,8 @@ History backfill is **oldest-first by default**.
 - If a repo has missing history inside the retained window, collection resumes from the earliest missing retained day.
 - Progress is persisted in the Supabase `collection_state` table through `backfill_cursor`.
 - If history is already complete, normal incremental collection continues.
+- Runs with cached jobs in Supabase skip the per-run jobs API call; missing jobs are refetched even when the run row already exists.
+- PR artifact rebuilding resolves missing run-to-PR links from, in order: run payload refs, Supabase's `pr_resolution_cache`, the commits API, and a small Search API fallback. Set `PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT` to tune the fallback budget; the default is `5`.
 
 ### Run a workflow manually
 
@@ -80,6 +83,7 @@ History backfill is **oldest-first by default**.
 
 ```bash
 npm install
+SUPABASE_DB_URL=postgresql://... npm run migrate:supabase
 GITHUB_TOKEN=your_token SUPABASE_URL=your_url SUPABASE_SERVICE_ROLE_KEY=your_key npx tsx etl/scripts/collect.ts --repo owner/repo
 ```
 
@@ -101,7 +105,7 @@ Deploy the `main` branch to Vercel:
 
 1. Connect your repository to [Vercel](https://vercel.com/new)
 2. Set the deploy branch to `main`
-3. Configure environment variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+3. Configure environment variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and a database connection URL such as `SUPABASE_DB_URL` or `POSTGRES_URL_NON_POOLING`
 
 ## Database Schema
 
@@ -112,7 +116,12 @@ Data is stored in Supabase with the following tables (see `supabase/schema.sql`)
 - **jobs** — Individual jobs within runs (queue duration, execution duration)
 - **pr_metrics** — PR-level CI metrics summaries
 - **pr_workflows** — Linking table between PR metrics and runs
+- **pr_resolution_cache** — Cached commit SHA to PR number associations used to reduce GitHub API calls
 - **collection_state** — Per-repo collection state (backfill cursor, history completion, latest date)
+
+### Database migrations
+
+Per-repo collection workflows run `npm run migrate:supabase` before collection. `npm run build` also runs the same migration automatically through `prebuild`, so production deployments can apply schema changes before the app starts serving new code. In protected runtimes such as GitHub Actions or Vercel, the script only runs when `AUTO_MIGRATE_SUPABASE=1` and the runtime is `main` or production; PR previews skip migration by default. Use `FORCE_SUPABASE_MIGRATION=1` only for explicit manual overrides.
 
 ### Adding a new repository
 

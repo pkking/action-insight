@@ -55,7 +55,20 @@ interface PrMetricsSummary {
   conclusion: string;
 }
 
+export interface PullRequestResolutionCacheEntry {
+  head_sha: string;
+  pr_number: number;
+  source?: string;
+}
+
 let cachedClient: ReturnType<typeof createClient> | null = null;
+const SUPABASE_PAGE_SIZE = 1000;
+const PR_RESOLUTION_SOURCE_PRIORITY: Record<string, number> = {
+  run_payload: 1,
+  workflow_run: 1,
+  search_api: 2,
+  commits_api: 3,
+};
 
 function getSupabase() {
   if (cachedClient) return cachedClient;
@@ -69,6 +82,10 @@ function getSupabase() {
 
   cachedClient = createClient(supabaseUrl, supabaseKey);
   return cachedClient;
+}
+
+function getPrResolutionSourcePriority(source?: string): number {
+  return PR_RESOLUTION_SOURCE_PRIORITY[source ?? 'commits_api'] ?? 0;
 }
 
 async function ensureRepo(owner: string, repo: string): Promise<number | null> {
@@ -190,6 +207,173 @@ export async function getExistingRunIdsFromSupabase(repo: string): Promise<Set<n
   }
 
   return new Set((data || []).map((row: { id: number }) => row.id));
+}
+
+export async function getExistingRunIdsWithJobsFromSupabase(repo: string): Promise<Set<number>> {
+  const supabase = getSupabase();
+  if (!supabase) return new Set();
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return new Set();
+
+  const runIds = new Set<number>();
+  let from = 0;
+  let useRpc = true;
+
+  while (true) {
+    const to = from + SUPABASE_PAGE_SIZE - 1;
+    const { data, error } = useRpc
+      ? await supabase
+          .rpc('get_run_ids_with_jobs', { p_repo_id: repoId })
+          .range(from, to)
+      : await supabase
+          .from('runs')
+          .select('id, jobs!inner(id)')
+          .eq('repo_id', repoId)
+          .range(from, to);
+
+    if (error) {
+      if (useRpc) {
+        console.warn(
+          `  [Supabase] RPC get_run_ids_with_jobs unavailable, falling back to paginated join: ${error.message}`
+        );
+        useRpc = false;
+        from = 0;
+        runIds.clear();
+        continue;
+      }
+
+      console.error(`  [Supabase] Error fetching existing run IDs with jobs: ${error.message}`);
+      return runIds;
+    }
+
+    for (const row of data || []) {
+      runIds.add(Number(useRpc ? row.run_id : row.id));
+    }
+
+    if (!data || data.length < SUPABASE_PAGE_SIZE) {
+      break;
+    }
+
+    from += SUPABASE_PAGE_SIZE;
+  }
+
+  return runIds;
+}
+
+export async function readPullRequestResolutionCacheFromSupabase(
+  repo: string,
+  shas: string[],
+): Promise<Map<string, number>> {
+  const supabase = getSupabase();
+  if (!supabase || shas.length === 0) return new Map();
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return new Map();
+
+  const resolved = new Map<string, number>();
+  const uniqueShas = Array.from(new Set(shas));
+
+  for (let i = 0; i < uniqueShas.length; i += 100) {
+    const batch = uniqueShas.slice(i, i + 100);
+    const { data, error } = await supabase
+      .from('pr_resolution_cache')
+      .select('head_sha, pr_number')
+      .eq('repo_id', repoId)
+      .in('head_sha', batch);
+
+    if (error) {
+      console.error(`  [Supabase] Error reading PR resolution cache: ${error.message}`);
+      continue;
+    }
+
+    for (const row of data || []) {
+      if (typeof row.head_sha === 'string' && typeof row.pr_number === 'number') {
+        resolved.set(row.head_sha, row.pr_number);
+      }
+    }
+  }
+
+  return resolved;
+}
+
+export async function writePullRequestResolutionCacheToSupabase(
+  repo: string,
+  entries: PullRequestResolutionCacheEntry[],
+): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase || entries.length === 0) return;
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return;
+
+  const entriesBySha = new Map<string, PullRequestResolutionCacheEntry>();
+  for (const entry of entries) {
+    const existing = entriesBySha.get(entry.head_sha);
+    if (
+      !existing ||
+      getPrResolutionSourcePriority(entry.source) >= getPrResolutionSourcePriority(existing.source)
+    ) {
+      entriesBySha.set(entry.head_sha, entry);
+    }
+  }
+  const uniqueEntries = Array.from(entriesBySha.values());
+  const existingEntries = new Map<string, { source: string }>();
+  const uniqueShas = uniqueEntries.map((entry) => entry.head_sha);
+
+  for (let i = 0; i < uniqueShas.length; i += 100) {
+    const batch = uniqueShas.slice(i, i + 100);
+    const { data, error } = await supabase
+      .from('pr_resolution_cache')
+      .select('head_sha, pr_number, source')
+      .eq('repo_id', repoId)
+      .in('head_sha', batch);
+
+    if (error) {
+      console.error(`  [Supabase] Error checking PR resolution cache priority: ${error.message}`);
+      continue;
+    }
+
+    for (const row of data || []) {
+      if (
+        typeof row.head_sha === 'string' &&
+        typeof row.pr_number === 'number' &&
+        typeof row.source === 'string'
+      ) {
+        existingEntries.set(row.head_sha, { source: row.source });
+      }
+    }
+  }
+
+  const rows = uniqueEntries
+    .filter((entry) => {
+      const existing = existingEntries.get(entry.head_sha);
+      if (!existing) return true;
+
+      return getPrResolutionSourcePriority(entry.source) >= getPrResolutionSourcePriority(existing.source);
+    })
+    .map((entry) => ({
+      repo_id: repoId,
+      head_sha: entry.head_sha,
+      pr_number: entry.pr_number,
+      source: entry.source ?? 'commits_api',
+    }));
+
+  if (rows.length === 0) return;
+
+  for (let i = 0; i < rows.length; i += 100) {
+    const batch = rows.slice(i, i + 100);
+    const { error } = await supabase
+      .from('pr_resolution_cache')
+      .upsert(batch, { onConflict: 'repo_id,head_sha' });
+
+    if (error) {
+      console.error(`  [Supabase] Error writing PR resolution cache: ${error.message}`);
+    }
+  }
 }
 
 export async function writePrWorkflowsToSupabase(repo: string, prWorkflows: Map<number, number[]>): Promise<void> {

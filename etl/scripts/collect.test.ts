@@ -15,6 +15,7 @@ vi.mock('./supabase-storage.ts', async () => {
     writeCollectionState: vi.fn().mockResolvedValue(undefined),
     getCollectedDatesFromSupabase: vi.fn().mockResolvedValue([]),
     getExistingRunIdsFromSupabase: vi.fn().mockResolvedValue(new Set()),
+    getExistingRunIdsWithJobsFromSupabase: vi.fn().mockResolvedValue(new Set()),
     writeRunsToSupabase: vi.fn().mockResolvedValue(undefined),
   };
 });
@@ -24,6 +25,7 @@ import {
   writeCollectionState,
   getCollectedDatesFromSupabase,
   getExistingRunIdsFromSupabase,
+  getExistingRunIdsWithJobsFromSupabase,
   writeRunsToSupabase,
 } from './supabase-storage';
 
@@ -50,6 +52,7 @@ describe('collect rate limit handling', () => {
     vi.mocked(readCollectionState).mockResolvedValue(null);
     vi.mocked(getCollectedDatesFromSupabase).mockResolvedValue([]);
     vi.mocked(getExistingRunIdsFromSupabase).mockResolvedValue(new Set());
+    vi.mocked(getExistingRunIdsWithJobsFromSupabase).mockResolvedValue(new Set());
     vi.mocked(writeRunsToSupabase).mockResolvedValue(undefined);
     vi.mocked(writeCollectionState).mockResolvedValue(undefined);
   });
@@ -547,6 +550,69 @@ describe('collect rate limit handling', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('refetches jobs for existing runs when no cached jobs are present', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-18T00:00:00Z'));
+
+    const repo = 'acme/widgets';
+    mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
+    vi.mocked(getExistingRunIdsFromSupabase).mockResolvedValue(new Set([101]));
+    vi.mocked(getExistingRunIdsWithJobsFromSupabase).mockResolvedValue(new Set());
+
+    const request = vi.fn().mockImplementation((route: string, params: Record<string, unknown>) => {
+      if (route === 'GET /repos/{owner}/{repo}/actions/runs') {
+        return Promise.resolve({
+          data: {
+            workflow_runs: [
+              {
+                id: 101,
+                name: 'CI',
+                head_branch: 'main',
+                status: 'completed',
+                conclusion: 'success',
+                created_at: '2026-04-18T10:00:00Z',
+                updated_at: '2026-04-18T10:10:00Z',
+                html_url: 'https://example.com/runs/101',
+              },
+            ],
+          },
+        });
+      }
+
+      if (route === 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs') {
+        return Promise.resolve({
+          data: {
+            jobs: [
+              {
+                id: 201,
+                name: 'build',
+                status: 'completed',
+                conclusion: 'success',
+                created_at: '2026-04-18T10:00:00Z',
+                started_at: '2026-04-18T10:01:00Z',
+                completed_at: '2026-04-18T10:10:00Z',
+                html_url: 'https://example.com/jobs/201',
+              },
+            ],
+          },
+        });
+      }
+
+      throw new Error(`Unexpected request: ${route} ${JSON.stringify(params)}`);
+    });
+
+    try {
+      await collectRepo({ request } as never, repo, 90, { forceFullBackfill: false, reverse: false });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(request).toHaveBeenCalledWith(
+      'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs',
+      expect.objectContaining({ run_id: 101 })
+    );
   });
 
   it('keeps the exact retention-boundary day file when pruning old data', async () => {
