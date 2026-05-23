@@ -4,6 +4,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import type { GitHubApiPayload } from '../../src/lib/types.ts';
 
 interface Job {
   id: number;
@@ -16,6 +17,7 @@ interface Job {
   html_url: string;
   queueDurationInSeconds: number;
   durationInSeconds: number;
+  githubPayload?: GitHubApiPayload;
 }
 
 interface Run {
@@ -32,6 +34,7 @@ interface Run {
   durationInSeconds: number;
   pull_requests?: { number: number }[];
   jobs?: Job[];
+  githubPayload?: GitHubApiPayload;
 }
 
 interface PrMetricsSummary {
@@ -131,6 +134,7 @@ export async function writeRunsToSupabase(repo: string, runs: Run[], date: strin
     updated_at: run.updated_at,
     html_url: run.html_url,
     duration_seconds: run.durationInSeconds,
+    github_payload: run.githubPayload ?? null,
     date,
   }));
 
@@ -155,6 +159,7 @@ export async function writeRunsToSupabase(repo: string, runs: Run[], date: strin
     html_url: string;
     queue_duration_seconds: number;
     duration_seconds: number;
+    github_payload: GitHubApiPayload | null;
   }[] = [];
 
   for (const run of runs) {
@@ -172,6 +177,7 @@ export async function writeRunsToSupabase(repo: string, runs: Run[], date: strin
           html_url: job.html_url,
           queue_duration_seconds: job.queueDurationInSeconds,
           duration_seconds: job.durationInSeconds,
+          github_payload: job.githubPayload ?? null,
         });
       }
     }

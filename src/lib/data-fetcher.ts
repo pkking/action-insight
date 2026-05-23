@@ -1,6 +1,9 @@
 import { getSupabaseClient } from './supabase';
 import type { Index, DayData, Run, Job } from './types';
 
+const RUN_WITH_JOBS_SELECT =
+  'id,repo_id,name,head_branch,head_sha,status,conclusion,event,created_at,updated_at,html_url,duration_seconds,date,jobs(id,run_id,name,status,conclusion,created_at,started_at,completed_at,html_url,queue_duration_seconds,duration_seconds)' as const;
+
 async function getRepoId(owner: string, repo: string): Promise<number> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
@@ -92,7 +95,7 @@ export async function fetchDay(owner: string, repo: string, fileName: string): P
 
   const { data: runs, error } = await supabase
     .from('runs')
-    .select('*, jobs(*)')
+    .select(RUN_WITH_JOBS_SELECT)
     .eq('repo_id', repoId)
     .eq('date', date);
 
@@ -117,7 +120,7 @@ async function fetchRunsFromDb(repoId: number, dateFilter: { startDate?: string;
 
   let query = supabase
     .from('runs')
-    .select('*, jobs(*)')
+    .select(RUN_WITH_JOBS_SELECT)
     .eq('repo_id', repoId)
     .order('date', { ascending: false });
 

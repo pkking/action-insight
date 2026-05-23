@@ -21,6 +21,8 @@ export interface PullRequestRef {
   number: number;
 }
 
+export type GitHubApiPayload = Record<string, unknown>;
+
 export interface PullRequestUser {
   login: string;
 }
@@ -49,6 +51,7 @@ export interface Run {
   durationInSeconds: number;
   pull_requests?: PullRequestRef[];
   jobs?: Job[];
+  githubPayload?: GitHubApiPayload;
 }
 
 export interface Job {
@@ -62,6 +65,7 @@ export interface Job {
   html_url: string;
   queueDurationInSeconds: number;
   durationInSeconds: number;
+  githubPayload?: GitHubApiPayload;
 }
 
 export interface PullRequestMetricsSummary {

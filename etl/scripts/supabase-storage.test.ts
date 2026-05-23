@@ -13,6 +13,8 @@ function mockSupabaseClient(options: {
   rpcError?: { message: string } | null;
 }) {
   const upsertedCacheRows: unknown[] = [];
+  const upsertedRunRows: unknown[] = [];
+  const upsertedJobRows: unknown[] = [];
   const fromCalls: string[] = [];
   const rpcRange = vi.fn((from: number, to: number) => {
     const pageIndex = Math.floor(from / (to - from + 1));
@@ -70,7 +72,20 @@ function mockSupabaseClient(options: {
 
       if (table === 'runs') {
         return {
+          upsert: vi.fn((rows: unknown[]) => {
+            upsertedRunRows.push(...rows);
+            return Promise.resolve({ error: null });
+          }),
           select: vi.fn(() => runsSelectBuilder),
+        };
+      }
+
+      if (table === 'jobs') {
+        return {
+          upsert: vi.fn((rows: unknown[]) => {
+            upsertedJobRows.push(...rows);
+            return Promise.resolve({ error: null });
+          }),
         };
       }
 
@@ -78,7 +93,7 @@ function mockSupabaseClient(options: {
     }),
   };
 
-  return { supabase, upsertedCacheRows, fromCalls, rpcRange };
+  return { supabase, upsertedCacheRows, upsertedRunRows, upsertedJobRows, fromCalls, rpcRange };
 }
 
 async function importStorageWithSupabase(supabase: unknown) {
@@ -92,6 +107,70 @@ async function importStorageWithSupabase(supabase: unknown) {
 }
 
 describe('supabase-storage', () => {
+  it('persists raw GitHub API payloads for runs and jobs', async () => {
+    const { supabase, upsertedRunRows, upsertedJobRows } = mockSupabaseClient({});
+    const { writeRunsToSupabase } = await importStorageWithSupabase(supabase);
+
+    await writeRunsToSupabase('acme/widgets', [
+      {
+        id: 101,
+        name: 'CI',
+        head_branch: 'main',
+        head_sha: 'abc123',
+        status: 'completed',
+        conclusion: 'success',
+        event: 'push',
+        created_at: '2026-05-01T00:00:00Z',
+        updated_at: '2026-05-01T00:10:00Z',
+        html_url: 'https://example.com/runs/101',
+        durationInSeconds: 600,
+        githubPayload: {
+          id: 101,
+          path: '.github/workflows/ci.yml',
+          run_attempt: 2,
+        },
+        jobs: [
+          {
+            id: 201,
+            name: 'test',
+            status: 'completed',
+            conclusion: 'success',
+            created_at: '2026-05-01T00:01:00Z',
+            started_at: '2026-05-01T00:02:00Z',
+            completed_at: '2026-05-01T00:09:00Z',
+            html_url: 'https://example.com/jobs/201',
+            queueDurationInSeconds: 60,
+            durationInSeconds: 420,
+            githubPayload: {
+              id: 201,
+              runner_name: 'runner-1',
+              labels: ['self-hosted', 'npu'],
+            },
+          },
+        ],
+      },
+    ], '2026-05-01');
+
+    expect(upsertedRunRows).toEqual([
+      expect.objectContaining({
+        id: 101,
+        github_payload: expect.objectContaining({
+          path: '.github/workflows/ci.yml',
+          run_attempt: 2,
+        }),
+      }),
+    ]);
+    expect(upsertedJobRows).toEqual([
+      expect.objectContaining({
+        id: 201,
+        github_payload: expect.objectContaining({
+          runner_name: 'runner-1',
+          labels: ['self-hosted', 'npu'],
+        }),
+      }),
+    ]);
+  });
+
   it('uses the server-side RPC to read run IDs with jobs', async () => {
     const { supabase, fromCalls, rpcRange } = mockSupabaseClient({
       rpcRows: [{ run_id: '101' }, { run_id: 102 }],
