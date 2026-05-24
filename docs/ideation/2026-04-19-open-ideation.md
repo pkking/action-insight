@@ -84,6 +84,10 @@ topic: open
 | 37 | Repo Categorization & Filtering | Solves hypothetical scale problem (5 repos today) |
 | 38 | Workflow Health Heatmaps | New viz library needed; Recharts heatmap support is weak |
 
+## Deferred TODOs
+
+- 2026-05-24: Move raw GitHub API payload storage out of Supabase into a repository-tracked SQLite database. Keep Supabase focused on queryable run/job/PR metrics fields, and store large `github_payload` blobs in SQLite artifacts committed to the code repository so Free Plan database size pressure stays bounded.
+
 ## Session Log
 
 - 2026-04-19: Initial ideation — 24 candidates generated, 6 survived.

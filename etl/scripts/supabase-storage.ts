@@ -73,6 +73,17 @@ const PR_RESOLUTION_SOURCE_PRIORITY: Record<string, number> = {
   commits_api: 3,
 };
 
+function readPositiveIntegerEnv(name: string, defaultValue: number): number {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : defaultValue;
+}
+
+const RUN_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('RUN_UPSERT_BATCH_SIZE', 200);
+const JOB_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('JOB_UPSERT_BATCH_SIZE', 500);
+const CACHE_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('CACHE_UPSERT_BATCH_SIZE', 100);
+const PR_METRIC_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('PR_METRIC_UPSERT_BATCH_SIZE', 100);
+const PR_WORKFLOW_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('PR_WORKFLOW_UPSERT_BATCH_SIZE', 500);
+
 function getSupabase() {
   if (cachedClient) return cachedClient;
 
@@ -98,6 +109,16 @@ function requireSupabaseForWrite(repo: string) {
   }
 
   return supabase;
+}
+
+function* chunkArray<T>(items: T[], size: number): Generator<T[]> {
+  if (size <= 0) {
+    throw new Error('Chunk size must be greater than 0');
+  }
+
+  for (let index = 0; index < items.length; index += size) {
+    yield items.slice(index, index + size);
+  }
 }
 
 async function ensureRepo(owner: string, repo: string): Promise<number | null> {
@@ -153,12 +174,14 @@ export async function writeRunsToSupabase(repo: string, runs: Run[], date: strin
     date,
   }));
 
-  const { error: runError } = await supabase
-    .from('runs')
-    .upsert(runRows, { onConflict: 'id' });
+  for (const batch of chunkArray(runRows, RUN_UPSERT_BATCH_SIZE)) {
+    const { error: runError } = await supabase
+      .from('runs')
+      .upsert(batch, { onConflict: 'id' });
 
-  if (runError) {
-    throw new Error(`Failed to insert runs for ${repo} into Supabase: ${runError.message}`);
+    if (runError) {
+      throw new Error(`Failed to insert runs for ${repo} into Supabase: ${runError.message}`);
+    }
   }
 
   const jobRows: {
@@ -197,10 +220,10 @@ export async function writeRunsToSupabase(repo: string, runs: Run[], date: strin
     }
   }
 
-  if (jobRows.length > 0) {
+  for (const batch of chunkArray(jobRows, JOB_UPSERT_BATCH_SIZE)) {
     const { error: jobError } = await supabase
       .from('jobs')
-      .upsert(jobRows, { onConflict: 'id' });
+      .upsert(batch, { onConflict: 'id' });
 
     if (jobError) {
       throw new Error(`Failed to insert jobs for ${repo} into Supabase: ${jobError.message}`);
@@ -296,8 +319,7 @@ export async function readPullRequestResolutionCacheFromSupabase(
   const resolved = new Map<string, number>();
   const uniqueShas = Array.from(new Set(shas));
 
-  for (let i = 0; i < uniqueShas.length; i += 100) {
-    const batch = uniqueShas.slice(i, i + 100);
+  for (const batch of chunkArray(uniqueShas, CACHE_UPSERT_BATCH_SIZE)) {
     const { data, error } = await supabase
       .from('pr_resolution_cache')
       .select('head_sha, pr_number')
@@ -342,8 +364,7 @@ export async function writePullRequestResolutionCacheToSupabase(
   const existingEntries = new Map<string, { source: string }>();
   const uniqueShas = uniqueEntries.map((entry) => entry.head_sha);
 
-  for (let i = 0; i < uniqueShas.length; i += 100) {
-    const batch = uniqueShas.slice(i, i + 100);
+  for (const batch of chunkArray(uniqueShas, CACHE_UPSERT_BATCH_SIZE)) {
     const { data, error } = await supabase
       .from('pr_resolution_cache')
       .select('head_sha, pr_number, source')
@@ -382,8 +403,7 @@ export async function writePullRequestResolutionCacheToSupabase(
 
   if (rows.length === 0) return;
 
-  for (let i = 0; i < rows.length; i += 100) {
-    const batch = rows.slice(i, i + 100);
+  for (const batch of chunkArray(rows, CACHE_UPSERT_BATCH_SIZE)) {
     const { error } = await supabase
       .from('pr_resolution_cache')
       .upsert(batch, { onConflict: 'repo_id,head_sha' });
@@ -400,17 +420,23 @@ export async function writePrWorkflowsToSupabase(repo: string, prWorkflows: Map<
   const supabase = requireSupabaseForWrite(repo);
   const repoId = await requireRepoIdForWrite(repo);
 
-  const { data: prMetrics, error: lookupError } = await supabase
-    .from('pr_metrics')
-    .select('id, pr_number')
-    .eq('repo_id', repoId)
-    .in('pr_number', Array.from(prWorkflows.keys()));
+  const prNumberToId = new Map<number, number>();
 
-  if (lookupError) {
-    throw new Error(`Failed to look up PR metric IDs for ${repo} in Supabase: ${lookupError.message}`);
+  for (const batch of chunkArray(Array.from(prWorkflows.keys()), PR_METRIC_UPSERT_BATCH_SIZE)) {
+    const { data: prMetrics, error: lookupError } = await supabase
+      .from('pr_metrics')
+      .select('id, pr_number')
+      .eq('repo_id', repoId)
+      .in('pr_number', batch);
+
+    if (lookupError) {
+      throw new Error(`Failed to look up PR metric IDs for ${repo} in Supabase: ${lookupError.message}`);
+    }
+
+    for (const row of prMetrics || []) {
+      prNumberToId.set(row.pr_number, row.id);
+    }
   }
-
-  const prNumberToId = new Map((prMetrics || []).map((row: { id: number; pr_number: number }) => [row.pr_number, row.id]));
 
   const workflowRows: { pr_metric_id: number; run_id: number }[] = [];
   for (const [prNumber, runIds] of prWorkflows.entries()) {
@@ -423,12 +449,14 @@ export async function writePrWorkflowsToSupabase(repo: string, prWorkflows: Map<
 
   if (workflowRows.length === 0) return;
 
-  const { error } = await supabase
-    .from('pr_workflows')
-    .upsert(workflowRows, { onConflict: 'pr_metric_id,run_id' });
+  for (const batch of chunkArray(workflowRows, PR_WORKFLOW_UPSERT_BATCH_SIZE)) {
+    const { error } = await supabase
+      .from('pr_workflows')
+      .upsert(batch, { onConflict: 'pr_metric_id,run_id' });
 
-  if (error) {
-    throw new Error(`Failed to insert PR workflows for ${repo} into Supabase: ${error.message}`);
+    if (error) {
+      throw new Error(`Failed to insert PR workflows for ${repo} into Supabase: ${error.message}`);
+    }
   }
 }
 
@@ -460,12 +488,14 @@ export async function writePrMetricsToSupabase(repo: string, prs: PrMetricsSumma
     conclusion: pr.conclusion || null,
   }));
 
-  const { error } = await supabase
-    .from('pr_metrics')
-    .upsert(prRows, { onConflict: 'repo_id,pr_number' });
+  for (const batch of chunkArray(prRows, PR_METRIC_UPSERT_BATCH_SIZE)) {
+    const { error } = await supabase
+      .from('pr_metrics')
+      .upsert(batch, { onConflict: 'repo_id,pr_number' });
 
-  if (error) {
-    throw new Error(`Failed to insert PR metrics for ${repo} into Supabase: ${error.message}`);
+    if (error) {
+      throw new Error(`Failed to insert PR metrics for ${repo} into Supabase: ${error.message}`);
+    }
   }
 }
 
