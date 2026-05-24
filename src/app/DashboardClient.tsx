@@ -694,14 +694,21 @@ function JobDetailView({
               axisLine={false}
               domain={[0, 100]}
             />
-            <Tooltip
-              formatter={(value: number | string, name: string) => {
-                if (name === 'P90 Queue' || name === 'P90 E2E') return `${Math.round(Number(value) / 60)}m`;
-                if (name === 'Success Rate') return `${value}%`;
-                if (name === 'Run Count') return String(value);
-                return String(value);
-              }}
-            />
+            <Tooltip content={({ payload }) => {
+              if (!payload?.[0]) return null;
+              const { name: label, value, dataKey } = payload[0];
+              const displayValue = dataKey === 'p90Queue' || dataKey === 'p90E2e'
+                ? `${Math.round(Number(value) / 60)}m`
+                : dataKey === 'successRate'
+                  ? `${value}%`
+                  : String(value);
+              return (
+                <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs shadow-md dark:border-neutral-700 dark:bg-neutral-800">
+                  <div className="font-medium text-neutral-700 dark:text-neutral-200">{label}</div>
+                  <div className="text-neutral-500 dark:text-neutral-400">{displayValue}</div>
+                </div>
+              );
+            }} />
             <Legend />
             {showDailyTrend && (
               <>
