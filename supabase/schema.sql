@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS runs (
 
 -- Index for common query patterns: by repo + date range
 CREATE INDEX IF NOT EXISTS idx_runs_repo_date ON runs(repo_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_runs_repo_id_id ON runs(repo_id, id);
 CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs(created_at DESC);
 
 -- 3. Jobs table (individual jobs within runs)
