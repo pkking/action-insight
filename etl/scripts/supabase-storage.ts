@@ -80,6 +80,7 @@ function readPositiveIntegerEnv(name: string, defaultValue: number): number {
 
 const RUN_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('RUN_UPSERT_BATCH_SIZE', 200);
 const JOB_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('JOB_UPSERT_BATCH_SIZE', 500);
+const CACHE_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('CACHE_UPSERT_BATCH_SIZE', 100);
 
 function getSupabase() {
   if (cachedClient) return cachedClient;
