@@ -1,0 +1,62 @@
+name: Rebuild PR Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'Repository to rebuild, in owner/repo form'
+        required: true
+        type: string
+      start_date:
+        description: 'Optional start date, yyyy-mm-dd'
+        required: false
+        type: string
+      end_date:
+        description: 'Optional end date, yyyy-mm-dd'
+        required: false
+        type: string
+
+concurrency:
+  group: rebuild-pr-artifacts-${{ inputs.repo }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm config set registry https://registry.npmjs.org
+      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
+      - name: Apply Supabase migrations
+        run: npm run migrate:supabase
+        env:
+          AUTO_MIGRATE_SUPABASE: 1
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+          SUPABASE_DB_SSL: no-verify
+      - name: Rebuild PR artifacts
+        run: |
+          args=(--repo "${REBUILD_REPO}")
+          if [ -n "${REBUILD_START_DATE}" ]; then
+            args+=(--start-date "${REBUILD_START_DATE}")
+          fi
+          if [ -n "${REBUILD_END_DATE}" ]; then
+            args+=(--end-date "${REBUILD_END_DATE}")
+          fi
+          npx tsx etl/scripts/rebuild-pr-artifacts.ts "${args[@]}"
+        env:
+          REBUILD_REPO: ${{ inputs.repo }}
+          REBUILD_START_DATE: ${{ inputs.start_date }}
+          REBUILD_END_DATE: ${{ inputs.end_date }}
+          GITHUB_TOKEN: ${{ secrets.ETL_GITHUB_TOKEN || github.token }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

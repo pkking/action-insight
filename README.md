@@ -70,6 +70,7 @@ History backfill is **oldest-first by default**.
 - Progress is persisted in the Supabase `collection_state` table through `backfill_cursor`.
 - If history is already complete, normal incremental collection continues.
 - Runs with cached jobs in Supabase skip the per-run jobs API call; missing jobs are refetched even when the run row already exists.
+- Raw collection only writes workflow runs and jobs. PR artifact rebuilding is a separate step that reads existing Supabase `runs` rows and writes `pr_metrics` and `pr_workflows`.
 - PR artifact rebuilding resolves missing run-to-PR links from, in order: run payload refs, Supabase's `pr_resolution_cache`, the commits API, and a small Search API fallback. Set `PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT` to tune the fallback budget; the default is `5`.
 
 ### Run a workflow manually
@@ -79,6 +80,8 @@ History backfill is **oldest-first by default**.
 3. Optionally fill the workflow inputs:
    - `force`: restart history backfill from the earliest retained day
    - `reverse`: collect from today backward instead of oldest-first
+
+To rebuild PR metrics from already-collected raw runs, use **Actions** → **Rebuild PR Artifacts** and provide `repo`, plus optional `start_date` and `end_date` inputs.
 
 ### Run locally
 
@@ -99,6 +102,32 @@ Collect from today backward:
 ```bash
 GITHUB_TOKEN=your_token SUPABASE_URL=your_url SUPABASE_SERVICE_ROLE_KEY=your_key npx tsx etl/scripts/collect.ts --repo owner/repo --reverse
 ```
+
+Rebuild PR artifacts from existing Supabase runs:
+
+```bash
+GITHUB_TOKEN=your_token SUPABASE_URL=your_url SUPABASE_SERVICE_ROLE_KEY=your_key npm run rebuild:pr-artifacts -- --repo owner/repo --start-date 2026-05-01 --end-date 2026-05-24
+```
+
+### Local maintenance tools
+
+Use these scripts for local recovery, backfills, and validation:
+
+| Tool | Use when | Command |
+| --- | --- | --- |
+| Supabase migration | Schema changed, a fresh database is being prepared, or ETL/rebuild jobs need the latest tables/functions. | `SUPABASE_DB_URL=postgresql://... SUPABASE_DB_SSL=no-verify npm run migrate:supabase` |
+| Raw CI collection | `runs` or `jobs` are stale or missing. This fetches GitHub Actions runs/jobs and writes raw records only. | `GITHUB_TOKEN=... SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... npx tsx etl/scripts/collect.ts --repo owner/repo` |
+| PR artifact rebuild | Raw runs already exist but PR metrics are stale, missing, or partially resolved. Prefer a bounded date range. | `GITHUB_TOKEN=... SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... npm run rebuild:pr-artifacts -- --repo owner/repo --start-date yyyy-mm-dd --end-date yyyy-mm-dd` |
+| Legacy PR rebuild entry | Existing local notes still reference the old filename. It delegates to the new rebuild script. | `npx tsx etl/scripts/rebuild-pr-artifacts-local.ts --repo owner/repo` |
+| Verification | Before handing off code changes. | `npm run lint` and `npm test` |
+
+Operational guidance:
+
+- Prefer `npm run rebuild:pr-artifacts` over rerunning raw collection when only `pr_metrics` or `pr_workflows` are stale.
+- Use `--start-date` and `--end-date` for rebuilds whenever possible to reduce Supabase reads and GitHub PR lookup calls.
+- Use `collect.ts --force-full-backfill` only when the retained raw history should be rebuilt from the earliest retained day.
+- Use `collect.ts --reverse` when the newest data matters most and the historical backfill can continue later.
+- `GITHUB_TOKEN` is optional for PR artifact rebuilds, but without it the rebuild can only use embedded run payload PR refs and `pr_resolution_cache`.
 
 ## Deploy on Vercel
 
