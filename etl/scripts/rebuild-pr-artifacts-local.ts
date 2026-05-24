@@ -77,6 +77,7 @@ async function fetchRunsFromSupabase(repo: string, dates: string[]): Promise<Run
         .eq('repo_id', repoData.id)
         .eq('date', date)
         .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
         .range(from, to);
 
       if (error) {
