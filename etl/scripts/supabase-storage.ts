@@ -651,3 +651,79 @@ export async function getCollectedDatesFromSupabase(repo: string): Promise<strin
 
   return (data || []).map((row: { date: string }) => row.date);
 }
+
+export interface EtlFreshnessReport {
+  latestRunCreatedAt: string | null;
+  latestCiCompletedAt: string | null;
+  lagInSeconds: number | null;
+  isStale: boolean;
+}
+
+export function formatFreshnessReport(report: EtlFreshnessReport, repo: string): string {
+  if (report.isStale) {
+    const lagDisplay = report.lagInSeconds !== null ? `${Math.round(report.lagInSeconds / 3600)}h` : 'infinite';
+    return `ETL freshness: ${repo} pr_metrics lag behind raw runs by ${lagDisplay} (runs: ${report.latestRunCreatedAt}, metrics: ${report.latestCiCompletedAt})`;
+  }
+  if (report.latestRunCreatedAt && report.latestCiCompletedAt) {
+    return `ETL freshness: ${repo} pr_metrics in sync (lag: ${Math.max(0, Math.round(report.lagInSeconds! / 60))}min)`;
+  }
+  return `ETL freshness: ${repo} runs=${report.latestRunCreatedAt ?? 'none'}, metrics=${report.latestCiCompletedAt ?? 'none'}`;
+}
+
+export async function checkEtlFreshness(repo: string, staleThresholdSeconds = 86400): Promise<EtlFreshnessReport | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const parts = repo.split('/');
+  if (parts.length !== 2) {
+    console.error(`Invalid repo format for freshness check: ${repo}. Expected owner/repo`);
+    return null;
+  }
+  const [owner, repoName] = parts;
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return null;
+
+  const prRelatedEvents = ['pull_request', 'pull_request_target', 'pull_request_review', 'push'];
+  const [runsResult, metricsResult] = await Promise.all([
+    supabase
+      .from('runs')
+      .select('created_at')
+      .eq('repo_id', repoId)
+      .in('event', prRelatedEvents)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single(),
+    supabase
+      .from('pr_metrics')
+      .select('ci_completed_at')
+      .eq('repo_id', repoId)
+      .not('ci_completed_at', 'is', null)
+      .order('ci_completed_at', { ascending: false })
+      .limit(1)
+      .single(),
+  ]);
+
+  if (runsResult.error && runsResult.error.code !== 'PGRST116') {
+    console.error(`  [Supabase] Error fetching latest run for freshness check: ${runsResult.error.message}`);
+    return null;
+  }
+  if (metricsResult.error && metricsResult.error.code !== 'PGRST116') {
+    console.error(`  [Supabase] Error fetching latest metric for freshness check: ${metricsResult.error.message}`);
+    return null;
+  }
+
+  const latestRunCreatedAt = runsResult.data?.created_at ?? null;
+  const latestCiCompletedAt = metricsResult.data?.ci_completed_at ?? null;
+
+  let lagInSeconds: number | null = null;
+  if (latestRunCreatedAt && latestCiCompletedAt) {
+    lagInSeconds = (new Date(latestRunCreatedAt).getTime() - new Date(latestCiCompletedAt).getTime()) / 1000;
+  }
+
+  return {
+    latestRunCreatedAt,
+    latestCiCompletedAt,
+    lagInSeconds,
+    isStale: (latestRunCreatedAt !== null && latestCiCompletedAt === null) || (lagInSeconds !== null && lagInSeconds > staleThresholdSeconds),
+  };
+}

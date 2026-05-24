@@ -20,6 +20,8 @@ import {
   readCollectionState,
   writeCollectionState,
   getCollectedDatesFromSupabase,
+  checkEtlFreshness,
+  formatFreshnessReport,
   type CollectionState,
 } from './supabase-storage.ts';
 import { readPullRequestsFromPayload } from './github-utils.ts';
@@ -593,6 +595,18 @@ export async function runCollection({
 
   if (stoppedEarly) {
     return;
+  }
+
+  for (const repo of targetRepos) {
+    const freshness = await checkEtlFreshness(repo);
+    if (freshness) {
+      const message = formatFreshnessReport(freshness, repo);
+      if (freshness.isStale) {
+        console.warn(message);
+      } else {
+        log(message);
+      }
+    }
   }
 
   console.log('Done!');

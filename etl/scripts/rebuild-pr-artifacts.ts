@@ -8,7 +8,7 @@ import { addDays, format, parseISO } from 'date-fns';
 import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
-import { getCollectedDatesFromSupabase } from './supabase-storage.ts';
+import { getCollectedDatesFromSupabase, checkEtlFreshness, formatFreshnessReport } from './supabase-storage.ts';
 import { readPullRequestsFromPayload } from './github-utils.ts';
 import type { GitHubApiPayload, Run } from '../../src/lib/types.ts';
 
@@ -288,6 +288,16 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       });
 
       console.log(`Rebuilt PR artifacts for ${repoKey} from ${runs.length} raw run(s)`);
+
+      const freshness = await checkEtlFreshness(repoKey);
+      if (freshness) {
+        const message = formatFreshnessReport(freshness, repoKey);
+        if (freshness.isStale) {
+          console.warn(message);
+        } else {
+          console.log(message);
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(`${repoKey}: ${message}`);

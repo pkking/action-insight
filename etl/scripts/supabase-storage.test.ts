@@ -566,3 +566,126 @@ describe('supabase-storage', () => {
     ]);
   });
 });
+
+describe('checkEtlFreshness', () => {
+  function mockFreshnessClient(options: {
+    latestPrRun?: { created_at: string } | null;
+    latestMetric?: { ci_completed_at: string } | null;
+    runError?: { message: string } | null;
+    metricError?: { message: string } | null;
+  }) {
+    const buildFreshnessQueryChain = (result: { data: unknown; error: unknown }, filterType: 'in' | 'not') => {
+      const orderBuilder = {
+        limit: vi.fn(() => ({
+          single: vi.fn().mockResolvedValue(result),
+        })),
+      };
+      if (filterType === 'in') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              in: vi.fn(() => ({
+                order: vi.fn(() => orderBuilder),
+              })),
+            })),
+          })),
+        };
+      }
+      return {
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            not: vi.fn(() => ({
+              order: vi.fn(() => orderBuilder),
+            })),
+          })),
+        })),
+      };
+    };
+
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'repos') {
+          return {
+            upsert: vi.fn().mockResolvedValue({ error: null }),
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  single: vi.fn().mockResolvedValue({ data: { id: 7 }, error: null }),
+                })),
+              })),
+            })),
+          };
+        }
+        if (table === 'runs') {
+          return buildFreshnessQueryChain({
+            data: options.latestPrRun ?? null,
+            error: options.runError ?? null,
+          }, 'in');
+        }
+        if (table === 'pr_metrics') {
+          return buildFreshnessQueryChain({
+            data: options.latestMetric ?? null,
+            error: options.metricError ?? null,
+          }, 'not');
+        }
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    };
+
+    return supabase;
+  }
+
+  it('returns null when Supabase is not configured', async () => {
+    const supabase = mockFreshnessClient({});
+    vi.doMock('@supabase/supabase-js', () => ({
+      createClient: vi.fn(() => supabase),
+    }));
+
+    const { checkEtlFreshness } = await import('./supabase-storage');
+    const result = await checkEtlFreshness('acme/widgets');
+    expect(result).toBeNull();
+  });
+
+  it('reports in-sync when runs and metrics have similar timestamps', async () => {
+    const supabase = mockFreshnessClient({
+      latestPrRun: { created_at: '2026-05-24T10:00:00Z' },
+      latestMetric: { ci_completed_at: '2026-05-24T09:50:00Z' },
+    });
+    const { checkEtlFreshness } = await importStorageWithSupabase(supabase);
+
+    const result = await checkEtlFreshness('acme/widgets');
+    expect(result).not.toBeNull();
+    expect(result!.latestRunCreatedAt).toBe('2026-05-24T10:00:00Z');
+    expect(result!.latestCiCompletedAt).toBe('2026-05-24T09:50:00Z');
+    expect(result!.lagInSeconds).toBe(600);
+    expect(result!.isStale).toBe(false);
+  });
+
+  it('flags stale metrics when pr_metrics lag behind runs by more than threshold', async () => {
+    const supabase = mockFreshnessClient({
+      latestPrRun: { created_at: '2026-05-24T10:00:00Z' },
+      latestMetric: { ci_completed_at: '2026-05-22T10:00:00Z' },
+    });
+    const { checkEtlFreshness } = await importStorageWithSupabase(supabase);
+
+    const result = await checkEtlFreshness('acme/widgets');
+    expect(result).not.toBeNull();
+    expect(result!.lagInSeconds).toBe(172800);
+    expect(result!.isStale).toBe(true);
+  });
+
+  it('handles missing metrics gracefully', async () => {
+    const supabase = mockFreshnessClient({
+      latestPrRun: { created_at: '2026-05-24T10:00:00Z' },
+      latestMetric: null,
+    });
+    const { checkEtlFreshness } = await importStorageWithSupabase(supabase);
+
+    const result = await checkEtlFreshness('acme/widgets');
+    expect(result).not.toBeNull();
+    expect(result!.latestRunCreatedAt).toBe('2026-05-24T10:00:00Z');
+    expect(result!.latestCiCompletedAt).toBeNull();
+    expect(result!.lagInSeconds).toBeNull();
+    expect(result!.isStale).toBe(true);
+  });
+});
