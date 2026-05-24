@@ -378,6 +378,21 @@ describe('rebuildPullRequestArtifacts', () => {
 
     const commitCalls = request.mock.calls.filter(call => call[0] === 'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls');
     expect(commitCalls.length).toBe(15);
+
+    expect(writePullRequestResolutionCacheToSupabase).toHaveBeenCalledWith(
+      'acme/widgets',
+      expect.arrayContaining([
+        expect.objectContaining({
+          head_sha: 'sha-0',
+          status: 'not_found',
+        }),
+        expect.objectContaining({
+          head_sha: 'sha-1',
+          status: 'failed',
+          error_message: 'Search API fallback budget exhausted before this SHA was fully resolved',
+        }),
+      ])
+    );
   });
 
   it('uses cached SHA to PR resolutions before calling GitHub', async () => {

@@ -123,7 +123,8 @@ async function resolvePullRequestsFromHeadSha(
       }
     }
 
-    if (!rateLimited && !searchRateLimited && searchAttempts < searchResolutionLimit) {
+    const searchBudgetExhausted = searchAttempts >= searchResolutionLimit;
+    if (!rateLimited && !searchRateLimited && !searchBudgetExhausted) {
       try {
         searchAttempts += 1;
         searchApiCalls += 1;
@@ -158,6 +159,11 @@ async function resolvePullRequestsFromHeadSha(
       }
     }
 
+    if (!rateLimited && !searchRateLimited && searchBudgetExhausted) {
+      failed = true;
+      warn(`Search API fallback budget exhausted for ${owner}/${repo}; commit ${sha} will be retried later.`);
+    }
+
     if (rateLimited) {
       entries.push({
         head_sha: sha,
@@ -173,7 +179,9 @@ async function resolvePullRequestsFromHeadSha(
         head_sha: sha,
         status: 'failed',
         source: 'commits_api',
-        error_message: 'GitHub API lookup failed during SHA to PR resolution',
+        error_message: searchBudgetExhausted
+          ? 'Search API fallback budget exhausted before this SHA was fully resolved'
+          : 'GitHub API lookup failed during SHA to PR resolution',
       });
       continue;
     }
