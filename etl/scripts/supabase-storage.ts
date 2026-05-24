@@ -651,3 +651,51 @@ export async function getCollectedDatesFromSupabase(repo: string): Promise<strin
 
   return (data || []).map((row: { date: string }) => row.date);
 }
+
+export interface EtlFreshnessReport {
+  latestRunCreatedAt: string | null;
+  latestPrMetricCreatedAt: string | null;
+  lagInSeconds: number | null;
+  isStale: boolean;
+}
+
+export async function checkEtlFreshness(repo: string, staleThresholdSeconds = 86400): Promise<EtlFreshnessReport | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return null;
+
+  const [runsResult, metricsResult] = await Promise.all([
+    supabase
+      .from('runs')
+      .select('created_at')
+      .eq('repo_id', repoId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single(),
+    supabase
+      .from('pr_metrics')
+      .select('created_at')
+      .eq('repo_id', repoId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single(),
+  ]);
+
+  const latestRunCreatedAt = runsResult.error ? null : (runsResult.data?.created_at ?? null);
+  const latestPrMetricCreatedAt = metricsResult.error ? null : (metricsResult.data?.created_at ?? null);
+
+  let lagInSeconds: number | null = null;
+  if (latestRunCreatedAt && latestPrMetricCreatedAt) {
+    lagInSeconds = (new Date(latestRunCreatedAt).getTime() - new Date(latestPrMetricCreatedAt).getTime()) / 1000;
+  }
+
+  return {
+    latestRunCreatedAt,
+    latestPrMetricCreatedAt,
+    lagInSeconds,
+    isStale: lagInSeconds !== null && lagInSeconds > staleThresholdSeconds,
+  };
+}

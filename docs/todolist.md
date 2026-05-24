@@ -4,7 +4,7 @@
 
 - [x] Keep per-repo ETL workflows serialized with `concurrency` so overlapping scheduled runs do not rewrite the same recent windows.
 - [x] Separate PR metrics rebuild from raw runs/jobs collection so rate-limit failures can be retried independently without re-fetching workflow runs. See [ETL Follow-up Plan](plans/2026-05-24-001-etl-followup-plan.md).
-- [ ] Add ETL freshness checks that compare latest raw `runs.created_at` with latest `pr_metrics.created_at` and warn when metrics lag raw data.
+- [x] Add ETL freshness checks that compare latest raw `runs.created_at` with latest `pr_metrics.created_at` and warn when metrics lag raw data.
 
 ## ETL Recovery
 
