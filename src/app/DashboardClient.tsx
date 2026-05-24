@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Activity,
   AlignLeft,
+  ArrowLeft,
   Calendar as CalendarIcon,
   CheckCircle,
   ChevronDown,
@@ -17,15 +18,16 @@ import {
   Share2,
   XCircle,
 } from 'lucide-react';
-import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, LineChart, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
 import type { LegendPayload } from 'recharts';
-import { format } from 'date-fns';
+import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 
 import { buildDailyTrend, buildRepoOverviewRows, createDateRange, filterByDateRange } from '@/lib/overview-metrics';
 import { callApi } from '@/lib/api-client';
 import type { RepoOption } from '@/lib/server-homepage-data';
 import type {
   DailyTrendPoint,
+  DateRange,
   PullRequestDetailFile,
   PullRequestIndexFile,
   RepoOverviewRow,
@@ -63,6 +65,7 @@ type DashboardQueryState = {
   useCustomRange: boolean;
   filterName: string;
   repoKey: string;
+  jobName: string;
 };
 
 type DashboardClientProps = {
@@ -169,6 +172,7 @@ function parseDashboardQuery(params: Pick<URLSearchParams, 'get'>): DashboardQue
     useCustomRange: params.get('useCustomRange') === 'true',
     filterName: params.get('filterName') || '',
     repoKey: params.get('repo') || '',
+    jobName: params.get('jobName') || '',
   };
 }
 
@@ -503,6 +507,275 @@ function TimingChart<T extends { id: number; name: string; queueTimeSeconds: num
   );
 }
 
+function JobDetailView({
+  jobName,
+  allWorkflows,
+  dateRange,
+  onBack,
+}: {
+  jobName: string;
+  allWorkflows: Run[];
+  dateRange: DateRange;
+  onBack: () => void;
+}) {
+  const [showDailyTrend, setShowDailyTrend] = useState(true);
+  const [showIndividualRuns, setShowIndividualRuns] = useState(true);
+
+  const chartData = useMemo(() => {
+    const matchingJobs: {
+      day: string;
+      dayIndex: number;
+      queueSeconds: number;
+      e2eSeconds: number;
+      conclusion: string;
+      created_at: string;
+    }[] = [];
+
+    for (const run of allWorkflows) {
+      if (!run.jobs) continue;
+      const runCreatedAtMs = new Date(run.created_at).getTime();
+      const runDate = new Date(run.created_at);
+      const dayStr = format(runDate, 'yyyy-MM-dd');
+      const dayIndex = differenceInCalendarDays(runDate, dateRange.start);
+
+      for (const job of run.jobs) {
+        if (job.name !== jobName) continue;
+        if (!job.started_at && !job.created_at) continue;
+        const startedAtMs = new Date(job.started_at || job.created_at).getTime();
+        const completedAtMs = new Date(job.completed_at || job.started_at || job.created_at).getTime();
+        const queueSeconds = Math.max(0, (startedAtMs - runCreatedAtMs) / 1000);
+        const e2eSeconds = Math.max(0, (completedAtMs - runCreatedAtMs) / 1000);
+        matchingJobs.push({ day: dayStr, dayIndex, queueSeconds, e2eSeconds, conclusion: job.conclusion, created_at: run.created_at });
+      }
+    }
+
+    if (matchingJobs.length === 0) return null;
+
+    const byDay = new Map<string, typeof matchingJobs>();
+    for (const job of matchingJobs) {
+      const existing = byDay.get(job.day) || [];
+      existing.push(job);
+      byDay.set(job.day, existing);
+    }
+
+    const dailyRows: Record<string, unknown>[] = [];
+    const sortedDays = [...byDay.keys()].sort();
+
+    const p90 = (values: number[]) => {
+      if (values.length === 0) return 0;
+      const sorted = [...values].sort((a, b) => a - b);
+      return sorted[Math.ceil(sorted.length * 0.9) - 1] ?? 0;
+    };
+
+    for (const day of sortedDays) {
+      const dayJobs = byDay.get(day)!;
+      const queueValues = dayJobs.map((j) => j.queueSeconds);
+      const e2eValues = dayJobs.map((j) => j.e2eSeconds);
+      const successCount = dayJobs.filter((j) => j.conclusion === 'success').length;
+      dailyRows.push({
+        day,
+        p90Queue: p90(queueValues),
+        p90E2e: p90(e2eValues),
+        successRate: Math.round((successCount / dayJobs.length) * 100),
+        runCount: dayJobs.length,
+        dayIndex: dayJobs[0].dayIndex,
+      });
+    }
+
+    // Group scatter data by conclusion to minimize <Scatter> components
+    const scatterByConclusion = new Map<string, { x: number; y: number }[]>();
+    for (const job of matchingJobs) {
+      const seed = job.created_at.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) + job.conclusion.charCodeAt(0);
+      const jitter = ((seed * 9301 + 49297) % 233280) / 233280 * 0.6 - 0.3;
+      const group = scatterByConclusion.get(job.conclusion) || [];
+      group.push({ x: job.dayIndex + jitter, y: job.e2eSeconds });
+      scatterByConclusion.set(job.conclusion, group);
+    }
+
+    return { dailyRows, scatterByConclusion };
+  }, [allWorkflows, jobName, dateRange.start]);
+
+  if (!chartData) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to jobs
+          </button>
+          <h3 className="text-lg font-bold text-neutral-900 dark:text-neutral-100">{jobName}</h3>
+        </div>
+        <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">
+          No runs found for this job in the selected time range.
+        </div>
+      </div>
+    );
+  }
+
+  const { dailyRows, scatterByConclusion } = chartData;
+
+  const conclusionColor = (conclusion: string) => {
+    if (conclusion === 'success') return '#22c55e';
+    if (conclusion === 'skipped') return '#9ca3af';
+    return '#ef4444';
+  };
+
+  const conclusionLabel = (conclusion: string) => {
+    if (conclusion === 'success') return 'Success';
+    if (conclusion === 'skipped') return 'Skipped';
+    return 'Failed';
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to jobs
+        </button>
+        <h3 className="text-lg font-bold text-neutral-900 dark:text-neutral-100">{jobName}</h3>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 text-sm">
+        <label className="inline-flex items-center gap-2 text-neutral-600 dark:text-neutral-400">
+          <input
+            type="checkbox"
+            checked={showDailyTrend}
+            onChange={(e) => setShowDailyTrend(e.target.checked)}
+            className="rounded border-neutral-300 text-blue-600 focus:ring-blue-500 dark:border-neutral-600"
+          />
+          Show daily trend
+        </label>
+        <label className="inline-flex items-center gap-2 text-neutral-600 dark:text-neutral-400">
+          <input
+            type="checkbox"
+            checked={showIndividualRuns}
+            onChange={(e) => setShowIndividualRuns(e.target.checked)}
+            className="rounded border-neutral-300 text-blue-600 focus:ring-blue-500 dark:border-neutral-600"
+          />
+          Show individual runs
+        </label>
+      </div>
+
+      <div className="h-80">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={showDailyTrend ? dailyRows : []}>
+            <XAxis
+              type="number"
+              dataKey="dayIndex"
+              tick={{ fontSize: 11, fill: '#888' }}
+              tickLine={false}
+              axisLine={false}
+              interval="preserveStartEnd"
+              ticks={dailyRows.map((r) => r.dayIndex as number)}
+              tickFormatter={(val) => {
+                const row = dailyRows.find((r) => r.dayIndex === val);
+                return row ? format(parseISO(row.day as string), 'MMM dd') : '';
+              }}
+              angle={-30}
+              textAnchor="end"
+              height={50}
+              domain={['dataMin - 0.5', 'dataMax + 0.5']}
+            />
+            <YAxis
+              yAxisId="left"
+              tick={{ fontSize: 12, fill: '#888' }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(val) => `${Math.round(val / 60)}`}
+              label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
+            />
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              tick={{ fontSize: 12, fill: '#888' }}
+              tickLine={false}
+              axisLine={false}
+              domain={[0, 100]}
+            />
+            <Tooltip content={({ payload, label }) => {
+              if (!payload || payload.length === 0) return null;
+              return (
+                <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs shadow-md dark:border-neutral-700 dark:bg-neutral-800">
+                  <div className="mb-1.5 font-medium text-neutral-700 dark:text-neutral-200">{label}</div>
+                  <div className="space-y-0.5">
+                    {payload.map((entry, i) => {
+                      const { dataKey, value, color, name } = entry;
+                      const displayValue = dataKey === 'p90Queue' || dataKey === 'p90E2e'
+                        ? `${Math.round(Number(value) / 60)}m`
+                        : dataKey === 'successRate'
+                          ? `${value}%`
+                          : String(value);
+                      return (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+                          <span className="text-neutral-500 dark:text-neutral-400">{name}:</span>
+                          <span className="font-mono text-neutral-700 dark:text-neutral-200">{displayValue}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }} />
+            <Legend />
+            {showDailyTrend && (
+              <>
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="p90Queue"
+                  name="P90 Queue"
+                  stroke="#f59e0b"
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="p90E2e"
+                  name="P90 E2E"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="successRate"
+                  name="Success Rate"
+                  stroke="#22c55e"
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Bar yAxisId="right" dataKey="runCount" name="Run Count" fill="#9ca3af" radius={[4, 4, 0, 0]} opacity={0.5} />
+              </>
+            )}
+            {showIndividualRuns &&
+              [...scatterByConclusion.entries()].map(([conclusion, points]) => (
+                <Scatter
+                  key={conclusion}
+                  name={conclusionLabel(conclusion)}
+                  data={points}
+                  fill={conclusionColor(conclusion)}
+                  shape="circle"
+                />
+              ))}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 function DashboardContent({
   initialFailedRepoKeys,
   initialRepoIndexesByKey,
@@ -552,6 +825,7 @@ function DashboardContent({
   const [allWorkflowsError, setAllWorkflowsError] = useState('');
   const [jobSortField, setJobSortField] = useState<JobSortField>('duration');
   const [jobSortOrder, setJobSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [selectedJobName, setSelectedJobName] = useState<string | null>(() => initialQuery.jobName || null);
   const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
   const detailAbortControllerRef = useRef<AbortController | null>(null);
   const debouncedFilterName = useDebouncedValue(filterName, 250);
@@ -611,6 +885,7 @@ function DashboardContent({
     setSelectedJobIds(new Set());
     setAllWorkflows([]);
     setAllWorkflowsError('');
+    setSelectedJobName(null);
   }, [selectedRepoKey]);
 
   useEffect(() => {
@@ -625,6 +900,7 @@ function DashboardContent({
     }
     if (selectedRepo) params.set('repo', selectedRepo.key);
     if (debouncedFilterName) params.set('filterName', debouncedFilterName);
+    if (selectedJobName) params.set('jobName', selectedJobName);
 
     const query = params.toString();
     const current = searchParams.toString();
@@ -634,7 +910,7 @@ function DashboardContent({
     }
 
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  }, [days, debouncedFilterName, endDate, pathname, router, searchParams, selectedRepo, startDate, useCustomRange]);
+  }, [days, debouncedFilterName, endDate, pathname, router, searchParams, selectedRepo, startDate, useCustomRange, selectedJobName]);
 
   useEffect(() => {
     if (!shareNotice) {
@@ -1610,10 +1886,17 @@ function DashboardContent({
                     </>
                   )}
                 </div>
-              ) : (
+               ) : (
                 /* ===== JOB VIEW ===== */
                 <div>
-                  {allWorkflowsError ? (
+                  {selectedJobName ? (
+                    <JobDetailView
+                      jobName={selectedJobName}
+                      allWorkflows={allWorkflows}
+                      dateRange={dateRange}
+                      onBack={() => setSelectedJobName(null)}
+                    />
+                  ) : allWorkflowsError ? (
                     <div className="p-8 text-center text-sm text-red-500 dark:text-red-400">Failed to load jobs. Please try again later.</div>
                   ) : allWorkflowsLoading ? (
                     <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">Loading jobs...</div>
@@ -1653,7 +1936,16 @@ function DashboardContent({
                                     aria-label={`Select ${job.name}`}
                                   />
                                 </td>
-                                <td className="px-6 py-4 font-medium text-neutral-900 dark:text-neutral-100">{job.name}</td>
+                                <td className="px-6 py-4 font-medium text-neutral-900 dark:text-neutral-100">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedJobName(job.name)}
+                                    className="text-left text-blue-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-400"
+                                    title="View job detail"
+                                  >
+                                    {job.name}
+                                  </button>
+                                </td>
                                 <td className="px-6 py-4 text-xs text-neutral-500 dark:text-neutral-400">{job.workflowName}</td>
                                 <td className="px-6 py-4"><StatusBadge conclusion={job.conclusion} /></td>
                                 <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(job.created_at), 'MMM dd, HH:mm')}</td>
