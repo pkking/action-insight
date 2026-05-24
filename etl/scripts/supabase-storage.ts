@@ -316,8 +316,7 @@ export async function readPullRequestResolutionCacheFromSupabase(
   const resolved = new Map<string, number>();
   const uniqueShas = Array.from(new Set(shas));
 
-  for (let i = 0; i < uniqueShas.length; i += 100) {
-    const batch = uniqueShas.slice(i, i + 100);
+  for (const batch of chunkArray(uniqueShas, 100)) {
     const { data, error } = await supabase
       .from('pr_resolution_cache')
       .select('head_sha, pr_number')
@@ -362,8 +361,7 @@ export async function writePullRequestResolutionCacheToSupabase(
   const existingEntries = new Map<string, { source: string }>();
   const uniqueShas = uniqueEntries.map((entry) => entry.head_sha);
 
-  for (let i = 0; i < uniqueShas.length; i += 100) {
-    const batch = uniqueShas.slice(i, i + 100);
+  for (const batch of chunkArray(uniqueShas, 100)) {
     const { data, error } = await supabase
       .from('pr_resolution_cache')
       .select('head_sha, pr_number, source')
@@ -402,8 +400,7 @@ export async function writePullRequestResolutionCacheToSupabase(
 
   if (rows.length === 0) return;
 
-  for (let i = 0; i < rows.length; i += 100) {
-    const batch = rows.slice(i, i + 100);
+  for (const batch of chunkArray(rows, 100)) {
     const { error } = await supabase
       .from('pr_resolution_cache')
       .upsert(batch, { onConflict: 'repo_id,head_sha' });
