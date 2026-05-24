@@ -653,7 +653,7 @@ export async function getCollectedDatesFromSupabase(repo: string): Promise<strin
 }
 
 export interface EtlFreshnessReport {
-  latestPrRunCreatedAt: string | null;
+  latestRunCreatedAt: string | null;
   latestCiCompletedAt: string | null;
   lagInSeconds: number | null;
   isStale: boolean;
@@ -662,12 +662,13 @@ export interface EtlFreshnessReport {
 export function formatFreshnessReport(report: EtlFreshnessReport, repo: string): string {
   if (report.isStale) {
     const lagDisplay = report.lagInSeconds !== null ? `${Math.round(report.lagInSeconds / 3600)}h` : 'infinite';
-    return `ETL freshness: ${repo} pr_metrics lag behind PR runs by ${lagDisplay} (runs: ${report.latestPrRunCreatedAt}, metrics: ${report.latestCiCompletedAt})`;
+    return `ETL freshness: ${repo} pr_metrics lag behind raw runs by ${lagDisplay} (runs: ${report.latestRunCreatedAt}, metrics: ${report.latestCiCompletedAt})`;
   }
-  if (report.latestPrRunCreatedAt && report.latestCiCompletedAt) {
+  if (report.latestRunCreatedAt && report.latestCiCompletedAt) {
     return `ETL freshness: ${repo} pr_metrics in sync (lag: ${Math.max(0, Math.round(report.lagInSeconds! / 60))}min)`;
   }
-  return `ETL freshness: ${repo} PR runs=${report.latestPrRunCreatedAt ?? 'none'}, metrics=${report.latestCiCompletedAt ?? 'none'}`;
+  }
+  return `ETL freshness: ${repo} runs=${report.latestRunCreatedAt ?? 'none'}, metrics=${report.latestCiCompletedAt ?? 'none'}`;
 }
 
 export async function checkEtlFreshness(repo: string, staleThresholdSeconds = 86400): Promise<EtlFreshnessReport | null> {
@@ -683,13 +684,11 @@ export async function checkEtlFreshness(repo: string, staleThresholdSeconds = 86
   const repoId = await ensureRepo(owner, repoName);
   if (!repoId) return null;
 
-  const prEvents = ['pull_request', 'pull_request_target', 'pull_request_review'];
   const [runsResult, metricsResult] = await Promise.all([
     supabase
       .from('runs')
       .select('created_at')
       .eq('repo_id', repoId)
-      .in('event', prEvents)
       .order('created_at', { ascending: false })
       .limit(1)
       .single(),
@@ -712,18 +711,18 @@ export async function checkEtlFreshness(repo: string, staleThresholdSeconds = 86
     return null;
   }
 
-  const latestPrRunCreatedAt = runsResult.data?.created_at ?? null;
+  const latestRunCreatedAt = runsResult.data?.created_at ?? null;
   const latestCiCompletedAt = metricsResult.data?.ci_completed_at ?? null;
 
   let lagInSeconds: number | null = null;
-  if (latestPrRunCreatedAt && latestCiCompletedAt) {
-    lagInSeconds = (new Date(latestPrRunCreatedAt).getTime() - new Date(latestCiCompletedAt).getTime()) / 1000;
+  if (latestRunCreatedAt && latestCiCompletedAt) {
+    lagInSeconds = (new Date(latestRunCreatedAt).getTime() - new Date(latestCiCompletedAt).getTime()) / 1000;
   }
 
   return {
-    latestPrRunCreatedAt,
+    latestRunCreatedAt,
     latestCiCompletedAt,
     lagInSeconds,
-    isStale: (latestPrRunCreatedAt !== null && latestCiCompletedAt === null) || (lagInSeconds !== null && lagInSeconds > staleThresholdSeconds),
+    isStale: (latestRunCreatedAt !== null && latestCiCompletedAt === null) || (lagInSeconds !== null && lagInSeconds > staleThresholdSeconds),
   };
 }
