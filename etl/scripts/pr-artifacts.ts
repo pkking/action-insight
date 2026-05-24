@@ -4,7 +4,6 @@ import { isGitHubRateLimitError, checkRateLimitBudget } from './github';
 import {
   readPullRequestResolutionCacheFromSupabase,
   type PullRequestResolutionCacheEntry,
-  type PullRequestResolutionCacheRecord,
   writePrMetricsToSupabase,
   writePrWorkflowsToSupabase,
   writePullRequestResolutionCacheToSupabase,
@@ -64,20 +63,6 @@ function getSearchResolutionLimit(): number {
 
 function isPullRequestLikeEvent(event?: string): boolean {
   return event === 'pull_request' || event === 'pull_request_target' || event === 'pull_request_review';
-}
-
-function normalizeCachedResolution(value: PullRequestResolutionCacheRecord | number): PullRequestResolutionCacheRecord {
-  if (typeof value === 'number') {
-    return {
-      head_sha: '',
-      pr_number: value,
-      source: 'commits_api',
-      status: 'resolved',
-      error_message: null,
-    };
-  }
-
-  return value;
 }
 
 async function resolvePullRequestsFromHeadSha(
@@ -288,8 +273,7 @@ export async function rebuildPullRequestArtifacts({
   let resolvedCacheHitCount = 0;
   let notFoundCacheHitCount = 0;
   let retryableCacheHitCount = 0;
-  for (const [sha, cachedValue] of persistedCache.entries()) {
-    const cached = normalizeCachedResolution(cachedValue);
+  for (const [sha, cached] of persistedCache.entries()) {
     if (cached.status === 'resolved' && typeof cached.pr_number === 'number') {
       cachedPullRequestsBySha.set(sha, cached.pr_number);
       resolvedCacheHitCount += 1;

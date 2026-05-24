@@ -451,15 +451,21 @@ export async function writePullRequestResolutionCacheToSupabase(
       const existing = existingEntries.get(entry.head_sha);
       return shouldWritePrResolutionCacheEntry(entry, existing);
     })
-    .map((entry) => ({
-      repo_id: repoId,
-      head_sha: entry.head_sha,
-      pr_number: entry.pr_number ?? null,
-      source: entry.source ?? 'commits_api',
-      status: getPrResolutionStatus(entry),
-      error_message: entry.error_message ?? null,
-      attempted_at: new Date().toISOString(),
-    }));
+    .map((entry) => {
+      const status = getPrResolutionStatus(entry);
+      const now = new Date().toISOString();
+
+      return {
+        repo_id: repoId,
+        head_sha: entry.head_sha,
+        pr_number: entry.pr_number ?? null,
+        source: entry.source ?? 'commits_api',
+        status,
+        error_message: entry.error_message ?? null,
+        attempted_at: now,
+        ...(status === 'resolved' ? { resolved_at: now } : {}),
+      };
+    });
 
   if (rows.length === 0) return;
 

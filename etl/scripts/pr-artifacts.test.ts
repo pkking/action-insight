@@ -381,7 +381,18 @@ describe('rebuildPullRequestArtifacts', () => {
   });
 
   it('uses cached SHA to PR resolutions before calling GitHub', async () => {
-    vi.mocked(readPullRequestResolutionCacheFromSupabase).mockResolvedValue(new Map([['abc123', 42]]));
+    vi.mocked(readPullRequestResolutionCacheFromSupabase).mockResolvedValue(new Map([
+      [
+        'abc123',
+        {
+          head_sha: 'abc123',
+          pr_number: 42,
+          source: 'commits_api',
+          status: 'resolved',
+          error_message: null,
+        },
+      ],
+    ]));
 
     const request = vi.fn().mockImplementation((route: string) => {
       if (route === 'GET /rate_limit') {

@@ -475,6 +475,8 @@ describe('supabase-storage', () => {
         head_sha: 'sha-existing',
         pr_number: 43,
         source: 'commits_api',
+        status: 'resolved',
+        resolved_at: expect.any(String),
       }),
     ]);
   });
