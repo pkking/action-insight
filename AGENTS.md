@@ -24,8 +24,20 @@
     - 从 `main` 创建 feature 分支，命名格式：`feat/<descriptive-name>` 或 `fix/<descriptive-name>`
     - 推送分支到 origin 并创建 PR
     - PR 标题使用 Conventional Commits 格式，PR 描述需说明变更内容、测试情况、相关文档链接
+    - **PR 打开后禁止 force push**：审查过程中产生的任何修改都必须追加新的 Conventional Commit 并正常 push，禁止使用 `git commit --amend`、`git rebase` 或 `git push --force/--force-with-lease` 重写 PR 历史，除非用户明确要求。
     - 等待审查通过后合并，合并后删除 feature 分支
     - **Gitignore 规范**：**AI 工具相关目录不应被加入 .gitignore**。例如 `.codex`、`.sisyphus`、`.serena/memories` 等目录包含有用的 AI 会话信息和上下文，应当保留在仓库中以便跨会话共享和延续上下文。只有临时缓存文件（如 `.serena/cache/`）和编译产物（如 `__pycache__/`）才应被忽略。
+
+## 本地维护工具使用建议 (Local Maintenance Tools)
+
+AI 助手在维护 ETL、Supabase 数据或恢复指标时，应优先使用以下本地入口，并遵守成本控制原则：
+
+1.  **Schema 迁移**：当修改 `supabase/schema.sql`、新增表/函数，或本地/CI 需要补齐数据库结构时，使用 `npm run migrate:supabase`。需要设置 `SUPABASE_DB_URL`，CI 中可设置 `AUTO_MIGRATE_SUPABASE=1`，证书链异常时才使用 `SUPABASE_DB_SSL=no-verify`。
+2.  **Raw CI 采集**：当 `runs` 或 `jobs` 缺失/过期时，使用 `npx tsx etl/scripts/collect.ts --repo owner/repo`。该脚本只负责抓取 GitHub Actions runs/jobs 并写 Supabase，不再重建 PR metrics。避免无范围、无目的地重复运行，以免浪费 GitHub API 配额。
+3.  **PR 指标重建**：当 raw runs 已存在，但 `pr_metrics` / `pr_workflows` 缺失、落后或部分解析时，优先使用 `npm run rebuild:pr-artifacts -- --repo owner/repo --start-date yyyy-mm-dd --end-date yyyy-mm-dd`。尽量提供日期范围，避免全量扫描。`GITHUB_TOKEN` 可选；没有 token 时只能依赖 run payload 和 `pr_resolution_cache`。
+4.  **兼容入口**：`etl/scripts/rebuild-pr-artifacts-local.ts` 仅作为旧路径兼容 wrapper，新的说明、脚本和自动化应使用 `npm run rebuild:pr-artifacts` 或 `etl/scripts/rebuild-pr-artifacts.ts`。
+5.  **回填策略**：只有在需要从保留窗口最早日期重新构建 raw history 时才使用 `collect.ts --force-full-backfill`；当最新数据优先级更高时使用 `collect.ts --reverse`。
+6.  **验证命令**：改动完成后至少运行与改动相关的测试；通用验证为 `npm run lint` 和 `npm test`。ETL 脚本改动应额外跑相关 `vitest` 文件和脚本 `--help`。
 
 ## 相关关联 (Relations)
 此仓库针对 `vllm-project/vllm-ascend` 等带有复杂 CI/CD 标签的仓库进行了专门的适配（例如针对 `npu` 或 `large-disk` 标签）。

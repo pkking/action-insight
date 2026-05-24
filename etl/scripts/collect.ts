@@ -13,8 +13,7 @@ import {
   type CollectCliOptions,
 } from './collect-options.ts';
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
-import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
-import { isGitHubRateLimitError, getRateLimitDetails, checkRateLimitBudget, type GitHubRequestErrorLike, type RateLimitDetails } from './github.ts';
+import { isGitHubRateLimitError, getRateLimitDetails, type RateLimitDetails } from './github.ts';
 import {
   writeRunsToSupabase,
   getExistingRunIdsWithJobsFromSupabase,
@@ -524,16 +523,7 @@ export async function collectRepo(
           allRunsMap.set(run.id, run);
         }
         const persistedState = await persistCollectedRuns(repo, state, Array.from(allRunsMap.values()), retentionDays, completedWindows, now);
-        await rebuildPullRequestArtifacts({
-          octokit,
-          owner,
-          repo: repoName,
-          repoKey: repo,
-          collectedDates: persistedState.collectedDates,
-          runs: Array.from(allRunsMap.values()),
-          log,
-          warn,
-        });
+        log(`Persisted partial raw collection state for ${repo}: ${persistedState.collectedDates.length} retained date(s).`);
       }
       throw err;
     }
@@ -541,17 +531,7 @@ export async function collectRepo(
 
   const allRuns = Array.from(allRunsMap.values());
   log(`Total completed runs collected: ${allRuns.length}`);
-  const persistedState = await persistCollectedRuns(repo, state, allRuns, retentionDays, completedWindows, now);
-  await rebuildPullRequestArtifacts({
-    octokit,
-    owner,
-    repo: repoName,
-    repoKey: repo,
-    collectedDates: persistedState.collectedDates,
-    runs: allRuns,
-    log,
-    warn,
-  });
+  await persistCollectedRuns(repo, state, allRuns, retentionDays, completedWindows, now);
 }
 
 export async function runCollection({
