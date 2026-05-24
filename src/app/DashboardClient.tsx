@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, LineChart, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
 import type { LegendPayload } from 'recharts';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
 import { buildDailyTrend, buildRepoOverviewRows, createDateRange, filterByDateRange } from '@/lib/overview-metrics';
 import { callApi } from '@/lib/api-client';
@@ -665,7 +665,7 @@ function JobDetailView({
       </div>
 
       <div className="h-80">
-          <ComposedChart data={dailyRows}>
+        <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={showDailyTrend ? dailyRows : []}>
             <XAxis
               type="number"
@@ -683,7 +683,6 @@ function JobDetailView({
               textAnchor="end"
               height={50}
               domain={['dataMin - 0.5', 'dataMax + 0.5']}
-            />
             />
             <YAxis
               yAxisId="left"
