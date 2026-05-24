@@ -17,6 +17,8 @@ function mockSupabaseClient(options: {
   const upsertedCacheRows: unknown[] = [];
   const upsertedRunRows: unknown[] = [];
   const upsertedJobRows: unknown[] = [];
+  const runUpsertBatches: unknown[][] = [];
+  const jobUpsertBatches: unknown[][] = [];
   const fromCalls: string[] = [];
   const rpcRange = vi.fn((from: number, to: number) => {
     const pageIndex = Math.floor(from / (to - from + 1));
@@ -75,6 +77,7 @@ function mockSupabaseClient(options: {
       if (table === 'runs') {
         return {
           upsert: vi.fn((rows: unknown[]) => {
+            runUpsertBatches.push(rows);
             upsertedRunRows.push(...rows);
             return Promise.resolve({ error: options.runUpsertError ?? null });
           }),
@@ -85,6 +88,7 @@ function mockSupabaseClient(options: {
       if (table === 'jobs') {
         return {
           upsert: vi.fn((rows: unknown[]) => {
+            jobUpsertBatches.push(rows);
             upsertedJobRows.push(...rows);
             return Promise.resolve({ error: options.jobUpsertError ?? null });
           }),
@@ -95,7 +99,16 @@ function mockSupabaseClient(options: {
     }),
   };
 
-  return { supabase, upsertedCacheRows, upsertedRunRows, upsertedJobRows, fromCalls, rpcRange };
+  return {
+    supabase,
+    upsertedCacheRows,
+    upsertedRunRows,
+    upsertedJobRows,
+    runUpsertBatches,
+    jobUpsertBatches,
+    fromCalls,
+    rpcRange,
+  };
 }
 
 async function importStorageWithSupabase(supabase: unknown) {
@@ -200,6 +213,40 @@ describe('supabase-storage', () => {
     ).rejects.toThrow(
       "Failed to insert runs for acme/widgets into Supabase: Could not find the 'github_payload' column of 'runs' in the schema cache"
     );
+  });
+
+  it('chunks run and job upserts to avoid oversized Supabase statements', async () => {
+    const { supabase, runUpsertBatches, jobUpsertBatches } = mockSupabaseClient({});
+    const { writeRunsToSupabase } = await importStorageWithSupabase(supabase);
+    const runs = Array.from({ length: 201 }, (_, index) => ({
+      id: 10_000 + index,
+      name: 'CI',
+      head_branch: 'main',
+      status: 'completed',
+      conclusion: 'success',
+      event: 'push',
+      created_at: '2026-05-01T00:00:00Z',
+      updated_at: '2026-05-01T00:10:00Z',
+      html_url: `https://example.com/runs/${10_000 + index}`,
+      durationInSeconds: 600,
+      jobs: Array.from({ length: 3 }, (_, jobIndex) => ({
+        id: 20_000 + index * 3 + jobIndex,
+        name: `job-${jobIndex}`,
+        status: 'completed',
+        conclusion: 'success',
+        created_at: '2026-05-01T00:01:00Z',
+        started_at: '2026-05-01T00:02:00Z',
+        completed_at: '2026-05-01T00:09:00Z',
+        html_url: `https://example.com/jobs/${20_000 + index * 3 + jobIndex}`,
+        queueDurationInSeconds: 60,
+        durationInSeconds: 420,
+      })),
+    }));
+
+    await writeRunsToSupabase('acme/widgets', runs, '2026-05-01');
+
+    expect(runUpsertBatches.map((batch) => batch.length)).toEqual([200, 1]);
+    expect(jobUpsertBatches.map((batch) => batch.length)).toEqual([500, 103]);
   });
 
   it('uses the server-side RPC to read run IDs with jobs', async () => {
