@@ -137,11 +137,11 @@ function shouldWritePrResolutionCacheEntry(
     );
   }
 
-  if (incomingStatus === 'resolved') return true;
-  if (existing.status === 'not_found') return incomingStatus === 'resolved';
-  if (incomingStatus === 'failed' || incomingStatus === 'rate_limited') return true;
+  if (incomingStatus === 'resolved' || incomingStatus === 'not_found') return true;
+  if (existing.status === 'not_found') return false;
 
-  return existing.status !== incomingStatus || (incoming.error_message ?? null) !== (existing.error_message ?? null);
+  // Retryable existing (failed/rate_limited) — always allow new attempt to refresh
+  return true;
 }
 
 function requireSupabaseForWrite(repo: string) {
@@ -408,11 +408,16 @@ export async function writePullRequestResolutionCacheToSupabase(
   const entriesBySha = new Map<string, PullRequestResolutionCacheEntry>();
   for (const entry of entries) {
     const existing = entriesBySha.get(entry.head_sha);
-    if (shouldWritePrResolutionCacheEntry(entry, existing ? {
-      source: existing.source ?? 'commits_api',
-      status: getPrResolutionStatus(existing),
-      error_message: existing.error_message ?? null,
-    } : undefined)) {
+    const incomingStatus = getPrResolutionStatus(entry);
+    const existingStatus = existing ? getPrResolutionStatus(existing) : undefined;
+    if (
+      !existing ||
+      (incomingStatus === 'resolved' &&
+        (existingStatus !== 'resolved' ||
+          getPrResolutionSourcePriority(entry.source) >= getPrResolutionSourcePriority(existing.source))) ||
+      (existingStatus !== 'resolved' &&
+        getPrResolutionSourcePriority(entry.source) >= getPrResolutionSourcePriority(existing.source))
+    ) {
       entriesBySha.set(entry.head_sha, entry);
     }
   }
