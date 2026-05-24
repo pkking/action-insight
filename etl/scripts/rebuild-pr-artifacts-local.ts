@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import yaml from 'js-yaml';
+import { Octokit } from '@octokit/core';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts';
 import { getCollectedDatesFromSupabase } from './supabase-storage';
@@ -11,6 +12,31 @@ import type { GitHubApiPayload, Run } from '../../src/lib/types.ts';
 
 interface ReposConfig {
   repos?: unknown;
+}
+
+const RUN_SELECT_PAGE_SIZE = 1000;
+
+function loadEnvFile(filePath: string): void {
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+
+  const content = fs.readFileSync(filePath, 'utf8');
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const separatorIndex = trimmed.indexOf('=');
+    if (separatorIndex === -1) continue;
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const rawValue = trimmed.slice(separatorIndex + 1).trim();
+    const value = rawValue.replace(/^['"]|['"]$/g, '');
+
+    if (key && process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
 }
 
 function readReposConfig(): string[] {
@@ -64,55 +90,71 @@ async function fetchRunsFromSupabase(repo: string, dates: string[]): Promise<Run
 
   const allRuns: Run[] = [];
   for (const date of dates) {
-    const { data: runs, error } = await supabase
-      .from('runs')
-      .select('*, jobs(*)')
-      .eq('repo_id', repoData.id)
-      .eq('date', date);
+    let dateRunCount = 0;
 
-    if (error) {
-      console.warn(`Error fetching runs for ${repo} on ${date}: ${error.message}`);
-      continue;
+    for (let from = 0; ; from += RUN_SELECT_PAGE_SIZE) {
+      const to = from + RUN_SELECT_PAGE_SIZE - 1;
+      const { data: runs, error } = await supabase
+        .from('runs')
+        .select('*, jobs(*)')
+        .eq('repo_id', repoData.id)
+        .eq('date', date)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (error) {
+        console.warn(`Error fetching runs for ${repo} on ${date}: ${error.message}`);
+        break;
+      }
+
+      for (const row of runs || []) {
+        const githubPayload = (row.github_payload ?? null) as GitHubApiPayload | null;
+        const run: Run = {
+          id: Number(row.id),
+          name: row.name as string,
+          head_branch: row.head_branch as string,
+          head_sha: row.head_sha as string | undefined,
+          status: row.status as string,
+          conclusion: (row.conclusion as string) || '',
+          event: row.event as string | undefined,
+          created_at: row.created_at as string,
+          updated_at: row.updated_at as string,
+          html_url: row.html_url as string,
+          durationInSeconds: Number(row.duration_seconds),
+          pull_requests: readPullRequestsFromPayload(githubPayload),
+          githubPayload: githubPayload ?? undefined,
+          jobs: (row.jobs || []).map((j: Record<string, unknown>) => ({
+            id: Number(j.id),
+            name: j.name as string,
+            status: j.status as string,
+            conclusion: (j.conclusion as string) || '',
+            created_at: j.created_at as string,
+            started_at: j.started_at as string,
+            completed_at: j.completed_at as string,
+            html_url: j.html_url as string,
+            queueDurationInSeconds: Number(j.queue_duration_seconds),
+            durationInSeconds: Number(j.duration_seconds),
+            githubPayload: (j['github_payload'] as GitHubApiPayload | null) ?? undefined,
+          })),
+        };
+        allRuns.push(run);
+        dateRunCount += 1;
+      }
+
+      if (!runs || runs.length < RUN_SELECT_PAGE_SIZE) {
+        break;
+      }
     }
 
-    for (const row of runs || []) {
-      const githubPayload = (row.github_payload ?? null) as GitHubApiPayload | null;
-      const run: Run = {
-        id: Number(row.id),
-        name: row.name as string,
-        head_branch: row.head_branch as string,
-        head_sha: row.head_sha as string | undefined,
-        status: row.status as string,
-        conclusion: (row.conclusion as string) || '',
-        event: row.event as string | undefined,
-        created_at: row.created_at as string,
-        updated_at: row.updated_at as string,
-        html_url: row.html_url as string,
-        durationInSeconds: Number(row.duration_seconds),
-        pull_requests: readPullRequestsFromPayload(githubPayload),
-        githubPayload: githubPayload ?? undefined,
-        jobs: (row.jobs || []).map((j: Record<string, unknown>) => ({
-          id: Number(j.id),
-          name: j.name as string,
-          status: j.status as string,
-          conclusion: (j.conclusion as string) || '',
-          created_at: j.created_at as string,
-          started_at: j.started_at as string,
-          completed_at: j.completed_at as string,
-          html_url: j.html_url as string,
-          queueDurationInSeconds: Number(j.queue_duration_seconds),
-          durationInSeconds: Number(j.duration_seconds),
-          githubPayload: (j['github_payload'] as GitHubApiPayload | null) ?? undefined,
-        })),
-      };
-      allRuns.push(run);
-    }
+    console.log(`Fetched ${dateRunCount} runs for ${repo} on ${date}`);
   }
 
   return allRuns;
 }
 
 async function main() {
+  loadEnvFile(path.join(process.cwd(), '.env.local'));
+
   const targetRepos = parseTargetRepos(process.argv.slice(2));
   if (targetRepos.length === 0) {
     console.warn('No repositories found to process. Use --repo <owner/repo> or check etl/repos.yaml.');
@@ -134,8 +176,13 @@ async function main() {
       }
 
       const runs = await fetchRunsFromSupabase(repoKey, dates);
+      const octokit = process.env.GITHUB_TOKEN ? new Octokit({ auth: process.env.GITHUB_TOKEN }) : undefined;
+      if (!octokit) {
+        console.warn('GITHUB_TOKEN is not set; PR metrics rebuild will only use cached or embedded PR associations.');
+      }
 
       await rebuildPullRequestArtifacts({
+        octokit,
         owner,
         repo,
         repoKey,

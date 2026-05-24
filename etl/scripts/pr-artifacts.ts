@@ -293,6 +293,7 @@ export async function rebuildPullRequestArtifacts({
 
   if (prNumbers.length === 0) {
     await writePrMetricsToSupabase(repoKey, []);
+    log(`PR metrics written for ${repoKey}: 0 rows; latest created_at: none`);
     return;
   }
 
@@ -313,10 +314,12 @@ export async function rebuildPullRequestArtifacts({
   result.index.skippedPrShaCount = skippedPrShaCount;
 
   await writePrMetricsToSupabase(repoKey, result.index.prs);
+  log(`PR metrics written for ${repoKey}: ${result.index.prs.length} rows; latest created_at: ${result.index.prs[0]?.created_at ?? 'none'}`);
 
   const prWorkflowsMap = new Map<number, number[]>();
   for (const [prNumber, detail] of result.details.entries()) {
     prWorkflowsMap.set(prNumber, detail.pr.workflows.map((w) => w.id));
   }
   await writePrWorkflowsToSupabase(repoKey, prWorkflowsMap);
+  log(`PR workflows written for ${repoKey}: ${prWorkflowsMap.size} PRs`);
 }

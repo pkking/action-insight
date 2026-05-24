@@ -16,6 +16,8 @@ import { rebuildPullRequestArtifacts } from './pr-artifacts';
 import {
   readPullRequestResolutionCacheFromSupabase,
   writePullRequestResolutionCacheToSupabase,
+  writePrMetricsToSupabase,
+  writePrWorkflowsToSupabase,
 } from './supabase-storage';
 
 const tempDirs: string[] = [];
@@ -23,6 +25,8 @@ const tempDirs: string[] = [];
 afterEach(() => {
   vi.mocked(readPullRequestResolutionCacheFromSupabase).mockResolvedValue(new Map());
   vi.mocked(writePullRequestResolutionCacheToSupabase).mockClear();
+  vi.mocked(writePrMetricsToSupabase).mockClear();
+  vi.mocked(writePrWorkflowsToSupabase).mockClear();
 
   for (const dir of tempDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -50,6 +54,7 @@ describe('rebuildPullRequestArtifacts', () => {
   });
 
   it('writes PR metrics and workflows to Supabase from retained runs', async () => {
+    const log = vi.fn();
 
     await rebuildPullRequestArtifacts({
       octokit: {
@@ -83,6 +88,7 @@ describe('rebuildPullRequestArtifacts', () => {
       repo: 'widgets',
       repoKey: 'acme/widgets',
       collectedDates: ['2026-04-18.json'],
+      log,
       runs: [
         {
           id: 101,
@@ -100,6 +106,19 @@ describe('rebuildPullRequestArtifacts', () => {
         },
       ],
     });
+
+    expect(writePrMetricsToSupabase).toHaveBeenCalledWith(
+      'acme/widgets',
+      expect.arrayContaining([
+        expect.objectContaining({
+          number: 42,
+          created_at: '2026-04-18T01:00:00Z',
+        }),
+      ])
+    );
+    expect(writePrWorkflowsToSupabase).toHaveBeenCalledWith('acme/widgets', expect.any(Map));
+    expect(log).toHaveBeenCalledWith('PR metrics written for acme/widgets: 1 rows; latest created_at: 2026-04-18T01:00:00Z');
+    expect(log).toHaveBeenCalledWith('PR workflows written for acme/widgets: 1 PRs');
   });
 
   it('recovers PR associations from head_sha when workflow runs have no pull_requests refs', async () => {
