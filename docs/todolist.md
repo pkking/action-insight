@@ -3,7 +3,8 @@
 ## ETL Reliability
 
 - [x] Keep per-repo ETL workflows serialized with `concurrency` so overlapping scheduled runs do not rewrite the same recent windows.
-- [ ] Separate PR metrics rebuild from raw runs/jobs collection so rate-limit failures can be retried independently without re-fetching workflow runs.
+- [ ] Separate PR metrics rebuild from raw runs/jobs collection so rate-limit failures can be retried independently without re-fetching workflow runs. See [ETL Follow-up Plan](plans/2026-05-24-001-etl-followup-plan.md).
+- [ ] Add ETL freshness checks that compare latest raw `runs.created_at` with latest `pr_metrics.created_at` and warn when metrics lag raw data.
 
 ## ETL Recovery
 
@@ -13,8 +14,9 @@
 ## ETL Throughput
 
 - [ ] Reduce GitHub API pressure by expanding reuse of `pr_resolution_cache` and making SHA resolution resumable across runs.
+- [ ] Track cache hits, cache misses, unresolved SHAs, and GitHub API calls in PR metrics rebuild logs.
 
 ## Storage
 
 - [ ] Move raw `github_payload` storage out of Supabase and into a repository-tracked SQLite database to avoid Free Plan database size pressure.
-
+- [ ] Document the recovery path for rebuilding Supabase metrics from the repository-tracked SQLite raw payload store.
