@@ -665,7 +665,7 @@ function JobDetailView({
       </div>
 
       <div className="h-80">
-        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={dailyRows}>
           <ComposedChart data={showDailyTrend ? dailyRows : []}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
             <XAxis
