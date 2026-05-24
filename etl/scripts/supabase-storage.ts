@@ -102,16 +102,14 @@ function requireSupabaseForWrite(repo: string) {
   return supabase;
 }
 
-function chunkArray<T>(items: T[], size: number): T[][] {
+function* chunkArray<T>(items: T[], size: number): Generator<T[]> {
   if (size <= 0) {
     throw new Error('Chunk size must be greater than 0');
   }
 
-  const chunks: T[][] = [];
   for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
+    yield items.slice(index, index + size);
   }
-  return chunks;
 }
 
 async function ensureRepo(owner: string, repo: string): Promise<number | null> {
