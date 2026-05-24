@@ -667,16 +667,23 @@ function JobDetailView({
       <div className="h-80">
           <ComposedChart data={dailyRows}>
           <ComposedChart data={showDailyTrend ? dailyRows : []}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
             <XAxis
-              dataKey="day"
+              type="number"
+              dataKey="dayIndex"
               tick={{ fontSize: 11, fill: '#888' }}
               tickLine={false}
               axisLine={false}
-              interval="preserveStartEnd"
+              interval={0}
+              ticks={dailyRows.map((r) => r.dayIndex as number)}
+              tickFormatter={(val) => {
+                const row = dailyRows.find((r) => r.dayIndex === val);
+                return row ? format(parseISO(row.day as string), 'MMM dd') : '';
+              }}
               angle={-30}
               textAnchor="end"
               height={50}
+              domain={['dataMin - 0.5', 'dataMax + 0.5']}
+            />
             />
             <YAxis
               yAxisId="left"
