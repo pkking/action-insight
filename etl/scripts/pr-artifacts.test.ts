@@ -378,10 +378,36 @@ describe('rebuildPullRequestArtifacts', () => {
 
     const commitCalls = request.mock.calls.filter(call => call[0] === 'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls');
     expect(commitCalls.length).toBe(15);
+
+    expect(writePullRequestResolutionCacheToSupabase).toHaveBeenCalledWith(
+      'acme/widgets',
+      expect.arrayContaining([
+        expect.objectContaining({
+          head_sha: 'sha-0',
+          status: 'not_found',
+        }),
+        expect.objectContaining({
+          head_sha: 'sha-1',
+          status: 'failed',
+          error_message: 'Search API fallback budget exhausted before this SHA was fully resolved',
+        }),
+      ])
+    );
   });
 
   it('uses cached SHA to PR resolutions before calling GitHub', async () => {
-    vi.mocked(readPullRequestResolutionCacheFromSupabase).mockResolvedValue(new Map([['abc123', 42]]));
+    vi.mocked(readPullRequestResolutionCacheFromSupabase).mockResolvedValue(new Map([
+      [
+        'abc123',
+        {
+          head_sha: 'abc123',
+          pr_number: 42,
+          source: 'commits_api',
+          status: 'resolved',
+          error_message: null,
+        },
+      ],
+    ]));
 
     const request = vi.fn().mockImplementation((route: string) => {
       if (route === 'GET /rate_limit') {
@@ -443,6 +469,213 @@ describe('rebuildPullRequestArtifacts', () => {
       expect.anything()
     );
     expect(request).not.toHaveBeenCalledWith('GET /search/issues', expect.anything());
+  });
+
+  it('persists not-found SHA lookups so later rebuilds do not repeat API calls', async () => {
+    const previousLimit = process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT;
+    process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT = '1';
+
+    const log = vi.fn();
+    const request = vi.fn().mockImplementation((route: string) => {
+      if (route === 'GET /rate_limit') {
+        return Promise.resolve({
+          data: {
+            resources: {
+              core: {
+                remaining: 100,
+              },
+            },
+          },
+        });
+      }
+
+      if (route === 'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls') {
+        return Promise.resolve({ data: [] });
+      }
+
+      if (route === 'GET /search/issues') {
+        return Promise.resolve({ data: { items: [] } });
+      }
+
+      throw new Error(`Unexpected route: ${route}`);
+    });
+
+    try {
+      await rebuildPullRequestArtifacts({
+        octokit: { request },
+        owner: 'acme',
+        repo: 'widgets',
+        repoKey: 'acme/widgets',
+        collectedDates: ['2026-04-18.json'],
+        log,
+        runs: [
+          {
+            id: 101,
+            name: 'lint',
+            head_branch: 'main',
+            head_sha: 'abc123',
+            status: 'completed',
+            conclusion: 'success',
+            event: 'pull_request',
+            created_at: '2026-04-18T01:05:00Z',
+            updated_at: '2026-04-18T01:15:00Z',
+            html_url: 'https://github.com/acme/widgets/actions/runs/101',
+            durationInSeconds: 600,
+            pull_requests: [],
+            jobs: [],
+          },
+        ],
+      });
+    } finally {
+      if (previousLimit === undefined) {
+        delete process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT;
+      } else {
+        process.env.PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT = previousLimit;
+      }
+    }
+
+    expect(writePullRequestResolutionCacheToSupabase).toHaveBeenCalledWith(
+      'acme/widgets',
+      expect.arrayContaining([
+        expect.objectContaining({
+          head_sha: 'abc123',
+          status: 'not_found',
+          source: 'commits_api',
+        }),
+      ])
+    );
+    expect(log).toHaveBeenCalledWith(
+      'PR resolution API calls for acme/widgets: 1 core, 1 search; resolved 0, not_found 1, failed 0, rate_limited 0, skipped 0'
+    );
+
+    vi.mocked(readPullRequestResolutionCacheFromSupabase).mockResolvedValue(new Map([
+      [
+        'abc123',
+        {
+          head_sha: 'abc123',
+          pr_number: null,
+          source: 'commits_api',
+          status: 'not_found',
+          error_message: null,
+        },
+      ],
+    ]));
+    request.mockClear();
+
+    await rebuildPullRequestArtifacts({
+      octokit: { request },
+      owner: 'acme',
+      repo: 'widgets',
+      repoKey: 'acme/widgets',
+      collectedDates: ['2026-04-18.json'],
+      runs: [
+        {
+          id: 101,
+          name: 'lint',
+          head_branch: 'main',
+          head_sha: 'abc123',
+          status: 'completed',
+          conclusion: 'success',
+          event: 'pull_request',
+          created_at: '2026-04-18T01:05:00Z',
+          updated_at: '2026-04-18T01:15:00Z',
+          html_url: 'https://github.com/acme/widgets/actions/runs/101',
+          durationInSeconds: 600,
+          pull_requests: [],
+          jobs: [],
+        },
+      ],
+    });
+
+    expect(request).not.toHaveBeenCalledWith(
+      'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
+      expect.anything()
+    );
+    expect(request).not.toHaveBeenCalledWith('GET /search/issues', expect.anything());
+  });
+
+  it('persists rate-limited SHA state and keeps later SHAs retryable', async () => {
+    const request = vi.fn().mockImplementation((route: string) => {
+      if (route === 'GET /rate_limit') {
+        return Promise.resolve({
+          data: {
+            resources: {
+              core: {
+                remaining: 100,
+              },
+            },
+          },
+        });
+      }
+
+      if (route === 'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls') {
+        const error: any = new Error('API rate limit exceeded');
+        error.status = 403;
+        error.response = {
+          headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-limit': '5000' },
+          data: { message: 'API rate limit exceeded' },
+        };
+        throw error;
+      }
+
+      throw new Error(`Unexpected route: ${route}`);
+    });
+
+    await rebuildPullRequestArtifacts({
+      octokit: { request },
+      owner: 'acme',
+      repo: 'widgets',
+      repoKey: 'acme/widgets',
+      collectedDates: ['2026-04-18.json'],
+      runs: [
+        {
+          id: 101,
+          name: 'lint',
+          head_branch: 'main',
+          head_sha: 'sha-one',
+          status: 'completed',
+          conclusion: 'success',
+          event: 'pull_request',
+          created_at: '2026-04-18T01:05:00Z',
+          updated_at: '2026-04-18T01:15:00Z',
+          html_url: 'https://github.com/acme/widgets/actions/runs/101',
+          durationInSeconds: 600,
+          pull_requests: [],
+          jobs: [],
+        },
+        {
+          id: 102,
+          name: 'test',
+          head_branch: 'main',
+          head_sha: 'sha-two',
+          status: 'completed',
+          conclusion: 'success',
+          event: 'pull_request',
+          created_at: '2026-04-18T01:10:00Z',
+          updated_at: '2026-04-18T01:20:00Z',
+          html_url: 'https://github.com/acme/widgets/actions/runs/102',
+          durationInSeconds: 600,
+          pull_requests: [],
+          jobs: [],
+        },
+      ],
+    });
+
+    const commitCalls = request.mock.calls.filter(call => call[0] === 'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls');
+    expect(commitCalls.length).toBe(1);
+    expect(writePullRequestResolutionCacheToSupabase).toHaveBeenCalledWith(
+      'acme/widgets',
+      expect.arrayContaining([
+        expect.objectContaining({
+          head_sha: 'sha-one',
+          status: 'rate_limited',
+        }),
+        expect.objectContaining({
+          head_sha: 'sha-two',
+          status: 'rate_limited',
+        }),
+      ])
+    );
   });
 
   it('can rebuild artifacts locally without GitHub API access when runs already include PR refs', async () => {

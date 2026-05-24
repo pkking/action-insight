@@ -146,7 +146,7 @@ Data is stored in Supabase with the following tables (see `supabase/schema.sql`)
 - **jobs** — Individual jobs within runs (queue duration, execution duration)
 - **pr_metrics** — PR-level CI metrics summaries
 - **pr_workflows** — Linking table between PR metrics and runs
-- **pr_resolution_cache** — Cached commit SHA to PR number associations used to reduce GitHub API calls
+- **pr_resolution_cache** — Cached commit SHA to PR resolution state, including resolved PRs, not-found SHAs, failed lookups, and rate-limited attempts used to reduce GitHub API calls
 - **collection_state** — Per-repo collection state (backfill cursor, history completion, latest date)
 
 ### Database migrations

@@ -3,6 +3,7 @@ import type { PullRequestRef, PullRequestSnapshot, Run } from '../../src/lib/typ
 import { isGitHubRateLimitError, checkRateLimitBudget } from './github';
 import {
   readPullRequestResolutionCacheFromSupabase,
+  type PullRequestResolutionCacheEntry,
   writePrMetricsToSupabase,
   writePrWorkflowsToSupabase,
   writePullRequestResolutionCacheToSupabase,
@@ -39,6 +40,12 @@ const DEFAULT_SEARCH_RESOLUTION_LIMIT = 5;
 const DEFAULT_RATE_LIMIT_RESERVE = 10;
 const RUN_PAYLOAD_PR_SOURCE = 'run_payload';
 
+interface ShaResolutionResult {
+  entries: PullRequestResolutionCacheEntry[];
+  coreApiCalls: number;
+  searchApiCalls: number;
+}
+
 function getShaResolutionLimit(): number {
   const value = Number.parseInt(process.env.PR_ARTIFACT_SHA_RESOLUTION_LIMIT ?? '', 10);
   return Number.isFinite(value) && value >= 0 ? value : DEFAULT_SHA_RESOLUTION_LIMIT;
@@ -64,20 +71,31 @@ async function resolvePullRequestsFromHeadSha(
   repo: string,
   shas: string[],
   warn: (...args: unknown[]) => void
-): Promise<Map<string, { number: number; source: string }>> {
-  const resolved = new Map<string, { number: number; source: string }>();
+): Promise<ShaResolutionResult> {
+  const entries: PullRequestResolutionCacheEntry[] = [];
   let searchRateLimited = false;
   let coreRateLimited = false;
   let searchAttempts = 0;
+  let coreApiCalls = 0;
+  let searchApiCalls = 0;
   const searchResolutionLimit = getSearchResolutionLimit();
 
   for (const sha of shas) {
     if (coreRateLimited) {
       warn(`Skipping PR resolution for commit ${sha}: core rate limit reached`);
-      break;
+      entries.push({
+        head_sha: sha,
+        status: 'rate_limited',
+        source: 'commits_api',
+        error_message: 'Core API rate limit reached before this SHA was resolved',
+      });
+      continue;
     }
 
+    let failed = false;
+    let rateLimited = false;
     try {
+      coreApiCalls += 1;
       const response = await octokit.request('GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls', {
         owner,
         repo,
@@ -86,21 +104,30 @@ async function resolvePullRequestsFromHeadSha(
       const data = response.data as Array<{ number?: number }>;
       const number = data.find((pullRequest) => typeof pullRequest.number === 'number')?.number;
       if (typeof number === 'number') {
-        resolved.set(sha, { number, source: 'commits_api' });
+        entries.push({
+          head_sha: sha,
+          pr_number: number,
+          source: 'commits_api',
+          status: 'resolved',
+        });
         continue;
       }
     } catch (error) {
       if (isGitHubRateLimitError(error)) {
         coreRateLimited = true;
-        warn(`Core API rate limit reached while resolving PRs for ${owner}/${repo}. ${resolved.size} PRs resolved so far.`);
-        break;
+        rateLimited = true;
+        warn(`Core API rate limit reached while resolving PRs for ${owner}/${repo}.`);
+      } else {
+        failed = true;
+        warn(`Failed to resolve PR for commit ${sha} in ${owner}/${repo}:`, error);
       }
-      warn(`Failed to resolve PR for commit ${sha} in ${owner}/${repo}:`, error);
     }
 
-    if (!searchRateLimited && searchAttempts < searchResolutionLimit) {
+    const searchBudgetExhausted = searchAttempts >= searchResolutionLimit;
+    if (!rateLimited && !searchRateLimited && !searchBudgetExhausted) {
       try {
         searchAttempts += 1;
+        searchApiCalls += 1;
         const searchResponse = await octokit.request('GET /search/issues', {
           q: `${sha} repo:${owner}/${repo} type:pr`,
           per_page: 1,
@@ -112,21 +139,61 @@ async function resolvePullRequestsFromHeadSha(
         )?.number;
 
         if (typeof searchNumber === 'number') {
-          resolved.set(sha, { number: searchNumber, source: 'search_api' });
+          entries.push({
+            head_sha: sha,
+            pr_number: searchNumber,
+            source: 'search_api',
+            status: 'resolved',
+          });
           continue;
         }
       } catch (error) {
         if (isGitHubRateLimitError(error)) {
           searchRateLimited = true;
-          warn(`Search API rate limit reached for ${owner}/${repo}. Disabling search fallback for remaining commits. ${resolved.size} PRs resolved so far.`);
+          rateLimited = true;
+          warn(`Search API rate limit reached for ${owner}/${repo}. Disabling search fallback for remaining commits.`);
         } else {
+          failed = true;
           warn(`Search API failed for commit ${sha} in ${owner}/${repo}:`, error);
         }
       }
     }
+
+    if (!rateLimited && !searchRateLimited && searchBudgetExhausted) {
+      failed = true;
+      warn(`Search API fallback budget exhausted for ${owner}/${repo}; commit ${sha} will be retried later.`);
+    }
+
+    if (rateLimited) {
+      entries.push({
+        head_sha: sha,
+        status: 'rate_limited',
+        source: 'commits_api',
+        error_message: 'GitHub API rate limit reached during SHA to PR resolution',
+      });
+      continue;
+    }
+
+    if (failed) {
+      entries.push({
+        head_sha: sha,
+        status: 'failed',
+        source: 'commits_api',
+        error_message: searchBudgetExhausted
+          ? 'Search API fallback budget exhausted before this SHA was fully resolved'
+          : 'GitHub API lookup failed during SHA to PR resolution',
+      });
+      continue;
+    }
+
+    entries.push({
+      head_sha: sha,
+      status: 'not_found',
+      source: 'commits_api',
+    });
   }
 
-  return resolved;
+  return { entries, coreApiCalls, searchApiCalls };
 }
 
 async function fetchPullRequestSnapshots(
@@ -195,7 +262,8 @@ export async function rebuildPullRequestArtifacts({
   const runsWithoutPr = runs.filter((run) => (!run.pull_requests || run.pull_requests.length === 0) && run.head_sha && isPullRequestLikeEvent(run.event));
   const uniqueShas = new Set(runsWithoutPr.map((run) => run.head_sha as string));
   const cachedPullRequestsBySha = new Map<string, number>();
-  const cacheEntriesToWrite: Array<{ head_sha: string; pr_number: number; source: string }> = [];
+  const notFoundShas = new Set<string>();
+  const cacheEntriesToWrite: PullRequestResolutionCacheEntry[] = [];
 
   for (const run of runs) {
     const prNumber = run.pull_requests?.[0]?.number;
@@ -210,11 +278,26 @@ export async function rebuildPullRequestArtifacts({
   }
 
   const persistedCache = await readPullRequestResolutionCacheFromSupabase(repoKey, [...uniqueShas]);
-  for (const [sha, number] of persistedCache.entries()) {
-    cachedPullRequestsBySha.set(sha, number);
+  let resolvedCacheHitCount = 0;
+  let notFoundCacheHitCount = 0;
+  let retryableCacheHitCount = 0;
+  for (const [sha, cached] of persistedCache.entries()) {
+    if (cached.status === 'resolved' && typeof cached.pr_number === 'number') {
+      cachedPullRequestsBySha.set(sha, cached.pr_number);
+      resolvedCacheHitCount += 1;
+    } else if (cached.status === 'not_found') {
+      notFoundShas.add(sha);
+      notFoundCacheHitCount += 1;
+    } else {
+      retryableCacheHitCount += 1;
+    }
   }
 
-  const unresolvedShas = [...uniqueShas].filter((sha) => !cachedPullRequestsBySha.has(sha));
+  const unresolvedShas = [...uniqueShas].filter((sha) => !cachedPullRequestsBySha.has(sha) && !notFoundShas.has(sha));
+  log(
+    `PR resolution cache for ${repoKey}: ${resolvedCacheHitCount} resolved hit(s), ${notFoundCacheHitCount} not-PR hit(s), ${retryableCacheHitCount} retryable hit(s), ${unresolvedShas.length} miss(es)`
+  );
+
   const allPrNumbers = Array.from(
     new Set(
       [
@@ -251,18 +334,32 @@ export async function rebuildPullRequestArtifacts({
   }
 
   const shasToResolve = unresolvedShas.slice(0, shaResolutionBudget);
-  const newlyResolvedPullRequestsBySha = octokit
+  const resolutionResult = octokit
     ? await resolvePullRequestsFromHeadSha(octokit, owner, repo, shasToResolve, warn)
-    : new Map<string, { number: number; source: string }>();
-  for (const [sha, resolution] of newlyResolvedPullRequestsBySha.entries()) {
-    cachedPullRequestsBySha.set(sha, resolution.number);
-    cacheEntriesToWrite.push({
-      head_sha: sha,
-      pr_number: resolution.number,
-      source: resolution.source,
-    });
+    : { entries: [], coreApiCalls: 0, searchApiCalls: 0 };
+  let newlyResolvedShaCount = 0;
+  let newlyNotFoundShaCount = 0;
+  let newlyFailedShaCount = 0;
+  let newlyRateLimitedShaCount = 0;
+  for (const entry of resolutionResult.entries) {
+    if (entry.status === 'resolved' && typeof entry.pr_number === 'number') {
+      cachedPullRequestsBySha.set(entry.head_sha, entry.pr_number);
+      newlyResolvedShaCount += 1;
+    } else if (entry.status === 'not_found') {
+      notFoundShas.add(entry.head_sha);
+      newlyNotFoundShaCount += 1;
+    } else if (entry.status === 'rate_limited') {
+      newlyRateLimitedShaCount += 1;
+    } else {
+      newlyFailedShaCount += 1;
+    }
+
+    cacheEntriesToWrite.push(entry);
   }
   await writePullRequestResolutionCacheToSupabase(repoKey, cacheEntriesToWrite);
+  log(
+    `PR resolution API calls for ${repoKey}: ${resolutionResult.coreApiCalls} core, ${resolutionResult.searchApiCalls} search; resolved ${newlyResolvedShaCount}, not_found ${newlyNotFoundShaCount}, failed ${newlyFailedShaCount}, rate_limited ${newlyRateLimitedShaCount}, skipped ${skippedPrShaCount}`
+  );
 
   const normalizedRuns = runs.map((run) => {
     if (run.pull_requests && run.pull_requests.length > 0) {
@@ -289,7 +386,8 @@ export async function rebuildPullRequestArtifacts({
   ).sort((left, right) => right - left);
 
   const resolvedRelevantShaCount = [...uniqueShas].filter((sha) => cachedPullRequestsBySha.has(sha)).length;
-  const partialPrResolution = skippedPrShaCount > 0 || newlyResolvedPullRequestsBySha.size < shasToResolve.length;
+  const unresolvedRelevantShaCount = uniqueShas.size - resolvedRelevantShaCount - notFoundShas.size;
+  const partialPrResolution = unresolvedRelevantShaCount > 0;
 
   if (prNumbers.length === 0) {
     await writePrMetricsToSupabase(repoKey, []);
@@ -310,7 +408,7 @@ export async function rebuildPullRequestArtifacts({
   });
   result.index.partialPrResolution = partialPrResolution;
   result.index.resolvedPrShaCount = resolvedRelevantShaCount;
-  result.index.unresolvedPrShaCount = uniqueShas.size - resolvedRelevantShaCount;
+  result.index.unresolvedPrShaCount = unresolvedRelevantShaCount;
   result.index.skippedPrShaCount = skippedPrShaCount;
 
   await writePrMetricsToSupabase(repoKey, result.index.prs);

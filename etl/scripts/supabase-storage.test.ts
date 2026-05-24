@@ -7,7 +7,13 @@ afterEach(() => {
 });
 
 function mockSupabaseClient(options: {
-  cacheRows?: Array<{ head_sha: string; pr_number: number; source: string }>;
+  cacheRows?: Array<{
+    head_sha: string;
+    pr_number: number | null;
+    source: string;
+    status?: string;
+    error_message?: string | null;
+  }>;
   rpcRows?: Array<{ run_id: number | string }>;
   rpcPages?: Array<Array<{ run_id: number | string }>>;
   rpcError?: { message: string } | null;
@@ -469,6 +475,93 @@ describe('supabase-storage', () => {
         head_sha: 'sha-existing',
         pr_number: 43,
         source: 'commits_api',
+        status: 'resolved',
+        resolved_at: expect.any(String),
+      }),
+    ]);
+  });
+
+  it('deduplicates cache entries by resolution priority before writing', async () => {
+    const { supabase, upsertedCacheRows } = mockSupabaseClient({});
+    const { writePullRequestResolutionCacheToSupabase } = await importStorageWithSupabase(supabase);
+
+    await writePullRequestResolutionCacheToSupabase('acme/widgets', [
+      {
+        head_sha: 'sha-existing',
+        pr_number: 42,
+        source: 'commits_api',
+      },
+      {
+        head_sha: 'sha-existing',
+        pr_number: 99,
+        source: 'run_payload',
+      },
+    ]);
+
+    expect(upsertedCacheRows).toEqual([
+      expect.objectContaining({
+        head_sha: 'sha-existing',
+        pr_number: 42,
+        source: 'commits_api',
+      }),
+    ]);
+  });
+
+  it('does not overwrite definitive not-found cache entries with retryable failures', async () => {
+    const { supabase, upsertedCacheRows } = mockSupabaseClient({
+      cacheRows: [
+        {
+          head_sha: 'sha-existing',
+          pr_number: null,
+          source: 'commits_api',
+          status: 'not_found',
+          error_message: null,
+        },
+      ],
+    });
+    const { writePullRequestResolutionCacheToSupabase } = await importStorageWithSupabase(supabase);
+
+    await writePullRequestResolutionCacheToSupabase('acme/widgets', [
+      {
+        head_sha: 'sha-existing',
+        source: 'commits_api',
+        status: 'rate_limited',
+        error_message: 'GitHub API rate limit reached during SHA to PR resolution',
+      },
+    ]);
+
+    expect(upsertedCacheRows).toEqual([]);
+  });
+
+  it('refreshes retryable cache attempts when the error message is unchanged', async () => {
+    const { supabase, upsertedCacheRows } = mockSupabaseClient({
+      cacheRows: [
+        {
+          head_sha: 'sha-existing',
+          pr_number: null,
+          source: 'commits_api',
+          status: 'failed',
+          error_message: 'GitHub API lookup failed during SHA to PR resolution',
+        },
+      ],
+    });
+    const { writePullRequestResolutionCacheToSupabase } = await importStorageWithSupabase(supabase);
+
+    await writePullRequestResolutionCacheToSupabase('acme/widgets', [
+      {
+        head_sha: 'sha-existing',
+        source: 'commits_api',
+        status: 'failed',
+        error_message: 'GitHub API lookup failed during SHA to PR resolution',
+      },
+    ]);
+
+    expect(upsertedCacheRows).toEqual([
+      expect.objectContaining({
+        head_sha: 'sha-existing',
+        status: 'failed',
+        error_message: 'GitHub API lookup failed during SHA to PR resolution',
+        attempted_at: expect.any(String),
       }),
     ]);
   });
