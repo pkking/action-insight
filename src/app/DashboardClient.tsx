@@ -673,7 +673,7 @@ function JobDetailView({
               tick={{ fontSize: 11, fill: '#888' }}
               tickLine={false}
               axisLine={false}
-              interval={0}
+              interval="preserveStartEnd"
               ticks={dailyRows.map((r) => r.dayIndex as number)}
               tickFormatter={(val) => {
                 const row = dailyRows.find((r) => r.dayIndex === val);
