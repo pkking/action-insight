@@ -13,8 +13,8 @@
 
 ## ETL Throughput
 
-- [x] Reduce GitHub API pressure by expanding reuse of `pr_resolution_cache` and making SHA resolution resumable across runs.
-- [x] Track cache hits, cache misses, unresolved SHAs, and GitHub API calls in PR metrics rebuild logs.
+- [x] Reduce GitHub API pressure by expanding reuse of `pr_resolution_cache` and making SHA resolution resumable across runs. (PR #87)
+- [x] Track cache hits, cache misses, unresolved SHAs, and GitHub API calls in PR metrics rebuild logs. (PR #87)
 
 ## Storage
 
