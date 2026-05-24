@@ -684,6 +684,6 @@ describe('checkEtlFreshness', () => {
     expect(result!.latestPrRunCreatedAt).toBe('2026-05-24T10:00:00Z');
     expect(result!.latestPrMetricCreatedAt).toBeNull();
     expect(result!.lagInSeconds).toBeNull();
-    expect(result!.isStale).toBe(false);
+    expect(result!.isStale).toBe(true);
   });
 });

@@ -292,7 +292,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       const freshness = await checkEtlFreshness(repoKey);
       if (freshness) {
         if (freshness.isStale) {
-          console.warn(`ETL freshness: ${repoKey} pr_metrics lag behind PR runs by ${Math.round(freshness.lagInSeconds! / 3600)}h (runs: ${freshness.latestPrRunCreatedAt}, metrics: ${freshness.latestPrMetricCreatedAt})`);
+          const lagDisplay = freshness.lagInSeconds !== null ? `${Math.round(freshness.lagInSeconds / 3600)}h` : 'infinite';
+          console.warn(`ETL freshness: ${repoKey} pr_metrics lag behind PR runs by ${lagDisplay} (runs: ${freshness.latestPrRunCreatedAt}, metrics: ${freshness.latestPrMetricCreatedAt})`);
         } else if (freshness.latestPrRunCreatedAt && freshness.latestPrMetricCreatedAt) {
           console.log(`ETL freshness: ${repoKey} pr_metrics in sync (lag: ${Math.round(freshness.lagInSeconds! / 60)}min)`);
         } else {

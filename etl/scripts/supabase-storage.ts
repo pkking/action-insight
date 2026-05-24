@@ -686,8 +686,15 @@ export async function checkEtlFreshness(repo: string, staleThresholdSeconds = 86
       .single(),
   ]);
 
-  const latestPrRunCreatedAt = runsResult.error ? null : (runsResult.data?.created_at ?? null);
-  const latestPrMetricCreatedAt = metricsResult.error ? null : (metricsResult.data?.created_at ?? null);
+  if (runsResult.error && runsResult.error.code !== 'PGRST116') {
+    console.error(`  [Supabase] Error fetching latest run for freshness check: ${runsResult.error.message}`);
+  }
+  if (metricsResult.error && metricsResult.error.code !== 'PGRST116') {
+    console.error(`  [Supabase] Error fetching latest metric for freshness check: ${metricsResult.error.message}`);
+  }
+
+  const latestPrRunCreatedAt = runsResult.data?.created_at ?? null;
+  const latestPrMetricCreatedAt = metricsResult.data?.created_at ?? null;
 
   let lagInSeconds: number | null = null;
   if (latestPrRunCreatedAt && latestPrMetricCreatedAt) {
@@ -698,6 +705,6 @@ export async function checkEtlFreshness(repo: string, staleThresholdSeconds = 86
     latestPrRunCreatedAt,
     latestPrMetricCreatedAt,
     lagInSeconds,
-    isStale: lagInSeconds !== null && lagInSeconds > staleThresholdSeconds,
+    isStale: (latestPrRunCreatedAt !== null && latestPrMetricCreatedAt === null) || (lagInSeconds !== null && lagInSeconds > staleThresholdSeconds),
   };
 }
