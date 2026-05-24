@@ -70,7 +70,9 @@ Success criteria:
 - A historical metrics rebuild can be performed from the SQLite raw store.
 - The storage path is documented and reproducible in local recovery.
 
-### 4. Add operational checks for ETL freshness
+### 4. Add operational checks for ETL freshness ✅
+
+**Completed.**
 
 Add lightweight checks around scheduled ETL runs and frontend data freshness.
 
@@ -100,5 +102,5 @@ Revisit keyset pagination if:
 1. ~~Split PR metrics rebuild from raw ETL collection.~~ ✅ PR #85
 2. ~~Improve SHA to PR resolution cache and resumability.~~ ✅ PR #87
 3. Move raw payload storage out of Supabase.
-4. Add operational freshness and storage checks.
+4. ~~Add operational freshness and storage checks.~~ ✅ Done
 5. Revisit keyset pagination only if rebuild scale or concurrency requires it.
