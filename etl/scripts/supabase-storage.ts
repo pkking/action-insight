@@ -66,14 +66,20 @@ export interface PullRequestResolutionCacheEntry {
 
 let cachedClient: ReturnType<typeof createClient> | null = null;
 const SUPABASE_PAGE_SIZE = 1000;
-const RUN_UPSERT_BATCH_SIZE = 200;
-const JOB_UPSERT_BATCH_SIZE = 500;
 const PR_RESOLUTION_SOURCE_PRIORITY: Record<string, number> = {
   run_payload: 1,
   workflow_run: 1,
   search_api: 2,
   commits_api: 3,
 };
+
+function readPositiveIntegerEnv(name: string, defaultValue: number): number {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : defaultValue;
+}
+
+const RUN_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('RUN_UPSERT_BATCH_SIZE', 200);
+const JOB_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('JOB_UPSERT_BATCH_SIZE', 500);
 
 function getSupabase() {
   if (cachedClient) return cachedClient;

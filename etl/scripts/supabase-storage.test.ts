@@ -249,6 +249,43 @@ describe('supabase-storage', () => {
     expect(jobUpsertBatches.map((batch) => batch.length)).toEqual([500, 103]);
   });
 
+  it('allows Supabase upsert batch sizes to be tuned with environment variables', async () => {
+    vi.stubEnv('RUN_UPSERT_BATCH_SIZE', '50');
+    vi.stubEnv('JOB_UPSERT_BATCH_SIZE', '75');
+
+    const { supabase, runUpsertBatches, jobUpsertBatches } = mockSupabaseClient({});
+    const { writeRunsToSupabase } = await importStorageWithSupabase(supabase);
+    const runs = Array.from({ length: 51 }, (_, index) => ({
+      id: 10_000 + index,
+      name: 'CI',
+      head_branch: 'main',
+      status: 'completed',
+      conclusion: 'success',
+      event: 'push',
+      created_at: '2026-05-01T00:00:00Z',
+      updated_at: '2026-05-01T00:10:00Z',
+      html_url: `https://example.com/runs/${10_000 + index}`,
+      durationInSeconds: 600,
+      jobs: Array.from({ length: 2 }, (_, jobIndex) => ({
+        id: 20_000 + index * 2 + jobIndex,
+        name: `job-${jobIndex}`,
+        status: 'completed',
+        conclusion: 'success',
+        created_at: '2026-05-01T00:01:00Z',
+        started_at: '2026-05-01T00:02:00Z',
+        completed_at: '2026-05-01T00:09:00Z',
+        html_url: `https://example.com/jobs/${20_000 + index * 2 + jobIndex}`,
+        queueDurationInSeconds: 60,
+        durationInSeconds: 420,
+      })),
+    }));
+
+    await writeRunsToSupabase('acme/widgets', runs, '2026-05-01');
+
+    expect(runUpsertBatches.map((batch) => batch.length)).toEqual([50, 1]);
+    expect(jobUpsertBatches.map((batch) => batch.length)).toEqual([75, 27]);
+  });
+
   it('uses the server-side RPC to read run IDs with jobs', async () => {
     const { supabase, fromCalls, rpcRange } = mockSupabaseClient({
       rpcRows: [{ run_id: '101' }, { run_id: 102 }],
