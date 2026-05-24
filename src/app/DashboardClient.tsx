@@ -536,7 +536,7 @@ function JobDetailView({
       const runCreatedAtMs = new Date(run.created_at).getTime();
       const runDate = new Date(run.created_at);
       const dayStr = format(runDate, 'yyyy-MM-dd');
-      const dayIndex = Math.floor((runCreatedAtMs - dateRange.start.getTime()) / (1000 * 60 * 60 * 24));
+      const dayIndex = differenceInCalendarDays(runDate, dateRange.start);
 
       for (const job of run.jobs) {
         if (job.name !== jobName) continue;
