@@ -16,29 +16,6 @@ interface ReposConfig {
 
 const RUN_SELECT_PAGE_SIZE = 1000;
 
-function loadEnvFile(filePath: string): void {
-  if (!fs.existsSync(filePath)) {
-    return;
-  }
-
-  const content = fs.readFileSync(filePath, 'utf8');
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-
-    const separatorIndex = trimmed.indexOf('=');
-    if (separatorIndex === -1) continue;
-
-    const key = trimmed.slice(0, separatorIndex).trim();
-    const rawValue = trimmed.slice(separatorIndex + 1).trim();
-    const value = rawValue.replace(/^['"]|['"]$/g, '');
-
-    if (key && process.env[key] === undefined) {
-      process.env[key] = value;
-    }
-  }
-}
-
 function readReposConfig(): string[] {
   const reposConfigPath = path.join(__dirname, '../repos.yaml');
   if (!fs.existsSync(reposConfigPath)) {
@@ -153,8 +130,6 @@ async function fetchRunsFromSupabase(repo: string, dates: string[]): Promise<Run
 }
 
 async function main() {
-  loadEnvFile(path.join(process.cwd(), '.env.local'));
-
   const targetRepos = parseTargetRepos(process.argv.slice(2));
   if (targetRepos.length === 0) {
     console.warn('No repositories found to process. Use --repo <owner/repo> or check etl/repos.yaml.');
