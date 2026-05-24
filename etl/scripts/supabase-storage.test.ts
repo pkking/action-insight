@@ -574,17 +574,17 @@ describe('checkEtlFreshness', () => {
     runError?: { message: string } | null;
     metricError?: { message: string } | null;
   }) {
-    const buildFreshnessQueryChain = (result: { data: unknown; error: unknown }, hasNotFilter: boolean) => {
+    const buildFreshnessQueryChain = (result: { data: unknown; error: unknown }, filterType: 'in' | 'not') => {
       const orderBuilder = {
         limit: vi.fn(() => ({
           single: vi.fn().mockResolvedValue(result),
         })),
       };
-      if (hasNotFilter) {
+      if (filterType === 'in') {
         return {
           select: vi.fn(() => ({
             eq: vi.fn(() => ({
-              not: vi.fn(() => ({
+              in: vi.fn(() => ({
                 order: vi.fn(() => orderBuilder),
               })),
             })),
@@ -594,7 +594,9 @@ describe('checkEtlFreshness', () => {
       return {
         select: vi.fn(() => ({
           eq: vi.fn(() => ({
-            order: vi.fn(() => orderBuilder),
+            not: vi.fn(() => ({
+              order: vi.fn(() => orderBuilder),
+            })),
           })),
         })),
       };
@@ -618,13 +620,13 @@ describe('checkEtlFreshness', () => {
           return buildFreshnessQueryChain({
             data: options.latestPrRun ?? null,
             error: options.runError ?? null,
-          }, false);
+          }, 'in');
         }
         if (table === 'pr_metrics') {
           return buildFreshnessQueryChain({
             data: options.latestMetric ?? null,
             error: options.metricError ?? null,
-          }, true);
+          }, 'not');
         }
         throw new Error(`Unexpected table: ${table}`);
       }),

@@ -683,11 +683,13 @@ export async function checkEtlFreshness(repo: string, staleThresholdSeconds = 86
   const repoId = await ensureRepo(owner, repoName);
   if (!repoId) return null;
 
+  const prRelatedEvents = ['pull_request', 'pull_request_target', 'pull_request_review', 'push'];
   const [runsResult, metricsResult] = await Promise.all([
     supabase
       .from('runs')
       .select('created_at')
       .eq('repo_id', repoId)
+      .in('event', prRelatedEvents)
       .order('created_at', { ascending: false })
       .limit(1)
       .single(),
