@@ -532,17 +532,17 @@ function JobDetailView({
 
     for (const run of allWorkflows) {
       if (!run.jobs) continue;
+      const runCreatedAtMs = new Date(run.created_at).getTime();
+      const runDate = new Date(run.created_at);
+      const dayStr = format(runDate, 'yyyy-MM-dd');
+      const dayIndex = Math.floor((runCreatedAtMs - dateRange.start.getTime()) / (1000 * 60 * 60 * 24));
+
       for (const job of run.jobs) {
         if (job.name !== jobName) continue;
-        const runCreatedAtMs = new Date(run.created_at).getTime();
         const startedAtMs = new Date(job.started_at || job.created_at || 0).getTime();
         const completedAtMs = new Date(job.completed_at || job.started_at || 0).getTime();
         const queueSeconds = Math.max(0, (startedAtMs - runCreatedAtMs) / 1000);
         const e2eSeconds = Math.max(0, (completedAtMs - runCreatedAtMs) / 1000);
-        const dayStr = format(new Date(run.created_at), 'yyyy-MM-dd');
-        const dayIndex = Math.floor(
-          (new Date(run.created_at).getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24)
-        );
         matchingJobs.push({ day: dayStr, dayIndex, queueSeconds, e2eSeconds, conclusion: job.conclusion, created_at: run.created_at });
       }
     }
@@ -580,19 +580,17 @@ function JobDetailView({
       });
     }
 
-    const scatterData = matchingJobs.map((job) => {
-      const seed = job.created_at.charCodeAt(0) + job.conclusion.charCodeAt(0);
+    // Group scatter data by conclusion to minimize <Scatter> components
+    const scatterByConclusion = new Map<string, { x: number; y: number }[]>();
+    for (const job of matchingJobs) {
+      const seed = job.created_at.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) + job.conclusion.charCodeAt(0);
       const jitter = ((seed * 9301 + 49297) % 233280) / 233280 * 0.6 - 0.3;
-      return {
-        day: job.day,
-        x: job.dayIndex + jitter,
-        queueSeconds: job.queueSeconds,
-        e2eSeconds: job.e2eSeconds,
-        conclusion: job.conclusion,
-      };
-    });
+      const group = scatterByConclusion.get(job.conclusion) || [];
+      group.push({ x: job.dayIndex + jitter, y: job.e2eSeconds });
+      scatterByConclusion.set(job.conclusion, group);
+    }
 
-    return { dailyRows, scatterData };
+    return { dailyRows, scatterByConclusion };
   }, [allWorkflows, jobName, dateRange.start]);
 
   if (!chartData) {
@@ -616,12 +614,18 @@ function JobDetailView({
     );
   }
 
-  const { dailyRows, scatterData } = chartData;
+  const { dailyRows, scatterByConclusion } = chartData;
 
   const conclusionColor = (conclusion: string) => {
     if (conclusion === 'success') return '#22c55e';
     if (conclusion === 'skipped') return '#9ca3af';
     return '#ef4444';
+  };
+
+  const conclusionLabel = (conclusion: string) => {
+    if (conclusion === 'success') return 'Success';
+    if (conclusion === 'skipped') return 'Skipped';
+    return 'Failed';
   };
 
   return (
@@ -678,6 +682,7 @@ function JobDetailView({
               tick={{ fontSize: 12, fill: '#888' }}
               tickLine={false}
               axisLine={false}
+              tickFormatter={(val) => `${Math.round(val / 60)}`}
               label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
             />
             <YAxis
@@ -730,11 +735,12 @@ function JobDetailView({
               </>
             )}
             {showIndividualRuns &&
-              scatterData.map((point, i) => (
+              [...scatterByConclusion.entries()].map(([conclusion, points]) => (
                 <Scatter
-                  key={i}
-                  data={[point]}
-                  fill={conclusionColor(point.conclusion)}
+                  key={conclusion}
+                  name={conclusionLabel(conclusion)}
+                  data={points}
+                  fill={conclusionColor(conclusion)}
                   shape="circle"
                 />
               ))}
