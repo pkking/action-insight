@@ -27,6 +27,7 @@ import { callApi } from '@/lib/api-client';
 import type { RepoOption } from '@/lib/server-homepage-data';
 import type {
   DailyTrendPoint,
+  DateRange,
   PullRequestDetailFile,
   PullRequestIndexFile,
   RepoOverviewRow,
@@ -694,7 +695,7 @@ function JobDetailView({
               domain={[0, 100]}
             />
             <Tooltip
-              formatter={(value: unknown, name: string) => {
+              formatter={(value: number | string, name: string) => {
                 if (name === 'P90 Queue' || name === 'P90 E2E') return `${Math.round(Number(value) / 60)}m`;
                 if (name === 'Success Rate') return `${value}%`;
                 if (name === 'Run Count') return String(value);
