@@ -125,7 +125,7 @@ function isPrResolutionStatus(value: unknown): value is PullRequestResolutionSta
 
 function shouldWritePrResolutionCacheEntry(
   incoming: PullRequestResolutionCacheEntry,
-  existing?: { source: string; status: PullRequestResolutionStatus },
+  existing?: { source: string; status: PullRequestResolutionStatus; error_message: string | null },
 ): boolean {
   if (!existing) return true;
 
@@ -138,9 +138,9 @@ function shouldWritePrResolutionCacheEntry(
   }
 
   if (incomingStatus === 'resolved') return true;
-  if (existing.status === 'not_found' && incomingStatus !== 'not_found') return true;
+  if (existing.status === 'not_found') return incomingStatus === 'resolved';
 
-  return existing.status !== incomingStatus || (incoming.error_message ?? null) !== null;
+  return existing.status !== incomingStatus || (incoming.error_message ?? null) !== (existing.error_message ?? null);
 }
 
 function requireSupabaseForWrite(repo: string) {
@@ -419,13 +419,13 @@ export async function writePullRequestResolutionCacheToSupabase(
     }
   }
   const uniqueEntries = Array.from(entriesBySha.values());
-  const existingEntries = new Map<string, { source: string; status: PullRequestResolutionStatus }>();
+  const existingEntries = new Map<string, { source: string; status: PullRequestResolutionStatus; error_message: string | null }>();
   const uniqueShas = uniqueEntries.map((entry) => entry.head_sha);
 
   for (const batch of chunkArray(uniqueShas, CACHE_UPSERT_BATCH_SIZE)) {
     const { data, error } = await supabase
       .from('pr_resolution_cache')
-      .select('head_sha, pr_number, source, status')
+      .select('head_sha, pr_number, source, status, error_message')
       .eq('repo_id', repoId)
       .in('head_sha', batch);
 
@@ -443,6 +443,7 @@ export async function writePullRequestResolutionCacheToSupabase(
             : typeof row.pr_number === 'number'
               ? 'resolved'
               : 'failed',
+          error_message: typeof row.error_message === 'string' ? row.error_message : null,
         });
       }
     }
