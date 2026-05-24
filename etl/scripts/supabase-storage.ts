@@ -422,7 +422,7 @@ export async function writePrWorkflowsToSupabase(repo: string, prWorkflows: Map<
 
   const prNumberToId = new Map<number, number>();
 
-  for (const batch of chunkArray(Array.from(prWorkflows.keys()), 100)) {
+  for (const batch of chunkArray(Array.from(prWorkflows.keys()), PR_METRIC_UPSERT_BATCH_SIZE)) {
     const { data: prMetrics, error: lookupError } = await supabase
       .from('pr_metrics')
       .select('id, pr_number')
