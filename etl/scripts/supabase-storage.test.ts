@@ -570,7 +570,7 @@ describe('supabase-storage', () => {
 describe('checkEtlFreshness', () => {
   function mockFreshnessClient(options: {
     latestPrRun?: { created_at: string } | null;
-    latestMetric?: { created_at: string } | null;
+    latestMetric?: { ci_completed_at: string } | null;
     runError?: { message: string } | null;
     metricError?: { message: string } | null;
   }) {
@@ -594,7 +594,9 @@ describe('checkEtlFreshness', () => {
       return {
         select: vi.fn(() => ({
           eq: vi.fn(() => ({
-            order: vi.fn(() => orderBuilder),
+            not: vi.fn(() => ({
+              order: vi.fn(() => orderBuilder),
+            })),
           })),
         })),
       };
@@ -647,14 +649,14 @@ describe('checkEtlFreshness', () => {
   it('reports in-sync when PR runs and metrics have similar timestamps', async () => {
     const supabase = mockFreshnessClient({
       latestPrRun: { created_at: '2026-05-24T10:00:00Z' },
-      latestMetric: { created_at: '2026-05-24T09:50:00Z' },
+      latestMetric: { ci_completed_at: '2026-05-24T09:50:00Z' },
     });
     const { checkEtlFreshness } = await importStorageWithSupabase(supabase);
 
     const result = await checkEtlFreshness('acme/widgets');
     expect(result).not.toBeNull();
     expect(result!.latestPrRunCreatedAt).toBe('2026-05-24T10:00:00Z');
-    expect(result!.latestPrMetricCreatedAt).toBe('2026-05-24T09:50:00Z');
+    expect(result!.latestCiCompletedAt).toBe('2026-05-24T09:50:00Z');
     expect(result!.lagInSeconds).toBe(600);
     expect(result!.isStale).toBe(false);
   });
@@ -662,7 +664,7 @@ describe('checkEtlFreshness', () => {
   it('flags stale metrics when pr_metrics lag behind PR runs by more than threshold', async () => {
     const supabase = mockFreshnessClient({
       latestPrRun: { created_at: '2026-05-24T10:00:00Z' },
-      latestMetric: { created_at: '2026-05-22T10:00:00Z' },
+      latestMetric: { ci_completed_at: '2026-05-22T10:00:00Z' },
     });
     const { checkEtlFreshness } = await importStorageWithSupabase(supabase);
 
@@ -682,7 +684,7 @@ describe('checkEtlFreshness', () => {
     const result = await checkEtlFreshness('acme/widgets');
     expect(result).not.toBeNull();
     expect(result!.latestPrRunCreatedAt).toBe('2026-05-24T10:00:00Z');
-    expect(result!.latestPrMetricCreatedAt).toBeNull();
+    expect(result!.latestCiCompletedAt).toBeNull();
     expect(result!.lagInSeconds).toBeNull();
     expect(result!.isStale).toBe(true);
   });
