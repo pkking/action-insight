@@ -66,6 +66,8 @@ export interface PullRequestResolutionCacheEntry {
 
 let cachedClient: ReturnType<typeof createClient> | null = null;
 const SUPABASE_PAGE_SIZE = 1000;
+const RUN_UPSERT_BATCH_SIZE = 200;
+const JOB_UPSERT_BATCH_SIZE = 500;
 const PR_RESOLUTION_SOURCE_PRIORITY: Record<string, number> = {
   run_payload: 1,
   workflow_run: 1,
@@ -98,6 +100,14 @@ function requireSupabaseForWrite(repo: string) {
   }
 
   return supabase;
+}
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
 }
 
 async function ensureRepo(owner: string, repo: string): Promise<number | null> {
@@ -153,12 +163,14 @@ export async function writeRunsToSupabase(repo: string, runs: Run[], date: strin
     date,
   }));
 
-  const { error: runError } = await supabase
-    .from('runs')
-    .upsert(runRows, { onConflict: 'id' });
+  for (const batch of chunkArray(runRows, RUN_UPSERT_BATCH_SIZE)) {
+    const { error: runError } = await supabase
+      .from('runs')
+      .upsert(batch, { onConflict: 'id' });
 
-  if (runError) {
-    throw new Error(`Failed to insert runs for ${repo} into Supabase: ${runError.message}`);
+    if (runError) {
+      throw new Error(`Failed to insert runs for ${repo} into Supabase: ${runError.message}`);
+    }
   }
 
   const jobRows: {
@@ -197,10 +209,10 @@ export async function writeRunsToSupabase(repo: string, runs: Run[], date: strin
     }
   }
 
-  if (jobRows.length > 0) {
+  for (const batch of chunkArray(jobRows, JOB_UPSERT_BATCH_SIZE)) {
     const { error: jobError } = await supabase
       .from('jobs')
-      .upsert(jobRows, { onConflict: 'id' });
+      .upsert(batch, { onConflict: 'id' });
 
     if (jobError) {
       throw new Error(`Failed to insert jobs for ${repo} into Supabase: ${jobError.message}`);
