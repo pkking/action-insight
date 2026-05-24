@@ -21,6 +21,7 @@ import {
   writeCollectionState,
   getCollectedDatesFromSupabase,
   checkEtlFreshness,
+  formatFreshnessReport,
   type CollectionState,
 } from './supabase-storage.ts';
 import { readPullRequestsFromPayload } from './github-utils.ts';
@@ -599,13 +600,11 @@ export async function runCollection({
   for (const repo of targetRepos) {
     const freshness = await checkEtlFreshness(repo);
     if (freshness) {
+      const message = formatFreshnessReport(freshness, repo);
       if (freshness.isStale) {
-        const lagDisplay = freshness.lagInSeconds !== null ? `${Math.round(freshness.lagInSeconds / 3600)}h` : 'infinite';
-        console.warn(`ETL freshness: ${repo} pr_metrics lag behind PR runs by ${lagDisplay} (runs: ${freshness.latestPrRunCreatedAt}, metrics: ${freshness.latestPrMetricCreatedAt})`);
-      } else if (freshness.latestPrRunCreatedAt && freshness.latestPrMetricCreatedAt) {
-        log(`ETL freshness: ${repo} pr_metrics in sync (lag: ${Math.round(freshness.lagInSeconds! / 60)}min)`);
+        console.warn(message);
       } else {
-        log(`ETL freshness: ${repo} PR runs=${freshness.latestPrRunCreatedAt ?? 'none'}, metrics=${freshness.latestPrMetricCreatedAt ?? 'none'}`);
+        log(message);
       }
     }
   }

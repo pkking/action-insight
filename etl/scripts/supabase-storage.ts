@@ -659,11 +659,27 @@ export interface EtlFreshnessReport {
   isStale: boolean;
 }
 
+export function formatFreshnessReport(report: EtlFreshnessReport, repo: string): string {
+  if (report.isStale) {
+    const lagDisplay = report.lagInSeconds !== null ? `${Math.round(report.lagInSeconds / 3600)}h` : 'infinite';
+    return `ETL freshness: ${repo} pr_metrics lag behind PR runs by ${lagDisplay} (runs: ${report.latestPrRunCreatedAt}, metrics: ${report.latestPrMetricCreatedAt})`;
+  }
+  if (report.latestPrRunCreatedAt && report.latestPrMetricCreatedAt) {
+    return `ETL freshness: ${repo} pr_metrics in sync (lag: ${Math.round(report.lagInSeconds! / 60)}min)`;
+  }
+  return `ETL freshness: ${repo} PR runs=${report.latestPrRunCreatedAt ?? 'none'}, metrics=${report.latestPrMetricCreatedAt ?? 'none'}`;
+}
+
 export async function checkEtlFreshness(repo: string, staleThresholdSeconds = 86400): Promise<EtlFreshnessReport | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
 
-  const [owner, repoName] = repo.split('/');
+  const parts = repo.split('/');
+  if (parts.length !== 2) {
+    console.error(`Invalid repo format for freshness check: ${repo}. Expected owner/repo`);
+    return null;
+  }
+  const [owner, repoName] = parts;
   const repoId = await ensureRepo(owner, repoName);
   if (!repoId) return null;
 

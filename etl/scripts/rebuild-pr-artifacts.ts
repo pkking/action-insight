@@ -8,7 +8,7 @@ import { addDays, format, parseISO } from 'date-fns';
 import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
-import { getCollectedDatesFromSupabase, checkEtlFreshness } from './supabase-storage.ts';
+import { getCollectedDatesFromSupabase, checkEtlFreshness, formatFreshnessReport } from './supabase-storage.ts';
 import { readPullRequestsFromPayload } from './github-utils.ts';
 import type { GitHubApiPayload, Run } from '../../src/lib/types.ts';
 
@@ -291,13 +291,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 
       const freshness = await checkEtlFreshness(repoKey);
       if (freshness) {
+        const message = formatFreshnessReport(freshness, repoKey);
         if (freshness.isStale) {
-          const lagDisplay = freshness.lagInSeconds !== null ? `${Math.round(freshness.lagInSeconds / 3600)}h` : 'infinite';
-          console.warn(`ETL freshness: ${repoKey} pr_metrics lag behind PR runs by ${lagDisplay} (runs: ${freshness.latestPrRunCreatedAt}, metrics: ${freshness.latestPrMetricCreatedAt})`);
-        } else if (freshness.latestPrRunCreatedAt && freshness.latestPrMetricCreatedAt) {
-          console.log(`ETL freshness: ${repoKey} pr_metrics in sync (lag: ${Math.round(freshness.lagInSeconds! / 60)}min)`);
+          console.warn(message);
         } else {
-          console.log(`ETL freshness: ${repoKey} PR runs=${freshness.latestPrRunCreatedAt ?? 'none'}, metrics=${freshness.latestPrMetricCreatedAt ?? 'none'}`);
+          console.log(message);
         }
       }
     } catch (error) {
