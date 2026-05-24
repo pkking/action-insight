@@ -9,8 +9,7 @@ import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
 import { getCollectedDatesFromSupabase, checkEtlFreshness, formatFreshnessReport } from './supabase-storage.ts';
-import { readPullRequestsFromPayload } from './github-utils.ts';
-import type { GitHubApiPayload, Run } from '../../src/lib/types.ts';
+import type { Run } from '../../src/lib/types.ts';
 
 interface ReposConfig {
   repos?: unknown;
@@ -195,7 +194,6 @@ async function fetchRunsFromSupabase(repo: string, dates: string[]): Promise<Run
       }
 
       for (const row of runs || []) {
-        const githubPayload = (row.github_payload ?? null) as GitHubApiPayload | null;
         const run: Run = {
           id: Number(row.id),
           name: row.name as string,
@@ -208,8 +206,6 @@ async function fetchRunsFromSupabase(repo: string, dates: string[]): Promise<Run
           updated_at: row.updated_at as string,
           html_url: row.html_url as string,
           durationInSeconds: Number(row.duration_seconds),
-          pull_requests: readPullRequestsFromPayload(githubPayload),
-          githubPayload: githubPayload ?? undefined,
           jobs: (row.jobs || []).map((job: Record<string, unknown>) => ({
             id: Number(job.id),
             name: job.name as string,
@@ -221,7 +217,6 @@ async function fetchRunsFromSupabase(repo: string, dates: string[]): Promise<Run
             html_url: job.html_url as string,
             queueDurationInSeconds: Number(job.queue_duration_seconds),
             durationInSeconds: Number(job.duration_seconds),
-            githubPayload: (job.github_payload as GitHubApiPayload | null) ?? undefined,
           })),
         };
         allRuns.push(run);
