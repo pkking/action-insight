@@ -139,6 +139,7 @@ function shouldWritePrResolutionCacheEntry(
 
   if (incomingStatus === 'resolved') return true;
   if (existing.status === 'not_found') return incomingStatus === 'resolved';
+  if (incomingStatus === 'failed' || incomingStatus === 'rate_limited') return true;
 
   return existing.status !== incomingStatus || (incoming.error_message ?? null) !== (existing.error_message ?? null);
 }

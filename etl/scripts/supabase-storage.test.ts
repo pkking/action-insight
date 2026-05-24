@@ -533,7 +533,7 @@ describe('supabase-storage', () => {
     expect(upsertedCacheRows).toEqual([]);
   });
 
-  it('skips duplicate retryable cache writes when the error message is unchanged', async () => {
+  it('refreshes retryable cache attempts when the error message is unchanged', async () => {
     const { supabase, upsertedCacheRows } = mockSupabaseClient({
       cacheRows: [
         {
@@ -556,6 +556,13 @@ describe('supabase-storage', () => {
       },
     ]);
 
-    expect(upsertedCacheRows).toEqual([]);
+    expect(upsertedCacheRows).toEqual([
+      expect.objectContaining({
+        head_sha: 'sha-existing',
+        status: 'failed',
+        error_message: 'GitHub API lookup failed during SHA to PR resolution',
+        attempted_at: expect.any(String),
+      }),
+    ]);
   });
 });

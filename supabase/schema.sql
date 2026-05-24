@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS pr_resolution_cache (
   status TEXT NOT NULL DEFAULT 'resolved',
   error_message TEXT,
   attempted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  resolved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at TIMESTAMPTZ,
   UNIQUE(repo_id, head_sha)
 );
 
@@ -112,6 +112,9 @@ ALTER TABLE pr_resolution_cache ALTER COLUMN pr_number DROP NOT NULL;
 ALTER TABLE pr_resolution_cache ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'resolved';
 ALTER TABLE pr_resolution_cache ADD COLUMN IF NOT EXISTS error_message TEXT;
 ALTER TABLE pr_resolution_cache ADD COLUMN IF NOT EXISTS attempted_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE pr_resolution_cache ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
+ALTER TABLE pr_resolution_cache ALTER COLUMN resolved_at DROP NOT NULL;
+ALTER TABLE pr_resolution_cache ALTER COLUMN resolved_at DROP DEFAULT;
 CREATE INDEX IF NOT EXISTS idx_pr_resolution_cache_status ON pr_resolution_cache(repo_id, status);
 
 -- 7. Collection state table (replaces local index.json)
