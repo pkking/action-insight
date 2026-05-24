@@ -2,9 +2,9 @@
 
 ## Context
 
-PR #83 fixed oversized Supabase writes by chunking ETL upserts. PR #84 serialized per-repo ETL workflows to avoid overlapping scheduled collectors rewriting the same recent windows. PR #85 made local PR metrics recovery usable with environment-provided Supabase credentials and an optional `GITHUB_TOKEN`, and added PR metrics rebuild observability.
+PR #83 fixed oversized Supabase writes by chunking ETL upserts. PR #84 serialized per-repo ETL workflows to avoid overlapping scheduled collectors rewriting the same recent windows. PR #85 made local PR metrics recovery usable with environment-provided Supabase credentials and an optional `GITHUB_TOKEN`, and added PR metrics rebuild observability. PR #87 extended `pr_resolution_cache` to track resolution status (resolved, not_found, failed, rate_limited) and made SHA resolution resumable across runs.
 
-After those changes, the frontend recovered to current data. The remaining work is mostly about separating failure domains, reducing GitHub API pressure, and lowering Supabase storage risk.
+After those changes, the frontend recovered to current data. Items 1 and 2 below are complete. The remaining work focuses on lowering Supabase storage risk and adding operational visibility.
 
 ## Goals
 
@@ -15,7 +15,9 @@ After those changes, the frontend recovered to current data. The remaining work 
 
 ## Work Items
 
-### 1. Split PR metrics rebuild from raw ETL collection
+### 1. Split PR metrics rebuild from raw ETL collection ✅
+
+**Completed in PR #85.**
 
 Create an independent script and GitHub Actions workflow for rebuilding PR metrics from already-collected raw runs.
 
@@ -32,7 +34,9 @@ Success criteria:
 - PR metrics rebuild can be rerun for a date range using existing raw data.
 - Logs report rows written and latest `created_at` for rebuilt metrics.
 
-### 2. Make SHA to PR resolution resumable
+### 2. Make SHA to PR resolution resumable ✅
+
+**Completed in PR #87.**
 
 Reduce repeated GitHub API calls during PR metrics rebuild.
 
@@ -93,8 +97,8 @@ Revisit keyset pagination if:
 
 ## Priority
 
-1. Split PR metrics rebuild from raw ETL collection.
-2. Improve SHA to PR resolution cache and resumability.
+1. ~~Split PR metrics rebuild from raw ETL collection.~~ ✅ PR #85
+2. ~~Improve SHA to PR resolution cache and resumability.~~ ✅ PR #87
 3. Move raw payload storage out of Supabase.
 4. Add operational freshness and storage checks.
 5. Revisit keyset pagination only if rebuild scale or concurrency requires it.
