@@ -667,7 +667,6 @@ export function formatFreshnessReport(report: EtlFreshnessReport, repo: string):
   if (report.latestRunCreatedAt && report.latestCiCompletedAt) {
     return `ETL freshness: ${repo} pr_metrics in sync (lag: ${Math.max(0, Math.round(report.lagInSeconds! / 60))}min)`;
   }
-  }
   return `ETL freshness: ${repo} runs=${report.latestRunCreatedAt ?? 'none'}, metrics=${report.latestCiCompletedAt ?? 'none'}`;
 }
 
