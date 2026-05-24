@@ -479,6 +479,32 @@ describe('supabase-storage', () => {
     ]);
   });
 
+  it('deduplicates cache entries by resolution priority before writing', async () => {
+    const { supabase, upsertedCacheRows } = mockSupabaseClient({});
+    const { writePullRequestResolutionCacheToSupabase } = await importStorageWithSupabase(supabase);
+
+    await writePullRequestResolutionCacheToSupabase('acme/widgets', [
+      {
+        head_sha: 'sha-existing',
+        pr_number: 42,
+        source: 'commits_api',
+      },
+      {
+        head_sha: 'sha-existing',
+        pr_number: 99,
+        source: 'run_payload',
+      },
+    ]);
+
+    expect(upsertedCacheRows).toEqual([
+      expect.objectContaining({
+        head_sha: 'sha-existing',
+        pr_number: 42,
+        source: 'commits_api',
+      }),
+    ]);
+  });
+
   it('does not overwrite definitive not-found cache entries with retryable failures', async () => {
     const { supabase, upsertedCacheRows } = mockSupabaseClient({
       cacheRows: [

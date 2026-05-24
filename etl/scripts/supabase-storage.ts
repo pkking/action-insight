@@ -407,14 +407,11 @@ export async function writePullRequestResolutionCacheToSupabase(
   const entriesBySha = new Map<string, PullRequestResolutionCacheEntry>();
   for (const entry of entries) {
     const existing = entriesBySha.get(entry.head_sha);
-    if (
-      !existing ||
-      getPrResolutionStatus(entry) === 'resolved' ||
-      (
-        getPrResolutionStatus(existing) !== 'resolved' &&
-        getPrResolutionSourcePriority(entry.source) >= getPrResolutionSourcePriority(existing.source)
-      )
-    ) {
+    if (shouldWritePrResolutionCacheEntry(entry, existing ? {
+      source: existing.source ?? 'commits_api',
+      status: getPrResolutionStatus(existing),
+      error_message: existing.error_message ?? null,
+    } : undefined)) {
       entriesBySha.set(entry.head_sha, entry);
     }
   }
