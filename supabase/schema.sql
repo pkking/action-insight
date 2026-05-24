@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS runs (
   updated_at TIMESTAMPTZ NOT NULL,
   html_url TEXT NOT NULL,
   duration_seconds INTEGER NOT NULL DEFAULT 0,
-  github_payload JSONB,
   date DATE NOT NULL  -- Denormalized for efficient date-range queries
 );
 
@@ -44,15 +43,10 @@ CREATE TABLE IF NOT EXISTS jobs (
   completed_at TIMESTAMPTZ NOT NULL,
   html_url TEXT NOT NULL,
   queue_duration_seconds INTEGER NOT NULL DEFAULT 0,
-  duration_seconds INTEGER NOT NULL DEFAULT 0,
-  github_payload JSONB
+  duration_seconds INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_run_id ON jobs(run_id);
-
--- Existing deployments created by earlier versions need additive columns.
-ALTER TABLE runs ADD COLUMN IF NOT EXISTS github_payload JSONB;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS github_payload JSONB;
 
 -- 4. PR Metrics table (PR-level CI metrics summaries)
 CREATE TABLE IF NOT EXISTS pr_metrics (

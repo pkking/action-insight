@@ -172,7 +172,7 @@ async function importStorageWithSupabase(supabase: unknown) {
 }
 
 describe('supabase-storage', () => {
-  it('persists raw GitHub API payloads for runs and jobs', async () => {
+  it('writes runs and jobs to Supabase without raw payloads', async () => {
     const { supabase, upsertedRunRows, upsertedJobRows } = mockSupabaseClient({});
     const { writeRunsToSupabase } = await importStorageWithSupabase(supabase);
 
@@ -219,27 +219,27 @@ describe('supabase-storage', () => {
     expect(upsertedRunRows).toEqual([
       expect.objectContaining({
         id: 101,
-        github_payload: expect.objectContaining({
-          path: '.github/workflows/ci.yml',
-          run_attempt: 2,
-        }),
+        name: 'CI',
+        head_branch: 'main',
+        date: '2026-05-01',
       }),
     ]);
+    expect(upsertedRunRows[0]).not.toHaveProperty('github_payload');
+
     expect(upsertedJobRows).toEqual([
       expect.objectContaining({
         id: 201,
-        github_payload: expect.objectContaining({
-          runner_name: 'runner-1',
-          labels: ['self-hosted', 'npu'],
-        }),
+        name: 'test',
+        status: 'completed',
       }),
     ]);
+    expect(upsertedJobRows[0]).not.toHaveProperty('github_payload');
   });
 
   it('throws when run upsert fails so collection state is not advanced', async () => {
     const { supabase } = mockSupabaseClient({
       runUpsertError: {
-        message: "Could not find the 'github_payload' column of 'runs' in the schema cache",
+        message: 'Could not find the \'duration_seconds\' column of \'runs\' in the schema cache',
       },
     });
     const { writeRunsToSupabase } = await importStorageWithSupabase(supabase);
@@ -261,7 +261,7 @@ describe('supabase-storage', () => {
         },
       ], '2026-05-01')
     ).rejects.toThrow(
-      "Failed to insert runs for acme/widgets into Supabase: Could not find the 'github_payload' column of 'runs' in the schema cache"
+      "Failed to insert runs for acme/widgets into Supabase: Could not find the 'duration_seconds' column of 'runs' in the schema cache"
     );
   });
 
