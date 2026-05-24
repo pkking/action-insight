@@ -600,11 +600,11 @@ export async function runCollection({
     const freshness = await checkEtlFreshness(repo);
     if (freshness) {
       if (freshness.isStale) {
-        warn(`ETL freshness: ${repo} pr_metrics lag behind raw runs by ${Math.round(freshness.lagInSeconds! / 3600)}h (runs: ${freshness.latestRunCreatedAt}, metrics: ${freshness.latestPrMetricCreatedAt})`);
-      } else if (freshness.latestRunCreatedAt && freshness.latestPrMetricCreatedAt) {
+        console.warn(`ETL freshness: ${repo} pr_metrics lag behind PR runs by ${Math.round(freshness.lagInSeconds! / 3600)}h (runs: ${freshness.latestPrRunCreatedAt}, metrics: ${freshness.latestPrMetricCreatedAt})`);
+      } else if (freshness.latestPrRunCreatedAt && freshness.latestPrMetricCreatedAt) {
         log(`ETL freshness: ${repo} pr_metrics in sync (lag: ${Math.round(freshness.lagInSeconds! / 60)}min)`);
       } else {
-        log(`ETL freshness: ${repo} runs=${freshness.latestRunCreatedAt ?? 'none'}, metrics=${freshness.latestPrMetricCreatedAt ?? 'none'}`);
+        log(`ETL freshness: ${repo} PR runs=${freshness.latestPrRunCreatedAt ?? 'none'}, metrics=${freshness.latestPrMetricCreatedAt ?? 'none'}`);
       }
     }
   }

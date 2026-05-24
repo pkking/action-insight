@@ -653,7 +653,7 @@ export async function getCollectedDatesFromSupabase(repo: string): Promise<strin
 }
 
 export interface EtlFreshnessReport {
-  latestRunCreatedAt: string | null;
+  latestPrRunCreatedAt: string | null;
   latestPrMetricCreatedAt: string | null;
   lagInSeconds: number | null;
   isStale: boolean;
@@ -667,11 +667,13 @@ export async function checkEtlFreshness(repo: string, staleThresholdSeconds = 86
   const repoId = await ensureRepo(owner, repoName);
   if (!repoId) return null;
 
+  const prEvents = ['pull_request', 'pull_request_target', 'pull_request_review'];
   const [runsResult, metricsResult] = await Promise.all([
     supabase
       .from('runs')
       .select('created_at')
       .eq('repo_id', repoId)
+      .in('event', prEvents)
       .order('created_at', { ascending: false })
       .limit(1)
       .single(),
@@ -684,16 +686,16 @@ export async function checkEtlFreshness(repo: string, staleThresholdSeconds = 86
       .single(),
   ]);
 
-  const latestRunCreatedAt = runsResult.error ? null : (runsResult.data?.created_at ?? null);
+  const latestPrRunCreatedAt = runsResult.error ? null : (runsResult.data?.created_at ?? null);
   const latestPrMetricCreatedAt = metricsResult.error ? null : (metricsResult.data?.created_at ?? null);
 
   let lagInSeconds: number | null = null;
-  if (latestRunCreatedAt && latestPrMetricCreatedAt) {
-    lagInSeconds = (new Date(latestRunCreatedAt).getTime() - new Date(latestPrMetricCreatedAt).getTime()) / 1000;
+  if (latestPrRunCreatedAt && latestPrMetricCreatedAt) {
+    lagInSeconds = (new Date(latestPrRunCreatedAt).getTime() - new Date(latestPrMetricCreatedAt).getTime()) / 1000;
   }
 
   return {
-    latestRunCreatedAt,
+    latestPrRunCreatedAt,
     latestPrMetricCreatedAt,
     lagInSeconds,
     isStale: lagInSeconds !== null && lagInSeconds > staleThresholdSeconds,

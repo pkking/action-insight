@@ -569,22 +569,36 @@ describe('supabase-storage', () => {
 
 describe('checkEtlFreshness', () => {
   function mockFreshnessClient(options: {
-    latestRun?: { created_at: string } | null;
+    latestPrRun?: { created_at: string } | null;
     latestMetric?: { created_at: string } | null;
     runError?: { message: string } | null;
     metricError?: { message: string } | null;
   }) {
-    const buildQueryChain = (result: { data: unknown; error: unknown }) => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          order: vi.fn(() => ({
-            limit: vi.fn(() => ({
-              single: vi.fn().mockResolvedValue(result),
+    const buildFreshnessQueryChain = (result: { data: unknown; error: unknown }, hasInFilter: boolean) => {
+      const orderBuilder = {
+        limit: vi.fn(() => ({
+          single: vi.fn().mockResolvedValue(result),
+        })),
+      };
+      if (hasInFilter) {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              in: vi.fn(() => ({
+                order: vi.fn(() => orderBuilder),
+              })),
             })),
           })),
+        };
+      }
+      return {
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            order: vi.fn(() => orderBuilder),
+          })),
         })),
-      })),
-    });
+      };
+    };
 
     const supabase = {
       from: vi.fn((table: string) => {
@@ -601,16 +615,16 @@ describe('checkEtlFreshness', () => {
           };
         }
         if (table === 'runs') {
-          return buildQueryChain({
-            data: options.latestRun ?? null,
+          return buildFreshnessQueryChain({
+            data: options.latestPrRun ?? null,
             error: options.runError ?? null,
-          });
+          }, true);
         }
         if (table === 'pr_metrics') {
-          return buildQueryChain({
+          return buildFreshnessQueryChain({
             data: options.latestMetric ?? null,
             error: options.metricError ?? null,
-          });
+          }, false);
         }
         throw new Error(`Unexpected table: ${table}`);
       }),
@@ -630,24 +644,24 @@ describe('checkEtlFreshness', () => {
     expect(result).toBeNull();
   });
 
-  it('reports in-sync when runs and metrics have similar timestamps', async () => {
+  it('reports in-sync when PR runs and metrics have similar timestamps', async () => {
     const supabase = mockFreshnessClient({
-      latestRun: { created_at: '2026-05-24T10:00:00Z' },
+      latestPrRun: { created_at: '2026-05-24T10:00:00Z' },
       latestMetric: { created_at: '2026-05-24T09:50:00Z' },
     });
     const { checkEtlFreshness } = await importStorageWithSupabase(supabase);
 
     const result = await checkEtlFreshness('acme/widgets');
     expect(result).not.toBeNull();
-    expect(result!.latestRunCreatedAt).toBe('2026-05-24T10:00:00Z');
+    expect(result!.latestPrRunCreatedAt).toBe('2026-05-24T10:00:00Z');
     expect(result!.latestPrMetricCreatedAt).toBe('2026-05-24T09:50:00Z');
     expect(result!.lagInSeconds).toBe(600);
     expect(result!.isStale).toBe(false);
   });
 
-  it('flags stale metrics when pr_metrics lag behind runs by more than threshold', async () => {
+  it('flags stale metrics when pr_metrics lag behind PR runs by more than threshold', async () => {
     const supabase = mockFreshnessClient({
-      latestRun: { created_at: '2026-05-24T10:00:00Z' },
+      latestPrRun: { created_at: '2026-05-24T10:00:00Z' },
       latestMetric: { created_at: '2026-05-22T10:00:00Z' },
     });
     const { checkEtlFreshness } = await importStorageWithSupabase(supabase);
@@ -660,14 +674,14 @@ describe('checkEtlFreshness', () => {
 
   it('handles missing metrics gracefully', async () => {
     const supabase = mockFreshnessClient({
-      latestRun: { created_at: '2026-05-24T10:00:00Z' },
+      latestPrRun: { created_at: '2026-05-24T10:00:00Z' },
       latestMetric: null,
     });
     const { checkEtlFreshness } = await importStorageWithSupabase(supabase);
 
     const result = await checkEtlFreshness('acme/widgets');
     expect(result).not.toBeNull();
-    expect(result!.latestRunCreatedAt).toBe('2026-05-24T10:00:00Z');
+    expect(result!.latestPrRunCreatedAt).toBe('2026-05-24T10:00:00Z');
     expect(result!.latestPrMetricCreatedAt).toBeNull();
     expect(result!.lagInSeconds).toBeNull();
     expect(result!.isStale).toBe(false);
