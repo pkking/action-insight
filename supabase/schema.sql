@@ -97,13 +97,22 @@ CREATE TABLE IF NOT EXISTS pr_resolution_cache (
   id SERIAL PRIMARY KEY,
   repo_id INTEGER NOT NULL REFERENCES repos(id),
   head_sha TEXT NOT NULL,
-  pr_number INTEGER NOT NULL,
+  pr_number INTEGER,
   source TEXT NOT NULL DEFAULT 'commits_api',
+  status TEXT NOT NULL DEFAULT 'resolved',
+  error_message TEXT,
+  attempted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   resolved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(repo_id, head_sha)
 );
 
 CREATE INDEX IF NOT EXISTS idx_pr_resolution_cache_repo_sha ON pr_resolution_cache(repo_id, head_sha);
+
+ALTER TABLE pr_resolution_cache ALTER COLUMN pr_number DROP NOT NULL;
+ALTER TABLE pr_resolution_cache ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'resolved';
+ALTER TABLE pr_resolution_cache ADD COLUMN IF NOT EXISTS error_message TEXT;
+ALTER TABLE pr_resolution_cache ADD COLUMN IF NOT EXISTS attempted_at TIMESTAMPTZ NOT NULL DEFAULT now();
+CREATE INDEX IF NOT EXISTS idx_pr_resolution_cache_status ON pr_resolution_cache(repo_id, status);
 
 -- 7. Collection state table (replaces local index.json)
 CREATE TABLE IF NOT EXISTS collection_state (

@@ -58,10 +58,22 @@ interface PrMetricsSummary {
   conclusion: string;
 }
 
+export type PullRequestResolutionStatus = 'resolved' | 'not_found' | 'failed' | 'rate_limited';
+
 export interface PullRequestResolutionCacheEntry {
   head_sha: string;
-  pr_number: number;
+  pr_number?: number | null;
   source?: string;
+  status?: PullRequestResolutionStatus;
+  error_message?: string | null;
+}
+
+export interface PullRequestResolutionCacheRecord {
+  head_sha: string;
+  pr_number: number | null;
+  source: string;
+  status: PullRequestResolutionStatus;
+  error_message: string | null;
 }
 
 let cachedClient: ReturnType<typeof createClient> | null = null;
@@ -100,6 +112,35 @@ function getSupabase() {
 
 function getPrResolutionSourcePriority(source?: string): number {
   return PR_RESOLUTION_SOURCE_PRIORITY[source ?? 'commits_api'] ?? 0;
+}
+
+function getPrResolutionStatus(entry: PullRequestResolutionCacheEntry): PullRequestResolutionStatus {
+  if (entry.status) return entry.status;
+  return typeof entry.pr_number === 'number' ? 'resolved' : 'failed';
+}
+
+function isPrResolutionStatus(value: unknown): value is PullRequestResolutionStatus {
+  return value === 'resolved' || value === 'not_found' || value === 'failed' || value === 'rate_limited';
+}
+
+function shouldWritePrResolutionCacheEntry(
+  incoming: PullRequestResolutionCacheEntry,
+  existing?: { source: string; status: PullRequestResolutionStatus },
+): boolean {
+  if (!existing) return true;
+
+  const incomingStatus = getPrResolutionStatus(incoming);
+  if (existing.status === 'resolved') {
+    return (
+      incomingStatus === 'resolved' &&
+      getPrResolutionSourcePriority(incoming.source) >= getPrResolutionSourcePriority(existing.source)
+    );
+  }
+
+  if (incomingStatus === 'resolved') return true;
+  if (existing.status === 'not_found' && incomingStatus !== 'not_found') return true;
+
+  return existing.status !== incomingStatus || (incoming.error_message ?? null) !== null;
 }
 
 function requireSupabaseForWrite(repo: string) {
@@ -308,7 +349,7 @@ export async function getExistingRunIdsWithJobsFromSupabase(repo: string): Promi
 export async function readPullRequestResolutionCacheFromSupabase(
   repo: string,
   shas: string[],
-): Promise<Map<string, number>> {
+): Promise<Map<string, PullRequestResolutionCacheRecord>> {
   const supabase = getSupabase();
   if (!supabase || shas.length === 0) return new Map();
 
@@ -316,13 +357,13 @@ export async function readPullRequestResolutionCacheFromSupabase(
   const repoId = await ensureRepo(owner, repoName);
   if (!repoId) return new Map();
 
-  const resolved = new Map<string, number>();
+  const cached = new Map<string, PullRequestResolutionCacheRecord>();
   const uniqueShas = Array.from(new Set(shas));
 
   for (const batch of chunkArray(uniqueShas, CACHE_UPSERT_BATCH_SIZE)) {
     const { data, error } = await supabase
       .from('pr_resolution_cache')
-      .select('head_sha, pr_number')
+      .select('head_sha, pr_number, source, status, error_message')
       .eq('repo_id', repoId)
       .in('head_sha', batch);
 
@@ -332,13 +373,26 @@ export async function readPullRequestResolutionCacheFromSupabase(
     }
 
     for (const row of data || []) {
-      if (typeof row.head_sha === 'string' && typeof row.pr_number === 'number') {
-        resolved.set(row.head_sha, row.pr_number);
+      if (typeof row.head_sha === 'string') {
+        const prNumber = typeof row.pr_number === 'number' ? row.pr_number : null;
+        const status = isPrResolutionStatus(row.status)
+          ? row.status
+          : prNumber === null
+            ? 'failed'
+            : 'resolved';
+
+        cached.set(row.head_sha, {
+          head_sha: row.head_sha,
+          pr_number: prNumber,
+          source: typeof row.source === 'string' ? row.source : 'commits_api',
+          status,
+          error_message: typeof row.error_message === 'string' ? row.error_message : null,
+        });
       }
     }
   }
 
-  return resolved;
+  return cached;
 }
 
 export async function writePullRequestResolutionCacheToSupabase(
@@ -355,19 +409,23 @@ export async function writePullRequestResolutionCacheToSupabase(
     const existing = entriesBySha.get(entry.head_sha);
     if (
       !existing ||
-      getPrResolutionSourcePriority(entry.source) >= getPrResolutionSourcePriority(existing.source)
+      getPrResolutionStatus(entry) === 'resolved' ||
+      (
+        getPrResolutionStatus(existing) !== 'resolved' &&
+        getPrResolutionSourcePriority(entry.source) >= getPrResolutionSourcePriority(existing.source)
+      )
     ) {
       entriesBySha.set(entry.head_sha, entry);
     }
   }
   const uniqueEntries = Array.from(entriesBySha.values());
-  const existingEntries = new Map<string, { source: string }>();
+  const existingEntries = new Map<string, { source: string; status: PullRequestResolutionStatus }>();
   const uniqueShas = uniqueEntries.map((entry) => entry.head_sha);
 
   for (const batch of chunkArray(uniqueShas, CACHE_UPSERT_BATCH_SIZE)) {
     const { data, error } = await supabase
       .from('pr_resolution_cache')
-      .select('head_sha, pr_number, source')
+      .select('head_sha, pr_number, source, status')
       .eq('repo_id', repoId)
       .in('head_sha', batch);
 
@@ -377,12 +435,15 @@ export async function writePullRequestResolutionCacheToSupabase(
     }
 
     for (const row of data || []) {
-      if (
-        typeof row.head_sha === 'string' &&
-        typeof row.pr_number === 'number' &&
-        typeof row.source === 'string'
-      ) {
-        existingEntries.set(row.head_sha, { source: row.source });
+      if (typeof row.head_sha === 'string' && typeof row.source === 'string') {
+        existingEntries.set(row.head_sha, {
+          source: row.source,
+          status: isPrResolutionStatus(row.status)
+            ? row.status
+            : typeof row.pr_number === 'number'
+              ? 'resolved'
+              : 'failed',
+        });
       }
     }
   }
@@ -390,15 +451,16 @@ export async function writePullRequestResolutionCacheToSupabase(
   const rows = uniqueEntries
     .filter((entry) => {
       const existing = existingEntries.get(entry.head_sha);
-      if (!existing) return true;
-
-      return getPrResolutionSourcePriority(entry.source) >= getPrResolutionSourcePriority(existing.source);
+      return shouldWritePrResolutionCacheEntry(entry, existing);
     })
     .map((entry) => ({
       repo_id: repoId,
       head_sha: entry.head_sha,
-      pr_number: entry.pr_number,
+      pr_number: entry.pr_number ?? null,
       source: entry.source ?? 'commits_api',
+      status: getPrResolutionStatus(entry),
+      error_message: entry.error_message ?? null,
+      attempted_at: new Date().toISOString(),
     }));
 
   if (rows.length === 0) return;
