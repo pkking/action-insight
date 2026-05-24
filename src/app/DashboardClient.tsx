@@ -700,18 +700,28 @@ function JobDetailView({
               axisLine={false}
               domain={[0, 100]}
             />
-            <Tooltip content={({ payload }) => {
-              if (!payload?.[0]) return null;
-              const { name: label, value, dataKey } = payload[0];
-              const displayValue = dataKey === 'p90Queue' || dataKey === 'p90E2e'
-                ? `${Math.round(Number(value) / 60)}m`
-                : dataKey === 'successRate'
-                  ? `${value}%`
-                  : String(value);
+            <Tooltip content={({ payload, label }) => {
+              if (!payload || payload.length === 0) return null;
               return (
                 <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs shadow-md dark:border-neutral-700 dark:bg-neutral-800">
-                  <div className="font-medium text-neutral-700 dark:text-neutral-200">{label}</div>
-                  <div className="text-neutral-500 dark:text-neutral-400">{displayValue}</div>
+                  <div className="mb-1.5 font-medium text-neutral-700 dark:text-neutral-200">{label}</div>
+                  <div className="space-y-0.5">
+                    {payload.map((entry, i) => {
+                      const { dataKey, value, color, name } = entry;
+                      const displayValue = dataKey === 'p90Queue' || dataKey === 'p90E2e'
+                        ? `${Math.round(Number(value) / 60)}m`
+                        : dataKey === 'successRate'
+                          ? `${value}%`
+                          : String(value);
+                      return (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+                          <span className="text-neutral-500 dark:text-neutral-400">{name}:</span>
+                          <span className="font-mono text-neutral-700 dark:text-neutral-200">{displayValue}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             }} />
