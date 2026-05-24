@@ -13,12 +13,21 @@ function mockSupabaseClient(options: {
   rpcError?: { message: string } | null;
   runUpsertError?: { message: string } | null;
   jobUpsertError?: { message: string } | null;
+  prMetricRows?: Array<{ id: number; pr_number: number }>;
+  prMetricLookupError?: { message: string } | null;
+  prMetricUpsertError?: { message: string } | null;
+  prWorkflowUpsertError?: { message: string } | null;
 }) {
   const upsertedCacheRows: unknown[] = [];
   const upsertedRunRows: unknown[] = [];
   const upsertedJobRows: unknown[] = [];
+  const upsertedPrMetricRows: unknown[] = [];
+  const upsertedPrWorkflowRows: unknown[] = [];
   const runUpsertBatches: unknown[][] = [];
   const jobUpsertBatches: unknown[][] = [];
+  const prMetricLookupBatches: unknown[][] = [];
+  const prMetricUpsertBatches: unknown[][] = [];
+  const prWorkflowUpsertBatches: unknown[][] = [];
   const fromCalls: string[] = [];
   const rpcRange = vi.fn((from: number, to: number) => {
     const pageIndex = Math.floor(from / (to - from + 1));
@@ -95,6 +104,36 @@ function mockSupabaseClient(options: {
         };
       }
 
+      if (table === 'pr_metrics') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              in: vi.fn((_column: string, values: unknown[]) => {
+                prMetricLookupBatches.push(values);
+                const lookupValues = new Set(values);
+                const rows = (options.prMetricRows ?? []).filter((row) => lookupValues.has(row.pr_number));
+                return Promise.resolve({ data: rows, error: options.prMetricLookupError ?? null });
+              }),
+            })),
+          })),
+          upsert: vi.fn((rows: unknown[]) => {
+            prMetricUpsertBatches.push(rows);
+            upsertedPrMetricRows.push(...rows);
+            return Promise.resolve({ error: options.prMetricUpsertError ?? null });
+          }),
+        };
+      }
+
+      if (table === 'pr_workflows') {
+        return {
+          upsert: vi.fn((rows: unknown[]) => {
+            prWorkflowUpsertBatches.push(rows);
+            upsertedPrWorkflowRows.push(...rows);
+            return Promise.resolve({ error: options.prWorkflowUpsertError ?? null });
+          }),
+        };
+      }
+
       throw new Error(`Unexpected table: ${table}`);
     }),
   };
@@ -104,8 +143,13 @@ function mockSupabaseClient(options: {
     upsertedCacheRows,
     upsertedRunRows,
     upsertedJobRows,
+    upsertedPrMetricRows,
+    upsertedPrWorkflowRows,
     runUpsertBatches,
     jobUpsertBatches,
+    prMetricLookupBatches,
+    prMetricUpsertBatches,
+    prWorkflowUpsertBatches,
     fromCalls,
     rpcRange,
   };
@@ -284,6 +328,56 @@ describe('supabase-storage', () => {
 
     expect(runUpsertBatches.map((batch) => batch.length)).toEqual([50, 1]);
     expect(jobUpsertBatches.map((batch) => batch.length)).toEqual([75, 27]);
+  });
+
+  it('chunks PR metric and PR workflow Supabase writes', async () => {
+    vi.stubEnv('PR_METRIC_UPSERT_BATCH_SIZE', '100');
+    vi.stubEnv('PR_WORKFLOW_UPSERT_BATCH_SIZE', '500');
+
+    const prMetricRows = Array.from({ length: 101 }, (_, index) => ({
+      id: 1_000 + index,
+      pr_number: index + 1,
+    }));
+    const {
+      supabase,
+      prMetricLookupBatches,
+      prMetricUpsertBatches,
+      prWorkflowUpsertBatches,
+    } = mockSupabaseClient({ prMetricRows });
+    const { writePrMetricsToSupabase, writePrWorkflowsToSupabase } = await importStorageWithSupabase(supabase);
+    const prs = Array.from({ length: 201 }, (_, index) => ({
+      number: index + 1,
+      title: `PR ${index + 1}`,
+      branch: 'main',
+      author: 'octocat',
+      state: 'open',
+      html_url: `https://example.com/pulls/${index + 1}`,
+      created_at: '2026-05-01T00:00:00Z',
+      ci_started_at: null,
+      ci_completed_at: null,
+      merged_at: null,
+      partialCiHistory: false,
+      timeToCiStartInSeconds: null,
+      ciDurationInSeconds: null,
+      timeToMergeInSeconds: null,
+      mergeLeadTimeInSeconds: null,
+      workflowCount: 6,
+      successfulWorkflowCount: 6,
+      conclusion: 'success',
+    }));
+    const prWorkflows = new Map(
+      Array.from({ length: 101 }, (_, index) => [
+        index + 1,
+        Array.from({ length: 6 }, (_, runIndex) => 20_000 + index * 6 + runIndex),
+      ])
+    );
+
+    await writePrMetricsToSupabase('acme/widgets', prs);
+    await writePrWorkflowsToSupabase('acme/widgets', prWorkflows);
+
+    expect(prMetricUpsertBatches.map((batch) => batch.length)).toEqual([100, 100, 1]);
+    expect(prMetricLookupBatches.map((batch) => batch.length)).toEqual([100, 1]);
+    expect(prWorkflowUpsertBatches.map((batch) => batch.length)).toEqual([500, 106]);
   });
 
   it('uses the server-side RPC to read run IDs with jobs', async () => {
