@@ -461,7 +461,7 @@ describe('Dashboard PR view', () => {
       },
     });
 
-    expect(await screen.findAllByText('Insufficient data')).toHaveLength(8);
+    expect(await screen.findAllByText('Insufficient data')).toHaveLength(12);
   });
 
   it('explains when the selected repo metrics artifact failed to load', async () => {

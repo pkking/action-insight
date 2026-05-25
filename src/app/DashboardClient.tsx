@@ -161,6 +161,25 @@ function formatRate(value: number | null) {
   return value === null ? 'Insufficient data' : `${value}%`;
 }
 
+function computePercentile(sortedValues: number[], p: number): number {
+  if (sortedValues.length === 0) return 0;
+  const index = Math.ceil(sortedValues.length * p) - 1;
+  return sortedValues[Math.max(0, index)] ?? 0;
+}
+
+type TimeStats = { avg: number; p50: number; p90: number };
+
+function computeTimeStats(values: number[]): TimeStats | null {
+  if (values.length < 2) return null;
+  const sum = values.reduce((a, b) => a + b, 0);
+  const sorted = [...values].sort((a, b) => a - b);
+  return {
+    avg: sum / values.length,
+    p50: computePercentile(sorted, 0.5),
+    p90: computePercentile(sorted, 0.9),
+  };
+}
+
 function parseDashboardQuery(params: Pick<URLSearchParams, 'get'>): DashboardQueryState {
   const daysParam = params.get('days');
   const parsedDays = daysParam ? parseInt(daysParam, 10) : 7;
@@ -826,6 +845,8 @@ function DashboardContent({
   const [jobSortField, setJobSortField] = useState<JobSortField>('duration');
   const [jobSortOrder, setJobSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedJobName, setSelectedJobName] = useState<string | null>(() => initialQuery.jobName || null);
+  const [prPageSize, setPrPageSize] = useState<10 | 50 | 200>(50);
+  const [prPage, setPrPage] = useState(1);
   const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
   const detailAbortControllerRef = useRef<AbortController | null>(null);
   const debouncedFilterName = useDebouncedValue(filterName, 250);
@@ -961,6 +982,32 @@ function DashboardContent({
 
     return result;
   }, [dateRangePrs, filterName]);
+
+  // Reset page to 1 when filtered results change
+  useEffect(() => {
+    setPrPage(1);
+  }, [filteredPrs, selectedRepoKey]);
+
+  const paginatedPrs = useMemo(
+    () => filteredPrs.slice((prPage - 1) * prPageSize, prPage * prPageSize),
+    [filteredPrs, prPage, prPageSize]
+  );
+
+  const prLifecycleStats = useMemo(() => {
+    if (prLifecycleViewMode !== 'pr' || filteredPrs.length === 0) return null;
+    const queueTimes = filteredPrs.map((p) => p.timeToCiStartInSeconds).filter((v): v is number => v !== undefined);
+    const ciDurations = filteredPrs.map((p) => p.ciDurationInSeconds).filter((v): v is number => v !== undefined);
+    const mergeLeads = filteredPrs.map((p) => p.mergeLeadTimeInSeconds).filter((v): v is number => v !== undefined);
+    const mergedPrs = filteredPrs.filter((p) => p.merged_at);
+    const forceMergedCount = mergedPrs.filter((p) => p.ci_completed_at && p.merged_at! < p.ci_completed_at).length;
+    return {
+      queueStats: computeTimeStats(queueTimes),
+      ciStats: computeTimeStats(ciDurations),
+      mergeStats: computeTimeStats(mergeLeads),
+      mergedPrCount: mergedPrs.length,
+      forceMergedCount,
+    };
+  }, [filteredPrs, prLifecycleViewMode]);
 
   const shouldLoadWorkflowFallback = Boolean(
     selectedRepo && (selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution || dateRangePrs.length === 0)
@@ -1580,8 +1627,8 @@ function DashboardContent({
         <section className="overflow-hidden rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
               <div className="flex flex-col gap-4 border-b border-neutral-100 p-6 dark:border-neutral-800 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h2 className="text-lg font-bold">PR Lifecycle</h2>
-                  <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Drill into PR and workflow details for {selectedRepo.key}.</p>
+                  <h2 className="text-lg font-bold">CI Pipeline & PR Details</h2>
+                  <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Drill into PR, workflow, and job details for {selectedRepo.key}.</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800">
@@ -1612,6 +1659,59 @@ function DashboardContent({
                   </div>
                 </div>
               </div>
+
+              {prLifecycleStats && (
+                <div className="border-b border-neutral-100 px-6 py-4 dark:border-neutral-800">
+                  <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                      <div className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">排队时间<MetricTooltip definition="从 PR 提交到 CI 开始执行的等待时间。统计当前时间周期内所有 PR 的平均值、P50、P90。" /></div>
+                      {prLifecycleStats.queueStats ? (
+                        <div className="mt-2 flex gap-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                          <span>avg: {formatDurationMinutes(prLifecycleStats.queueStats.avg)}</span>
+                          <span>p50: {formatDurationMinutes(prLifecycleStats.queueStats.p50)}</span>
+                          <span>p90: {formatDurationMinutes(prLifecycleStats.queueStats.p90)}</span>
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
+                      )}
+                    </div>
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                      <div className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">执行时间<MetricTooltip definition="CI 从开始执行到完成的耗时。统计当前时间周期内所有 PR 的平均值、P50、P90。" /></div>
+                      {prLifecycleStats.ciStats ? (
+                        <div className="mt-2 flex gap-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                          <span>avg: {formatDurationMinutes(prLifecycleStats.ciStats.avg)}</span>
+                          <span>p50: {formatDurationMinutes(prLifecycleStats.ciStats.p50)}</span>
+                          <span>p90: {formatDurationMinutes(prLifecycleStats.ciStats.p90)}</span>
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
+                      )}
+                    </div>
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                      <div className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">合入时间<MetricTooltip definition="从 CI 完成到 PR 被合入的等待时间。统计当前时间周期内所有 PR 的平均值、P50、P90。" /></div>
+                      {prLifecycleStats.mergeStats ? (
+                        <div className="mt-2 flex gap-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                          <span>avg: {formatDurationMinutes(prLifecycleStats.mergeStats.avg)}</span>
+                          <span>p50: {formatDurationMinutes(prLifecycleStats.mergeStats.p50)}</span>
+                          <span>p90: {formatDurationMinutes(prLifecycleStats.mergeStats.p90)}</span>
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
+                      )}
+                    </div>
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                      <div className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">强行合入率<MetricTooltip definition="PR 合入时间早于 CI 完成时间的比例，表示跳过 CI 检查直接合入的情况。" /></div>
+                      {prLifecycleStats.mergedPrCount > 0 ? (
+                        <div className="mt-2 text-2xl font-bold text-neutral-900 dark:text-neutral-100">
+                          {Math.round((prLifecycleStats.forceMergedCount / prLifecycleStats.mergedPrCount) * 100)}%
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {prLifecycleViewMode === 'pr' ? (
                 /* ===== PR VIEW (existing behavior) ===== */
@@ -1683,26 +1783,36 @@ function DashboardContent({
                     </div>
                   )
                 ) : (
-                  <div className="overflow-x-auto">
+                  <>
+                    <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
-                      <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
-                        <tr>
-                          <th className="px-6 py-3">PR / Branch</th>
-                          <th className="px-6 py-3">Status</th>
-                          <th className="px-6 py-3">T1 PR Created</th>
-                          <th className="px-6 py-3">T2 CI Started</th>
-                          <th className="px-6 py-3">T3 CI Completed</th>
-                          <th className="px-6 py-3">T4 PR Merged</th>
-                          <th className="px-6 py-3">Submit→CI Start</th>
-                          <th className="px-6 py-3">CI Start→CI End</th>
-                          <th className="px-6 py-3">Submit→Merge</th>
-                          <th className="px-6 py-3 text-right">Details</th>
-                        </tr>
-                      </thead>
+                       <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+                         <tr>
+                           <th className="px-6 py-3">PR / Branch</th>
+                           <th className="px-6 py-3">Status</th>
+                           <th className="px-6 py-3">
+                             <span className="inline-flex items-center gap-1.5">PR提交时间<MetricTooltip definition="Pull Request 创建的时间点。" /></span>
+                           </th>
+                           <th className="px-6 py-3">
+                             <span className="inline-flex items-center gap-1.5">CI排队时间<MetricTooltip definition="从 PR 提交到 CI 开始执行的等待时间。" /></span>
+                           </th>
+                           <th className="px-6 py-3">
+                             <span className="inline-flex items-center gap-1.5">CI执行时间<MetricTooltip definition="CI 从开始执行到完成的耗时。" /></span>
+                           </th>
+                           <th className="px-6 py-3">
+                             <span className="inline-flex items-center gap-1.5">合入时间<MetricTooltip definition="从 CI 完成到 PR 被合入的等待时间（CI完成 → 合入）。" /></span>
+                           </th>
+                           <th className="px-6 py-3">
+                             <span className="inline-flex items-center gap-1.5">强行合入<MetricTooltip definition="PR 合入时间早于 CI 完成时间，表示跳过了 CI 检查直接合入。" /></span>
+                           </th>
+                           <th className="px-6 py-3 text-right">Details</th>
+                         </tr>
+                       </thead>
                       <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                        {filteredPrs.map((pr) => {
+                        {paginatedPrs.map((pr) => {
                           const detail = detailsByNumber[pr.number];
                           const workflows = detail ? getSortedWorkflows(detail.workflows) : [];
+                          const isForceMerged = pr.merged_at && pr.ci_completed_at && pr.merged_at < pr.ci_completed_at;
 
                           return (
                             <React.Fragment key={pr.number}>
@@ -1716,12 +1826,22 @@ function DashboardContent({
                                 </td>
                                 <td className="px-6 py-4"><StatusBadge conclusion={pr.conclusion} /></td>
                                 <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(pr.created_at), 'MMM dd, HH:mm')}</td>
-                                <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{pr.ci_started_at ? format(new Date(pr.ci_started_at), 'MMM dd, HH:mm') : 'N/A'}</td>
-                                <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{pr.ci_completed_at ? format(new Date(pr.ci_completed_at), 'MMM dd, HH:mm') : 'N/A'}</td>
-                                <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{pr.merged_at ? format(new Date(pr.merged_at), 'MMM dd, HH:mm') : 'N/A'}</td>
                                 <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.timeToCiStartInSeconds)}</td>
                                 <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.ciDurationInSeconds)}</td>
-                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.timeToMergeInSeconds)}</td>
+                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.mergeLeadTimeInSeconds)}</td>
+                                <td className="px-6 py-4">
+                                  {pr.merged_at ? (
+                                    isForceMerged ? (
+                                      <span className="inline-flex items-center gap-1 rounded-full border border-green-200/50 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 dark:border-green-800/50 dark:bg-green-900/30 dark:text-green-400">
+                                        ✓
+                                      </span>
+                                    ) : (
+                                      <span className="text-neutral-400 dark:text-neutral-500">—</span>
+                                    )
+                                  ) : (
+                                    <span className="text-neutral-400 dark:text-neutral-500">—</span>
+                                  )}
+                                </td>
                                 <td className="px-6 py-4 text-right">
                                   <button type="button" onClick={() => void loadDetail(pr.number)} className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100">
                                     {expandedPrNumber === pr.number ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -1733,7 +1853,7 @@ function DashboardContent({
                               {expandedPrNumber === pr.number && detail && (
                                 <>
                                   <tr className="bg-neutral-50 dark:bg-neutral-950/50">
-                                    <td colSpan={10} className="p-6">
+                                    <td colSpan={8} className="p-6">
                                       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                                         <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
                                           <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Workflows</div>
@@ -1759,7 +1879,7 @@ function DashboardContent({
                                     </td>
                                   </tr>
                                   <tr>
-                                    <td colSpan={10} className="p-0">
+                                    <td colSpan={8} className="p-0">
                                       <div className="overflow-x-auto">
                                         <table className="w-full text-left text-sm">
                                           <thead className="bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
@@ -1812,11 +1932,46 @@ function DashboardContent({
                             </React.Fragment>
                           );
                         })}
-                      </tbody>
-                    </table>
-                  </div>
+                       </tbody>
+                     </table>
+                   </div>
+                    {filteredPrs.length > 10 && (
+                      <div className="flex items-center justify-between gap-4 border-t border-neutral-100 px-6 py-4 dark:border-neutral-800">
+                        <span className="text-sm text-neutral-500 dark:text-neutral-400">
+                          Showing {(prPage - 1) * prPageSize + 1}–{Math.min(prPage * prPageSize, filteredPrs.length)} of {filteredPrs.length}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPrPage((p) => Math.max(1, p - 1))}
+                            disabled={prPage === 1}
+                            className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm text-neutral-600 transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950"
+                          >
+                            Previous
+                          </button>
+                          <select
+                            value={prPageSize}
+                            onChange={(e) => { setPrPageSize(Number(e.target.value) as 10 | 50 | 200); setPrPage(1); }}
+                            className="rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-sm text-neutral-700 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
+                          >
+                            <option value={10}>10 / page</option>
+                            <option value={50}>50 / page</option>
+                            <option value={200}>200 / page</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => setPrPage((p) => p + 1)}
+                            disabled={prPage * prPageSize >= filteredPrs.length}
+                            className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm text-neutral-600 transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )
-              ) : prLifecycleViewMode === 'workflow' ? (
+                ) : prLifecycleViewMode === 'workflow' ? (
                 /* ===== WORKFLOW VIEW ===== */
                 <div>
                   {allWorkflowsError ? (
