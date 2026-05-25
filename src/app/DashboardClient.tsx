@@ -331,6 +331,265 @@ function StatusBadge({ conclusion }: { conclusion: string }) {
   );
 }
 
+type PrLifecycleTimelineData = {
+  created_at: string;
+  ci_started_at?: string;
+  ci_completed_at?: string;
+  merged_at?: string;
+  workflows: Run[];
+};
+
+function PrLifecycleTimeline({ data }: { data: PrLifecycleTimelineData }) {
+  const [expandedLevel, setExpandedLevel] = useState<'pr' | 'workflows' | 'jobs'>('pr');
+  const [expandedWorkflowId, setExpandedWorkflowId] = useState<number | null>(null);
+
+  const { timelineStartMs, timelineEndMs, milestones, workflowBars, jobBarsByWorkflow } = useMemo(() => {
+    const prCreatedMs = new Date(data.created_at).getTime();
+    const ciStartedMs = data.ci_started_at ? new Date(data.ci_started_at).getTime() : undefined;
+    const ciCompletedMs = data.ci_completed_at ? new Date(data.ci_completed_at).getTime() : undefined;
+    const mergedMs = data.merged_at ? new Date(data.merged_at).getTime() : undefined;
+
+    let startMs = prCreatedMs;
+    let endMs = prCreatedMs;
+
+    if (ciStartedMs) { startMs = Math.min(startMs, ciStartedMs); endMs = Math.max(endMs, ciStartedMs); }
+    if (ciCompletedMs) { endMs = Math.max(endMs, ciCompletedMs); }
+    if (mergedMs) { endMs = Math.max(endMs, mergedMs); }
+
+    for (const wf of data.workflows) {
+      const wfStart = new Date(wf.created_at).getTime();
+      const wfEnd = wfStart + wf.durationInSeconds * 1000;
+      startMs = Math.min(startMs, wfStart);
+      endMs = Math.max(endMs, wfEnd);
+      if (wf.jobs) {
+        for (const job of wf.jobs) {
+          const jobStart = new Date(job.started_at || job.created_at || wf.created_at).getTime();
+          const jobEnd = new Date(job.completed_at || job.started_at || wf.created_at).getTime();
+          startMs = Math.min(startMs, jobStart);
+          endMs = Math.max(endMs, jobEnd);
+        }
+      }
+    }
+
+    // Add 5% padding on each side
+    const padding = Math.max(60000, (endMs - startMs) * 0.05);
+    startMs -= padding;
+    endMs += padding;
+    const total = Math.max(60000, endMs - startMs);
+
+    const pct = (ms: number) => Math.max(0, Math.min(100, ((ms - startMs) / total) * 100));
+
+    const milestones: Array<{ label: string; ms: number; color: string; icon: string }> = [];
+    milestones.push({ label: 'PR Created', ms: prCreatedMs, color: '#3b82f6', icon: '📝' });
+    if (ciStartedMs) milestones.push({ label: 'CI Started', ms: ciStartedMs, color: '#f59e0b', icon: '▶️' });
+    if (ciCompletedMs) milestones.push({ label: 'CI Completed', ms: ciCompletedMs, color: '#22c55e', icon: '✅' });
+    if (mergedMs) milestones.push({ label: 'PR Merged', ms: mergedMs, color: '#8b5cf6', icon: '🔀' });
+
+    const wfBars = data.workflows.map((wf) => {
+      const wfStart = new Date(wf.created_at).getTime();
+      const wfEnd = wfStart + wf.durationInSeconds * 1000;
+      return {
+        id: wf.id,
+        name: wf.name,
+        conclusion: wf.conclusion,
+        left: pct(wfStart),
+        width: Math.max(0.5, pct(wfEnd) - pct(wfStart)),
+        created_at: wf.created_at,
+        durationInSeconds: wf.durationInSeconds,
+        html_url: wf.html_url,
+      };
+    });
+
+    const jobsByWf = new Map<number, Array<{ id: number; name: string; conclusion: string; left: number; width: number; html_url: string }>>();
+    for (const wf of data.workflows) {
+      if (!wf.jobs || wf.jobs.length === 0) continue;
+      const bars = wf.jobs.map((job) => {
+        const jobStart = new Date(job.started_at || job.created_at || wf.created_at).getTime();
+        const jobEnd = new Date(job.completed_at || job.started_at || wf.created_at).getTime();
+        return {
+          id: job.id,
+          name: job.name,
+          conclusion: job.conclusion,
+          left: pct(jobStart),
+          width: Math.max(0.3, pct(jobEnd) - pct(jobStart)),
+          html_url: job.html_url,
+        };
+      });
+      jobsByWf.set(wf.id, bars);
+    }
+
+    return { timelineStartMs: startMs, timelineEndMs: startMs + total, totalMs: total, milestones, workflowBars: wfBars, jobBarsByWorkflow: jobsByWf };
+  }, [data]);
+
+  const formatTime = (ms: number) => {
+    const d = new Date(ms);
+    return format(d, 'MMM dd HH:mm');
+  };
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.round(seconds / 60);
+    if (mins < 60) return `${mins}m`;
+    return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  };
+
+  const conclusionColor = (conclusion: string) => {
+    if (conclusion === 'success') return 'bg-green-500 border-green-600';
+    if (conclusion === 'skipped') return 'bg-neutral-400 border-neutral-500';
+    return 'bg-red-500 border-red-600';
+  };
+
+  const conclusionColorLight = (conclusion: string) => {
+    if (conclusion === 'success') return 'bg-green-100 border-green-300 dark:bg-green-900/30 dark:border-green-700';
+    if (conclusion === 'skipped') return 'bg-neutral-200 border-neutral-300 dark:bg-neutral-700 dark:border-neutral-600';
+    return 'bg-red-100 border-red-300 dark:bg-red-900/30 dark:border-red-700';
+  };
+
+  const isForceMerged = data.merged_at && data.ci_completed_at && data.merged_at < data.ci_completed_at;
+
+  return (
+    <div className="space-y-3">
+      {/* PR-level timeline bar */}
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">PR Lifecycle</span>
+          <span className="text-[10px] text-neutral-400 dark:text-neutral-500">{formatTime(timelineStartMs)} → {formatTime(timelineEndMs)}</span>
+        </div>
+        <div
+          className="relative h-10 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800"
+          onClick={() => setExpandedLevel(expandedLevel === 'pr' ? 'workflows' : 'pr')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedLevel(expandedLevel === 'pr' ? 'workflows' : 'pr'); }}
+        >
+          {/* Milestone markers */}
+          {milestones.map((m, i) => (
+            <div
+              key={i}
+              className="absolute top-0 flex h-full flex-col items-center justify-center"
+              style={{ left: `${((m.ms - timelineStartMs) / (timelineEndMs - timelineStartMs)) * 100}%` }}
+            >
+              <div className="h-full w-0.5" style={{ backgroundColor: m.color }} />
+            </div>
+          ))}
+          {/* Force merge indicator: CI end after merge */}
+          {isForceMerged && data.ci_completed_at && data.merged_at && (
+            <div
+              className="absolute top-0 h-full border-l-2 border-r-2 border-red-400/60 bg-red-50/40 dark:bg-red-900/20"
+              style={{
+                left: `${((new Date(data.merged_at).getTime() - timelineStartMs) / (timelineEndMs - timelineStartMs)) * 100}%`,
+                width: `${((new Date(data.ci_completed_at).getTime() - new Date(data.merged_at).getTime()) / (timelineEndMs - timelineStartMs)) * 100}%`,
+              }}
+              title="Force merged: PR merged before CI completed"
+            />
+          )}
+          {/* Milestone labels */}
+          <div className="absolute inset-x-0 bottom-0 flex h-4 items-center justify-between px-1">
+            {milestones.map((m, i) => (
+              <div
+                key={i}
+                className="absolute flex items-center gap-0.5 text-[9px] font-medium text-neutral-600 dark:text-neutral-400"
+                style={{ left: `${((m.ms - timelineStartMs) / (timelineEndMs - timelineStartMs)) * 100}%`, transform: 'translateX(-50%)' }}
+              >
+                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: m.color }} />
+                <span className="hidden sm:inline">{m.label.split(' ')[0]}</span>
+              </div>
+            ))}
+          </div>
+          {/* Expand indicator */}
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400">
+            {expandedLevel === 'pr' ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+          </div>
+        </div>
+      </div>
+
+      {/* Workflow-level timeline */}
+      {expandedLevel !== 'pr' && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">Workflows ({data.workflows.length})</span>
+            {expandedLevel === 'workflows' && (
+              <button
+                type="button"
+                onClick={() => setExpandedLevel('pr')}
+                className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+              >
+                Collapse
+              </button>
+            )}
+          </div>
+          {data.workflows.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-neutral-200 p-4 text-center text-xs text-neutral-400 dark:border-neutral-700 dark:text-neutral-500">
+              No workflows found for this PR.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {workflowBars.map((wf) => {
+                const jobs = jobBarsByWorkflow.get(wf.id) || [];
+                const isExpanded = expandedWorkflowId === wf.id;
+                return (
+                  <div key={wf.id} className="space-y-1">
+                    <div
+                      className={`relative flex h-7 cursor-pointer items-center overflow-hidden rounded-md border transition-colors hover:opacity-90 ${conclusionColorLight(wf.conclusion)}`}
+                      onClick={() => { setExpandedWorkflowId(isExpanded ? null : wf.id); setExpandedLevel('jobs'); }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedWorkflowId(isExpanded ? null : wf.id); }}
+                    >
+                      <div
+                        className={`absolute h-full ${conclusionColor(wf.conclusion)}`}
+                        style={{ left: `${wf.left}%`, width: `${wf.width}%` }}
+                      />
+                      <div className="relative z-10 flex w-full items-center justify-between truncate px-2 text-[10px] font-medium text-neutral-700 drop-shadow-sm dark:text-neutral-200">
+                        <span className="max-w-[70%] truncate">{wf.name}</span>
+                        <span className="opacity-70">{formatDuration(wf.durationInSeconds)}</span>
+                      </div>
+                    </div>
+                    {/* Job-level timeline */}
+                    {isExpanded && jobs.length > 0 && (
+                      <div className="ml-4 space-y-1 border-l-2 border-neutral-200 pl-3 dark:border-neutral-700">
+                        {jobs.map((job) => (
+                          <a
+                            key={job.id}
+                            href={job.html_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`relative flex h-6 items-center overflow-hidden rounded-md border transition-colors hover:opacity-90 ${conclusionColorLight(job.conclusion)}`}
+                          >
+                            <div
+                              className={`absolute h-full ${conclusionColor(job.conclusion)}`}
+                              style={{ left: `${job.left}%`, width: `${job.width}%` }}
+                            />
+                            <div className="relative z-10 w-full truncate px-2 text-[10px] font-medium text-neutral-700 drop-shadow-sm dark:text-neutral-200">
+                              {job.name}
+                            </div>
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    {isExpanded && jobs.length === 0 && (
+                      <div className="ml-4 border-l-2 border-neutral-200 pl-3 text-[10px] text-neutral-400 dark:border-neutral-700 dark:text-neutral-500">
+                        No jobs data available.
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Force merge warning */}
+      {isForceMerged && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
+          <XCircle className="h-3.5 w-3.5 flex-shrink-0" />
+          <span>Force merged — PR was merged before CI completed. CI ended {formatDuration((new Date(data.ci_completed_at!).getTime() - new Date(data.merged_at!).getTime()) / 1000)} after merge.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function JobDetailsView({ run }: { run: Run }) {
   const [viewMode, setViewMode] = useState<'timeline' | 'table'>('timeline');
   const [sortField, setSortField] = useState<JobSortField>('duration');
@@ -1239,10 +1498,6 @@ function DashboardContent({
     setWorkflowSortOrder('desc');
   };
 
-  const getSortedWorkflows = (workflows: Run[]) => {
-    return sortWorkflows(workflows, workflowSortField, workflowSortOrder);
-  };
-
   const toggleMetric = (metricKey: MetricKey) => {
     setSelectedMetrics((current) => {
       if (current.includes(metricKey)) {
@@ -1809,10 +2064,9 @@ function DashboardContent({
                          </tr>
                        </thead>
                       <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                        {paginatedPrs.map((pr) => {
-                          const detail = detailsByNumber[pr.number];
-                          const workflows = detail ? getSortedWorkflows(detail.workflows) : [];
-                          const isForceMerged = pr.merged_at && pr.ci_completed_at && pr.merged_at < pr.ci_completed_at;
+                         {paginatedPrs.map((pr) => {
+                           const detail = detailsByNumber[pr.number];
+                           const isForceMerged = pr.merged_at && pr.ci_completed_at && pr.merged_at < pr.ci_completed_at;
 
                           return (
                             <React.Fragment key={pr.number}>
@@ -1845,89 +2099,17 @@ function DashboardContent({
                                 <td className="px-6 py-4 text-right">
                                   <button type="button" onClick={() => void loadDetail(pr.number)} className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100">
                                     {expandedPrNumber === pr.number ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                    {loadingDetailNumber === pr.number ? 'Loading...' : 'Workflows'}
+                                    {loadingDetailNumber === pr.number ? 'Loading...' : 'Timeline'}
                                   </button>
                                 </td>
                               </tr>
 
                               {expandedPrNumber === pr.number && detail && (
-                                <>
-                                  <tr className="bg-neutral-50 dark:bg-neutral-950/50">
-                                    <td colSpan={8} className="p-6">
-                                      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                                        <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                                          <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Workflows</div>
-                                          <div className="mt-2 text-2xl font-bold text-neutral-900 dark:text-neutral-100">{detail.workflowCount}</div>
-                                        </div>
-                                        <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                                          <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Successful</div>
-                                          <div className="mt-2 text-2xl font-bold text-neutral-900 dark:text-neutral-100">{detail.successfulWorkflowCount}</div>
-                                          <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">{detail.successfulWorkflowCount} / {detail.workflowCount} successful workflows</div>
-                                        </div>
-                                        <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                                          <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">CI Duration</div>
-                                          <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{formatDurationMinutes(detail.ciDurationInSeconds)}</div>
-                                        </div>
-                                        <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                                          <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">PR E2E</div>
-                                          <div className="mt-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">{formatDurationMinutes(detail.timeToMergeInSeconds)}</div>
-                                          {detail.partialCiHistory ? (
-                                            <div className="mt-2 text-xs text-amber-600 dark:text-amber-400">Partial CI history</div>
-                                          ) : null}
-                                        </div>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                  <tr>
-                                    <td colSpan={8} className="p-0">
-                                      <div className="overflow-x-auto">
-                                        <table className="w-full text-left text-sm">
-                                          <thead className="bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
-                                            <tr>
-                                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('name')}>Workflow</th>
-                                              <th className="px-6 py-3">Status</th>
-                                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('date')}>Created</th>
-                                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('duration')}>Duration</th>
-                                              <th className="px-6 py-3 text-right">Details</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                                            {workflows.map((workflow) => (
-                                              <React.Fragment key={workflow.id}>
-                                                <tr className="hover:bg-neutral-50 dark:hover:bg-neutral-950/50">
-                                                  <td className="px-6 py-4 font-medium text-neutral-900 dark:text-neutral-100">{workflow.name}</td>
-                                                  <td className="px-6 py-4"><StatusBadge conclusion={workflow.conclusion} /></td>
-                                                  <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(workflow.created_at), 'MMM dd, HH:mm')}</td>
-                                                  <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(workflow.durationInSeconds)}</td>
-                                                  <td className="px-6 py-4 text-right">
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => setExpandedWorkflowId((current) => current === workflow.id ? null : workflow.id)}
-                                                      className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-                                                    >
-                                                      {expandedWorkflowId === workflow.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                                      Jobs
-                                                    </button>
-                                                    <a href={workflow.html_url} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
-                                                      <ExternalLink className="h-4 w-4" />
-                                                    </a>
-                                                  </td>
-                                                </tr>
-                                                {expandedWorkflowId === workflow.id ? (
-                                                  <tr>
-                                                    <td colSpan={5} className="p-0">
-                                                      <JobDetailsView run={workflow} />
-                                                    </td>
-                                                  </tr>
-                                                ) : null}
-                                              </React.Fragment>
-                                            ))}
-                                          </tbody>
-                                        </table>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                </>
+                                <tr>
+                                  <td colSpan={8} className="p-4">
+                                    <PrLifecycleTimeline data={detail} />
+                                  </td>
+                                </tr>
                               )}
                             </React.Fragment>
                           );
