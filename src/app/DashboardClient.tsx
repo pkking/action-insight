@@ -986,7 +986,7 @@ function DashboardContent({
   // Reset page to 1 when filtered results change
   useEffect(() => {
     setPrPage(1);
-  }, [dateRangePrs.length, filterName, selectedRepoKey]);
+  }, [filteredPrs, selectedRepoKey]);
 
   const paginatedPrs = useMemo(
     () => filteredPrs.slice((prPage - 1) * prPageSize, prPage * prPageSize),
@@ -999,7 +999,7 @@ function DashboardContent({
     const ciDurations = filteredPrs.map((p) => p.ciDurationInSeconds).filter((v): v is number => v !== undefined);
     const mergeLeads = filteredPrs.map((p) => p.mergeLeadTimeInSeconds).filter((v): v is number => v !== undefined);
     const mergedPrs = filteredPrs.filter((p) => p.merged_at);
-    const forceMergedCount = mergedPrs.filter((p) => p.merged_at && p.ci_completed_at && new Date(p.merged_at) < new Date(p.ci_completed_at)).length;
+    const forceMergedCount = mergedPrs.filter((p) => p.merged_at && p.ci_completed_at && p.merged_at < p.ci_completed_at).length;
     return {
       queueStats: computeTimeStats(queueTimes),
       ciStats: computeTimeStats(ciDurations),
@@ -1812,7 +1812,7 @@ function DashboardContent({
                         {paginatedPrs.map((pr) => {
                           const detail = detailsByNumber[pr.number];
                           const workflows = detail ? getSortedWorkflows(detail.workflows) : [];
-                          const isForceMerged = pr.merged_at && pr.ci_completed_at && new Date(pr.merged_at) < new Date(pr.ci_completed_at);
+                          const isForceMerged = pr.merged_at && pr.ci_completed_at && pr.merged_at < pr.ci_completed_at;
 
                           return (
                             <React.Fragment key={pr.number}>
