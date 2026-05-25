@@ -1784,11 +1784,11 @@ function DashboardContent({
                         <tr>
                           <th className="px-6 py-3">PR / Branch</th>
                           <th className="px-6 py-3">Status</th>
-                          <th className="px-6 py-3">PR提交时间</th>
-                          <th className="px-6 py-3">CI排队时间</th>
-                          <th className="px-6 py-3">CI执行时间</th>
-                          <th className="px-6 py-3">合入时间</th>
-                          <th className="px-6 py-3">强行合入</th>
+                          <th className="px-6 py-3">PR Created</th>
+                          <th className="px-6 py-3">CI Queue Time</th>
+                          <th className="px-6 py-3">CI Execution Time</th>
+                          <th className="px-6 py-3">Merge Time</th>
+                          <th className="px-6 py-3">Force Merged</th>
                           <th className="px-6 py-3 text-right">Details</th>
                         </tr>
                       </thead>
