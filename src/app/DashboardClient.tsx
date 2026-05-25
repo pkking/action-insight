@@ -170,7 +170,7 @@ function computePercentile(sortedValues: number[], p: number): number {
 type TimeStats = { avg: number; p50: number; p90: number };
 
 function computeTimeStats(values: number[]): TimeStats | null {
-  if (values.length === 0) return null;
+  if (values.length < 2) return null;
   const sum = values.reduce((a, b) => a + b, 0);
   const sorted = [...values].sort((a, b) => a - b);
   return {
@@ -999,7 +999,7 @@ function DashboardContent({
     const ciDurations = filteredPrs.map((p) => p.ciDurationInSeconds).filter((v): v is number => v !== undefined);
     const mergeLeads = filteredPrs.map((p) => p.mergeLeadTimeInSeconds).filter((v): v is number => v !== undefined);
     const mergedPrs = filteredPrs.filter((p) => p.merged_at);
-    const forceMergedCount = mergedPrs.filter((p) => p.merged_at && p.ci_completed_at && p.merged_at < p.ci_completed_at).length;
+    const forceMergedCount = mergedPrs.filter((p) => p.ci_completed_at && p.merged_at < p.ci_completed_at).length;
     return {
       queueStats: computeTimeStats(queueTimes),
       ciStats: computeTimeStats(ciDurations),
