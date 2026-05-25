@@ -161,11 +161,10 @@ function formatRate(value: number | null) {
   return value === null ? 'Insufficient data' : `${value}%`;
 }
 
-function computePercentile(values: number[], p: number): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const index = Math.ceil(sorted.length * p) - 1;
-  return sorted[Math.max(0, index)] ?? 0;
+function computePercentile(sortedValues: number[], p: number): number {
+  if (sortedValues.length === 0) return 0;
+  const index = Math.ceil(sortedValues.length * p) - 1;
+  return sortedValues[Math.max(0, index)] ?? 0;
 }
 
 type TimeStats = { avg: number; p50: number; p90: number };
@@ -173,10 +172,11 @@ type TimeStats = { avg: number; p50: number; p90: number };
 function computeTimeStats(values: number[]): TimeStats | null {
   if (values.length < 2) return null;
   const sum = values.reduce((a, b) => a + b, 0);
+  const sorted = [...values].sort((a, b) => a - b);
   return {
     avg: sum / values.length,
-    p50: computePercentile(values, 0.5),
-    p90: computePercentile(values, 0.9),
+    p50: computePercentile(sorted, 0.5),
+    p90: computePercentile(sorted, 0.9),
   };
 }
 
