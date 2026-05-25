@@ -339,11 +339,23 @@ type PrLifecycleTimelineData = {
   workflows: Run[];
 };
 
+type TimelineRow = {
+  label: string;
+  type: 'milestone' | 'workflow' | 'job';
+  startMs: number;
+  endMs: number;
+  color: string;
+  conclusion?: string;
+  html_url?: string;
+  workflowId?: number;
+};
+
+type LegendItem = { label: string; color: string };
+
 function PrLifecycleTimeline({ data }: { data: PrLifecycleTimelineData }) {
-  const [expandedLevel, setExpandedLevel] = useState<'pr' | 'workflows' | 'jobs'>('pr');
   const [expandedWorkflowId, setExpandedWorkflowId] = useState<number | null>(null);
 
-  const { timelineStartMs, timelineEndMs, milestones, workflowBars, jobBarsByWorkflow } = useMemo(() => {
+  const { rows, legend, timelineStartMs, timelineEndMs, isForceMerged, forceMergeGapMs } = useMemo(() => {
     const prCreatedMs = new Date(data.created_at).getTime();
     const ciStartedMs = data.ci_started_at ? new Date(data.ci_started_at).getTime() : undefined;
     const ciCompletedMs = data.ci_completed_at ? new Date(data.ci_completed_at).getTime() : undefined;
@@ -351,10 +363,9 @@ function PrLifecycleTimeline({ data }: { data: PrLifecycleTimelineData }) {
 
     let startMs = prCreatedMs;
     let endMs = prCreatedMs;
-
     if (ciStartedMs) { startMs = Math.min(startMs, ciStartedMs); endMs = Math.max(endMs, ciStartedMs); }
-    if (ciCompletedMs) { endMs = Math.max(endMs, ciCompletedMs); }
-    if (mergedMs) { endMs = Math.max(endMs, mergedMs); }
+    if (ciCompletedMs) endMs = Math.max(endMs, ciCompletedMs);
+    if (mergedMs) endMs = Math.max(endMs, mergedMs);
 
     for (const wf of data.workflows) {
       const wfStart = new Date(wf.created_at).getTime();
@@ -371,221 +382,165 @@ function PrLifecycleTimeline({ data }: { data: PrLifecycleTimelineData }) {
       }
     }
 
-    // Add 5% padding on each side
-    const padding = Math.max(60000, (endMs - startMs) * 0.05);
+    const padding = Math.max(30000, (endMs - startMs) * 0.03);
     startMs -= padding;
     endMs += padding;
-    const total = Math.max(60000, endMs - startMs);
 
-    const pct = (ms: number) => Math.max(0, Math.min(100, ((ms - startMs) / total) * 100));
+    const forceMerged = Boolean(mergedMs && ciCompletedMs && mergedMs < ciCompletedMs);
+    const forceGap = forceMerged && ciCompletedMs && mergedMs ? ciCompletedMs - mergedMs : 0;
 
-    const milestones: Array<{ label: string; ms: number; color: string; icon: string }> = [];
-    milestones.push({ label: 'PR Created', ms: prCreatedMs, color: '#3b82f6', icon: '📝' });
-    if (ciStartedMs) milestones.push({ label: 'CI Started', ms: ciStartedMs, color: '#f59e0b', icon: '▶️' });
-    if (ciCompletedMs) milestones.push({ label: 'CI Completed', ms: ciCompletedMs, color: '#22c55e', icon: '✅' });
-    if (mergedMs) milestones.push({ label: 'PR Merged', ms: mergedMs, color: '#8b5cf6', icon: '🔀' });
+    const legend: LegendItem[] = [
+      { label: 'PR Created', color: '#3b82f6' },
+      { label: 'CI Started', color: '#f59e0b' },
+      { label: 'CI Completed', color: '#22c55e' },
+      { label: 'PR Merged', color: '#8b5cf6' },
+      { label: 'Workflow (success)', color: '#22c55e' },
+      { label: 'Workflow (failed)', color: '#ef4444' },
+      { label: 'Workflow (skipped)', color: '#9ca3af' },
+      { label: 'Job (success)', color: '#16a34a' },
+      { label: 'Job (failed)', color: '#dc2626' },
+      { label: 'Job (skipped)', color: '#6b7280' },
+    ];
 
-    const wfBars = data.workflows.map((wf) => {
+    const rows: TimelineRow[] = [];
+
+    rows.push({ label: 'PR Created', type: 'milestone', startMs: prCreatedMs, endMs: prCreatedMs, color: '#3b82f6' });
+    if (ciStartedMs) rows.push({ label: 'CI Started', type: 'milestone', startMs: ciStartedMs, endMs: ciStartedMs, color: '#f59e0b' });
+    if (ciCompletedMs) rows.push({ label: 'CI Completed', type: 'milestone', startMs: ciCompletedMs, endMs: ciCompletedMs, color: '#22c55e' });
+    if (mergedMs) rows.push({ label: 'PR Merged', type: 'milestone', startMs: mergedMs, endMs: mergedMs, color: '#8b5cf6' });
+
+    const sortedWorkflows = [...data.workflows].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    for (const wf of sortedWorkflows) {
       const wfStart = new Date(wf.created_at).getTime();
       const wfEnd = wfStart + wf.durationInSeconds * 1000;
-      return {
-        id: wf.id,
-        name: wf.name,
-        conclusion: wf.conclusion,
-        left: pct(wfStart),
-        width: Math.max(0.5, pct(wfEnd) - pct(wfStart)),
-        created_at: wf.created_at,
-        durationInSeconds: wf.durationInSeconds,
-        html_url: wf.html_url,
-      };
-    });
+      const wfColor = wf.conclusion === 'success' ? '#22c55e' : wf.conclusion === 'skipped' ? '#9ca3af' : '#ef4444';
+      rows.push({ label: wf.name, type: 'workflow', startMs: wfStart, endMs: wfEnd, color: wfColor, conclusion: wf.conclusion, html_url: wf.html_url, workflowId: wf.id });
 
-    const jobsByWf = new Map<number, Array<{ id: number; name: string; conclusion: string; left: number; width: number; html_url: string }>>();
-    for (const wf of data.workflows) {
-      if (!wf.jobs || wf.jobs.length === 0) continue;
-      const bars = wf.jobs.map((job) => {
-        const jobStart = new Date(job.started_at || job.created_at || wf.created_at).getTime();
-        const jobEnd = new Date(job.completed_at || job.started_at || wf.created_at).getTime();
-        return {
-          id: job.id,
-          name: job.name,
-          conclusion: job.conclusion,
-          left: pct(jobStart),
-          width: Math.max(0.3, pct(jobEnd) - pct(jobStart)),
-          html_url: job.html_url,
-        };
-      });
-      jobsByWf.set(wf.id, bars);
+      if (wf.jobs && wf.jobs.length > 0) {
+        const sortedJobs = [...wf.jobs].sort((a, b) => new Date(a.started_at || a.created_at || 0).getTime() - new Date(b.started_at || b.created_at || 0).getTime());
+        for (const job of sortedJobs) {
+          const jobStart = new Date(job.started_at || job.created_at || wf.created_at).getTime();
+          const jobEnd = new Date(job.completed_at || job.started_at || wf.created_at).getTime();
+          const jobColor = job.conclusion === 'success' ? '#16a34a' : job.conclusion === 'skipped' ? '#6b7280' : '#dc2626';
+          rows.push({ label: `  ${job.name}`, type: 'job', startMs: jobStart, endMs: jobEnd, color: jobColor, conclusion: job.conclusion, html_url: job.html_url, workflowId: wf.id });
+        }
+      }
     }
 
-    return { timelineStartMs: startMs, timelineEndMs: startMs + total, totalMs: total, milestones, workflowBars: wfBars, jobBarsByWorkflow: jobsByWf };
+    return { rows, legend, timelineStartMs: startMs, timelineEndMs: endMs, isForceMerged: forceMerged, forceMergeGapMs: forceGap };
   }, [data]);
 
-  const formatTime = (ms: number) => {
-    const d = new Date(ms);
-    return format(d, 'MMM dd HH:mm');
-  };
-
+  const formatTime = (ms: number) => format(new Date(ms), 'MMM dd HH:mm');
   const formatDuration = (seconds: number) => {
     const mins = Math.round(seconds / 60);
-    if (mins < 60) return `${mins}m`;
-    return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+    return mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
   };
+  const totalRange = timelineEndMs - timelineStartMs;
+  const pct = (ms: number) => Math.max(0, Math.min(100, ((ms - timelineStartMs) / totalRange) * 100));
 
-  const conclusionColor = (conclusion: string) => {
-    if (conclusion === 'success') return 'bg-green-500 border-green-600';
-    if (conclusion === 'skipped') return 'bg-neutral-400 border-neutral-500';
-    return 'bg-red-500 border-red-600';
-  };
+  const visibleRows = expandedWorkflowId !== null
+    ? rows.filter((r) => r.type === 'milestone' || r.workflowId === expandedWorkflowId)
+    : rows;
 
-  const conclusionColorLight = (conclusion: string) => {
-    if (conclusion === 'success') return 'bg-green-100 border-green-300 dark:bg-green-900/30 dark:border-green-700';
-    if (conclusion === 'skipped') return 'bg-neutral-200 border-neutral-300 dark:bg-neutral-700 dark:border-neutral-600';
-    return 'bg-red-100 border-red-300 dark:bg-red-900/30 dark:border-red-700';
-  };
-
-  const isForceMerged = data.merged_at && data.ci_completed_at && data.merged_at < data.ci_completed_at;
+  const expandedWfName = expandedWorkflowId !== null
+    ? data.workflows.find((w) => w.id === expandedWorkflowId)?.name
+    : null;
 
   return (
     <div className="space-y-3">
-      {/* PR-level timeline bar */}
-      <div>
-        <div className="mb-1 flex items-center justify-between">
-          <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">PR Lifecycle</span>
-          <span className="text-[10px] text-neutral-400 dark:text-neutral-500">{formatTime(timelineStartMs)} → {formatTime(timelineEndMs)}</span>
-        </div>
-        <div
-          className="relative h-10 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800"
-          onClick={() => setExpandedLevel(expandedLevel === 'pr' ? 'workflows' : 'pr')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedLevel(expandedLevel === 'pr' ? 'workflows' : 'pr'); }}
-        >
-          {/* Milestone markers */}
-          {milestones.map((m, i) => (
-            <div
-              key={i}
-              className="absolute top-0 flex h-full flex-col items-center justify-center"
-              style={{ left: `${((m.ms - timelineStartMs) / (timelineEndMs - timelineStartMs)) * 100}%` }}
+      {/* Header with time range */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+          {expandedWfName ? `Workflow: ${expandedWfName}` : 'PR Lifecycle Timeline'}
+        </span>
+        <div className="flex items-center gap-3">
+          {expandedWorkflowId !== null && (
+            <button
+              type="button"
+              onClick={() => setExpandedWorkflowId(null)}
+              className="text-[10px] text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
             >
-              <div className="h-full w-0.5" style={{ backgroundColor: m.color }} />
-            </div>
-          ))}
-          {/* Force merge indicator: CI end after merge */}
-          {isForceMerged && data.ci_completed_at && data.merged_at && (
-            <div
-              className="absolute top-0 h-full border-l-2 border-r-2 border-red-400/60 bg-red-50/40 dark:bg-red-900/20"
-              style={{
-                left: `${((new Date(data.merged_at).getTime() - timelineStartMs) / (timelineEndMs - timelineStartMs)) * 100}%`,
-                width: `${((new Date(data.ci_completed_at).getTime() - new Date(data.merged_at).getTime()) / (timelineEndMs - timelineStartMs)) * 100}%`,
-              }}
-              title="Force merged: PR merged before CI completed"
-            />
+              Show all
+            </button>
           )}
-          {/* Milestone labels */}
-          <div className="absolute inset-x-0 bottom-0 flex h-4 items-center justify-between px-1">
-            {milestones.map((m, i) => (
-              <div
-                key={i}
-                className="absolute flex items-center gap-0.5 text-[9px] font-medium text-neutral-600 dark:text-neutral-400"
-                style={{ left: `${((m.ms - timelineStartMs) / (timelineEndMs - timelineStartMs)) * 100}%`, transform: 'translateX(-50%)' }}
-              >
-                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: m.color }} />
-                <span className="hidden sm:inline">{m.label.split(' ')[0]}</span>
-              </div>
-            ))}
-          </div>
-          {/* Expand indicator */}
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400">
-            {expandedLevel === 'pr' ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
-          </div>
+          <span className="text-[10px] text-neutral-400 dark:text-neutral-500">{formatTime(timelineStartMs)} → {formatTime(timelineEndMs)}</span>
         </div>
       </div>
 
-      {/* Workflow-level timeline */}
-      {expandedLevel !== 'pr' && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">Workflows ({data.workflows.length})</span>
-            {expandedLevel === 'workflows' && (
-              <button
-                type="button"
-                onClick={() => setExpandedLevel('pr')}
-                className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-              >
-                Collapse
-              </button>
-            )}
-          </div>
-          {data.workflows.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-neutral-200 p-4 text-center text-xs text-neutral-400 dark:border-neutral-700 dark:text-neutral-500">
-              No workflows found for this PR.
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              {workflowBars.map((wf) => {
-                const jobs = jobBarsByWorkflow.get(wf.id) || [];
-                const isExpanded = expandedWorkflowId === wf.id;
-                return (
-                  <div key={wf.id} className="space-y-1">
-                    <div
-                      className={`relative flex h-7 cursor-pointer items-center overflow-hidden rounded-md border transition-colors hover:opacity-90 ${conclusionColorLight(wf.conclusion)}`}
-                      onClick={() => { setExpandedWorkflowId(isExpanded ? null : wf.id); setExpandedLevel('jobs'); }}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedWorkflowId(isExpanded ? null : wf.id); }}
-                    >
-                      <div
-                        className={`absolute h-full ${conclusionColor(wf.conclusion)}`}
-                        style={{ left: `${wf.left}%`, width: `${wf.width}%` }}
+      {/* Time axis labels */}
+      <div className="relative h-4">
+        <div className="absolute inset-x-0 flex justify-between text-[9px] font-mono text-neutral-400 dark:text-neutral-500">
+          <span>{formatTime(timelineStartMs)}</span>
+          <span>{formatTime(timelineEndMs)}</span>
+        </div>
+      </div>
+
+      {/* Timeline rows */}
+      <div className="space-y-1">
+        {visibleRows.map((row, i) => {
+          const isMilestone = row.type === 'milestone';
+          const left = pct(row.startMs);
+          const width = isMilestone ? 0.4 : Math.max(0.3, pct(row.endMs) - pct(row.startMs));
+
+          return (
+            <div key={i} className="group relative flex h-6 items-center">
+              {/* Row label */}
+              <div className="w-28 flex-shrink-0 truncate text-[10px] font-medium text-neutral-600 dark:text-neutral-400" title={row.label.trim()}>
+                {row.label.trim()}
+              </div>
+              {/* Timeline bar area */}
+              <div className="relative flex-1">
+                {isMilestone ? (
+                  <div
+                    className="absolute top-1/2 h-4 w-1 -translate-y-1/2 rounded-full"
+                    style={{ left: `${left}%`, backgroundColor: row.color }}
+                    title={`${row.label}: ${formatTime(row.startMs)}`}
+                  />
+                ) : (
+                  <div
+                    className={`absolute top-0.5 h-5 rounded-sm ${row.html_url ? 'cursor-pointer hover:opacity-80' : ''}`}
+                    style={{ left: `${left}%`, width: `${width}%`, backgroundColor: row.color }}
+                    title={`${row.label.trim()}: ${formatTime(row.startMs)} → ${formatTime(row.endMs)} (${formatDuration((row.endMs - row.startMs) / 1000)})`}
+                    onClick={() => {
+                      if (row.type === 'workflow' && row.workflowId) {
+                        setExpandedWorkflowId(expandedWorkflowId === row.workflowId ? null : row.workflowId);
+                      }
+                    }}
+                  >
+                    {row.html_url && (
+                      <a
+                        href={row.html_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="absolute inset-0"
+                        onClick={(e) => e.stopPropagation()}
                       />
-                      <div className="relative z-10 flex w-full items-center justify-between truncate px-2 text-[10px] font-medium text-neutral-700 drop-shadow-sm dark:text-neutral-200">
-                        <span className="max-w-[70%] truncate">{wf.name}</span>
-                        <span className="opacity-70">{formatDuration(wf.durationInSeconds)}</span>
-                      </div>
-                    </div>
-                    {/* Job-level timeline */}
-                    {isExpanded && jobs.length > 0 && (
-                      <div className="ml-4 space-y-1 border-l-2 border-neutral-200 pl-3 dark:border-neutral-700">
-                        {jobs.map((job) => (
-                          <a
-                            key={job.id}
-                            href={job.html_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`relative flex h-6 items-center overflow-hidden rounded-md border transition-colors hover:opacity-90 ${conclusionColorLight(job.conclusion)}`}
-                          >
-                            <div
-                              className={`absolute h-full ${conclusionColor(job.conclusion)}`}
-                              style={{ left: `${job.left}%`, width: `${job.width}%` }}
-                            />
-                            <div className="relative z-10 w-full truncate px-2 text-[10px] font-medium text-neutral-700 drop-shadow-sm dark:text-neutral-200">
-                              {job.name}
-                            </div>
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                    {isExpanded && jobs.length === 0 && (
-                      <div className="ml-4 border-l-2 border-neutral-200 pl-3 text-[10px] text-neutral-400 dark:border-neutral-700 dark:text-neutral-500">
-                        No jobs data available.
-                      </div>
                     )}
                   </div>
-                );
-              })}
+                )}
+              </div>
             </div>
-          )}
+          );
+        })}
+      </div>
+
+      {/* Force merge indicator */}
+      {isForceMerged && data.ci_completed_at && data.merged_at && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
+          <XCircle className="h-3.5 w-3.5 flex-shrink-0" />
+          <span>Force merged — PR merged {formatDuration(forceMergeGapMs / 1000)} before CI completed.</span>
         </div>
       )}
 
-      {/* Force merge warning */}
-      {isForceMerged && (
-        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
-          <XCircle className="h-3.5 w-3.5 flex-shrink-0" />
-          <span>Force merged — PR was merged before CI completed. CI ended {formatDuration((new Date(data.ci_completed_at!).getTime() - new Date(data.merged_at!).getTime()) / 1000)} after merge.</span>
-        </div>
-      )}
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-neutral-200 pt-2 text-[10px] text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+        {legend.map((item) => (
+          <span key={item.label} className="inline-flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+            {item.label}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
