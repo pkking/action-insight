@@ -1935,7 +1935,7 @@ function DashboardContent({
                        </tbody>
                      </table>
                    </div>
-                    {filteredPrs.length > prPageSize && (
+                    {filteredPrs.length > 10 && (
                       <div className="flex items-center justify-between gap-4 border-t border-neutral-100 px-6 py-4 dark:border-neutral-800">
                         <span className="text-sm text-neutral-500 dark:text-neutral-400">
                           Showing {(prPage - 1) * prPageSize + 1}–{Math.min(prPage * prPageSize, filteredPrs.length)} of {filteredPrs.length}
