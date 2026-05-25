@@ -993,6 +993,22 @@ function DashboardContent({
     [filteredPrs, prPage, prPageSize]
   );
 
+  const prLifecycleStats = useMemo(() => {
+    if (prLifecycleViewMode !== 'pr' || filteredPrs.length === 0) return null;
+    const queueTimes = filteredPrs.map((p) => p.timeToCiStartInSeconds).filter((v): v is number => v !== undefined);
+    const ciDurations = filteredPrs.map((p) => p.ciDurationInSeconds).filter((v): v is number => v !== undefined);
+    const mergeLeads = filteredPrs.map((p) => p.mergeLeadTimeInSeconds).filter((v): v is number => v !== undefined);
+    const mergedPrs = filteredPrs.filter((p) => p.merged_at);
+    const forceMergedCount = mergedPrs.filter((p) => p.merged_at && p.ci_completed_at && new Date(p.merged_at) < new Date(p.ci_completed_at)).length;
+    return {
+      queueStats: computeTimeStats(queueTimes),
+      ciStats: computeTimeStats(ciDurations),
+      mergeStats: computeTimeStats(mergeLeads),
+      mergedPrCount: mergedPrs.length,
+      forceMergedCount,
+    };
+  }, [filteredPrs, prLifecycleViewMode]);
+
   const shouldLoadWorkflowFallback = Boolean(
     selectedRepo && (selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution || dateRangePrs.length === 0)
   );
@@ -1644,68 +1660,58 @@ function DashboardContent({
                 </div>
               </div>
 
-              {prLifecycleViewMode === 'pr' && filteredPrs.length > 0 && (() => {
-                const queueTimes = filteredPrs.map((p) => p.timeToCiStartInSeconds).filter((v): v is number => v !== undefined);
-                const ciDurations = filteredPrs.map((p) => p.ciDurationInSeconds).filter((v): v is number => v !== undefined);
-                const mergeLeads = filteredPrs.map((p) => p.mergeLeadTimeInSeconds).filter((v): v is number => v !== undefined);
-                const mergedPrs = filteredPrs.filter((p) => p.merged_at);
-                const forceMergedCount = mergedPrs.filter((p) => p.merged_at && p.ci_completed_at && new Date(p.merged_at) < new Date(p.ci_completed_at)).length;
-                const queueStats = computeTimeStats(queueTimes);
-                const ciStats = computeTimeStats(ciDurations);
-                const mergeStats = computeTimeStats(mergeLeads);
-                return (
-                  <div className="border-b border-neutral-100 px-6 py-4 dark:border-neutral-800">
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">排队时间</div>
-                        {queueStats ? (
-                          <div className="mt-2 flex gap-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
-                            <span>avg: {formatDurationMinutes(queueStats.avg)}</span>
-                            <span>p50: {formatDurationMinutes(queueStats.p50)}</span>
-                            <span>p90: {formatDurationMinutes(queueStats.p90)}</span>
-                          </div>
-                        ) : (
-                          <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
-                        )}
-                      </div>
-                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">执行时间</div>
-                        {ciStats ? (
-                          <div className="mt-2 flex gap-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
-                            <span>avg: {formatDurationMinutes(ciStats.avg)}</span>
-                            <span>p50: {formatDurationMinutes(ciStats.p50)}</span>
-                            <span>p90: {formatDurationMinutes(ciStats.p90)}</span>
-                          </div>
-                        ) : (
-                          <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
-                        )}
-                      </div>
-                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">合入时间</div>
-                        {mergeStats ? (
-                          <div className="mt-2 flex gap-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
-                            <span>avg: {formatDurationMinutes(mergeStats.avg)}</span>
-                            <span>p50: {formatDurationMinutes(mergeStats.p50)}</span>
-                            <span>p90: {formatDurationMinutes(mergeStats.p90)}</span>
-                          </div>
-                        ) : (
-                          <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
-                        )}
-                      </div>
-                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">强行合入率</div>
-                        {mergedPrs.length > 0 ? (
-                          <div className="mt-2 text-2xl font-bold text-neutral-900 dark:text-neutral-100">
-                            {Math.round((forceMergedCount / mergedPrs.length) * 100)}%
-                          </div>
-                        ) : (
-                          <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
-                        )}
-                      </div>
+              {prLifecycleStats && (
+                <div className="border-b border-neutral-100 px-6 py-4 dark:border-neutral-800">
+                  <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                      <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">排队时间</div>
+                      {prLifecycleStats.queueStats ? (
+                        <div className="mt-2 flex gap-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                          <span>avg: {formatDurationMinutes(prLifecycleStats.queueStats.avg)}</span>
+                          <span>p50: {formatDurationMinutes(prLifecycleStats.queueStats.p50)}</span>
+                          <span>p90: {formatDurationMinutes(prLifecycleStats.queueStats.p90)}</span>
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
+                      )}
+                    </div>
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                      <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">执行时间</div>
+                      {prLifecycleStats.ciStats ? (
+                        <div className="mt-2 flex gap-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                          <span>avg: {formatDurationMinutes(prLifecycleStats.ciStats.avg)}</span>
+                          <span>p50: {formatDurationMinutes(prLifecycleStats.ciStats.p50)}</span>
+                          <span>p90: {formatDurationMinutes(prLifecycleStats.ciStats.p90)}</span>
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
+                      )}
+                    </div>
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                      <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">合入时间</div>
+                      {prLifecycleStats.mergeStats ? (
+                        <div className="mt-2 flex gap-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                          <span>avg: {formatDurationMinutes(prLifecycleStats.mergeStats.avg)}</span>
+                          <span>p50: {formatDurationMinutes(prLifecycleStats.mergeStats.p50)}</span>
+                          <span>p90: {formatDurationMinutes(prLifecycleStats.mergeStats.p90)}</span>
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
+                      )}
+                    </div>
+                    <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                      <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">强行合入率</div>
+                      {prLifecycleStats.mergedPrCount > 0 ? (
+                        <div className="mt-2 text-2xl font-bold text-neutral-900 dark:text-neutral-100">
+                          {Math.round((prLifecycleStats.forceMergedCount / prLifecycleStats.mergedPrCount) * 100)}%
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
+                      )}
                     </div>
                   </div>
-                );
-              })()}
+                </div>
+              )}
 
               {prLifecycleViewMode === 'pr' ? (
                 /* ===== PR VIEW (existing behavior) ===== */
