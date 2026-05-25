@@ -1664,7 +1664,7 @@ function DashboardContent({
                 <div className="border-b border-neutral-100 px-6 py-4 dark:border-neutral-800">
                   <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                     <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                      <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">排队时间</div>
+                      <div className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">排队时间<MetricTooltip definition="从 PR 提交到 CI 开始执行的等待时间。统计当前时间周期内所有 PR 的平均值、P50、P90。" /></div>
                       {prLifecycleStats.queueStats ? (
                         <div className="mt-2 flex gap-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
                           <span>avg: {formatDurationMinutes(prLifecycleStats.queueStats.avg)}</span>
@@ -1676,7 +1676,7 @@ function DashboardContent({
                       )}
                     </div>
                     <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                      <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">执行时间</div>
+                      <div className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">执行时间<MetricTooltip definition="CI 从开始执行到完成的耗时。统计当前时间周期内所有 PR 的平均值、P50、P90。" /></div>
                       {prLifecycleStats.ciStats ? (
                         <div className="mt-2 flex gap-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
                           <span>avg: {formatDurationMinutes(prLifecycleStats.ciStats.avg)}</span>
@@ -1688,7 +1688,7 @@ function DashboardContent({
                       )}
                     </div>
                     <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                      <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">合入时间</div>
+                      <div className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">合入时间<MetricTooltip definition="从 CI 完成到 PR 被合入的等待时间。统计当前时间周期内所有 PR 的平均值、P50、P90。" /></div>
                       {prLifecycleStats.mergeStats ? (
                         <div className="mt-2 flex gap-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
                           <span>avg: {formatDurationMinutes(prLifecycleStats.mergeStats.avg)}</span>
@@ -1700,7 +1700,7 @@ function DashboardContent({
                       )}
                     </div>
                     <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
-                      <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">强行合入率</div>
+                      <div className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">强行合入率<MetricTooltip definition="PR 合入时间早于 CI 完成时间的比例，表示跳过 CI 检查直接合入的情况。" /></div>
                       {prLifecycleStats.mergedPrCount > 0 ? (
                         <div className="mt-2 text-2xl font-bold text-neutral-900 dark:text-neutral-100">
                           {Math.round((prLifecycleStats.forceMergedCount / prLifecycleStats.mergedPrCount) * 100)}%
@@ -1786,18 +1786,28 @@ function DashboardContent({
                   <>
                     <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
-                      <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
-                        <tr>
-                          <th className="px-6 py-3">PR / Branch</th>
-                          <th className="px-6 py-3">Status</th>
-                          <th className="px-6 py-3">PR Created</th>
-                          <th className="px-6 py-3">CI Queue Time</th>
-                          <th className="px-6 py-3">CI Execution Time</th>
-                          <th className="px-6 py-3">Merge Time</th>
-                          <th className="px-6 py-3">Force Merged</th>
-                          <th className="px-6 py-3 text-right">Details</th>
-                        </tr>
-                      </thead>
+                       <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+                         <tr>
+                           <th className="px-6 py-3">PR / Branch</th>
+                           <th className="px-6 py-3">Status</th>
+                           <th className="px-6 py-3">
+                             <span className="inline-flex items-center gap-1.5">PR提交时间<MetricTooltip definition="Pull Request 创建的时间点。" /></span>
+                           </th>
+                           <th className="px-6 py-3">
+                             <span className="inline-flex items-center gap-1.5">CI排队时间<MetricTooltip definition="从 PR 提交到 CI 开始执行的等待时间。" /></span>
+                           </th>
+                           <th className="px-6 py-3">
+                             <span className="inline-flex items-center gap-1.5">CI执行时间<MetricTooltip definition="CI 从开始执行到完成的耗时。" /></span>
+                           </th>
+                           <th className="px-6 py-3">
+                             <span className="inline-flex items-center gap-1.5">合入时间<MetricTooltip definition="从 CI 完成到 PR 被合入的等待时间（CI完成 → 合入）。" /></span>
+                           </th>
+                           <th className="px-6 py-3">
+                             <span className="inline-flex items-center gap-1.5">强行合入<MetricTooltip definition="PR 合入时间早于 CI 完成时间，表示跳过了 CI 检查直接合入。" /></span>
+                           </th>
+                           <th className="px-6 py-3 text-right">Details</th>
+                         </tr>
+                       </thead>
                       <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                         {paginatedPrs.map((pr) => {
                           const detail = detailsByNumber[pr.number];
