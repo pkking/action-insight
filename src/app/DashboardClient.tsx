@@ -480,7 +480,9 @@ function PrLifecycleTimeline({ data }: { data: PrLifecycleTimelineData }) {
         {visibleRows.map((row, i) => {
           const isMilestone = row.type === 'milestone';
           const left = pct(row.startMs);
-          const width = isMilestone ? 0.4 : Math.max(0.3, pct(row.endMs) - pct(row.startMs));
+          const width = isMilestone
+            ? Math.max(0.3, pct(row.endMs) - pct(timelineStartMs))
+            : Math.max(0.3, pct(row.endMs) - pct(row.startMs));
 
           return (
             <div key={i} className="group relative flex h-6 items-center">
@@ -492,8 +494,8 @@ function PrLifecycleTimeline({ data }: { data: PrLifecycleTimelineData }) {
               <div className="relative flex-1">
                 {isMilestone ? (
                   <div
-                    className="absolute top-1/2 h-4 w-1 -translate-y-1/2 rounded-full"
-                    style={{ left: `${left}%`, backgroundColor: row.color }}
+                    className="absolute top-0.5 h-5 rounded-sm"
+                    style={{ left: `${pct(timelineStartMs)}%`, width: `${width}%`, backgroundColor: row.color, opacity: 0.7 }}
                     title={`${row.label}: ${formatTime(row.startMs)}`}
                   />
                 ) : (
