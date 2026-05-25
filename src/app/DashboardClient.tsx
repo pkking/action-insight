@@ -161,6 +161,25 @@ function formatRate(value: number | null) {
   return value === null ? 'Insufficient data' : `${value}%`;
 }
 
+function computePercentile(values: number[], p: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.ceil(sorted.length * p) - 1;
+  return sorted[Math.max(0, index)] ?? 0;
+}
+
+type TimeStats = { avg: number; p50: number; p90: number };
+
+function computeTimeStats(values: number[]): TimeStats | null {
+  if (values.length < 2) return null;
+  const sum = values.reduce((a, b) => a + b, 0);
+  return {
+    avg: sum / values.length,
+    p50: computePercentile(values, 0.5),
+    p90: computePercentile(values, 0.9),
+  };
+}
+
 function parseDashboardQuery(params: Pick<URLSearchParams, 'get'>): DashboardQueryState {
   const daysParam = params.get('days');
   const parsedDays = daysParam ? parseInt(daysParam, 10) : 7;
@@ -826,6 +845,8 @@ function DashboardContent({
   const [jobSortField, setJobSortField] = useState<JobSortField>('duration');
   const [jobSortOrder, setJobSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedJobName, setSelectedJobName] = useState<string | null>(() => initialQuery.jobName || null);
+  const [prPageSize, setPrPageSize] = useState<10 | 50 | 200>(50);
+  const [prPage, setPrPage] = useState(1);
   const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
   const detailAbortControllerRef = useRef<AbortController | null>(null);
   const debouncedFilterName = useDebouncedValue(filterName, 250);
@@ -961,6 +982,16 @@ function DashboardContent({
 
     return result;
   }, [dateRangePrs, filterName]);
+
+  // Reset page to 1 when filtered results change
+  useEffect(() => {
+    setPrPage(1);
+  }, [dateRangePrs.length, filterName, selectedRepoKey]);
+
+  const paginatedPrs = useMemo(
+    () => filteredPrs.slice((prPage - 1) * prPageSize, prPage * prPageSize),
+    [filteredPrs, prPage, prPageSize]
+  );
 
   const shouldLoadWorkflowFallback = Boolean(
     selectedRepo && (selectedRepoMissingPrArtifact || selectedRepoHasPartialPrResolution || dateRangePrs.length === 0)
@@ -1580,8 +1611,8 @@ function DashboardContent({
         <section className="overflow-hidden rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
               <div className="flex flex-col gap-4 border-b border-neutral-100 p-6 dark:border-neutral-800 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h2 className="text-lg font-bold">PR Lifecycle</h2>
-                  <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Drill into PR and workflow details for {selectedRepo.key}.</p>
+                  <h2 className="text-lg font-bold">CI Pipeline & PR Details</h2>
+                  <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Drill into PR, workflow, and job details for {selectedRepo.key}.</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800">
@@ -1612,6 +1643,69 @@ function DashboardContent({
                   </div>
                 </div>
               </div>
+
+              {prLifecycleViewMode === 'pr' && filteredPrs.length > 0 && (() => {
+                const queueTimes = filteredPrs.map((p) => p.timeToCiStartInSeconds).filter((v): v is number => v !== undefined);
+                const ciDurations = filteredPrs.map((p) => p.ciDurationInSeconds).filter((v): v is number => v !== undefined);
+                const mergeLeads = filteredPrs.map((p) => p.mergeLeadTimeInSeconds).filter((v): v is number => v !== undefined);
+                const mergedPrs = filteredPrs.filter((p) => p.merged_at);
+                const forceMergedCount = mergedPrs.filter((p) => p.merged_at && p.ci_completed_at && new Date(p.merged_at) < new Date(p.ci_completed_at)).length;
+                const queueStats = computeTimeStats(queueTimes);
+                const ciStats = computeTimeStats(ciDurations);
+                const mergeStats = computeTimeStats(mergeLeads);
+                return (
+                  <div className="border-b border-neutral-100 px-6 py-4 dark:border-neutral-800">
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">排队时间</div>
+                        {queueStats ? (
+                          <div className="mt-2 flex gap-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                            <span>avg: {formatDurationMinutes(queueStats.avg)}</span>
+                            <span>p50: {formatDurationMinutes(queueStats.p50)}</span>
+                            <span>p90: {formatDurationMinutes(queueStats.p90)}</span>
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
+                        )}
+                      </div>
+                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">执行时间</div>
+                        {ciStats ? (
+                          <div className="mt-2 flex gap-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                            <span>avg: {formatDurationMinutes(ciStats.avg)}</span>
+                            <span>p50: {formatDurationMinutes(ciStats.p50)}</span>
+                            <span>p90: {formatDurationMinutes(ciStats.p90)}</span>
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
+                        )}
+                      </div>
+                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">合入时间</div>
+                        {mergeStats ? (
+                          <div className="mt-2 flex gap-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                            <span>avg: {formatDurationMinutes(mergeStats.avg)}</span>
+                            <span>p50: {formatDurationMinutes(mergeStats.p50)}</span>
+                            <span>p90: {formatDurationMinutes(mergeStats.p90)}</span>
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
+                        )}
+                      </div>
+                      <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                        <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">强行合入率</div>
+                        {mergedPrs.length > 0 ? (
+                          <div className="mt-2 text-2xl font-bold text-neutral-900 dark:text-neutral-100">
+                            {Math.round((forceMergedCount / mergedPrs.length) * 100)}%
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-sm text-neutral-400 dark:text-neutral-500">Insufficient data</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {prLifecycleViewMode === 'pr' ? (
                 /* ===== PR VIEW (existing behavior) ===== */
@@ -1683,26 +1777,26 @@ function DashboardContent({
                     </div>
                   )
                 ) : (
-                  <div className="overflow-x-auto">
+                  <>
+                    <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
                       <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
                         <tr>
                           <th className="px-6 py-3">PR / Branch</th>
                           <th className="px-6 py-3">Status</th>
-                          <th className="px-6 py-3">T1 PR Created</th>
-                          <th className="px-6 py-3">T2 CI Started</th>
-                          <th className="px-6 py-3">T3 CI Completed</th>
-                          <th className="px-6 py-3">T4 PR Merged</th>
-                          <th className="px-6 py-3">Submit→CI Start</th>
-                          <th className="px-6 py-3">CI Start→CI End</th>
-                          <th className="px-6 py-3">Submit→Merge</th>
+                          <th className="px-6 py-3">PR提交时间</th>
+                          <th className="px-6 py-3">CI排队时间</th>
+                          <th className="px-6 py-3">CI执行时间</th>
+                          <th className="px-6 py-3">合入时间</th>
+                          <th className="px-6 py-3">强行合入</th>
                           <th className="px-6 py-3 text-right">Details</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                        {filteredPrs.map((pr) => {
+                        {paginatedPrs.map((pr) => {
                           const detail = detailsByNumber[pr.number];
                           const workflows = detail ? getSortedWorkflows(detail.workflows) : [];
+                          const isForceMerged = pr.merged_at && pr.ci_completed_at && new Date(pr.merged_at) < new Date(pr.ci_completed_at);
 
                           return (
                             <React.Fragment key={pr.number}>
@@ -1716,12 +1810,22 @@ function DashboardContent({
                                 </td>
                                 <td className="px-6 py-4"><StatusBadge conclusion={pr.conclusion} /></td>
                                 <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(pr.created_at), 'MMM dd, HH:mm')}</td>
-                                <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{pr.ci_started_at ? format(new Date(pr.ci_started_at), 'MMM dd, HH:mm') : 'N/A'}</td>
-                                <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{pr.ci_completed_at ? format(new Date(pr.ci_completed_at), 'MMM dd, HH:mm') : 'N/A'}</td>
-                                <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{pr.merged_at ? format(new Date(pr.merged_at), 'MMM dd, HH:mm') : 'N/A'}</td>
                                 <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.timeToCiStartInSeconds)}</td>
                                 <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.ciDurationInSeconds)}</td>
-                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.timeToMergeInSeconds)}</td>
+                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(pr.mergeLeadTimeInSeconds)}</td>
+                                <td className="px-6 py-4">
+                                  {pr.merged_at ? (
+                                    isForceMerged ? (
+                                      <span className="inline-flex items-center gap-1 rounded-full border border-green-200/50 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 dark:border-green-800/50 dark:bg-green-900/30 dark:text-green-400">
+                                        ✓
+                                      </span>
+                                    ) : (
+                                      <span className="text-neutral-400 dark:text-neutral-500">—</span>
+                                    )
+                                  ) : (
+                                    <span className="text-neutral-400 dark:text-neutral-500">—</span>
+                                  )}
+                                </td>
                                 <td className="px-6 py-4 text-right">
                                   <button type="button" onClick={() => void loadDetail(pr.number)} className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100">
                                     {expandedPrNumber === pr.number ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -1733,7 +1837,7 @@ function DashboardContent({
                               {expandedPrNumber === pr.number && detail && (
                                 <>
                                   <tr className="bg-neutral-50 dark:bg-neutral-950/50">
-                                    <td colSpan={10} className="p-6">
+                                    <td colSpan={8} className="p-6">
                                       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                                         <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
                                           <div className="text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Workflows</div>
@@ -1759,7 +1863,7 @@ function DashboardContent({
                                     </td>
                                   </tr>
                                   <tr>
-                                    <td colSpan={10} className="p-0">
+                                    <td colSpan={8} className="p-0">
                                       <div className="overflow-x-auto">
                                         <table className="w-full text-left text-sm">
                                           <thead className="bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
@@ -1812,11 +1916,46 @@ function DashboardContent({
                             </React.Fragment>
                           );
                         })}
-                      </tbody>
-                    </table>
-                  </div>
+                       </tbody>
+                     </table>
+                   </div>
+                    {filteredPrs.length > prPageSize && (
+                      <div className="flex items-center justify-between gap-4 border-t border-neutral-100 px-6 py-4 dark:border-neutral-800">
+                        <span className="text-sm text-neutral-500 dark:text-neutral-400">
+                          Showing {(prPage - 1) * prPageSize + 1}–{Math.min(prPage * prPageSize, filteredPrs.length)} of {filteredPrs.length}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPrPage((p) => Math.max(1, p - 1))}
+                            disabled={prPage === 1}
+                            className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm text-neutral-600 transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950"
+                          >
+                            Previous
+                          </button>
+                          <select
+                            value={prPageSize}
+                            onChange={(e) => { setPrPageSize(Number(e.target.value) as 10 | 50 | 200); setPrPage(1); }}
+                            className="rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-sm text-neutral-700 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
+                          >
+                            <option value={10}>10 / page</option>
+                            <option value={50}>50 / page</option>
+                            <option value={200}>200 / page</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => setPrPage((p) => p + 1)}
+                            disabled={prPage * prPageSize >= filteredPrs.length}
+                            className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm text-neutral-600 transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )
-              ) : prLifecycleViewMode === 'workflow' ? (
+                ) : prLifecycleViewMode === 'workflow' ? (
                 /* ===== WORKFLOW VIEW ===== */
                 <div>
                   {allWorkflowsError ? (
