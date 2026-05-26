@@ -259,7 +259,10 @@ export async function rebuildPullRequestArtifacts({
   log = () => {},
   warn = () => {},
 }: RebuildPullRequestArtifactsOptions): Promise<void> {
-  const runsWithoutPr = runs.filter((run) => (!run.pull_requests || run.pull_requests.length === 0) && run.head_sha && isPullRequestLikeEvent(run.event));
+  // Resolve SHAs for runs that lack PR associations.
+  // 仅针对 PR 相关事件和 push 事件（用于合并提交）进行 SHA→PR 解析，
+  // 排除其他事件（如 schedule、workflow_dispatch）以避免浪费 GitHub API 速率限制预算。
+  const runsWithoutPr = runs.filter((run) => (!run.pull_requests || run.pull_requests.length === 0) && run.head_sha && (isPullRequestLikeEvent(run.event) || run.event === 'push'));
   const uniqueShas = new Set(runsWithoutPr.map((run) => run.head_sha as string));
   const cachedPullRequestsBySha = new Map<string, number>();
   const notFoundShas = new Set<string>();
