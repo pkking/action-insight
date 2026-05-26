@@ -18,7 +18,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 import * as yaml from 'js-yaml';
 import { createClient } from '@supabase/supabase-js';
 import { format, subDays } from 'date-fns';
@@ -156,12 +156,12 @@ function cloneOrUpdateRepo(owner: string, repo: string): string {
   if (fs.existsSync(repoDir) && fs.existsSync(path.join(repoDir, '.git'))) {
     info(`Updating existing clone at ${repoDir}...`);
     try {
-      execSync('git pull --ff-only', { cwd: repoDir, stdio: VERBOSE ? 'inherit' : 'pipe' });
+      execFileSync('git', ['pull', '--ff-only'], { cwd: repoDir, stdio: VERBOSE ? 'inherit' : 'pipe' });
       info('Repository updated.');
     } catch (err) {
       warn(`git pull failed, trying fetch + reset: ${err instanceof Error ? err.message : String(err)}`);
-      execSync('git fetch origin', { cwd: repoDir, stdio: VERBOSE ? 'inherit' : 'pipe' });
-      execSync('git reset --hard origin/main', { cwd: repoDir, stdio: VERBOSE ? 'inherit' : 'pipe' });
+      execFileSync('git', ['fetch', 'origin'], { cwd: repoDir, stdio: VERBOSE ? 'inherit' : 'pipe' });
+      execFileSync('git', ['reset', '--hard', 'origin/main'], { cwd: repoDir, stdio: VERBOSE ? 'inherit' : 'pipe' });
       info('Repository reset to origin/main.');
     }
   } else {
@@ -170,10 +170,10 @@ function cloneOrUpdateRepo(owner: string, repo: string): string {
 
     const githubToken = process.env.GITHUB_TOKEN;
     if (githubToken) {
-      // Use git config to set credential helper instead of embedding token in URL
-      execSync(`git -c http.extraheader="AUTHORIZATION: basic ${Buffer.from(`x-access-token:${githubToken}`).toString('base64')}" clone --depth 1 ${repoUrl} ${repoDir}`, { stdio: VERBOSE ? 'inherit' : 'pipe' });
+      const authHeader = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${githubToken}`).toString('base64')}`;
+      execFileSync('git', ['-c', `http.extraheader=${authHeader}`, 'clone', '--depth', '1', repoUrl, repoDir], { stdio: VERBOSE ? 'inherit' : 'pipe' });
     } else {
-      execSync(`git clone --depth 1 ${repoUrl} ${repoDir}`, { stdio: VERBOSE ? 'inherit' : 'pipe' });
+      execFileSync('git', ['clone', '--depth', '1', repoUrl, repoDir], { stdio: VERBOSE ? 'inherit' : 'pipe' });
     }
     info('Repository cloned.');
   }
