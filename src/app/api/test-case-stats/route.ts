@@ -56,9 +56,9 @@ export async function POST(request: Request) {
       .select('id')
       .eq('owner', body.owner)
       .eq('repo', body.repo)
-      .single();
+      .maybeSingle();
 
-    if (repoError && repoError.code !== 'PGRST116') {
+    if (repoError) {
       console.error('Error fetching repo:', repoError);
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
@@ -73,9 +73,9 @@ export async function POST(request: Request) {
       .eq('repo_id', repoData.id)
       .order('generated_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (statsError && statsError.code !== 'PGRST116') {
+    if (statsError) {
       console.error('Error fetching test case stats:', statsError);
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }

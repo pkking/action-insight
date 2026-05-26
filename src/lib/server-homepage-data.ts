@@ -54,12 +54,10 @@ const getTestCaseStats = cache(async (owner: string, repo: string): Promise<Test
     .eq('repo_id', repoId)
     .order('generated_at', { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (error) {
-    if (error.code !== 'PGRST116') {
-      console.error(`Error fetching test case stats for ${owner}/${repo}:`, error);
-    }
+    console.error(`Error fetching test case stats for ${owner}/${repo}:`, error);
     return null;
   }
 

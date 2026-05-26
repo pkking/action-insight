@@ -93,15 +93,10 @@ function getSupabaseClient() {
 }
 
 async function ensureRepo(supabase: ReturnType<typeof createClient>, owner: string, repo: string): Promise<number> {
-  await supabase
-    .from('repos')
-    .upsert({ owner, repo }, { onConflict: 'owner,repo', ignoreDuplicates: true });
-
   const { data, error } = await supabase
     .from('repos')
+    .upsert({ owner, repo }, { onConflict: 'owner,repo', ignoreDuplicates: true })
     .select('id')
-    .eq('owner', owner)
-    .eq('repo', repo)
     .single();
 
   if (error || !data) {
@@ -161,8 +156,10 @@ function cloneOrUpdateRepo(owner: string, repo: string): string {
     } catch (err) {
       warn(`git pull failed, trying fetch + reset: ${err instanceof Error ? err.message : String(err)}`);
       execFileSync('git', ['fetch', 'origin'], { cwd: repoDir, stdio: VERBOSE ? 'inherit' : 'pipe' });
-      execFileSync('git', ['reset', '--hard', 'origin/main'], { cwd: repoDir, stdio: VERBOSE ? 'inherit' : 'pipe' });
-      info('Repository reset to origin/main.');
+      // Dynamically detect default branch instead of hardcoding 'main'
+      const defaultBranch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'origin/HEAD'], { cwd: repoDir, encoding: 'utf-8' }).trim().replace('origin/', '');
+      execFileSync('git', ['reset', '--hard', `origin/${defaultBranch || 'main'}`], { cwd: repoDir, stdio: VERBOSE ? 'inherit' : 'pipe' });
+      info(`Repository reset to origin/${defaultBranch || 'main'}.`);
     }
   } else {
     info(`Cloning ${owner}/${repo} to ${repoDir}...`);
@@ -172,6 +169,9 @@ function cloneOrUpdateRepo(owner: string, repo: string): string {
     if (githubToken) {
       const authHeader = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${githubToken}`).toString('base64')}`;
       execFileSync('git', ['-c', `http.extraheader=${authHeader}`, 'clone', '--depth', '1', repoUrl, repoDir], { stdio: VERBOSE ? 'inherit' : 'pipe' });
+      // Persist credential helper for subsequent fetch/pull operations
+      execFileSync('git', ['config', '--local', 'credential.helper', ''], { cwd: repoDir, stdio: VERBOSE ? 'inherit' : 'pipe' });
+      execFileSync('git', ['config', '--local', `http.${repoUrl}.extraheader`, authHeader], { cwd: repoDir, stdio: VERBOSE ? 'inherit' : 'pipe' });
     } else {
       execFileSync('git', ['clone', '--depth', '1', repoUrl, repoDir], { stdio: VERBOSE ? 'inherit' : 'pipe' });
     }
@@ -194,6 +194,15 @@ function classifyHardware(runsOn: string | string[] | null, jobName: string): 'a
     labels.push(runsOn);
   } else if (Array.isArray(runsOn)) {
     labels.push(...runsOn);
+  } else if (runsOn && typeof runsOn === 'object') {
+    // Handle runs-on as object: { group: '...', labels: [...] }
+    const runsOnObj = runsOn as Record<string, unknown>;
+    if (Array.isArray(runsOnObj.labels)) {
+      labels.push(...runsOnObj.labels.map(String));
+    }
+    if (typeof runsOnObj.group === 'string') {
+      labels.push(runsOnObj.group);
+    }
   }
 
   const jobNameLower = jobName.toLowerCase();
@@ -214,8 +223,12 @@ function extractTestPathsFromStep(runContent: string): string[] {
   const paths: string[] = [];
 
   for (const pattern of TEST_COMMAND_PATTERNS) {
-    const match = runContent.match(pattern);
-    if (match) {
+    // Use matchAll to find all occurrences, not just the first
+    const globalPattern = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g');
+    const matches = [...runContent.matchAll(globalPattern)];
+    if (matches.length === 0) continue;
+
+    for (const match of matches) {
       const args = match[2] || match[1] || '';
       if (!args) continue;
 
@@ -248,7 +261,13 @@ function extractTestPathsFromStep(runContent: string): string[] {
 
 function parseWorkflowFile(filePath: string): WorkflowJob[] {
   const content = fs.readFileSync(filePath, 'utf-8');
-  const parsed = yaml.load(content) as Record<string, unknown>;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = yaml.load(content) as Record<string, unknown>;
+  } catch (err) {
+    warn(`Failed to parse workflow file ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
+    return [];
+  }
 
   if (!parsed || typeof parsed !== 'object' || !parsed.jobs) {
     return [];
@@ -261,7 +280,7 @@ function parseWorkflowFile(filePath: string): WorkflowJob[] {
     if (!jobConfig || typeof jobConfig !== 'object') continue;
 
     const job = jobConfig as Record<string, unknown>;
-    const runsOn = job['runs-on'] as string | string[] | null;
+    const runsOn = job['runs-on'] as string | string[] | object | null;
 
     const testPaths: string[] = [];
     const steps = job.steps as unknown[] | undefined;
@@ -279,7 +298,7 @@ function parseWorkflowFile(filePath: string): WorkflowJob[] {
 
     result.push({
       name: jobName,
-      runsOn,
+      runsOn: typeof runsOn === 'object' && !Array.isArray(runsOn) ? null : runsOn,
       testPaths: [...new Set(testPaths)],
     });
   }
@@ -297,7 +316,9 @@ function countTestFiles(repoDir: string, testPaths: string[]): number {
       if (!fs.existsSync(fullPath)) {
         const globMatches = globSync(testPath, { cwd: repoDir, absolute: true });
         for (const match of globMatches) {
-          if (match.endsWith('.py') && (match.includes('/test_') || match.includes('_test.py'))) {
+          // Normalize to forward slashes for consistent matching
+          const normalizedPath = match.replace(/\\/g, '/');
+          if (normalizedPath.endsWith('.py') && (normalizedPath.includes('/test_') || normalizedPath.includes('_test.py'))) {
             matchedFiles.add(match);
           }
         }
@@ -353,21 +374,23 @@ function globSync(pattern: string, options: { cwd: string; absolute: boolean }):
   const { cwd, absolute } = options;
   const results: string[] = [];
 
-  // Handle simple ** patterns
-  const regexPattern = pattern
-    .replace(/\*\*/g, '__DOUBLE_STAR__')
-    .replace(/\*/g, '[^/]*')
+  // Escape regex special characters first, then convert glob patterns
+  const escapedPattern = pattern
+    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\\\*\\\*/g, '__DOUBLE_STAR__')
+    .replace(/\\\*/g, '[^/]*')
     .replace(/__DOUBLE_STAR__/g, '.*')
-    .replace(/\?/g, '[^/]');
+    .replace(/\\\?/g, '[^/]');
 
-  const regex = new RegExp(`^${regexPattern}$`);
+  const regex = new RegExp(`^${escapedPattern}$`);
 
   function walk(dir: string) {
     try {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
-        const relativePath = path.relative(cwd, fullPath);
+        // Normalize to forward slashes for consistent regex matching
+        const relativePath = path.relative(cwd, fullPath).replace(/\\/g, '/');
 
         if (regex.test(relativePath)) {
           results.push(absolute ? fullPath : relativePath);
@@ -518,8 +541,9 @@ async function main() {
   }
 
   const today = new Date();
-  const windowEnd = format(today, 'yyyy-MM-dd');
-  const windowStart = format(subDays(today, 90), 'yyyy-MM-dd');
+  // Use UTC date to avoid timezone inconsistencies
+  const windowEnd = today.toISOString().split('T')[0];
+  const windowStart = subDays(today, 90).toISOString().split('T')[0];
 
   try {
     await upsertTestCaseStats(supabase, repoId, {
