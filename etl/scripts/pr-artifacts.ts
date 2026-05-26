@@ -259,7 +259,11 @@ export async function rebuildPullRequestArtifacts({
   log = () => {},
   warn = () => {},
 }: RebuildPullRequestArtifactsOptions): Promise<void> {
-  const runsWithoutPr = runs.filter((run) => (!run.pull_requests || run.pull_requests.length === 0) && run.head_sha && isPullRequestLikeEvent(run.event));
+  // Resolve SHAs for runs that lack PR associations.
+  // Include all events (not just PR-like) because push events on merge commits
+  // also need SHA→PR resolution — the commits API can resolve merge commit SHAs
+  // back to their originating PRs.
+  const runsWithoutPr = runs.filter((run) => (!run.pull_requests || run.pull_requests.length === 0) && run.head_sha);
   const uniqueShas = new Set(runsWithoutPr.map((run) => run.head_sha as string));
   const cachedPullRequestsBySha = new Map<string, number>();
   const notFoundShas = new Set<string>();
