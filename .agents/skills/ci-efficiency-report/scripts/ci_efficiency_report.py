@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 import sys
 import time
 from dataclasses import dataclass
@@ -25,6 +26,15 @@ try:
 except ImportError:
     print("Error: openpyxl is required. Install with: pip install openpyxl")
     sys.exit(1)
+
+try:
+    from .test_case_counter import compute_test_case_stats, clone_or_update_repo
+except ImportError:
+    import sys as _sys
+    _scripts_dir = os.path.dirname(os.path.abspath(__file__))
+    if _scripts_dir not in _sys.path:
+        _sys.path.insert(0, _scripts_dir)
+    from test_case_counter import compute_test_case_stats, clone_or_update_repo
 
 
 GITHUB_API_BASE = "https://api.github.com"
@@ -637,6 +647,7 @@ def compute_repo_report(token: str, owner: str, repo: str, window: Window, max_p
             "summary_judgment": "所选时间窗内没有 merged PR，无法评估月度 CI 提交体验。",
             "coverage_notes": ["No merged PRs found in the selected window."],
             "legacy_row": empty_metrics,
+            "test_case_stats": {"total": 0, "ascend": 0, "nvidia": 0},
         }
 
     print(f"  Fetching PR details (head_sha)...")
@@ -820,6 +831,14 @@ def compute_repo_report(token: str, owner: str, repo: str, window: Window, max_p
         "统计PR数": metrics["统计PR数"],
     }
 
+    test_case_stats = {"total": 0, "ascend": 0, "nvidia": 0}
+    try:
+        repo_path = clone_or_update_repo(full_repo)
+        test_case_stats = compute_test_case_stats(repo_path, job_raw_rows)
+        print(f"  Test case stats: total={test_case_stats['total']}, ascend={test_case_stats['ascend']}, nvidia={test_case_stats['nvidia']}")
+    except Exception as e:
+        print(f"  Warning: Could not compute test case stats: {e}")
+
     return {
         "repo": full_repo,
         "window": window,
@@ -838,6 +857,7 @@ def compute_repo_report(token: str, owner: str, repo: str, window: Window, max_p
         "daily_problems": daily_problems,
         "coverage_notes": coverage_notes,
         "legacy_row": legacy_row,
+        "test_case_stats": test_case_stats,
     }
 
 
@@ -937,6 +957,14 @@ def write_management_summary_sheet(wb: openpyxl.Workbook, report: dict) -> None:
         {"Metric": "CI E2E达标率(%)", "Value": metrics["CI E2E达标率(%)"]},
     ]
     next_row = write_table(ws, 6, "Core Metrics", ["Metric", "Value"], summary_rows)
+
+    test_case_stats = report.get("test_case_stats", {"total": 0, "ascend": 0, "nvidia": 0})
+    test_case_rows = [
+        {"Metric": "总测试用例数", "Value": test_case_stats["total"]},
+        {"Metric": "昇腾硬件用例数", "Value": test_case_stats["ascend"]},
+        {"Metric": "NVIDIA硬件用例数", "Value": test_case_stats["nvidia"]},
+    ]
+    next_row = write_table(ws, next_row, "Test Case Statistics", ["Metric", "Value"], test_case_rows)
 
     distribution_rows = []
     for bucket in report["distribution"]:
