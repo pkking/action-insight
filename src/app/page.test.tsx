@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DashboardClient from './DashboardClient';
-import type { PullRequestIndexFile } from '@/lib/types';
+import type { PullRequestIndexFile, TestCaseStats } from '@/lib/types';
 
 const replaceMock = vi.fn();
 const useSearchParamsMock = vi.fn();
@@ -139,12 +139,14 @@ function renderDashboard(overrides?: {
   repoIndexesByKey?: Record<string, PullRequestIndexFile>;
   repoOptions?: typeof defaultRepoOptions;
   searchParams?: Record<string, string | string[] | undefined>;
+  testCaseStatsByKey?: Record<string, TestCaseStats | null>;
 }) {
   return render(
     <DashboardClient
       initialFailedRepoKeys={overrides?.failedRepoKeys ?? []}
       initialRepoIndexesByKey={overrides?.repoIndexesByKey ?? createInitialRepoIndexesByKey()}
       initialRepoOptions={overrides?.repoOptions ?? defaultRepoOptions}
+      initialTestCaseStatsByKey={overrides?.testCaseStatsByKey ?? {}}
       initialSearchParams={overrides?.searchParams}
     />
   );
@@ -328,6 +330,7 @@ describe('Dashboard PR view', () => {
         initialFailedRepoKeys={[]}
         initialRepoIndexesByKey={createInitialRepoIndexesByKey()}
         initialRepoOptions={defaultRepoOptions}
+        initialTestCaseStatsByKey={{}}
         initialSearchParams={{ repo: 'vllm-project/vllm-ascend' }}
       />
     );
@@ -364,6 +367,7 @@ describe('Dashboard PR view', () => {
         initialFailedRepoKeys={[]}
         initialRepoIndexesByKey={createInitialRepoIndexesByKey()}
         initialRepoOptions={defaultRepoOptions}
+        initialTestCaseStatsByKey={{}}
         initialSearchParams={{ repo: 'vllm-project/vllm-ascend' }}
       />
     );

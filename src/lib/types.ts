@@ -136,3 +136,12 @@ export interface DailyTrendPoint {
   reviewP90Minutes: number | null;
   ciE2ESlaRate: number | null;
 }
+
+export interface TestCaseStats {
+  total_test_cases: number;
+  ascend_test_cases: number;
+  nvidia_test_cases: number;
+  window_start: string;
+  window_end: string;
+  generated_at: string;
+}
