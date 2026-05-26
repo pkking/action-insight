@@ -11,8 +11,14 @@ import glob
 import os
 import re
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+try:
+    import requests
+except ImportError:
+    requests = None
 
 try:
     import yaml
@@ -389,3 +395,92 @@ def compute_test_case_stats(repo_path: str, job_raw_rows: list[dict]) -> dict:
         "ascend": total_ascend,
         "nvidia": total_nvidia,
     }
+
+
+def write_test_case_stats_to_supabase(
+    repo: str,
+    window_start: str,
+    window_end: str,
+    stats: dict,
+    supabase_url: str | None = None,
+    supabase_key: str | None = None,
+) -> None:
+    """Upsert test case statistics into Supabase test_case_stats table.
+
+    Uses INSERT ... ON CONFLICT DO UPDATE (via Prefer: resolution=merge-duplicates)
+    so running the report multiple times for the same window doesn't create duplicates.
+
+    The conflict key is (repo_id, window_start, window_end). repo_id is looked up
+    from the repos table by owner/repo.
+
+    Args:
+        repo: Repository in "owner/repo" format (e.g., "vllm-project/vllm-ascend").
+        window_start: Start date in YYYY-MM-DD format.
+        window_end: End date in YYYY-MM-DD format.
+        stats: Dict with keys "total", "ascend", "nvidia".
+        supabase_url: Supabase URL (falls back to SUPABASE_URL env var).
+        supabase_key: Supabase service role key (falls back to SUPABASE_SERVICE_ROLE_KEY env var).
+    """
+    if requests is None:
+        print("  Warning: requests not available, skipping Supabase write for test case stats")
+        return
+
+    url = supabase_url or os.environ.get("SUPABASE_URL")
+    key = supabase_key or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+
+    if not url or not key:
+        print("  Warning: SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY not set, skipping Supabase write for test case stats")
+        return
+
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates",
+    }
+
+    try:
+        # Step 1: Look up repo_id from repos table by owner/repo
+        owner, repo_name = repo.split("/", 1)
+        resp = requests.get(
+            f"{url}/rest/v1/repos",
+            headers={**headers, "Prefer": "return=representation"},
+            params={"owner": f"eq.{owner}", "repo": f"eq.{repo_name}"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        repos = resp.json()
+
+        if not repos:
+            print(f"  Warning: repo '{repo}' not found in repos table, skipping Supabase write for test case stats")
+            return
+
+        repo_id = repos[0]["id"]
+
+        # Step 2: Upsert into test_case_stats table
+        payload = {
+            "repo_id": repo_id,
+            "window_start": window_start,
+            "window_end": window_end,
+            "total_test_cases": stats.get("total", 0),
+            "ascend_test_cases": stats.get("ascend", 0),
+            "nvidia_test_cases": stats.get("nvidia", 0),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        resp = requests.post(
+            f"{url}/rest/v1/test_case_stats",
+            headers=headers,
+            json=payload,
+            timeout=15,
+        )
+        # Supabase returns 200/201 on success, 409 on conflict without merge-duplicates
+        if resp.status_code not in (200, 201, 204):
+            print(f"  Warning: Supabase upsert failed with status {resp.status_code}: {resp.text[:200]}")
+        else:
+            print(f"  Test case stats written to Supabase for repo={repo}, window={window_start}..{window_end}")
+
+    except requests.exceptions.RequestException as e:
+        print(f"  Warning: Failed to write test case stats to Supabase: {e}")
+    except Exception as e:
+        print(f"  Warning: Unexpected error writing test case stats to Supabase: {e}")

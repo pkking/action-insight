@@ -28,13 +28,13 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from .test_case_counter import compute_test_case_stats, clone_or_update_repo
+    from .test_case_counter import compute_test_case_stats, clone_or_update_repo, write_test_case_stats_to_supabase
 except ImportError:
     import sys as _sys
     _scripts_dir = os.path.dirname(os.path.abspath(__file__))
     if _scripts_dir not in _sys.path:
         _sys.path.insert(0, _scripts_dir)
-    from test_case_counter import compute_test_case_stats, clone_or_update_repo
+    from test_case_counter import compute_test_case_stats, clone_or_update_repo, write_test_case_stats_to_supabase
 
 
 GITHUB_API_BASE = "https://api.github.com"
@@ -1403,7 +1403,16 @@ def main() -> None:
     parser.add_argument("--start-date", help="Start date in YYYY-MM-DD format")
     parser.add_argument("--end-date", help="End date in YYYY-MM-DD format")
     parser.add_argument("--max-prs", type=int, default=0, help="Max PRs per repo (0=unlimited)")
+    parser.add_argument(
+        "--write-to-supabase",
+        action="store_true",
+        default=None,
+        help="Write test case stats to Supabase (default: True if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set)",
+    )
     args = parser.parse_args()
+
+    supabase_env = bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_ROLE_KEY"))
+    write_to_supabase = args.write_to_supabase if args.write_to_supabase is not None else supabase_env
 
     try:
         window = resolve_window(days=args.days, start_date=args.start_date, end_date=args.end_date)
@@ -1419,6 +1428,18 @@ def main() -> None:
         owner, repo = repo_str.split("/", 1)
         report = compute_repo_report(args.token, owner, repo, window, args.max_prs)
         reports.append(report)
+
+        if write_to_supabase:
+            try:
+                test_case_stats = report.get("test_case_stats", {})
+                write_test_case_stats_to_supabase(
+                    repo=repo_str,
+                    window_start=window.start_date,
+                    window_end=window.end_date,
+                    stats=test_case_stats,
+                )
+            except Exception as e:
+                print(f"  Warning: Supabase write failed for {repo_str}: {e}")
 
     if not reports:
         print("No valid repositories to process.")
