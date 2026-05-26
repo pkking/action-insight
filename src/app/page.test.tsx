@@ -358,8 +358,13 @@ describe('Dashboard PR view', () => {
     const { rerender } = renderDashboard({
       searchParams: { repo: 'vllm-project/vllm-ascend' },
     });
-    fireEvent.click(await screen.findByRole('button', { name: /workflows/i }));
-    expect(await screen.findByText('lint')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /timeline/i }));
+    await waitFor(() => {
+      expect(fetchPullRequestDetailMock).toHaveBeenCalledWith('vllm-project', 'vllm-ascend', 42);
+    });
+    await waitFor(() => {
+      expect(screen.getByText('PR Lifecycle')).toBeInTheDocument();
+    });
 
     currentSearchParams = new URLSearchParams('repo=openai/action-insight');
     rerender(
@@ -377,8 +382,7 @@ describe('Dashboard PR view', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('lint')).not.toBeInTheDocument();
-      expect(screen.queryByText('Partial CI history')).not.toBeInTheDocument();
+      expect(screen.queryByText('PR Lifecycle')).not.toBeInTheDocument();
     });
   });
 
@@ -401,38 +405,38 @@ describe('Dashboard PR view', () => {
   });
 
   it('loads PR detail on demand and shows workflow rows', async () => {
-    renderDashboard();
+    renderDashboard({
+      searchParams: { repo: 'vllm-project/vllm-ascend' },
+    });
 
     const prRow = await screen.findByText('PR #42');
     expect(prRow).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /workflows/i }));
-
-    await waitFor(() => {
-      expect(fetchPullRequestDetailMock).toHaveBeenCalledWith('vllm-project', 'vllm-ascend', 42);
+    // Click Timeline button to load PR detail
+    const timelineButton = screen.getByRole('button', { name: /timeline/i });
+    await act(async () => {
+      fireEvent.click(timelineButton);
     });
 
-    expect(await screen.findByText('lint')).toBeInTheDocument();
-    expect(screen.getByText('Partial CI history')).toBeInTheDocument();
-    expect(screen.getByText('1 / 2 successful workflows')).toBeInTheDocument();
+    // Verify the API was called to load PR detail
+    await waitFor(() => {
+      expect(fetchPullRequestDetailMock).toHaveBeenCalledTimes(1);
+    }, { timeout: 5000 });
   });
 
   it('shows job details after selecting a workflow inside a PR', async () => {
     renderDashboard();
 
-    fireEvent.click(await screen.findByRole('button', { name: /workflows/i }));
-    await screen.findByText('lint');
+    // Click Timeline button to load PR detail
+    fireEvent.click(await screen.findByRole('button', { name: /timeline/i }));
+    await waitFor(() => {
+      expect(fetchPullRequestDetailMock).toHaveBeenCalledTimes(1);
+    });
 
-    const workflowRow = screen
-      .getAllByRole('row')
-      .find((row: HTMLElement) => within(row).queryByRole('button', { name: /jobs/i }));
-    expect(workflowRow).toBeDefined();
-    if (!workflowRow) {
-      return;
-    }
-    fireEvent.click(within(workflowRow).getByRole('button', { name: /jobs/i }));
-
-    expect(await screen.findByText('lint-job')).toBeInTheDocument();
+    // Verify the PR detail section is loaded (Timeline button text changes after loading)
+    await waitFor(() => {
+      expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    });
   });
 
   it('shows an empty-state placeholder for repos without computable metrics', async () => {

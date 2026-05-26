@@ -464,6 +464,7 @@ function PrLifecycleTimeline({ data }: { data: PrLifecycleTimelineData }) {
           onClick={() => setExpandedLevel(expandedLevel === 'pr' ? 'workflows' : 'pr')}
           role="button"
           tabIndex={0}
+          aria-label="Expand PR lifecycle timeline"
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedLevel(expandedLevel === 'pr' ? 'workflows' : 'pr'); }}
         >
           {/* Milestone markers */}

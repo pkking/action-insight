@@ -33,6 +33,15 @@ const CACHE_DIR = process.env.TEST_CASE_STATS_CACHE_DIR || '/tmp/action-insight-
 const ASCEND_LABELS = new Set(['npu', 'ascend', 'cann', 'huawei', 'atlas']);
 const NVIDIA_LABELS = new Set(['cuda', 'gpu', 'nvidia', 'tesla', 'a100', 'v100', 't4', 'l4', 'l40', 'h100']);
 
+// Safe identifier pattern: alphanumeric, hyphens, underscores only (GitHub owner/repo constraints)
+const SAFE_IDENTIFIER = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/;
+
+function validateIdentifier(value: string, label: string): void {
+  if (!SAFE_IDENTIFIER.test(value)) {
+    throw new Error(`Invalid ${label}: "${value}". Must match pattern: ${SAFE_IDENTIFIER.source}`);
+  }
+}
+
 const TEST_COMMAND_PATTERNS = [
   /pytest\s+(.+)/i,
   /python\s+(-m\s+pytest|unittest|pytest)\s+(.+)/i,
@@ -138,10 +147,11 @@ function getRepoDir(owner: string, repo: string): string {
 }
 
 function cloneOrUpdateRepo(owner: string, repo: string): string {
+  validateIdentifier(owner, 'owner');
+  validateIdentifier(repo, 'repo');
+
   const repoDir = getRepoDir(owner, repo);
-  const repoUrl = process.env.GITHUB_TOKEN
-    ? `https://${process.env.GITHUB_TOKEN}@github.com/${owner}/${repo}.git`
-    : `https://github.com/${owner}/${repo}.git`;
+  const repoUrl = `https://github.com/${owner}/${repo}.git`;
 
   if (fs.existsSync(repoDir) && fs.existsSync(path.join(repoDir, '.git'))) {
     info(`Updating existing clone at ${repoDir}...`);
@@ -157,7 +167,14 @@ function cloneOrUpdateRepo(owner: string, repo: string): string {
   } else {
     info(`Cloning ${owner}/${repo} to ${repoDir}...`);
     fs.mkdirSync(CACHE_DIR, { recursive: true });
-    execSync(`git clone --depth 1 ${repoUrl} ${repoDir}`, { stdio: VERBOSE ? 'inherit' : 'pipe' });
+
+    const githubToken = process.env.GITHUB_TOKEN;
+    if (githubToken) {
+      // Use git config to set credential helper instead of embedding token in URL
+      execSync(`git -c http.extraheader="AUTHORIZATION: basic ${Buffer.from(`x-access-token:${githubToken}`).toString('base64')}" clone --depth 1 ${repoUrl} ${repoDir}`, { stdio: VERBOSE ? 'inherit' : 'pipe' });
+    } else {
+      execSync(`git clone --depth 1 ${repoUrl} ${repoDir}`, { stdio: VERBOSE ? 'inherit' : 'pipe' });
+    }
     info('Repository cloned.');
   }
 

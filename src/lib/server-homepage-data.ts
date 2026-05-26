@@ -48,13 +48,20 @@ const getTestCaseStats = cache(async (owner: string, repo: string): Promise<Test
   if (!repoId) return null;
 
   const supabase = getSupabaseClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('test_case_stats')
     .select('*')
     .eq('repo_id', repoId)
     .order('generated_at', { ascending: false })
     .limit(1)
     .single();
+
+  if (error) {
+    if (error.code !== 'PGRST116') {
+      console.error(`Error fetching test case stats for ${owner}/${repo}:`, error);
+    }
+    return null;
+  }
 
   if (!data) return null;
 

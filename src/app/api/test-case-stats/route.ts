@@ -51,24 +51,34 @@ export async function POST(request: Request) {
 
     const supabase = getSupabaseClient();
 
-    const { data: repoData } = await supabase
+    const { data: repoData, error: repoError } = await supabase
       .from('repos')
       .select('id')
       .eq('owner', body.owner)
       .eq('repo', body.repo)
       .single();
 
+    if (repoError && repoError.code !== 'PGRST116') {
+      console.error('Error fetching repo:', repoError);
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
+
     if (!repoData?.id) {
       return NextResponse.json({ data: null });
     }
 
-    const { data: statsData } = await supabase
+    const { data: statsData, error: statsError } = await supabase
       .from('test_case_stats')
       .select('*')
       .eq('repo_id', repoData.id)
       .order('generated_at', { ascending: false })
       .limit(1)
       .single();
+
+    if (statsError && statsError.code !== 'PGRST116') {
+      console.error('Error fetching test case stats:', statsError);
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
 
     if (!statsData) {
       return NextResponse.json({ data: null });
