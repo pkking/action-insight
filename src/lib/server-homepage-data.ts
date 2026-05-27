@@ -6,7 +6,7 @@ import { cache } from 'react';
 
 import { getSupabaseClient } from './supabase';
 import { parseTrackedReposYaml } from './tracked-repos.js';
-import type { PullRequestIndexFile, PullRequestMetricsSummary } from './types';
+import type { PullRequestIndexFile, PullRequestMetricsSummary, TestCaseStats } from './types';
 
 export type RepoOption = {
   owner: string;
@@ -42,6 +42,36 @@ async function getRepoId(owner: string, repo: string): Promise<number | null> {
 
   return data?.id || null;
 }
+
+const getTestCaseStats = cache(async (owner: string, repo: string): Promise<TestCaseStats | null> => {
+  const repoId = await getRepoId(owner, repo);
+  if (!repoId) return null;
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('test_case_stats')
+    .select('*')
+    .eq('repo_id', repoId)
+    .order('generated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`Error fetching test case stats for ${owner}/${repo}:`, error);
+    return null;
+  }
+
+  if (!data) return null;
+
+  return {
+    total_test_cases: data.total_test_cases as number,
+    ascend_test_cases: data.ascend_test_cases as number,
+    nvidia_test_cases: data.nvidia_test_cases as number,
+    window_start: data.window_start as string,
+    window_end: data.window_end as string,
+    generated_at: data.generated_at as string,
+  };
+});
 
 function mapPrSummary(row: Record<string, unknown>): PullRequestMetricsSummary {
   return {
@@ -112,15 +142,18 @@ export async function getHomepageData() {
     repos.map(async (repo) => ({
       key: repo.key,
       index: await getPullRequestIndex(repo.owner, repo.repo),
+      testCaseStats: await getTestCaseStats(repo.owner, repo.repo),
     }))
   );
 
   const repoIndexesByKey: Record<string, PullRequestIndexFile> = {};
+  const testCaseStatsByKey: Record<string, TestCaseStats | null> = {};
   const failedRepoKeys: string[] = [];
 
   for (const [index, result] of results.entries()) {
     if (result.status === 'fulfilled') {
       repoIndexesByKey[result.value.key] = result.value.index;
+      testCaseStatsByKey[result.value.key] = result.value.testCaseStats;
       continue;
     }
 
@@ -130,6 +163,7 @@ export async function getHomepageData() {
   return {
     repoOptions: repos,
     repoIndexesByKey,
+    testCaseStatsByKey,
     failedRepoKeys,
   };
 }

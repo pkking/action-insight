@@ -11,13 +11,14 @@ type DashboardPageProps = {
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const { repoOptions, repoIndexesByKey, failedRepoKeys } = await getHomepageData();
+  const { repoOptions, repoIndexesByKey, testCaseStatsByKey, failedRepoKeys } = await getHomepageData();
 
   return (
     <DashboardClient
       initialFailedRepoKeys={failedRepoKeys}
       initialRepoIndexesByKey={repoIndexesByKey}
       initialRepoOptions={repoOptions}
+      initialTestCaseStatsByKey={testCaseStatsByKey}
       initialSearchParams={resolvedSearchParams}
     />
   );

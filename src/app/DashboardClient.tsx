@@ -10,12 +10,15 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronUp,
+  Cpu,
   ExternalLink,
   Filter,
   Info,
   LayoutList,
   MessageSquare,
+  Monitor,
   Share2,
+  TestTube,
   XCircle,
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, LineChart, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
@@ -32,6 +35,7 @@ import type {
   PullRequestIndexFile,
   RepoOverviewRow,
   Run,
+  TestCaseStats,
 } from '@/lib/types';
 
 type JobSortField = 'queue' | 'duration' | 'name';
@@ -72,6 +76,7 @@ type DashboardClientProps = {
   initialFailedRepoKeys: string[];
   initialRepoIndexesByKey: Record<string, PullRequestIndexFile>;
   initialRepoOptions: RepoOption[];
+  initialTestCaseStatsByKey: Record<string, TestCaseStats | null>;
   initialSearchParams?: Record<string, string | string[] | undefined>;
 };
 
@@ -459,6 +464,7 @@ function PrLifecycleTimeline({ data }: { data: PrLifecycleTimelineData }) {
           onClick={() => setExpandedLevel(expandedLevel === 'pr' ? 'workflows' : 'pr')}
           role="button"
           tabIndex={0}
+          aria-label="Expand PR lifecycle timeline"
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedLevel(expandedLevel === 'pr' ? 'workflows' : 'pr'); }}
         >
           {/* Milestone markers */}
@@ -1058,6 +1064,7 @@ function DashboardContent({
   initialFailedRepoKeys,
   initialRepoIndexesByKey,
   initialRepoOptions,
+  initialTestCaseStatsByKey,
   initialSearchParams,
 }: DashboardClientProps) {
   const router = useRouter();
@@ -1083,6 +1090,7 @@ function DashboardContent({
   const [error, setError] = useState(repoOptions.length === 0 ? 'No repository data found under data/.' : '');
   const repoIndexesByKey = initialRepoIndexesByKey;
   const failedRepoKeys = initialFailedRepoKeys;
+  const testCaseStatsByKey = initialTestCaseStatsByKey;
   const latestPrDate = useMemo(() => getLatestPrDate(repoIndexesByKey), [repoIndexesByKey]);
   const [detailsByNumber, setDetailsByNumber] = useState<Record<number, PullRequestDetailFile['pr']>>({});
   const [loadingDetailNumber, setLoadingDetailNumber] = useState<number | null>(null);
@@ -1708,6 +1716,54 @@ function DashboardContent({
             {' '}{selectedRepoIndex?.unresolvedPrShaCount ?? 0} still pending.
           </div>
         ) : null}
+
+        <section className="rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="mb-4 flex items-center gap-2">
+            <TestTube className="h-5 w-5 text-neutral-400 dark:text-neutral-500" />
+            <h2 className="text-lg font-bold">Test Case Statistics</h2>
+          </div>
+          {(() => {
+            const stats = selectedRepo ? testCaseStatsByKey[selectedRepo.key] : null;
+            if (!stats) {
+              return (
+                <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-neutral-200 text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+                  暂无测试用例统计数据
+                </div>
+              );
+            }
+            return (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-950">
+                  <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400">
+                    <TestTube className="h-4 w-4" />
+                    <span>总测试用例数</span>
+                  </div>
+                  <div className="mt-2 text-2xl font-bold font-mono text-neutral-900 dark:text-neutral-100">
+                    {stats.total_test_cases}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-950">
+                  <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400">
+                    <Cpu className="h-4 w-4" />
+                    <span>昇腾硬件用例数</span>
+                  </div>
+                  <div className="mt-2 text-2xl font-bold font-mono text-neutral-900 dark:text-neutral-100">
+                    {stats.ascend_test_cases}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-950">
+                  <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400">
+                    <Monitor className="h-4 w-4" />
+                    <span>NVIDIA硬件用例数</span>
+                  </div>
+                  <div className="mt-2 text-2xl font-bold font-mono text-neutral-900 dark:text-neutral-100">
+                    {stats.nvidia_test_cases}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </section>
 
         <section className="overflow-hidden rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
               <div className="border-b border-neutral-100 p-6 dark:border-neutral-800">

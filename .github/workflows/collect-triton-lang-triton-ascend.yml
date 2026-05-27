@@ -61,6 +61,14 @@ jobs:
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
           WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - id: test-case-stats
+        continue-on-error: true
+        run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "triton-lang/triton-ascend"
+        env:
+          GITHUB_TOKEN: ${{ secrets.TRITON_LANG_TRITON_ASCEND }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERBOSE: 1
       - if: always() && steps.collect.outcome == 'failure'
         run: |
           echo "Collection completed with partial failures. Data was written to Supabase."

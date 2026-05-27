@@ -155,3 +155,19 @@ BEGIN
     ORDER BY r.date DESC;
 END;
 $$ LANGUAGE plpgsql;
+
+-- 10. Test case statistics (per repo, per window)
+CREATE TABLE IF NOT EXISTS test_case_stats (
+  id SERIAL PRIMARY KEY,
+  repo_id INTEGER NOT NULL REFERENCES repos(id),
+  window_start DATE NOT NULL,
+  window_end DATE NOT NULL,
+  total_test_cases INTEGER NOT NULL DEFAULT 0,
+  ascend_test_cases INTEGER NOT NULL DEFAULT 0,
+  nvidia_test_cases INTEGER NOT NULL DEFAULT 0,
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(repo_id, window_start, window_end)
+);
+
+CREATE INDEX IF NOT EXISTS idx_test_case_stats_repo ON test_case_stats(repo_id);
+CREATE INDEX IF NOT EXISTS idx_test_case_stats_window ON test_case_stats(window_start, window_end);
