@@ -93,9 +93,10 @@ function getSupabaseClient() {
 }
 
 async function ensureRepo(supabase: ReturnType<typeof createClient>, owner: string, repo: string): Promise<number> {
+  // Try upsert without ignoreDuplicates so existing rows are still returned
   const { data, error } = await supabase
     .from('repos')
-    .upsert({ owner, repo }, { onConflict: 'owner,repo', ignoreDuplicates: true })
+    .upsert({ owner, repo }, { onConflict: 'owner,repo' })
     .select('id')
     .single();
 
