@@ -33,7 +33,7 @@ const RUN_SELECT_PAGE_SIZE = 1000;
 function resolveGitHubToken(repoKey: string): string | undefined {
   const perRepoKey = `GITHUB_TOKEN_PER_REPO_${repoKey.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
   const perRepo = process.env[perRepoKey];
-  if (perRepo) return perRepo;
+  if (perRepo !== undefined) return perRepo;
   return process.env.ETL_GITHUB_TOKEN ?? process.env.GITHUB_TOKEN;
 }
 
