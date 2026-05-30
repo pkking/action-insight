@@ -1,11 +1,13 @@
 name: Rebuild PR Artifacts
 
 on:
+  schedule:
+    - cron: '0 7 * * *'  # Daily at UTC 07:00, rebuild all repos from repos.yaml
   workflow_dispatch:
     inputs:
       repo:
-        description: 'Repository to rebuild, in owner/repo form'
-        required: true
+        description: 'Repository to rebuild, in owner/repo form. Leave empty to rebuild all repos from repos.yaml.'
+        required: false
         type: string
       start_date:
         description: 'Optional start date, yyyy-mm-dd'
@@ -17,7 +19,7 @@ on:
         type: string
 
 concurrency:
-  group: rebuild-pr-artifacts-${{ inputs.repo }}
+  group: rebuild-pr-artifacts-${{ inputs.repo || 'all' }}
   cancel-in-progress: false
 
 permissions:
@@ -43,9 +45,17 @@ jobs:
           POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
           POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
           SUPABASE_DB_SSL: no-verify
+      - name: Set default date range for scheduled runs
+        if: github.event_name == 'schedule'
+        run: |
+          echo "SCHEDULED_START_DATE=$(date -u -d '2 days ago' +%Y-%m-%d)" >> "$GITHUB_ENV"
+          echo "SCHEDULED_END_DATE=$(date -u -d '1 day ago' +%Y-%m-%d)" >> "$GITHUB_ENV"
       - name: Rebuild PR artifacts
         run: |
-          args=(--repo "${REBUILD_REPO}")
+          args=()
+          if [ -n "${REBUILD_REPO}" ]; then
+            args+=(--repo "${REBUILD_REPO}")
+          fi
           if [ -n "${REBUILD_START_DATE}" ]; then
             args+=(--start-date "${REBUILD_START_DATE}")
           fi
@@ -54,9 +64,9 @@ jobs:
           fi
           npx tsx etl/scripts/rebuild-pr-artifacts.ts "${args[@]}"
         env:
-          REBUILD_REPO: ${{ inputs.repo }}
-          REBUILD_START_DATE: ${{ inputs.start_date }}
-          REBUILD_END_DATE: ${{ inputs.end_date }}
+          REBUILD_REPO: ${{ inputs.repo || '' }}
+          REBUILD_START_DATE: ${{ inputs.start_date || env.SCHEDULED_START_DATE || '' }}
+          REBUILD_END_DATE: ${{ inputs.end_date || env.SCHEDULED_END_DATE || '' }}
           GITHUB_TOKEN: ${{ secrets.ETL_GITHUB_TOKEN || github.token }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
