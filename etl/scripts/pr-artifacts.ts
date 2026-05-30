@@ -35,8 +35,8 @@ interface RebuildPullRequestArtifactsOptions {
   warn?: (...args: unknown[]) => void;
 }
 
-const DEFAULT_SHA_RESOLUTION_LIMIT = 250;
-const DEFAULT_SEARCH_RESOLUTION_LIMIT = 5;
+const DEFAULT_SHA_RESOLUTION_LIMIT = 1000;
+const DEFAULT_SEARCH_RESOLUTION_LIMIT = 20;
 const DEFAULT_RATE_LIMIT_RESERVE = 10;
 const RUN_PAYLOAD_PR_SOURCE = 'run_payload';
 
@@ -263,7 +263,14 @@ export async function rebuildPullRequestArtifacts({
   // 仅针对 PR 相关事件和 push 事件（用于合并提交）进行 SHA→PR 解析，
   // 排除其他事件（如 schedule、workflow_dispatch）以避免浪费 GitHub API 速率限制预算。
   const runsWithoutPr = runs.filter((run) => (!run.pull_requests || run.pull_requests.length === 0) && run.head_sha && (isPullRequestLikeEvent(run.event) || run.event === 'push'));
-  const uniqueShas = new Set(runsWithoutPr.map((run) => run.head_sha as string));
+
+  // Prioritize pull_request events over push events for SHA resolution.
+  // Pull_request SHAs have a much higher resolution rate via the commits API,
+  // so resolving them first maximizes useful PR associations within the budget.
+  const eventPriority: Record<string, number> = { pull_request: 0, pull_request_target: 0, pull_request_review: 0, push: 1 };
+  const sortedWithoutPr = [...runsWithoutPr].sort((a, b) => (eventPriority[a.event ?? ''] ?? 1) - (eventPriority[b.event ?? ''] ?? 1));
+
+  const uniqueShas = new Set(sortedWithoutPr.map((run) => run.head_sha as string));
   const cachedPullRequestsBySha = new Map<string, number>();
   const notFoundShas = new Set<string>();
   const cacheEntriesToWrite: PullRequestResolutionCacheEntry[] = [];
@@ -337,7 +344,7 @@ export async function rebuildPullRequestArtifacts({
   }
 
   const shasToResolve = unresolvedShas.slice(0, shaResolutionBudget);
-  const resolutionResult = octokit
+  const resolutionResult = octokit && shasToResolve.length > 0
     ? await resolvePullRequestsFromHeadSha(octokit, owner, repo, shasToResolve, warn)
     : { entries: [], coreApiCalls: 0, searchApiCalls: 0 };
   let newlyResolvedShaCount = 0;
