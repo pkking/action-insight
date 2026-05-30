@@ -280,7 +280,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       const token = resolveGitHubToken(repoKey);
       const octokit = token ? new Octokit({ auth: token }) : undefined;
       if (!octokit) {
-        console.warn('GITHUB_TOKEN is not set; PR metrics rebuild will only use cached or embedded PR associations.');
+        console.warn('No GitHub token is configured; PR metrics rebuild will only use cached or embedded PR associations.');
       }
 
       await rebuildPullRequestArtifacts({
