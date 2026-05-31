@@ -28,6 +28,7 @@ import type { LegendPayload } from 'recharts';
 import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 
 import { buildDailyTrend, buildRepoOverviewRows, createDateRange, filterByDateRange } from '@/lib/overview-metrics';
+import { diffSeconds } from '@/lib/time-utils';
 import { callApi } from '@/lib/api-client';
 import type { RepoOption } from '@/lib/server-homepage-data';
 import type {
@@ -359,12 +360,7 @@ function formatDurationShort(ms: number): string {
 }
 
 function getStepDurationSeconds(step: { started_at?: string; completed_at?: string }): number {
-  if (!step.started_at || !step.completed_at) return 0;
-  const startMs = Date.parse(step.started_at);
-  const completedMs = Date.parse(step.completed_at);
-  const diffMs = completedMs - startMs;
-  if (Number.isNaN(diffMs)) return 0;
-  return Math.round(Math.max(0, diffMs) / 1000);
+  return diffSeconds(step.started_at, step.completed_at, { clampNegative: true }) ?? 0;
 }
 
 function conclusionBadgeBg(conclusion: string): string {
@@ -467,7 +463,7 @@ function TreeNodeCard({ depth, icon, label, duration, conclusion, expanded, hasC
     <div className={`relative min-w-0 py-1 ${nodeIndent(depth)}`}>
       {/* Tree connector line */}
       {depth > 0 && (
-        <div className="pointer-events-none absolute left-0 top-0 bottom-0 ml-[18px] w-px bg-neutral-200 dark:bg-neutral-700" />
+        <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-px bg-neutral-200 dark:bg-neutral-700" style={{ marginLeft: `${18 + (depth - 1) * 16}px` }} />
       )}
       {card}
     </div>
@@ -625,7 +621,7 @@ function PrLifecycleTree({ data, showPrRoot = true }: { data: PrLifecycleTimelin
 
                           {/* Step placeholder when no step data available */}
                           {isJobExpanded && steps.length === 0 && (
-                            <div className={showPrRoot ? "pl-14 py-1" : "pl-10 py-1"}>
+                            <div className={`${nodeIndent(showPrRoot ? 3 : 2)} py-1`}>
                               <div className="flex items-center gap-2 rounded-lg border border-dashed border-neutral-200 px-3 py-1.5 text-[10px] text-neutral-400 dark:border-neutral-700 dark:text-neutral-500">
                                 <Info className="h-3 w-3" />
                                 <span>Step details not available — run ETL with step collection to enable this view.</span>
@@ -2483,7 +2479,7 @@ function DashboardContent({
                                       disabled={loadingDetailNumber === pr.number}
                                       onClick={() => void loadDetail(pr.number)}
                                       className="inline-flex items-center justify-center rounded-md p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 disabled:cursor-wait disabled:opacity-50 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-                                      aria-label={expandedPrNumber === pr.number ? 'Collapse PR details' : 'Expand PR details'}
+                                      aria-label={loadingDetailNumber === pr.number ? 'Loading PR details' : expandedPrNumber === pr.number ? 'Collapse PR details' : 'Expand PR details'}
                                     >
                                       {loadingDetailNumber === pr.number ? (
                                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent" />
