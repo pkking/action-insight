@@ -54,6 +54,15 @@ export interface Run {
   githubPayload?: GitHubApiPayload;
 }
 
+export interface Step {
+  name: string;
+  status: string;
+  conclusion: string;
+  started_at?: string;
+  completed_at?: string;
+  number: number;
+}
+
 export interface Job {
   id: number;
   name: string;
@@ -66,6 +75,7 @@ export interface Job {
   queueDurationInSeconds: number;
   durationInSeconds: number;
   githubPayload?: GitHubApiPayload;
+  steps?: Step[];
 }
 
 export interface PullRequestMetricsSummary {
