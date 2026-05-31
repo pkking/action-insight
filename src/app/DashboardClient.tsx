@@ -363,7 +363,7 @@ function getStepDurationMs(step: { started_at?: string; completed_at?: string })
   const startMs = Date.parse(step.started_at);
   const completedMs = Date.parse(step.completed_at);
   const diff = completedMs - startMs;
-  return isNaN(diff) ? 0 : Math.max(0, diff);
+  return Number.isNaN(diff) ? 0 : Math.max(0, diff);
 }
 
 function conclusionBadgeBg(conclusion: string): string {
@@ -1808,6 +1808,7 @@ function DashboardContent({
 
     detailAbortControllerRef.current?.abort();
     detailAbortControllerRef.current = new AbortController();
+    setError('');
 
     setLoadingDetailNumber(number);
     try {
