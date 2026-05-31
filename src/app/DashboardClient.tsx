@@ -461,10 +461,14 @@ function TreeNodeCard({ depth, icon, label, duration, conclusion, expanded, hasC
 
   return (
     <div className={`relative min-w-0 py-1 ${nodeIndent(depth)}`}>
-      {/* Tree connector line */}
-      {depth > 0 && (
-        <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-px bg-neutral-200 dark:bg-neutral-700" style={{ marginLeft: `${18 + (depth - 1) * 16}px` }} />
-      )}
+      {/* Tree connector lines for all ancestor levels */}
+      {Array.from({ length: depth }).map((_, ancestor) => (
+        <div
+          key={ancestor}
+          className="pointer-events-none absolute left-0 top-0 bottom-0 w-px bg-neutral-200 dark:bg-neutral-700"
+          style={{ marginLeft: `${18 + ancestor * 16}px` }}
+        />
+      ))}
       {card}
     </div>
   );
