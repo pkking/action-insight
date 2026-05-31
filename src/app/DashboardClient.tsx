@@ -788,7 +788,7 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
             </select>
             <button
               type="button"
-              disabled={allWorkflows.length === 0}
+              disabled={sortedGroups.length === 0}
               onClick={expandedEvents.size > 0 ? collapseAll : expandAllEvents}
               className="inline-flex items-center justify-center rounded-md border border-neutral-200 p-1 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 disabled:cursor-not-allowed disabled:opacity-30 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
               aria-label={expandedEvents.size > 0 ? 'Collapse all' : 'Expand all'}

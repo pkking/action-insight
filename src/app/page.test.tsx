@@ -440,6 +440,9 @@ describe('Dashboard PR view', () => {
 
     // Verify the workflow node is visible after expanding
     expect(await screen.findByText('lint')).toBeInTheDocument();
+
+    // Verify no duplicate PR root node in the inline tree (PR info is already in the table row)
+    expect(screen.getAllByText('PR #42')).toHaveLength(1);
   });
 
   it('shows an empty-state placeholder for repos without computable metrics', async () => {
