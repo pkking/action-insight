@@ -505,8 +505,8 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
 
   return (
     <div className="space-y-2">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between">
+      {/* Toolbar — sticky so always visible when scrolling the tree */}
+      <div className="sticky top-0 z-10 flex items-center justify-between rounded-lg border border-neutral-100 bg-white/90 px-3 py-2 backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/90">
         <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">CI Breakdown</span>
         <div className="flex items-center gap-2">
           <button type="button" onClick={expandAllWorkflows} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
@@ -751,8 +751,8 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
 
   return (
     <div className="space-y-2">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between">
+      {/* Toolbar — sticky so always visible when scrolling the tree */}
+      <div className="sticky top-0 z-10 flex items-center justify-between rounded-lg border border-neutral-100 bg-white/90 px-3 py-2 backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/90">
         <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
           Events Breakdown ({eventGroups.length} event types, {allWorkflows.length} runs)
         </span>
