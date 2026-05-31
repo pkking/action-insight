@@ -385,7 +385,7 @@ interface TreeNodeCardProps {
   hasChildren: boolean;
   onToggle?: () => void;
   href?: string;
-  typeLabel?: string;
+  typeLabel?: 'PR' | 'Workflow' | 'Job' | 'Step' | 'Event';
 }
 
 function TreeNodeCard({ depth, icon, label, duration, conclusion, expanded, hasChildren, onToggle, href, typeLabel }: TreeNodeCardProps) {
