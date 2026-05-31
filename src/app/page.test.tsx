@@ -437,6 +437,9 @@ describe('Dashboard PR view', () => {
     await waitFor(() => {
       expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
     });
+
+    // Verify the workflow node is visible after expanding
+    expect(await screen.findByText('lint')).toBeInTheDocument();
   });
 
   it('shows an empty-state placeholder for repos without computable metrics', async () => {

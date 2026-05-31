@@ -517,7 +517,7 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white/90 px-3 py-2 backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/90">
         <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">CI Breakdown</span>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={expandAllWorkflows} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+            <button type="button" disabled={data.workflows.length === 0} onClick={expandAllWorkflows} className="text-[10px] text-neutral-500 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed dark:text-neutral-400 dark:hover:text-neutral-200">
               Expand All
             </button>
             <button type="button" onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
@@ -595,13 +595,14 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
                                 const stepDurationMs = step.started_at && step.completed_at
                                   ? new Date(step.completed_at).getTime() - new Date(step.started_at).getTime()
                                   : 0;
+                                const safeDurationMs = isNaN(stepDurationMs) ? 0 : stepDurationMs;
                                 return (
                                   <TreeNodeCard
                                     key={step.number}
                                     depth={3}
                                     icon={<span className="text-amber-500">▸</span>}
                                     label={step.name}
-                                    duration={formatDurationShort(Math.max(0, stepDurationMs))}
+                                    duration={formatDurationShort(Math.max(0, safeDurationMs))}
                                     conclusion={step.conclusion}
                                     expanded={false}
                                     hasChildren={false}
@@ -682,10 +683,10 @@ function PrWorkflowTree({ data }: { data: PrLifecycleTimelineData }) {
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white/90 px-3 py-2 backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/90">
         <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">CI Breakdown</span>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={expandAllWorkflows} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+            <button type="button" disabled={data.workflows.length === 0} onClick={expandAllWorkflows} className="text-[10px] text-neutral-500 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed dark:text-neutral-400 dark:hover:text-neutral-200">
               Expand All
             </button>
-            <button type="button" onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+            <button type="button" disabled={data.workflows.length === 0} onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed dark:text-neutral-400 dark:hover:text-neutral-200">
               Collapse All
             </button>
           </div>
@@ -748,13 +749,14 @@ function PrWorkflowTree({ data }: { data: PrLifecycleTimelineData }) {
                                 const stepDurationMs = step.started_at && step.completed_at
                                   ? new Date(step.completed_at).getTime() - new Date(step.started_at).getTime()
                                   : 0;
+                                const safeDurationMs = isNaN(stepDurationMs) ? 0 : stepDurationMs;
                                 return (
                                   <TreeNodeCard
                                     key={step.number}
                                     depth={2}
                                     icon={<span className="text-amber-500">▸</span>}
                                     label={step.name}
-                                    duration={formatDurationShort(Math.max(0, stepDurationMs))}
+                                    duration={formatDurationShort(Math.max(0, safeDurationMs))}
                                     conclusion={step.conclusion}
                                     expanded={false}
                                     hasChildren={false}
@@ -923,10 +925,10 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
               <option value="duration">Sort by Duration</option>
               <option value="name">Sort by Name</option>
             </select>
-            <button type="button" onClick={expandAllEvents} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+            <button type="button" disabled={allWorkflows.length === 0} onClick={expandAllEvents} className="text-[10px] text-neutral-500 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed dark:text-neutral-400 dark:hover:text-neutral-200">
               Expand All
             </button>
-            <button type="button" onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+            <button type="button" disabled={allWorkflows.length === 0} onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed dark:text-neutral-400 dark:hover:text-neutral-200">
               Collapse All
             </button>
           </div>
@@ -1028,13 +1030,14 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
                                         const stepDurationMs = step.started_at && step.completed_at
                                           ? new Date(step.completed_at).getTime() - new Date(step.started_at).getTime()
                                           : 0;
+                                        const safeDurationMs = isNaN(stepDurationMs) ? 0 : stepDurationMs;
                                         return (
                                           <TreeNodeCard
                                             key={step.number}
                                             depth={3}
                                             icon={<span className="text-amber-500">▸</span>}
                                             label={step.name}
-                                            duration={formatDurationShort(Math.max(0, stepDurationMs))}
+                                            duration={formatDurationShort(Math.max(0, safeDurationMs))}
                                             conclusion={step.conclusion}
                                             expanded={false}
                                             hasChildren={false}
@@ -2607,8 +2610,9 @@ function DashboardContent({
                                     </a>
                                     <button
                                       type="button"
+                                      disabled={loadingDetailNumber === pr.number}
                                       onClick={() => void loadDetail(pr.number)}
-                                      className="inline-flex items-center justify-center rounded-md p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                                      className="inline-flex items-center justify-center rounded-md p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 disabled:cursor-wait disabled:opacity-50 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
                                       aria-label={expandedPrNumber === pr.number ? 'Collapse PR details' : 'Expand PR details'}
                                     >
                                       {loadingDetailNumber === pr.number ? (
