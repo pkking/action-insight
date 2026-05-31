@@ -394,7 +394,7 @@ function TreeNodeCard({ depth, icon, label, duration, conclusion, expanded, hasC
 
   const card = (
     <div
-      className={`group relative rounded-lg border px-3 py-2.5 transition-colors ${
+      className={`group relative min-w-0 rounded-lg border px-3 py-2.5 transition-colors ${
         isClickable ? 'cursor-pointer border-neutral-200 bg-white hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800' : 'border-neutral-100 bg-neutral-50/50 dark:border-neutral-800 dark:bg-neutral-900/50'
       }`}
       onClick={isClickable ? onToggle : undefined}
@@ -402,7 +402,7 @@ function TreeNodeCard({ depth, icon, label, duration, conclusion, expanded, hasC
       tabIndex={isClickable ? 0 : undefined}
       onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') onToggle?.(); } : undefined}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         {/* Expand/Collapse chevron */}
         <span className="flex w-4 shrink-0 items-center justify-center text-neutral-400">
           {hasChildren ? (
@@ -453,7 +453,7 @@ function TreeNodeCard({ depth, icon, label, duration, conclusion, expanded, hasC
   );
 
   return (
-    <div className={`${nodeIndent(depth)} py-1`}>
+    <div className={`min-w-0 py-1 ${nodeIndent(depth)}`}>
       {/* Tree connector line */}
       {depth > 0 && (
         <div className="pointer-events-none absolute left-0 top-0 bottom-0 ml-[14px] w-px bg-neutral-200 dark:bg-neutral-700" />
@@ -512,7 +512,7 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
   };
 
   return (
-    <div className="max-h-[600px] overflow-y-auto pr-1 space-y-2">
+    <div className="max-h-[600px] min-w-0 overflow-y-auto pr-1 space-y-2">
       {/* Toolbar — sticky relative to the scrollable parent */}
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white/90 px-3 py-2 backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/90">
         <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">CI Breakdown</span>
@@ -762,7 +762,7 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
   }
 
   return (
-    <div className="max-h-[600px] overflow-y-auto pr-1 space-y-2">
+    <div className="max-h-[600px] min-w-0 overflow-y-auto pr-1 space-y-2">
       {/* Toolbar — sticky relative to the scrollable parent */}
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white/90 px-3 py-2 backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/90">
         <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
