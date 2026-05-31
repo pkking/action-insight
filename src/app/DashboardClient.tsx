@@ -385,9 +385,10 @@ interface TreeNodeCardProps {
   hasChildren: boolean;
   onToggle?: () => void;
   href?: string;
+  typeLabel?: 'PR' | 'Workflow' | 'Job' | 'Step' | 'Event';
 }
 
-function TreeNodeCard({ depth, icon, label, duration, conclusion, expanded, hasChildren, onToggle, href }: TreeNodeCardProps) {
+function TreeNodeCard({ depth, icon, label, duration, conclusion, expanded, hasChildren, onToggle, href, typeLabel }: TreeNodeCardProps) {
   const badgeClasses = conclusionBadgeBg(conclusion);
   const isClickable = hasChildren && onToggle;
 
@@ -422,6 +423,13 @@ function TreeNodeCard({ depth, icon, label, duration, conclusion, expanded, hasC
         ) : (
           <span className="truncate text-xs font-medium text-neutral-800 dark:text-neutral-200" title={label}>
             {label}
+          </span>
+        )}
+
+        {/* Type badge */}
+        {typeLabel && (
+          <span className="shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+            {typeLabel}
           </span>
         )}
 
@@ -527,6 +535,7 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
         conclusion={data.merged_at ? 'success' : data.ci_completed_at ? 'success' : 'pending'}
         expanded={data.workflows.length > 0}
         hasChildren={data.workflows.length > 0}
+        typeLabel="PR"
       />
 
       {/* Workflows */}
@@ -553,6 +562,7 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
                   hasChildren={jobs.length > 0}
                   onToggle={() => toggleWorkflow(wf.id)}
                   href={wf.html_url}
+                  typeLabel="Workflow"
                 />
 
                 {/* Jobs */}
@@ -575,6 +585,7 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
                             hasChildren={steps.length > 0}
                             onToggle={steps.length > 0 ? () => toggleJob(job.id) : undefined}
                             href={job.html_url}
+                            typeLabel="Job"
                           />
 
                           {/* Steps */}
@@ -594,6 +605,7 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
                                     conclusion={step.conclusion}
                                     expanded={false}
                                     hasChildren={false}
+                                    typeLabel="Step"
                                   />
                                 );
                               })}
@@ -792,6 +804,7 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
               expanded={isEventExpanded}
               hasChildren={group.workflows.length > 0}
               onToggle={() => toggleEvent(group.eventType)}
+              typeLabel="Event"
             />
 
             {/* Summary row under event */}
@@ -827,6 +840,7 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
                           hasChildren={jobs.length > 0}
                           onToggle={() => toggleWorkflow(wf.id)}
                           href={wf.html_url}
+                          typeLabel="Workflow"
                         />
 
                         {/* Branch & time info */}
@@ -859,6 +873,7 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
                                     hasChildren={steps.length > 0}
                                     onToggle={steps.length > 0 ? () => toggleJob(job.id) : undefined}
                                     href={job.html_url}
+                                    typeLabel="Job"
                                   />
 
                                   {/* Steps */}
@@ -878,6 +893,7 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
                                             conclusion={step.conclusion}
                                             expanded={false}
                                             hasChildren={false}
+                                            typeLabel="Step"
                                           />
                                         );
                                       })}
