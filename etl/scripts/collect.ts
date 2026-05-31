@@ -25,7 +25,7 @@ import {
   type CollectionState,
 } from './supabase-storage.ts';
 import { readPullRequestsFromPayload } from './github-utils.ts';
-import type { GitHubApiPayload, PullRequestRef } from '../../src/lib/types.ts';
+import type { GitHubApiPayload, PullRequestRef, Step } from '../../src/lib/types.ts';
 
 const { buildCollectionWindows, splitCollectionWindow, toCreatedRange } = collectionWindows;
 
@@ -107,6 +107,7 @@ interface Job {
   queueDurationInSeconds: number;
   durationInSeconds: number;
   githubPayload?: GitHubApiPayload;
+  steps?: Step[];
 }
 
 interface GitHubJobPayload extends GitHubApiPayload {
@@ -407,6 +408,37 @@ export async function collectRepo(
             const startedMs = new Date(j.started_at).getTime();
             const createdMs = j.created_at ? new Date(j.created_at).getTime() : startedMs;
             const completedMs = j.completed_at ? new Date(j.completed_at).getTime() : startedMs;
+
+            // Extract steps from the job payload
+            const steps: Step[] = [];
+            const rawSteps = (j.steps as Record<string, unknown>[] | undefined);
+            if (Array.isArray(rawSteps)) {
+              for (const [index, rawStep] of rawSteps.entries()) {
+                if (!rawStep || typeof rawStep !== 'object') continue;
+                const s = rawStep as Record<string, unknown>;
+                const stepStartedAt = typeof s.started_at === 'string' ? s.started_at : null;
+                const stepCompletedAt = typeof s.completed_at === 'string' ? s.completed_at : null;
+                let stepDuration = 0;
+                if (stepStartedAt && stepCompletedAt) {
+                  const startMs = new Date(stepStartedAt).getTime();
+                  const completedMs = new Date(stepCompletedAt).getTime();
+                  if (!isNaN(startMs) && !isNaN(completedMs)) {
+                    stepDuration = Math.max(0, Math.floor((completedMs - startMs) / 1000));
+                  }
+                }
+                const stepNumber = typeof s.number === 'number' ? s.number : index + 1;
+                steps.push({
+                  name: (s.name as string) || `Step ${index + 1}`,
+                  status: (s.status as string) || 'unknown',
+                  conclusion: (s.conclusion as string) || 'unknown',
+                  started_at: stepStartedAt || undefined,
+                  completed_at: stepCompletedAt || undefined,
+                  number: stepNumber,
+                  duration_seconds: stepDuration,
+                });
+              }
+            }
+
             return {
               id: j.id,
               name: j.name,
@@ -419,6 +451,7 @@ export async function collectRepo(
               queueDurationInSeconds: Math.max(0, (startedMs - createdMs) / 1000),
               durationInSeconds: Math.max(0, (completedMs - startedMs) / 1000),
               githubPayload: j,
+              steps: steps.length > 0 ? steps : undefined,
             };
           });
         }

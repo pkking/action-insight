@@ -61,6 +61,7 @@ export interface Step {
   started_at?: string;
   completed_at?: string;
   number: number;
+  duration_seconds?: number;
 }
 
 export interface Job {

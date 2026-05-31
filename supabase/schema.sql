@@ -48,6 +48,19 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 CREATE INDEX IF NOT EXISTS idx_jobs_run_id ON jobs(run_id);
 
+-- 3b. Steps table (individual steps within jobs)
+CREATE TABLE IF NOT EXISTS steps (
+  job_id BIGINT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  number INTEGER NOT NULL,  -- step position within the job (1-based)
+  name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  conclusion TEXT,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  duration_seconds INTEGER DEFAULT 0,
+  PRIMARY KEY (job_id, number)
+);
+
 -- 4. PR Metrics table (PR-level CI metrics summaries)
 CREATE TABLE IF NOT EXISTS pr_metrics (
   id SERIAL PRIMARY KEY,

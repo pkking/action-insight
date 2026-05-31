@@ -18,12 +18,12 @@
 2.  **样式规范**：使用 Tailwind CSS 进行样式编写，并确保所有新增 UI 支持 `dark:` 模式适配。
 3.  **容错处理**：在渲染图表和列表时，必须优雅处理数据空状态 (Empty State) 和加载中状态 (`jobsLoading`)。
 4.  **成本意识**：避免无意义地频繁调用 GitHub API 列表，尽可能重用现有的离线/本地缓存策略，对于长链路的数据解析，采用二级查询 + 本地脚本离线筛选方案。
-5.  **Git 规范**：所有修改在得到确认后，应当立即使用 [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#specification) 规范进行 commit 并推送到 origin。提交信息应遵循 `type(scope): description` 或 `type: description` 格式，常用类型包括 `feat`、`fix`、`ci`、`docs`、`test`、`refactor`、`chore`。
-6.  **PR 工作流**：**禁止直接推送到 `main` 分支**。所有变更必须通过 feature 分支 → Pull Request → 合并流程：
-    - **创建分支前必须先切换到 `main` 并同步远端代码**：`git fetch origin main && git checkout -B main origin/main`，确保 feature 分支基于最新的 `main`。
-    - 从 `main` 创建 feature 分支，命名格式：`feat/<descriptive-name>` 或 `fix/<descriptive-name>`
-    - 推送分支到 origin 并创建 PR
-    - PR 标题使用 Conventional Commits 格式，PR 描述需说明变更内容、测试情况、相关文档链接
+5.  **PR 工作流（唯一发布路径）**：所有变更必须通过 feature 分支 → Pull Request → 合并流程。**禁止直接在 `main` 分支上 commit 或 push**。
+    - **Step 0 — 分支检查**：在任何 commit 之前，执行 `git branch --show-current`。**如果当前分支是 `main`，必须先创建 feature 分支，禁止直接在 `main` 上 commit**。
+    - **Step 1 — 同步 main**：`git fetch origin main && git checkout -B main origin/main && git checkout -b feat/<descriptive-name>`
+    - **Step 2 — Commit**：使用 [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#specification) 规范提交，格式为 `type(scope): description` 或 `type: description`，常用类型包括 `feat`、`fix`、`ci`、`docs`、`test`、`refactor`、`chore`。
+    - **Step 3 — Push 分支**：`git push -u origin <feature-branch-name>`
+    - **Step 4 — 创建 PR**：`gh pr create --base main`，PR 标题使用 Conventional Commits 格式，PR 描述需说明变更内容、测试情况、相关文档链接。
     - **PR 打开后禁止 force push**：审查过程中产生的任何修改都必须追加新的 Conventional Commit 并正常 push，禁止使用 `git commit --amend`、`git rebase` 或 `git push --force/--force-with-lease` 重写 PR 历史，除非用户明确要求。
     - **一个分支只对应一个 PR**：push 过 origin 的分支在 PR 合入后不再用于新任务。每次新任务都必须基于最新 main 创建新分支并新建 PR，禁止复用已合入的 feature 分支。审查期间对同一 PR 的修改仍可追加 commit。
     - 等待审查通过后合并，合并后删除 feature 分支
