@@ -2443,24 +2443,24 @@ function DashboardContent({
                 ) : (
                   <>
                     <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1000px] table-fixed text-left text-sm">
+                    <table className="w-full min-w-[1100px] table-fixed text-left text-sm">
                        <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
                          <tr>
-                           <th className="w-[35%] px-6 py-3">PR / Branch</th>
-                           <th className="w-[8%] px-6 py-3">Status</th>
+                           <th className="w-[30%] px-6 py-3">PR / Branch</th>
+                           <th className="w-[12%] px-6 py-3">Status</th>
                            <th className="w-[12%] px-6 py-3">
                              <span className="inline-flex items-center gap-1.5">PR提交时间<MetricTooltip definition="Pull Request 创建的时间点。" /></span>
                            </th>
-                           <th className="w-[10%] px-6 py-3">
+                           <th className="w-[11%] px-6 py-3">
                              <span className="inline-flex items-center gap-1.5">CI排队时间<MetricTooltip definition="从 PR 提交到 CI 开始执行的等待时间。" /></span>
                            </th>
-                           <th className="w-[10%] px-6 py-3">
+                           <th className="w-[11%] px-6 py-3">
                              <span className="inline-flex items-center gap-1.5">CI执行时间<MetricTooltip definition="CI 从开始执行到完成的耗时。" /></span>
                            </th>
-                           <th className="w-[10%] px-6 py-3">
+                           <th className="w-[12%] px-6 py-3">
                              <span className="inline-flex items-center gap-1.5">合入时间<MetricTooltip definition="从 CI 完成到 PR 被合入的等待时间（CI完成 → 合入）。" /></span>
                            </th>
-                           <th className="w-[15%] px-6 py-3">
+                           <th className="w-[12%] px-6 py-3">
                              <span className="inline-flex items-center gap-1.5">强行合入<MetricTooltip definition="PR 合入时间早于 CI 完成时间，表示跳过了 CI 检查直接合入。" /></span>
                            </th>
                          </tr>
