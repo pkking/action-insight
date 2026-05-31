@@ -363,7 +363,7 @@ describe('Dashboard PR view', () => {
       expect(fetchPullRequestDetailMock).toHaveBeenCalledWith('vllm-project', 'vllm-ascend', 42);
     });
     await waitFor(() => {
-      expect(screen.getByText('PR Lifecycle')).toBeInTheDocument();
+      expect(screen.getByText('CI Breakdown')).toBeInTheDocument();
     });
 
     currentSearchParams = new URLSearchParams('repo=openai/action-insight');
@@ -382,7 +382,7 @@ describe('Dashboard PR view', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('PR Lifecycle')).not.toBeInTheDocument();
+      expect(screen.queryByText('CI Breakdown')).not.toBeInTheDocument();
     });
   });
 
