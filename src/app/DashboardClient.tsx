@@ -2264,7 +2264,7 @@ function DashboardContent({
               )}
         </section>
 
-        <section className="rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <section className="overflow-hidden rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
               <div className="flex flex-col gap-4 border-b border-neutral-100 p-6 dark:border-neutral-800 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h2 className="text-lg font-bold">CI Pipeline & PR Details</h2>
