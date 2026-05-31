@@ -361,7 +361,7 @@ function formatDurationShort(ms: number): string {
 function getStepDurationMs(step: { started_at?: string; completed_at?: string }): number {
   if (!step.started_at || !step.completed_at) return 0;
   const diff = new Date(step.completed_at).getTime() - new Date(step.started_at).getTime();
-  return isNaN(diff) ? 0 : diff;
+  return isNaN(diff) ? 0 : Math.max(0, diff);
 }
 
 function conclusionBadgeBg(conclusion: string): string {
@@ -471,7 +471,7 @@ function TreeNodeCard({ depth, icon, label, duration, conclusion, expanded, hasC
   );
 }
 
-function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
+function PrLifecycleTree({ data, showPrRoot = true }: { data: PrLifecycleTimelineData; showPrRoot?: boolean }) {
   const [expandedWorkflowIds, setExpandedWorkflowIds] = useState<Set<number>>(new Set());
   const [expandedJobIds, setExpandedJobIds] = useState<Set<number>>(new Set());
 
@@ -538,6 +538,7 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
         </div>
 
       {/* PR Root Node */}
+      {showPrRoot && (
       <TreeNodeCard
         depth={0}
         icon={<span className="text-blue-500">📝</span>}
@@ -548,6 +549,7 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
         hasChildren={data.workflows.length > 0}
         typeLabel="PR"
       />
+      )}
 
       {/* Workflows */}
       {data.workflows.length === 0 ? (
@@ -564,7 +566,7 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
               <div key={wf.id} className="relative">
                 {/* Workflow Node */}
                 <TreeNodeCard
-                  depth={1}
+                  depth={showPrRoot ? 1 : 0}
                   icon={<span className="text-teal-500">⚡</span>}
                   label={wf.name}
                   duration={formatDuration(wf.durationInSeconds)}
@@ -587,7 +589,7 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
                         <div key={job.id} className="relative">
                           {/* Job Node */}
                           <TreeNodeCard
-                            depth={2}
+                            depth={showPrRoot ? 2 : 1}
                             icon={<span className="text-purple-500">🔧</span>}
                             label={job.name}
                             duration={formatDuration(job.durationInSeconds)}
@@ -602,28 +604,25 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
                           {/* Steps */}
                           {isJobExpanded && steps.length > 0 && (
                             <div className="relative">
-                              {steps.map((step) => {
-                                const safeDurationMs = getStepDurationMs(step);
-                                return (
-                                  <TreeNodeCard
-                                    key={step.number}
-                                    depth={3}
-                                    icon={<span className="text-amber-500">▸</span>}
-                                    label={step.name}
-                                    duration={formatDurationShort(Math.max(0, safeDurationMs))}
-                                    conclusion={step.conclusion}
-                                    expanded={false}
-                                    hasChildren={false}
-                                    typeLabel="Step"
-                                  />
-                                );
-                              })}
+                              {steps.map((step) => (
+                                <TreeNodeCard
+                                  key={step.number}
+                                  depth={showPrRoot ? 3 : 2}
+                                  icon={<span className="text-amber-500">▸</span>}
+                                  label={step.name}
+                                  duration={formatDurationShort(getStepDurationMs(step))}
+                                  conclusion={step.conclusion}
+                                  expanded={false}
+                                  hasChildren={false}
+                                  typeLabel="Step"
+                                />
+                              ))}
                             </div>
                           )}
 
                           {/* Step placeholder when no step data available */}
                           {isJobExpanded && steps.length === 0 && (
-                            <div className="pl-14 py-1">
+                            <div className={showPrRoot ? "pl-14 py-1" : "pl-10 py-1"}>
                               <div className="flex items-center gap-2 rounded-lg border border-dashed border-neutral-200 px-3 py-1.5 text-[10px] text-neutral-400 dark:border-neutral-700 dark:text-neutral-500">
                                 <Info className="h-3 w-3" />
                                 <span>Step details not available — run ETL with step collection to enable this view.</span>
@@ -642,156 +641,10 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
       )}
 
       {/* Force merge warning */}
-      {isForceMerged && (
+      {showPrRoot && isForceMerged && (
         <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           <XCircle className="h-3.5 w-3.5 flex-shrink-0" />
           <span>Force merged — PR was merged before CI completed. CI ended {formatDuration(forceMergeGap)} after merge.</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * PrWorkflowTree — same as PrLifecycleTree but starts at the Workflow level.
- * Used inside the PR table row where the PR-level info is already visible.
- */
-function PrWorkflowTree({ data }: { data: PrLifecycleTimelineData }) {
-  const [expandedWorkflowIds, setExpandedWorkflowIds] = useState<Set<number>>(new Set());
-  const [expandedJobIds, setExpandedJobIds] = useState<Set<number>>(new Set());
-
-  const toggleWorkflow = (id: number) => {
-    setExpandedWorkflowIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleJob = (id: number) => {
-    setExpandedJobIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const expandAllWorkflows = () => {
-    setExpandedWorkflowIds(new Set(data.workflows.map((wf) => wf.id)));
-  };
-
-  const collapseAll = () => {
-    setExpandedWorkflowIds(new Set());
-    setExpandedJobIds(new Set());
-  };
-
-  return (
-    <div className="max-h-[600px] min-w-0 overflow-y-auto pr-1 space-y-2">
-      {/* Toolbar — sticky relative to the scrollable parent */}
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white/90 px-3 py-2 backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/90">
-        <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">CI Breakdown</span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={data.workflows.length === 0}
-              onClick={expandedWorkflowIds.size > 0 ? collapseAll : expandAllWorkflows}
-              className="inline-flex items-center justify-center rounded-md border border-neutral-200 p-1 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 disabled:cursor-not-allowed disabled:opacity-30 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-              aria-label={expandedWorkflowIds.size > 0 ? 'Collapse all' : 'Expand all'}
-            >
-              {expandedWorkflowIds.size > 0 ? <Minus className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-            </button>
-          </div>
-        </div>
-
-      {/* Workflows (root level) */}
-      {data.workflows.length === 0 ? (
-        <div className="pl-6 rounded-lg border border-dashed border-neutral-200 p-4 text-center text-xs text-neutral-400 dark:border-neutral-700 dark:text-neutral-500">
-          No workflows found for this PR.
-        </div>
-      ) : (
-        <div className="relative">
-          {data.workflows.map((wf) => {
-            const isWfExpanded = expandedWorkflowIds.has(wf.id);
-            const jobs = wf.jobs || [];
-
-            return (
-              <div key={wf.id} className="relative">
-                {/* Workflow Node */}
-                <TreeNodeCard
-                  depth={0}
-                  icon={<span className="text-teal-500">⚡</span>}
-                  label={wf.name}
-                  duration={formatDuration(wf.durationInSeconds)}
-                  conclusion={wf.conclusion}
-                  expanded={isWfExpanded}
-                  hasChildren={jobs.length > 0}
-                  onToggle={() => toggleWorkflow(wf.id)}
-                  href={wf.html_url}
-                  typeLabel="Workflow"
-                />
-
-                {/* Jobs */}
-                {isWfExpanded && jobs.length > 0 && (
-                  <div className="relative">
-                    {jobs.map((job) => {
-                      const isJobExpanded = expandedJobIds.has(job.id);
-                      const steps = job.steps || [];
-
-                      return (
-                        <div key={job.id} className="relative">
-                          {/* Job Node */}
-                          <TreeNodeCard
-                            depth={1}
-                            icon={<span className="text-purple-500">🔧</span>}
-                            label={job.name}
-                            duration={formatDuration(job.durationInSeconds)}
-                            conclusion={job.conclusion}
-                            expanded={isJobExpanded}
-                            hasChildren={steps.length > 0}
-                            onToggle={steps.length > 0 ? () => toggleJob(job.id) : undefined}
-                            href={job.html_url}
-                            typeLabel="Job"
-                          />
-
-                          {/* Steps */}
-                          {isJobExpanded && steps.length > 0 && (
-                            <div className="relative">
-                              {steps.map((step) => {
-                                const safeDurationMs = getStepDurationMs(step);
-                                return (
-                                  <TreeNodeCard
-                                    key={step.number}
-                                    depth={2}
-                                    icon={<span className="text-amber-500">▸</span>}
-                                    label={step.name}
-                                    duration={formatDurationShort(Math.max(0, safeDurationMs))}
-                                    conclusion={step.conclusion}
-                                    expanded={false}
-                                    hasChildren={false}
-                                    typeLabel="Step"
-                                  />
-                                );
-                              })}
-                            </div>
-                          )}
-
-                          {/* Step placeholder when no step data available */}
-                          {isJobExpanded && steps.length === 0 && (
-                            <div className="pl-10 py-1">
-                              <div className="flex items-center gap-2 rounded-lg border border-dashed border-neutral-200 px-3 py-1.5 text-[10px] text-neutral-400 dark:border-neutral-700 dark:text-neutral-500">
-                                <Info className="h-3 w-3" />
-                                <span>Step details not available — run ETL with step collection to enable this view.</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
         </div>
       )}
     </div>
@@ -1037,22 +890,19 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
                                   {/* Steps */}
                                   {isJobExpanded && steps.length > 0 && (
                                     <div className="relative">
-                                      {steps.map((step) => {
-                                        const safeDurationMs = getStepDurationMs(step);
-                                        return (
-                                          <TreeNodeCard
-                                            key={step.number}
-                                            depth={3}
-                                            icon={<span className="text-amber-500">▸</span>}
-                                            label={step.name}
-                                            duration={formatDurationShort(Math.max(0, safeDurationMs))}
-                                            conclusion={step.conclusion}
-                                            expanded={false}
-                                            hasChildren={false}
-                                            typeLabel="Step"
-                                          />
-                                        );
-                                      })}
+                                      {steps.map((step) => (
+                                        <TreeNodeCard
+                                          key={step.number}
+                                          depth={3}
+                                          icon={<span className="text-amber-500">▸</span>}
+                                          label={step.name}
+                                          duration={formatDurationShort(getStepDurationMs(step))}
+                                          conclusion={step.conclusion}
+                                          expanded={false}
+                                          hasChildren={false}
+                                          typeLabel="Step"
+                                        />
+                                      ))}
                                     </div>
                                   )}
 
@@ -2660,7 +2510,7 @@ function DashboardContent({
                               {expandedPrNumber === pr.number && detail && (
                                 <tr>
                                   <td colSpan={7} className="p-4">
-                                    <PrWorkflowTree data={detail} />
+                                    <PrLifecycleTree data={detail} showPrRoot={false} />
                                   </td>
                                 </tr>
                               )}
