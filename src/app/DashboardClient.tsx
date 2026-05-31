@@ -360,7 +360,9 @@ function formatDurationShort(ms: number): string {
 
 function getStepDurationMs(step: { started_at?: string; completed_at?: string }): number {
   if (!step.started_at || !step.completed_at) return 0;
-  const diff = new Date(step.completed_at).getTime() - new Date(step.started_at).getTime();
+  const startMs = Date.parse(step.started_at);
+  const completedMs = Date.parse(step.completed_at);
+  const diff = completedMs - startMs;
   return isNaN(diff) ? 0 : Math.max(0, diff);
 }
 
@@ -640,8 +642,8 @@ function PrLifecycleTree({ data, showPrRoot = true }: { data: PrLifecycleTimelin
         </div>
       )}
 
-      {/* Force merge warning */}
-      {showPrRoot && isForceMerged && (
+      {/* Force merge warning — always visible regardless of showPrRoot */}
+      {isForceMerged && (
         <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           <XCircle className="h-3.5 w-3.5 flex-shrink-0" />
           <span>Force merged — PR was merged before CI completed. CI ended {formatDuration(forceMergeGap)} after merge.</span>
