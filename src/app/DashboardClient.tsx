@@ -358,12 +358,13 @@ function formatDurationShort(ms: number): string {
   return formatDuration(Math.round(ms / 1000));
 }
 
-function getStepDurationMs(step: { started_at?: string; completed_at?: string }): number {
+function getStepDurationSeconds(step: { started_at?: string; completed_at?: string }): number {
   if (!step.started_at || !step.completed_at) return 0;
   const startMs = Date.parse(step.started_at);
   const completedMs = Date.parse(step.completed_at);
-  const diff = completedMs - startMs;
-  return Number.isNaN(diff) ? 0 : Math.max(0, diff);
+  const diffMs = completedMs - startMs;
+  if (Number.isNaN(diffMs)) return 0;
+  return Math.round(Math.max(0, diffMs) / 1000);
 }
 
 function conclusionBadgeBg(conclusion: string): string {
@@ -466,7 +467,7 @@ function TreeNodeCard({ depth, icon, label, duration, conclusion, expanded, hasC
     <div className={`relative min-w-0 py-1 ${nodeIndent(depth)}`}>
       {/* Tree connector line */}
       {depth > 0 && (
-        <div className="pointer-events-none absolute left-0 top-0 bottom-0 ml-[14px] w-px bg-neutral-200 dark:bg-neutral-700" />
+        <div className="pointer-events-none absolute left-0 top-0 bottom-0 ml-[18px] w-px bg-neutral-200 dark:bg-neutral-700" />
       )}
       {card}
     </div>
@@ -612,7 +613,7 @@ function PrLifecycleTree({ data, showPrRoot = true }: { data: PrLifecycleTimelin
                                   depth={showPrRoot ? 3 : 2}
                                   icon={<span className="text-amber-500">▸</span>}
                                   label={step.name}
-                                  duration={formatDurationShort(getStepDurationMs(step))}
+                                  duration={formatDuration(getStepDurationSeconds(step))}
                                   conclusion={step.conclusion}
                                   expanded={false}
                                   hasChildren={false}
@@ -898,7 +899,7 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
                                           depth={3}
                                           icon={<span className="text-amber-500">▸</span>}
                                           label={step.name}
-                                          duration={formatDurationShort(getStepDurationMs(step))}
+                                          duration={formatDuration(getStepDurationSeconds(step))}
                                           conclusion={step.conclusion}
                                           expanded={false}
                                           hasChildren={false}
@@ -1512,6 +1513,13 @@ function DashboardContent({
     setAllWorkflowsError('');
     setSelectedJobName(null);
   }, [selectedRepoKey]);
+
+  // Abort pending PR detail request on unmount
+  useEffect(() => {
+    return () => {
+      detailAbortControllerRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams();
