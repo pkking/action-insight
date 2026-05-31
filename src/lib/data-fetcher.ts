@@ -1,5 +1,5 @@
 import { getSupabaseClient } from './supabase';
-import type { Index, DayData, Run, Job } from './types';
+import type { Index, DayData, Run, Job, Step } from './types';
 
 const RUN_WITH_JOBS_SELECT =
   'id,repo_id,name,head_branch,head_sha,status,conclusion,event,created_at,updated_at,html_url,duration_seconds,date,jobs(id,run_id,name,status,conclusion,created_at,started_at,completed_at,html_url,queue_duration_seconds,duration_seconds)' as const;
@@ -50,6 +50,60 @@ function mapJobRow(row: Record<string, unknown>): Job {
     queueDurationInSeconds: Number(row.queue_duration_seconds),
     durationInSeconds: Number(row.duration_seconds),
   };
+}
+
+function mapStepRow(row: Record<string, unknown>): Step {
+  return {
+    name: (row.name as string) || '',
+    status: (row.status as string) || 'unknown',
+    conclusion: (row.conclusion as string) || 'unknown',
+    started_at: (row.started_at as string) || undefined,
+    completed_at: (row.completed_at as string) || undefined,
+    number: Number(row.number),
+  };
+}
+
+async function fetchStepsForJobs(jobIds: number[]): Promise<Map<number, Step[]>> {
+  if (jobIds.length === 0) return new Map();
+  const supabase = getSupabaseClient();
+
+  // Supabase IN clause has a limit; chunk if needed
+  const stepsByJob = new Map<number, Step[]>();
+  const CHUNK = 500;
+  for (let i = 0; i < jobIds.length; i += CHUNK) {
+    const chunk = jobIds.slice(i, i + CHUNK);
+    const { data, error } = await supabase
+      .from('steps')
+      .select('job_id,number,name,status,conclusion,started_at,completed_at,duration_seconds')
+      .in('job_id', chunk)
+      .order('number', { ascending: true });
+
+    if (error) {
+      if (typeof window === 'undefined') console.error('Supabase error fetching steps:', error);
+      continue;
+    }
+
+    for (const row of data || []) {
+      const jobId = Number(row.job_id);
+      if (!stepsByJob.has(jobId)) stepsByJob.set(jobId, []);
+      stepsByJob.get(jobId)!.push(mapStepRow(row));
+    }
+  }
+
+  return stepsByJob;
+}
+
+function attachStepsToRuns(runs: Run[], stepsByJob: Map<number, Step[]>): void {
+  for (const run of runs) {
+    if (run.jobs) {
+      for (const job of run.jobs) {
+        const steps = stepsByJob.get(job.id);
+        if (steps && steps.length > 0) {
+          job.steps = steps;
+        }
+      }
+    }
+  }
 }
 
 export interface FetchRunsOptions {
@@ -112,6 +166,11 @@ export async function fetchDay(owner: string, repo: string, fileName: string): P
     return run;
   });
 
+  // Fetch and attach steps
+  const allJobIds = mappedRuns.flatMap((r) => r.jobs?.map((j) => j.id) ?? []);
+  const stepsByJob = await fetchStepsForJobs(allJobIds);
+  attachStepsToRuns(mappedRuns, stepsByJob);
+
   return { date, repo: `${owner}/${repo}`, runs: mappedRuns };
 }
 
@@ -139,13 +198,20 @@ async function fetchRunsFromDb(repoId: number, dateFilter: { startDate?: string;
     throw new Error(`Failed to fetch runs: database query failed`);
   }
 
-  return (runs || []).map((row) => {
+  const mappedRuns: Run[] = (runs || []).map((row) => {
     const run = mapRunRow(row);
     if (row.jobs && Array.isArray(row.jobs)) {
       run.jobs = row.jobs.map((j: Record<string, unknown>) => mapJobRow(j));
     }
     return run;
   });
+
+  // Fetch and attach steps
+  const allJobIds = mappedRuns.flatMap((r) => r.jobs?.map((j) => j.id) ?? []);
+  const stepsByJob = await fetchStepsForJobs(allJobIds);
+  attachStepsToRuns(mappedRuns, stepsByJob);
+
+  return mappedRuns;
 }
 
 function selectFiles(files: string[], options: FetchRunsOptions): string[] {

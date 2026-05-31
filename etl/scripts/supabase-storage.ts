@@ -18,6 +18,17 @@ interface Job {
   queueDurationInSeconds: number;
   durationInSeconds: number;
   githubPayload?: GitHubApiPayload;
+  steps?: Step[];
+}
+
+interface Step {
+  name: string;
+  status: string;
+  conclusion: string;
+  started_at?: string;
+  completed_at?: string;
+  number: number;
+  duration_seconds: number;
 }
 
 interface Run {
@@ -92,6 +103,7 @@ function readPositiveIntegerEnv(name: string, defaultValue: number): number {
 
 const RUN_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('RUN_UPSERT_BATCH_SIZE', 200);
 const JOB_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('JOB_UPSERT_BATCH_SIZE', 500);
+const STEP_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('STEP_UPSERT_BATCH_SIZE', 500);
 const CACHE_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('CACHE_UPSERT_BATCH_SIZE', 100);
 const PR_METRIC_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('PR_METRIC_UPSERT_BATCH_SIZE', 100);
 const PR_WORKFLOW_UPSERT_BATCH_SIZE = readPositiveIntegerEnv('PR_WORKFLOW_UPSERT_BATCH_SIZE', 500);
@@ -266,6 +278,49 @@ export async function writeRunsToSupabase(repo: string, runs: Run[], date: strin
 
     if (jobError) {
       throw new Error(`Failed to insert jobs for ${repo} into Supabase: ${jobError.message}`);
+    }
+  }
+
+  // Extract and write steps
+  const stepRows: {
+    job_id: number;
+    number: number;
+    name: string;
+    status: string;
+    conclusion: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+    duration_seconds: number;
+  }[] = [];
+
+  for (const run of runs) {
+    if (run.jobs) {
+      for (const job of run.jobs) {
+        if (job.steps && job.steps.length > 0) {
+          for (const step of job.steps) {
+            stepRows.push({
+              job_id: job.id,
+              number: step.number,
+              name: step.name,
+              status: step.status,
+              conclusion: step.conclusion || null,
+              started_at: step.started_at || null,
+              completed_at: step.completed_at || null,
+              duration_seconds: step.duration_seconds,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  for (const batch of chunkArray(stepRows, STEP_UPSERT_BATCH_SIZE)) {
+    const { error: stepError } = await supabase
+      .from('steps')
+      .upsert(batch, { onConflict: 'job_id,number' });
+
+    if (stepError) {
+      throw new Error(`Failed to insert steps for ${repo} into Supabase: ${stepError.message}`);
     }
   }
 }

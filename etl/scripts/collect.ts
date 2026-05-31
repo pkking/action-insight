@@ -107,6 +107,17 @@ interface Job {
   queueDurationInSeconds: number;
   durationInSeconds: number;
   githubPayload?: GitHubApiPayload;
+  steps?: Step[];
+}
+
+interface Step {
+  name: string;
+  status: string;
+  conclusion: string;
+  started_at?: string;
+  completed_at?: string;
+  number: number;
+  duration_seconds: number;
 }
 
 interface GitHubJobPayload extends GitHubApiPayload {
@@ -407,6 +418,32 @@ export async function collectRepo(
             const startedMs = new Date(j.started_at).getTime();
             const createdMs = j.created_at ? new Date(j.created_at).getTime() : startedMs;
             const completedMs = j.completed_at ? new Date(j.completed_at).getTime() : startedMs;
+
+            // Extract steps from the job payload
+            const steps: Step[] = [];
+            const rawSteps = (j.steps as Record<string, unknown>[] | undefined);
+            if (Array.isArray(rawSteps)) {
+              for (const [index, rawStep] of rawSteps.entries()) {
+                if (!rawStep || typeof rawStep !== 'object') continue;
+                const s = rawStep as Record<string, string | null>;
+                const stepStartedAt = s.started_at;
+                const stepCompletedAt = s.completed_at;
+                let stepDuration = 0;
+                if (stepStartedAt && stepCompletedAt) {
+                  stepDuration = Math.max(0, (new Date(stepCompletedAt).getTime() - new Date(stepStartedAt).getTime()) / 1000);
+                }
+                steps.push({
+                  name: (s.name as string) || `Step ${index + 1}`,
+                  status: (s.status as string) || 'unknown',
+                  conclusion: (s.conclusion as string) || 'unknown',
+                  started_at: stepStartedAt || undefined,
+                  completed_at: stepCompletedAt || undefined,
+                  number: index + 1,
+                  duration_seconds: stepDuration,
+                });
+              }
+            }
+
             return {
               id: j.id,
               name: j.name,
@@ -419,6 +456,7 @@ export async function collectRepo(
               queueDurationInSeconds: Math.max(0, (startedMs - createdMs) / 1000),
               durationInSeconds: Math.max(0, (completedMs - startedMs) / 1000),
               githubPayload: j,
+              steps: steps.length > 0 ? steps : undefined,
             };
           });
         }
