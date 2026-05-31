@@ -50,7 +50,6 @@ CREATE INDEX IF NOT EXISTS idx_jobs_run_id ON jobs(run_id);
 
 -- 3b. Steps table (individual steps within jobs)
 CREATE TABLE IF NOT EXISTS steps (
-  id BIGINT,  -- GitHub step number is not unique globally; composite key below
   job_id BIGINT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
   number INTEGER NOT NULL,  -- step position within the job (1-based)
   name TEXT NOT NULL,

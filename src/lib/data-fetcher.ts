@@ -60,22 +60,25 @@ function mapStepRow(row: Record<string, unknown>): Step {
     started_at: (row.started_at as string) || undefined,
     completed_at: (row.completed_at as string) || undefined,
     number: Number(row.number),
+    duration_seconds: row.duration_seconds !== undefined ? Number(row.duration_seconds) : undefined,
   };
 }
 
 async function fetchStepsForJobs(jobIds: number[]): Promise<Map<number, Step[]>> {
-  if (jobIds.length === 0) return new Map();
+  const uniqueJobIds = Array.from(new Set(jobIds));
+  if (uniqueJobIds.length === 0) return new Map();
   const supabase = getSupabaseClient();
 
   // Supabase IN clause has a limit; chunk if needed
   const stepsByJob = new Map<number, Step[]>();
   const CHUNK = 500;
-  for (let i = 0; i < jobIds.length; i += CHUNK) {
-    const chunk = jobIds.slice(i, i + CHUNK);
+  for (let i = 0; i < uniqueJobIds.length; i += CHUNK) {
+    const chunk = uniqueJobIds.slice(i, i + CHUNK);
     const { data, error } = await supabase
       .from('steps')
       .select('job_id,number,name,status,conclusion,started_at,completed_at,duration_seconds')
       .in('job_id', chunk)
+      .order('job_id', { ascending: true })
       .order('number', { ascending: true });
 
     if (error) {
