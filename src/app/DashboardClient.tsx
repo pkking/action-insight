@@ -16,7 +16,9 @@ import {
   Info,
   LayoutList,
   MessageSquare,
+  Minus,
   Monitor,
+  Plus,
   Share2,
   TestTube,
   XCircle,
@@ -517,11 +519,14 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white/90 px-3 py-2 backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/90">
         <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">CI Breakdown</span>
           <div className="flex items-center gap-2">
-            <button type="button" disabled={data.workflows.length === 0} onClick={expandAllWorkflows} className="text-[10px] text-neutral-500 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed dark:text-neutral-400 dark:hover:text-neutral-200">
-              Expand All
-            </button>
-            <button type="button" disabled={data.workflows.length === 0} onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed dark:text-neutral-400 dark:hover:text-neutral-200">
-              Collapse All
+            <button
+              type="button"
+              disabled={data.workflows.length === 0}
+              onClick={expandedWorkflowIds.size > 0 ? collapseAll : expandAllWorkflows}
+              className="inline-flex items-center justify-center rounded-md border border-neutral-200 p-1 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 disabled:cursor-not-allowed disabled:opacity-30 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+              aria-label={expandedWorkflowIds.size > 0 ? 'Collapse all' : 'Expand all'}
+            >
+              {expandedWorkflowIds.size > 0 ? <Minus className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
             </button>
           </div>
         </div>
@@ -683,11 +688,14 @@ function PrWorkflowTree({ data }: { data: PrLifecycleTimelineData }) {
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white/90 px-3 py-2 backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/90">
         <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">CI Breakdown</span>
           <div className="flex items-center gap-2">
-            <button type="button" disabled={data.workflows.length === 0} onClick={expandAllWorkflows} className="text-[10px] text-neutral-500 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed dark:text-neutral-400 dark:hover:text-neutral-200">
-              Expand All
-            </button>
-            <button type="button" disabled={data.workflows.length === 0} onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed dark:text-neutral-400 dark:hover:text-neutral-200">
-              Collapse All
+            <button
+              type="button"
+              disabled={data.workflows.length === 0}
+              onClick={expandedWorkflowIds.size > 0 ? collapseAll : expandAllWorkflows}
+              className="inline-flex items-center justify-center rounded-md border border-neutral-200 p-1 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 disabled:cursor-not-allowed disabled:opacity-30 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+              aria-label={expandedWorkflowIds.size > 0 ? 'Collapse all' : 'Expand all'}
+            >
+              {expandedWorkflowIds.size > 0 ? <Minus className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
             </button>
           </div>
         </div>
@@ -925,11 +933,14 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
               <option value="duration">Sort by Duration</option>
               <option value="name">Sort by Name</option>
             </select>
-            <button type="button" disabled={allWorkflows.length === 0} onClick={expandAllEvents} className="text-[10px] text-neutral-500 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed dark:text-neutral-400 dark:hover:text-neutral-200">
-              Expand All
-            </button>
-            <button type="button" disabled={allWorkflows.length === 0} onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed dark:text-neutral-400 dark:hover:text-neutral-200">
-              Collapse All
+            <button
+              type="button"
+              disabled={allWorkflows.length === 0}
+              onClick={expandedEvents.size > 0 ? collapseAll : expandAllEvents}
+              className="inline-flex items-center justify-center rounded-md border border-neutral-200 p-1 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 disabled:cursor-not-allowed disabled:opacity-30 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+              aria-label={expandedEvents.size > 0 ? 'Collapse all' : 'Expand all'}
+            >
+              {expandedEvents.size > 0 ? <Minus className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
             </button>
           </div>
         </div>
