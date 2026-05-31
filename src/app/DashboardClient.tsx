@@ -2443,7 +2443,7 @@ function DashboardContent({
                 ) : (
                   <>
                     <div className="overflow-x-auto">
-                    <table className="w-full table-fixed text-left text-sm">
+                    <table className="w-full min-w-[1000px] table-fixed text-left text-sm">
                        <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
                          <tr>
                            <th className="w-[35%] px-6 py-3">PR / Branch</th>
