@@ -453,7 +453,7 @@ function TreeNodeCard({ depth, icon, label, duration, conclusion, expanded, hasC
   );
 
   return (
-    <div className={`min-w-0 py-1 ${nodeIndent(depth)}`}>
+    <div className={`relative min-w-0 py-1 ${nodeIndent(depth)}`}>
       {/* Tree connector line */}
       {depth > 0 && (
         <div className="pointer-events-none absolute left-0 top-0 bottom-0 ml-[14px] w-px bg-neutral-200 dark:bg-neutral-700" />
