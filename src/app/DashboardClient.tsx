@@ -358,6 +358,12 @@ function formatDurationShort(ms: number): string {
   return formatDuration(Math.round(ms / 1000));
 }
 
+function getStepDurationMs(step: { started_at?: string; completed_at?: string }): number {
+  if (!step.started_at || !step.completed_at) return 0;
+  const diff = new Date(step.completed_at).getTime() - new Date(step.started_at).getTime();
+  return isNaN(diff) ? 0 : diff;
+}
+
 function conclusionBadgeBg(conclusion: string): string {
   switch (conclusion) {
     case 'success':
@@ -597,10 +603,7 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
                           {isJobExpanded && steps.length > 0 && (
                             <div className="relative">
                               {steps.map((step) => {
-                                const stepDurationMs = step.started_at && step.completed_at
-                                  ? new Date(step.completed_at).getTime() - new Date(step.started_at).getTime()
-                                  : 0;
-                                const safeDurationMs = isNaN(stepDurationMs) ? 0 : stepDurationMs;
+                                const safeDurationMs = getStepDurationMs(step);
                                 return (
                                   <TreeNodeCard
                                     key={step.number}
@@ -754,10 +757,7 @@ function PrWorkflowTree({ data }: { data: PrLifecycleTimelineData }) {
                           {isJobExpanded && steps.length > 0 && (
                             <div className="relative">
                               {steps.map((step) => {
-                                const stepDurationMs = step.started_at && step.completed_at
-                                  ? new Date(step.completed_at).getTime() - new Date(step.started_at).getTime()
-                                  : 0;
-                                const safeDurationMs = isNaN(stepDurationMs) ? 0 : stepDurationMs;
+                                const safeDurationMs = getStepDurationMs(step);
                                 return (
                                   <TreeNodeCard
                                     key={step.number}
@@ -777,7 +777,7 @@ function PrWorkflowTree({ data }: { data: PrLifecycleTimelineData }) {
 
                           {/* Step placeholder when no step data available */}
                           {isJobExpanded && steps.length === 0 && (
-                            <div className="pl-14 py-1">
+                            <div className="pl-10 py-1">
                               <div className="flex items-center gap-2 rounded-lg border border-dashed border-neutral-200 px-3 py-1.5 text-[10px] text-neutral-400 dark:border-neutral-700 dark:text-neutral-500">
                                 <Info className="h-3 w-3" />
                                 <span>Step details not available — run ETL with step collection to enable this view.</span>
@@ -1038,10 +1038,7 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
                                   {isJobExpanded && steps.length > 0 && (
                                     <div className="relative">
                                       {steps.map((step) => {
-                                        const stepDurationMs = step.started_at && step.completed_at
-                                          ? new Date(step.completed_at).getTime() - new Date(step.started_at).getTime()
-                                          : 0;
-                                        const safeDurationMs = isNaN(stepDurationMs) ? 0 : stepDurationMs;
+                                        const safeDurationMs = getStepDurationMs(step);
                                         return (
                                           <TreeNodeCard
                                             key={step.number}
