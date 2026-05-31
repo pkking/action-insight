@@ -60,7 +60,7 @@ function mapStepRow(row: Record<string, unknown>): Step {
     started_at: (row.started_at as string) || undefined,
     completed_at: (row.completed_at as string) || undefined,
     number: Number(row.number),
-    duration_seconds: row.duration_seconds !== undefined ? Number(row.duration_seconds) : undefined,
+    duration_seconds: row.duration_seconds != null ? Number(row.duration_seconds) : undefined,
   };
 }
 
@@ -114,6 +114,7 @@ export interface FetchRunsOptions {
   startDate?: string;
   endDate?: string;
   now?: Date;
+  includeSteps?: boolean;
 }
 
 export async function fetchIndex(owner: string, repo: string): Promise<Index> {
@@ -169,15 +170,21 @@ export async function fetchDay(owner: string, repo: string, fileName: string): P
     return run;
   });
 
-  // Fetch and attach steps
-  const allJobIds = mappedRuns.flatMap((r) => r.jobs?.map((j) => j.id) ?? []);
-  const stepsByJob = await fetchStepsForJobs(allJobIds);
-  attachStepsToRuns(mappedRuns, stepsByJob);
+  // Fetch and attach steps only when explicitly requested
+  if (mappedRuns.length > 0) {
+    await fetchStepsAndAttach(mappedRuns);
+  }
 
   return { date, repo: `${owner}/${repo}`, runs: mappedRuns };
 }
 
-async function fetchRunsFromDb(repoId: number, dateFilter: { startDate?: string; endDate?: string; limit?: number }): Promise<Run[]> {
+async function fetchStepsAndAttach(runs: Run[]): Promise<void> {
+  const allJobIds = runs.flatMap((r) => r.jobs?.map((j) => j.id) ?? []);
+  const stepsByJob = await fetchStepsForJobs(allJobIds);
+  attachStepsToRuns(runs, stepsByJob);
+}
+
+async function fetchRunsFromDb(repoId: number, dateFilter: { startDate?: string; endDate?: string; limit?: number; includeSteps?: boolean }): Promise<Run[]> {
   const supabase = getSupabaseClient();
 
   let query = supabase
@@ -209,10 +216,10 @@ async function fetchRunsFromDb(repoId: number, dateFilter: { startDate?: string;
     return run;
   });
 
-  // Fetch and attach steps
-  const allJobIds = mappedRuns.flatMap((r) => r.jobs?.map((j) => j.id) ?? []);
-  const stepsByJob = await fetchStepsForJobs(allJobIds);
-  attachStepsToRuns(mappedRuns, stepsByJob);
+  // Fetch and attach steps only if requested
+  if (dateFilter.includeSteps) {
+    await fetchStepsAndAttach(mappedRuns);
+  }
 
   return mappedRuns;
 }

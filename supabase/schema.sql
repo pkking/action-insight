@@ -61,8 +61,6 @@ CREATE TABLE IF NOT EXISTS steps (
   PRIMARY KEY (job_id, number)
 );
 
-CREATE INDEX IF NOT EXISTS idx_steps_job_id ON steps(job_id);
-
 -- 4. PR Metrics table (PR-level CI metrics summaries)
 CREATE TABLE IF NOT EXISTS pr_metrics (
   id SERIAL PRIMARY KEY,

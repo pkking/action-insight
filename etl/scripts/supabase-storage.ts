@@ -4,7 +4,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import type { GitHubApiPayload } from '../../src/lib/types.ts';
+import type { GitHubApiPayload, Step } from '../../src/lib/types.ts';
 
 interface Job {
   id: number;
@@ -19,16 +19,6 @@ interface Job {
   durationInSeconds: number;
   githubPayload?: GitHubApiPayload;
   steps?: Step[];
-}
-
-interface Step {
-  name: string;
-  status: string;
-  conclusion: string;
-  started_at?: string;
-  completed_at?: string;
-  number: number;
-  duration_seconds: number;
 }
 
 interface Run {

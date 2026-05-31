@@ -25,7 +25,7 @@ import {
   type CollectionState,
 } from './supabase-storage.ts';
 import { readPullRequestsFromPayload } from './github-utils.ts';
-import type { GitHubApiPayload, PullRequestRef } from '../../src/lib/types.ts';
+import type { GitHubApiPayload, PullRequestRef, Step } from '../../src/lib/types.ts';
 
 const { buildCollectionWindows, splitCollectionWindow, toCreatedRange } = collectionWindows;
 
@@ -108,16 +108,6 @@ interface Job {
   durationInSeconds: number;
   githubPayload?: GitHubApiPayload;
   steps?: Step[];
-}
-
-interface Step {
-  name: string;
-  status: string;
-  conclusion: string;
-  started_at?: string;
-  completed_at?: string;
-  number: number;
-  duration_seconds: number;
 }
 
 interface GitHubJobPayload extends GitHubApiPayload {
