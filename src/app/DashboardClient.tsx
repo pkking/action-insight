@@ -520,7 +520,7 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
             <button type="button" disabled={data.workflows.length === 0} onClick={expandAllWorkflows} className="text-[10px] text-neutral-500 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed dark:text-neutral-400 dark:hover:text-neutral-200">
               Expand All
             </button>
-            <button type="button" onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+            <button type="button" disabled={data.workflows.length === 0} onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed dark:text-neutral-400 dark:hover:text-neutral-200">
               Collapse All
             </button>
           </div>
@@ -1967,7 +1967,8 @@ function DashboardContent({
       console.error('Failed to load PR detail', err);
       setError(`Failed to load PR #${number}`);
     } finally {
-      setLoadingDetailNumber(null);
+      // Only clear loading if this PR is still the active loading target
+      setLoadingDetailNumber((current) => current === number ? null : current);
     }
   };
 
