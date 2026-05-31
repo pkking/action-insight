@@ -358,7 +358,7 @@ describe('Dashboard PR view', () => {
     const { rerender } = renderDashboard({
       searchParams: { repo: 'vllm-project/vllm-ascend' },
     });
-    fireEvent.click(await screen.findByRole('button', { name: /timeline/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /expand pr details/i }));
     await waitFor(() => {
       expect(fetchPullRequestDetailMock).toHaveBeenCalledWith('vllm-project', 'vllm-ascend', 42);
     });
@@ -412,10 +412,10 @@ describe('Dashboard PR view', () => {
     const prRow = await screen.findByText('PR #42');
     expect(prRow).toBeInTheDocument();
 
-    // Click Timeline button to load PR detail
-    const timelineButton = screen.getByRole('button', { name: /timeline/i });
+    // Click the chevron button to load PR detail
+    const expandButton = screen.getByRole('button', { name: /expand pr details/i });
     await act(async () => {
-      fireEvent.click(timelineButton);
+      fireEvent.click(expandButton);
     });
 
     // Verify the API was called to load PR detail
@@ -427,16 +427,22 @@ describe('Dashboard PR view', () => {
   it('shows job details after selecting a workflow inside a PR', async () => {
     renderDashboard();
 
-    // Click Timeline button to load PR detail
-    fireEvent.click(await screen.findByRole('button', { name: /timeline/i }));
+    // Click the chevron button to load PR detail
+    fireEvent.click(await screen.findByRole('button', { name: /expand pr details/i }));
     await waitFor(() => {
       expect(fetchPullRequestDetailMock).toHaveBeenCalledTimes(1);
     });
 
-    // Verify the PR detail section is loaded (Timeline button text changes after loading)
+    // Verify the PR detail section is loaded
     await waitFor(() => {
       expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
     });
+
+    // Verify the workflow node is visible after expanding
+    expect(await screen.findByText('lint')).toBeInTheDocument();
+
+    // Verify no duplicate PR root node in the inline tree (PR info is already in the table row)
+    expect(screen.getAllByText('PR #42')).toHaveLength(1);
   });
 
   it('shows an empty-state placeholder for repos without computable metrics', async () => {
