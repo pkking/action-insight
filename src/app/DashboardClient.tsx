@@ -504,19 +504,20 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
   };
 
   return (
-    <div className="space-y-2">
-      {/* Toolbar — sticky so always visible when scrolling the tree */}
-      <div className="sticky top-0 z-10 flex items-center justify-between rounded-lg border border-neutral-100 bg-white/90 px-3 py-2 backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/90">
-        <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">CI Breakdown</span>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={expandAllWorkflows} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
-            Expand All
-          </button>
-          <button type="button" onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
-            Collapse All
-          </button>
+    <div className="max-h-[600px] overflow-y-auto pr-1">
+      <div className="space-y-2">
+        {/* Toolbar — sticky relative to the scrollable parent */}
+        <div className="sticky top-0 z-10 flex items-center justify-between rounded-lg border border-neutral-100 bg-white/90 px-3 py-2 backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/90">
+          <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">CI Breakdown</span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={expandAllWorkflows} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+              Expand All
+            </button>
+            <button type="button" onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+              Collapse All
+            </button>
+          </div>
         </div>
-      </div>
 
       {/* PR Root Node */}
       <TreeNodeCard
@@ -627,6 +628,7 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
           <span>Force merged — PR was merged before CI completed. CI ended {formatDuration(forceMergeGap)} after merge.</span>
         </div>
       )}
+    </div>
     </div>
   );
 }
@@ -750,30 +752,31 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
   }
 
   return (
-    <div className="space-y-2">
-      {/* Toolbar — sticky so always visible when scrolling the tree */}
-      <div className="sticky top-0 z-10 flex items-center justify-between rounded-lg border border-neutral-100 bg-white/90 px-3 py-2 backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/90">
-        <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
-          Events Breakdown ({eventGroups.length} event types, {allWorkflows.length} runs)
-        </span>
-        <div className="flex items-center gap-3">
-          <select
-            value={eventSortOrder}
-            onChange={(e) => setEventSortOrder(e.target.value as 'count' | 'duration' | 'name')}
-            className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-[10px] text-neutral-700 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
-          >
-            <option value="count">Sort by Count</option>
-            <option value="duration">Sort by Duration</option>
-            <option value="name">Sort by Name</option>
-          </select>
-          <button type="button" onClick={expandAllEvents} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
-            Expand All
-          </button>
-          <button type="button" onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
-            Collapse All
-          </button>
+    <div className="max-h-[600px] overflow-y-auto pr-1">
+      <div className="space-y-2">
+        {/* Toolbar — sticky relative to the scrollable parent */}
+        <div className="sticky top-0 z-10 flex items-center justify-between rounded-lg border border-neutral-100 bg-white/90 px-3 py-2 backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/90">
+          <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+            Events Breakdown ({eventGroups.length} event types, {allWorkflows.length} runs)
+          </span>
+          <div className="flex items-center gap-3">
+            <select
+              value={eventSortOrder}
+              onChange={(e) => setEventSortOrder(e.target.value as 'count' | 'duration' | 'name')}
+              className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-[10px] text-neutral-700 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
+            >
+              <option value="count">Sort by Count</option>
+              <option value="duration">Sort by Duration</option>
+              <option value="name">Sort by Name</option>
+            </select>
+            <button type="button" onClick={expandAllEvents} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+              Expand All
+            </button>
+            <button type="button" onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+              Collapse All
+            </button>
+          </div>
         </div>
-      </div>
 
       {/* Event groups */}
       {sortedGroups.map((group) => {
@@ -905,6 +908,7 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
           </div>
         );
       })}
+    </div>
     </div>
   );
 }
