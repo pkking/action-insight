@@ -359,8 +359,8 @@ function formatDurationShort(ms: number): string {
   return formatDuration(Math.round(ms / 1000));
 }
 
-function getStepDurationSeconds(step: { started_at?: string; completed_at?: string }): number {
-  return diffSeconds(step.started_at, step.completed_at, { clampNegative: true }) ?? 0;
+function getStepDurationSeconds(step: { started_at?: string; completed_at?: string; duration_seconds?: number }): number {
+  return step.duration_seconds ?? diffSeconds(step.started_at, step.completed_at, { clampNegative: true }) ?? 0;
 }
 
 function conclusionBadgeBg(conclusion: string): string {
