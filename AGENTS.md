@@ -36,6 +36,7 @@ AI 助手在维护 ETL、Supabase 数据或恢复指标时，应优先使用以�
 1.  **Schema 迁移**：当修改 `supabase/schema.sql`、新增表/函数，或本地/CI 需要补齐数据库结构时，使用 `npm run migrate:supabase`。需要设置 `SUPABASE_DB_URL`，CI 中可设置 `AUTO_MIGRATE_SUPABASE=1`，证书链异常时才使用 `SUPABASE_DB_SSL=no-verify`。
 2.  **Raw CI 采集**：当 `runs` 或 `jobs` 缺失/过期时，使用 `npx tsx etl/scripts/collect.ts --repo owner/repo`。该脚本只负责抓取 GitHub Actions runs/jobs 并写 Supabase，不再重建 PR metrics。避免无范围、无目的地重复运行，以免浪费 GitHub API 配额。
 3.  **PR 指标重建**：当 raw runs 已存在，但 `pr_metrics` / `pr_workflows` 缺失、落后或部分解析时，优先使用 `npm run rebuild:pr-artifacts -- --repo owner/repo --start-date yyyy-mm-dd --end-date yyyy-mm-dd`。尽量提供日期范围，避免全量扫描。`GITHUB_TOKEN` 可选；没有 token 时只能依赖 run payload 和 `pr_resolution_cache`。
+    - **Token 配置**：Rebuild workflow 使用 per-repo token 机制，优先级为 `GITHUB_TOKEN_PER_REPO_<OWNER>_<REPO>` → `GITHUB_TOKEN_PER_REPO_TRITON_LANG_TRITON_ASCEND`（fallback PAT）。新增 repo 时需确保在 GitHub Settings → Secrets 中配置对应的 `GITHUB_TOKEN_PER_REPO_<OWNER>_<REPO>`，否则会降级使用 triton-ascend 的 token（共享 rate limit 5,000/h）。
 4.  **兼容入口**：`etl/scripts/rebuild-pr-artifacts-local.ts` 仅作为旧路径兼容 wrapper，新的说明、脚本和自动化应使用 `npm run rebuild:pr-artifacts` 或 `etl/scripts/rebuild-pr-artifacts.ts`。
 5.  **回填策略**：只有在需要从保留窗口最早日期重新构建 raw history 时才使用 `collect.ts --force-full-backfill`；当最新数据优先级更高时使用 `collect.ts --reverse`。
 6.  **验证命令**：改动完成后至少运行与改动相关的测试；通用验证为 `npm run lint` 和 `npm test`。ETL 脚本改动应额外跑相关 `vitest` 文件和脚本 `--help`。

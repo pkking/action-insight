@@ -26,6 +26,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const RUN_SELECT_PAGE_SIZE = 1000;
 
+/** Resolve the GitHub token for a given repo.
+ * Priority: per-repo env var (GITHUB_TOKEN_PER_REPO_...) → fallback PAT (triton-lang/triton-ascend).
+ * The fallback token ensures newly added repos work even before their dedicated token is configured.
+ * Example: vllm-project/vllm-ascend → GITHUB_TOKEN_PER_REPO_VLLM_PROJECT_VLLM_ASCEND */
+function resolveGitHubToken(repoKey: string): string | undefined {
+  const perRepoKey = `GITHUB_TOKEN_PER_REPO_${repoKey.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
+  return process.env[perRepoKey] ?? process.env.GITHUB_TOKEN_PER_REPO_TRITON_LANG_TRITON_ASCEND;
+}
+
 const CLI_HELP = `Usage: npx tsx etl/scripts/rebuild-pr-artifacts.ts [options]
 
 Rebuild PR metrics and PR workflow links from raw runs already stored in Supabase.
@@ -266,9 +275,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 
       console.log(`Rebuilding PR artifacts for ${repoKey} from ${dates[0]} to ${dates[dates.length - 1]} (${dates.length} date(s))`);
       const runs = await fetchRunsFromSupabase(repoKey, dates);
-      const octokit = process.env.GITHUB_TOKEN ? new Octokit({ auth: process.env.GITHUB_TOKEN }) : undefined;
+      const token = resolveGitHubToken(repoKey);
+      const octokit = token ? new Octokit({ auth: token }) : undefined;
       if (!octokit) {
-        console.warn('GITHUB_TOKEN is not set; PR metrics rebuild will only use cached or embedded PR associations.');
+        console.warn('No GitHub token is configured; PR metrics rebuild will only use cached or embedded PR associations.');
       }
 
       await rebuildPullRequestArtifacts({
