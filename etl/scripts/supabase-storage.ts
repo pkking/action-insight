@@ -296,7 +296,7 @@ export async function writeRunsToSupabase(repo: string, runs: Run[], date: strin
               conclusion: step.conclusion || null,
               started_at: step.started_at || null,
               completed_at: step.completed_at || null,
-              duration_seconds: step.duration_seconds,
+              duration_seconds: step.duration_seconds ?? 0,
             });
           }
         }

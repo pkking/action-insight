@@ -170,10 +170,8 @@ export async function fetchDay(owner: string, repo: string, fileName: string): P
     return run;
   });
 
-  // Fetch and attach steps only when explicitly requested
-  if (mappedRuns.length > 0) {
-    await fetchStepsAndAttach(mappedRuns);
-  }
+  // fetchDay always loads steps (legacy single-day retrieval API)
+  await fetchStepsAndAttach(mappedRuns);
 
   return { date, repo: `${owner}/${repo}`, runs: mappedRuns };
 }
@@ -258,7 +256,7 @@ export async function fetchRuns(owner: string, repo: string, options: FetchRunsO
   const repoId = await getRepoId(owner, repo);
 
   if (options.startDate && options.endDate) {
-    return fetchRunsFromDb(repoId, { startDate: options.startDate, endDate: options.endDate });
+    return fetchRunsFromDb(repoId, { startDate: options.startDate, endDate: options.endDate, includeSteps: options.includeSteps });
   }
 
   const { days = 7, now = new Date() } = options;
@@ -266,7 +264,7 @@ export async function fetchRuns(owner: string, repo: string, options: FetchRunsO
   cutoff.setUTCDate(cutoff.getUTCDate() - days);
   const cutoffDate = cutoff.toISOString().slice(0, 10);
 
-  return fetchRunsFromDb(repoId, { startDate: cutoffDate, endDate: undefined });
+  return fetchRunsFromDb(repoId, { startDate: cutoffDate, endDate: undefined, includeSteps: options.includeSteps });
 }
 
 export async function fetchRunsFromIndex(
@@ -278,7 +276,7 @@ export async function fetchRunsFromIndex(
   const repoId = await getRepoId(owner, repo);
 
   if (options.startDate && options.endDate) {
-    return fetchRunsFromDb(repoId, { startDate: options.startDate, endDate: options.endDate });
+    return fetchRunsFromDb(repoId, { startDate: options.startDate, endDate: options.endDate, includeSteps: options.includeSteps });
   }
 
   const dates = selectFiles(repoIndex.files, options);
@@ -287,7 +285,7 @@ export async function fetchRunsFromIndex(
   const firstDate = dates[dates.length - 1].replace('.json', '');
   const lastDate = dates[0].replace('.json', '');
 
-  return fetchRunsFromDb(repoId, { startDate: firstDate, endDate: lastDate });
+  return fetchRunsFromDb(repoId, { startDate: firstDate, endDate: lastDate, includeSteps: options.includeSteps });
 }
 
 export async function fetchLatestRuns(owner: string, repo: string, maxFiles = 7): Promise<Run[]> {
