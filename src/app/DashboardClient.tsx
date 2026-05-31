@@ -643,6 +643,151 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
   );
 }
 
+/**
+ * PrWorkflowTree — same as PrLifecycleTree but starts at the Workflow level.
+ * Used inside the PR table row where the PR-level info is already visible.
+ */
+function PrWorkflowTree({ data }: { data: PrLifecycleTimelineData }) {
+  const [expandedWorkflowIds, setExpandedWorkflowIds] = useState<Set<number>>(new Set());
+  const [expandedJobIds, setExpandedJobIds] = useState<Set<number>>(new Set());
+
+  const toggleWorkflow = (id: number) => {
+    setExpandedWorkflowIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleJob = (id: number) => {
+    setExpandedJobIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const expandAllWorkflows = () => {
+    setExpandedWorkflowIds(new Set(data.workflows.map((wf) => wf.id)));
+  };
+
+  const collapseAll = () => {
+    setExpandedWorkflowIds(new Set());
+    setExpandedJobIds(new Set());
+  };
+
+  return (
+    <div className="max-h-[600px] min-w-0 overflow-y-auto pr-1 space-y-2">
+      {/* Toolbar — sticky relative to the scrollable parent */}
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white/90 px-3 py-2 backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/90">
+        <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">CI Breakdown</span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={expandAllWorkflows} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+              Expand All
+            </button>
+            <button type="button" onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+              Collapse All
+            </button>
+          </div>
+        </div>
+
+      {/* Workflows (root level) */}
+      {data.workflows.length === 0 ? (
+        <div className="pl-6 rounded-lg border border-dashed border-neutral-200 p-4 text-center text-xs text-neutral-400 dark:border-neutral-700 dark:text-neutral-500">
+          No workflows found for this PR.
+        </div>
+      ) : (
+        <div className="relative">
+          {data.workflows.map((wf) => {
+            const isWfExpanded = expandedWorkflowIds.has(wf.id);
+            const jobs = wf.jobs || [];
+
+            return (
+              <div key={wf.id} className="relative">
+                {/* Workflow Node */}
+                <TreeNodeCard
+                  depth={0}
+                  icon={<span className="text-teal-500">⚡</span>}
+                  label={wf.name}
+                  duration={formatDuration(wf.durationInSeconds)}
+                  conclusion={wf.conclusion}
+                  expanded={isWfExpanded}
+                  hasChildren={jobs.length > 0}
+                  onToggle={() => toggleWorkflow(wf.id)}
+                  href={wf.html_url}
+                  typeLabel="Workflow"
+                />
+
+                {/* Jobs */}
+                {isWfExpanded && jobs.length > 0 && (
+                  <div className="relative">
+                    {jobs.map((job) => {
+                      const isJobExpanded = expandedJobIds.has(job.id);
+                      const steps = job.steps || [];
+
+                      return (
+                        <div key={job.id} className="relative">
+                          {/* Job Node */}
+                          <TreeNodeCard
+                            depth={1}
+                            icon={<span className="text-purple-500">🔧</span>}
+                            label={job.name}
+                            duration={formatDuration(job.durationInSeconds)}
+                            conclusion={job.conclusion}
+                            expanded={isJobExpanded}
+                            hasChildren={steps.length > 0}
+                            onToggle={steps.length > 0 ? () => toggleJob(job.id) : undefined}
+                            href={job.html_url}
+                            typeLabel="Job"
+                          />
+
+                          {/* Steps */}
+                          {isJobExpanded && steps.length > 0 && (
+                            <div className="relative">
+                              {steps.map((step) => {
+                                const stepDurationMs = step.started_at && step.completed_at
+                                  ? new Date(step.completed_at).getTime() - new Date(step.started_at).getTime()
+                                  : 0;
+                                return (
+                                  <TreeNodeCard
+                                    key={step.number}
+                                    depth={2}
+                                    icon={<span className="text-amber-500">▸</span>}
+                                    label={step.name}
+                                    duration={formatDurationShort(Math.max(0, stepDurationMs))}
+                                    conclusion={step.conclusion}
+                                    expanded={false}
+                                    hasChildren={false}
+                                    typeLabel="Step"
+                                  />
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Step placeholder when no step data available */}
+                          {isJobExpanded && steps.length === 0 && (
+                            <div className="pl-14 py-1">
+                              <div className="flex items-center gap-2 rounded-lg border border-dashed border-neutral-200 px-3 py-1.5 text-[10px] text-neutral-400 dark:border-neutral-700 dark:text-neutral-500">
+                                <Info className="h-3 w-3" />
+                                <span>Step details not available — run ETL with step collection to enable this view.</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 type EventGroup = {
   eventType: string;
   workflows: Run[];
@@ -2445,7 +2590,6 @@ function DashboardContent({
                            <th className="px-6 py-3">
                              <span className="inline-flex items-center gap-1.5">强行合入<MetricTooltip definition="PR 合入时间早于 CI 完成时间，表示跳过了 CI 检查直接合入。" /></span>
                            </th>
-                           <th className="px-6 py-3 text-right">Details</th>
                          </tr>
                        </thead>
                       <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
@@ -2457,9 +2601,25 @@ function DashboardContent({
                             <React.Fragment key={pr.number}>
                               <tr className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-950/50">
                                 <td className="px-6 py-4">
-                                  <a href={pr.html_url} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline dark:text-blue-400" title="View PR on GitHub">
-                                    PR #{pr.number}
-                                  </a>
+                                  <div className="flex items-center gap-2">
+                                    <a href={pr.html_url} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline dark:text-blue-400" title="View PR on GitHub">
+                                      PR #{pr.number}
+                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() => void loadDetail(pr.number)}
+                                      className="inline-flex items-center justify-center rounded-md p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                                      aria-label={expandedPrNumber === pr.number ? 'Collapse PR details' : 'Expand PR details'}
+                                    >
+                                      {loadingDetailNumber === pr.number ? (
+                                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent" />
+                                      ) : expandedPrNumber === pr.number ? (
+                                        <ChevronUp className="h-4 w-4" />
+                                      ) : (
+                                        <ChevronDown className="h-4 w-4" />
+                                      )}
+                                    </button>
+                                  </div>
                                   <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{pr.title}</div>
                                   <div className="mt-1 font-mono text-xs text-neutral-500 dark:text-neutral-400">{pr.branch}</div>
                                 </td>
@@ -2481,18 +2641,13 @@ function DashboardContent({
                                     <span className="text-neutral-400 dark:text-neutral-500">—</span>
                                   )}
                                 </td>
-                                <td className="px-6 py-4 text-right">
-                                  <button type="button" onClick={() => void loadDetail(pr.number)} className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100">
-                                    {expandedPrNumber === pr.number ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                    {loadingDetailNumber === pr.number ? 'Loading...' : 'Timeline'}
-                                  </button>
-                                </td>
+
                               </tr>
 
                               {expandedPrNumber === pr.number && detail && (
                                 <tr>
-                                  <td colSpan={8} className="p-4">
-                                    <PrLifecycleTree data={detail} />
+                                  <td colSpan={7} className="p-4">
+                                    <PrWorkflowTree data={detail} />
                                   </td>
                                 </tr>
                               )}
