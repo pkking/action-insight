@@ -41,7 +41,7 @@ import type {
 type JobSortField = 'queue' | 'duration' | 'name';
 type WorkflowSortField = 'date' | 'duration' | 'name';
 type WorkflowSortOrder = 'asc' | 'desc' | 'none';
-type PrLifecycleViewMode = 'pr' | 'workflow' | 'job';
+type PrLifecycleViewMode = 'pr' | 'workflow' | 'job' | 'event';
 type WorkflowTimingData = {
   id: number;
   name: string;
@@ -627,6 +627,284 @@ function PrLifecycleTree({ data }: { data: PrLifecycleTimelineData }) {
           <span>Force merged — PR was merged before CI completed. CI ended {formatDuration(forceMergeGap)} after merge.</span>
         </div>
       )}
+    </div>
+  );
+}
+
+type EventGroup = {
+  eventType: string;
+  workflows: Run[];
+  totalCount: number;
+  successCount: number;
+  totalDurationSeconds: number;
+};
+
+const EVENT_LABELS: Record<string, { label: string; icon: string }> = {
+  push: { label: 'Push', icon: '🔀' },
+  pull_request: { label: 'Pull Request', icon: '📝' },
+  pull_request_review: { label: 'PR Review', icon: '👁️' },
+  pull_request_target: { label: 'PR Target', icon: '🎯' },
+  schedule: { label: 'Scheduled', icon: '⏰' },
+  workflow_dispatch: { label: 'Manual Dispatch', icon: '🖱️' },
+  issue_comment: { label: 'Issue Comment', icon: '💬' },
+  issues: { label: 'Issues', icon: '🐛' },
+  release: { label: 'Release', icon: '🏷️' },
+  create: { label: 'Branch/Tag Created', icon: '🌿' },
+  merge_group: { label: 'Merge Group', icon: '🔗' },
+};
+
+function getEventIcon(eventType: string): string {
+  return EVENT_LABELS[eventType]?.icon ?? '⚡';
+}
+
+function getEventLabel(eventType: string): string {
+  return EVENT_LABELS[eventType]?.label ?? eventType;
+}
+
+function groupWorkflowsByEvent(runs: Run[]): EventGroup[] {
+  const groups = new Map<string, Run[]>();
+  for (const run of runs) {
+    const type = run.event || 'unknown';
+    const existing = groups.get(type) || [];
+    existing.push(run);
+    groups.set(type, existing);
+  }
+
+  return Array.from(groups.entries())
+    .map(([eventType, workflows]) => ({
+      eventType,
+      workflows,
+      totalCount: workflows.length,
+      successCount: workflows.filter((w) => w.conclusion === 'success').length,
+      totalDurationSeconds: workflows.reduce((sum, w) => sum + w.durationInSeconds, 0),
+    }))
+    .sort((a, b) => b.totalCount - a.totalCount);
+}
+
+function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; filterName: string }) {
+  const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
+  const [expandedWorkflowIds, setExpandedWorkflowIds] = useState<Set<number>>(new Set());
+  const [expandedJobIds, setExpandedJobIds] = useState<Set<number>>(new Set());
+  const [eventSortOrder, setEventSortOrder] = useState<'count' | 'duration' | 'name'>('count');
+
+  const eventGroups = useMemo(() => {
+    let filtered = allWorkflows;
+    if (filterName) {
+      const query = filterName.toLowerCase();
+      filtered = filtered.filter(
+        (run) =>
+          `${run.name} ${run.head_branch} ${run.event ?? ''}`.toLowerCase().includes(query)
+      );
+    }
+    return groupWorkflowsByEvent(filtered);
+  }, [allWorkflows, filterName]);
+
+  const sortedGroups = useMemo(() => {
+    const sorted = [...eventGroups];
+    if (eventSortOrder === 'count') sorted.sort((a, b) => b.totalCount - a.totalCount);
+    else if (eventSortOrder === 'duration') sorted.sort((a, b) => b.totalDurationSeconds - a.totalDurationSeconds);
+    else if (eventSortOrder === 'name') sorted.sort((a, b) => a.eventType.localeCompare(b.eventType));
+    return sorted;
+  }, [eventGroups, eventSortOrder]);
+
+  const toggleEvent = (eventType: string) => {
+    setExpandedEvents((prev) => {
+      const next = new Set(prev);
+      if (next.has(eventType)) next.delete(eventType); else next.add(eventType);
+      return next;
+    });
+  };
+
+  const toggleWorkflow = (id: number) => {
+    setExpandedWorkflowIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleJob = (id: number) => {
+    setExpandedJobIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const expandAllEvents = () => {
+    setExpandedEvents(new Set(sortedGroups.map((g) => g.eventType)));
+  };
+
+  const collapseAll = () => {
+    setExpandedEvents(new Set());
+    setExpandedWorkflowIds(new Set());
+    setExpandedJobIds(new Set());
+  };
+
+  if (eventGroups.length === 0) {
+    return (
+      <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">
+        No workflow runs found for the selected date range.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+          Events Breakdown ({eventGroups.length} event types, {allWorkflows.length} runs)
+        </span>
+        <div className="flex items-center gap-3">
+          <select
+            value={eventSortOrder}
+            onChange={(e) => setEventSortOrder(e.target.value as 'count' | 'duration' | 'name')}
+            className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-[10px] text-neutral-700 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
+          >
+            <option value="count">Sort by Count</option>
+            <option value="duration">Sort by Duration</option>
+            <option value="name">Sort by Name</option>
+          </select>
+          <button type="button" onClick={expandAllEvents} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+            Expand All
+          </button>
+          <button type="button" onClick={collapseAll} className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+            Collapse All
+          </button>
+        </div>
+      </div>
+
+      {/* Event groups */}
+      {sortedGroups.map((group) => {
+        const isEventExpanded = expandedEvents.has(group.eventType);
+        const successRate = group.totalCount > 0 ? Math.round((group.successCount / group.totalCount) * 100) : 0;
+
+        return (
+          <div key={group.eventType} className="relative">
+            {/* Event Root Node */}
+            <TreeNodeCard
+              depth={0}
+              icon={<span>{getEventIcon(group.eventType)}</span>}
+              label={`${getEventLabel(group.eventType)} (${group.eventType})`}
+              duration={formatDuration(group.totalDurationSeconds)}
+              conclusion={successRate >= 80 ? 'success' : successRate >= 50 ? 'pending' : 'failure'}
+              expanded={isEventExpanded}
+              hasChildren={group.workflows.length > 0}
+              onToggle={() => toggleEvent(group.eventType)}
+            />
+
+            {/* Summary row under event */}
+            {isEventExpanded && (
+              <div className="pl-2 py-0.5">
+                <div className="flex items-center gap-3 text-[10px] text-neutral-500 dark:text-neutral-400">
+                  <span>{group.totalCount} runs</span>
+                  <span className="text-green-600 dark:text-green-400">{group.successCount} success</span>
+                  <span className="text-neutral-400 dark:text-neutral-500">{successRate}% success rate</span>
+                </div>
+              </div>
+            )}
+
+            {/* Workflows under event */}
+            {isEventExpanded && (
+              <div className="relative">
+                {group.workflows
+                  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                  .map((wf) => {
+                    const isWfExpanded = expandedWorkflowIds.has(wf.id);
+                    const jobs = wf.jobs || [];
+
+                    return (
+                      <div key={wf.id} className="relative">
+                        {/* Workflow Node */}
+                        <TreeNodeCard
+                          depth={1}
+                          icon={<span className="text-teal-500">⚡</span>}
+                          label={wf.name}
+                          duration={formatDuration(wf.durationInSeconds)}
+                          conclusion={wf.conclusion}
+                          expanded={isWfExpanded}
+                          hasChildren={jobs.length > 0}
+                          onToggle={() => toggleWorkflow(wf.id)}
+                          href={wf.html_url}
+                        />
+
+                        {/* Branch & time info */}
+                        {isWfExpanded && (
+                          <div className="pl-6 py-0.5">
+                            <div className="flex items-center gap-3 text-[10px] text-neutral-500 dark:text-neutral-400">
+                              <span className="font-mono">{wf.head_branch}</span>
+                              <span>{format(new Date(wf.created_at), 'MMM dd HH:mm')}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Jobs */}
+                        {isWfExpanded && jobs.length > 0 && (
+                          <div className="relative">
+                            {jobs.map((job) => {
+                              const isJobExpanded = expandedJobIds.has(job.id);
+                              const steps = job.steps || [];
+
+                              return (
+                                <div key={job.id} className="relative">
+                                  {/* Job Node */}
+                                  <TreeNodeCard
+                                    depth={2}
+                                    icon={<span className="text-purple-500">🔧</span>}
+                                    label={job.name}
+                                    duration={formatDuration(job.durationInSeconds)}
+                                    conclusion={job.conclusion}
+                                    expanded={isJobExpanded}
+                                    hasChildren={steps.length > 0}
+                                    onToggle={steps.length > 0 ? () => toggleJob(job.id) : undefined}
+                                    href={job.html_url}
+                                  />
+
+                                  {/* Steps */}
+                                  {isJobExpanded && steps.length > 0 && (
+                                    <div className="relative">
+                                      {steps.map((step) => {
+                                        const stepDurationMs = step.started_at && step.completed_at
+                                          ? new Date(step.completed_at).getTime() - new Date(step.started_at).getTime()
+                                          : 0;
+                                        return (
+                                          <TreeNodeCard
+                                            key={step.number}
+                                            depth={3}
+                                            icon={<span className="text-amber-500">▸</span>}
+                                            label={step.name}
+                                            duration={formatDurationShort(Math.max(0, stepDurationMs))}
+                                            conclusion={step.conclusion}
+                                            expanded={false}
+                                            hasChildren={false}
+                                          />
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+
+                                  {isJobExpanded && steps.length === 0 && (
+                                    <div className="pl-14 py-1">
+                                      <div className="flex items-center gap-2 rounded-lg border border-dashed border-neutral-200 px-3 py-1.5 text-[10px] text-neutral-400 dark:border-neutral-700 dark:text-neutral-500">
+                                        <Info className="h-3 w-3" />
+                                        <span>Step details not available.</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1393,7 +1671,7 @@ function DashboardContent({
     const controller = new AbortController();
 
     const loadAllWorkflows = async () => {
-      if (!selectedRepo || (prLifecycleViewMode !== 'workflow' && prLifecycleViewMode !== 'job')) {
+      if (!selectedRepo || (prLifecycleViewMode !== 'workflow' && prLifecycleViewMode !== 'job' && prLifecycleViewMode !== 'event')) {
         setAllWorkflows([]);
         setAllWorkflowsLoading(false);
         setAllWorkflowsError('');
@@ -1978,7 +2256,7 @@ function DashboardContent({
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800">
-                    {([['pr', 'PR'], ['workflow', 'Workflow'], ['job', 'Job']] as [PrLifecycleViewMode, string][]).map(([mode, label]) => (
+                    {([['pr', 'PR'], ['event', 'Event'], ['workflow', 'Workflow'], ['job', 'Job']] as [PrLifecycleViewMode, string][]).map(([mode, label]) => (
                       <button
                         key={mode}
                         type="button"
@@ -1997,7 +2275,7 @@ function DashboardContent({
                     <Filter className="h-4 w-4 text-neutral-400 dark:text-neutral-500" />
                     <input
                       type="text"
-                      placeholder={prLifecycleViewMode === 'pr' ? 'Filter by PR, title, branch...' : prLifecycleViewMode === 'workflow' ? 'Filter by workflow, branch...' : 'Filter by job, workflow...'}
+                      placeholder={prLifecycleViewMode === 'pr' ? 'Filter by PR, title, branch...' : prLifecycleViewMode === 'event' ? 'Filter by event, workflow, branch...' : prLifecycleViewMode === 'workflow' ? 'Filter by workflow, branch...' : 'Filter by job, workflow...'}
                       value={filterName}
                       onChange={(event) => setFilterName(event.target.value)}
                       className="w-48 bg-transparent outline-none"
@@ -2244,7 +2522,20 @@ function DashboardContent({
                     )}
                   </>
                 )
-                ) : prLifecycleViewMode === 'workflow' ? (
+                ) : prLifecycleViewMode === 'event' ? (
+                /* ===== EVENT VIEW ===== */
+                <div>
+                  {allWorkflowsError ? (
+                    <div className="p-8 text-center text-sm text-red-500 dark:text-red-400">Failed to load workflow runs. Please try again later.</div>
+                  ) : allWorkflowsLoading ? (
+                    <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">Loading workflow runs...</div>
+                  ) : allWorkflows.length === 0 ? (
+                    <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">No workflow runs found for the selected date range.</div>
+                  ) : (
+                    <EventsTreeView allWorkflows={allWorkflows} filterName={filterName} />
+                  )}
+                </div>
+               ) : prLifecycleViewMode === 'workflow' ? (
                 /* ===== WORKFLOW VIEW ===== */
                 <div>
                   {allWorkflowsError ? (
