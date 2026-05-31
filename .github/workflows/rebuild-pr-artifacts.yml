@@ -71,8 +71,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT: 20
           PR_ARTIFACT_SHA_RESOLUTION_LIMIT: 1000
-          # Per-repo token mapping — the rebuild script uses GITHUB_TOKEN_PER_REPO to look up
-          # the correct token for each repo. Falls back to ETL_GITHUB_TOKEN, then github.token.
           GITHUB_TOKEN_PER_REPO_HIYOUGA_LLAMAFACTORY: ${{ secrets.HIYOUGA_LLAMAFACTORY }}
           GITHUB_TOKEN_PER_REPO_MODELSCOPE_MS_SWIFT: ${{ secrets.MODELSCOPE_MS_SWIFT }}
           GITHUB_TOKEN_PER_REPO_SGL_PROJECT_SGLANG: ${{ secrets.SGL_PROJECT_SGLANG }}
@@ -80,5 +78,3 @@ jobs:
           GITHUB_TOKEN_PER_REPO_TRITON_LANG_TRITON_ASCEND: ${{ secrets.TRITON_LANG_TRITON_ASCEND }}
           GITHUB_TOKEN_PER_REPO_VERL_PROJECT_VERL: ${{ secrets.VERL_PROJECT_VERL }}
           GITHUB_TOKEN_PER_REPO_VLLM_PROJECT_VLLM_ASCEND: ${{ secrets.VLLM_PROJECT_VLLM_ASCEND }}
-          ETL_GITHUB_TOKEN: ${{ secrets.ETL_GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ github.token }}

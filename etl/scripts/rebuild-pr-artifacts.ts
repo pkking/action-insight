@@ -27,14 +27,11 @@ const __dirname = path.dirname(__filename);
 const RUN_SELECT_PAGE_SIZE = 1000;
 
 /** Resolve the GitHub token for a given repo.
- * Priority: per-repo env var (GITHUB_TOKEN_PER_REPO_...) > ETL_GITHUB_TOKEN > GITHUB_TOKEN.
- * Per-repo env var name: uppercase owner_repo, with / and - replaced by _.
+ * Uses per-repo env var GITHUB_TOKEN_PER_REPO_* (uppercase, non-alphanumeric → _).
  * Example: vllm-project/vllm-ascend → GITHUB_TOKEN_PER_REPO_VLLM_PROJECT_VLLM_ASCEND */
 function resolveGitHubToken(repoKey: string): string | undefined {
   const perRepoKey = `GITHUB_TOKEN_PER_REPO_${repoKey.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
-  const perRepo = process.env[perRepoKey];
-  if (perRepo !== undefined) return perRepo;
-  return process.env.ETL_GITHUB_TOKEN ?? process.env.GITHUB_TOKEN;
+  return process.env[perRepoKey];
 }
 
 const CLI_HELP = `Usage: npx tsx etl/scripts/rebuild-pr-artifacts.ts [options]
