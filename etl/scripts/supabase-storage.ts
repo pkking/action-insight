@@ -215,7 +215,7 @@ export async function writeRunsToSupabase(repo: string, runs: Run[], date: strin
     html_url: run.html_url,
     duration_seconds: run.durationInSeconds,
     date,
-    steps_checked_at: new Date().toISOString(),
+    steps_checked_at: run.updated_at,
   }));
 
   for (const batch of chunkArray(runRows, RUN_UPSERT_BATCH_SIZE)) {
