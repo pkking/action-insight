@@ -169,21 +169,32 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 10. RPC: Get run IDs that have jobs missing steps for a repo
+-- 10. RPC: Get run IDs where ALL non-skipped/non-cancelled jobs lack steps.
 -- Usage: SELECT * FROM get_run_ids_missing_steps(repo_id);
--- Note: Excludes skipped/cancelled jobs which legitimately have no steps.
--- A run is returned if ALL its non-skipped/non-cancelled jobs lack steps.
+-- A run is returned ONLY if it has at least one eligible job AND none of them have steps.
+-- Runs with even a single job that has steps are excluded to prevent infinite retries.
 CREATE OR REPLACE FUNCTION get_run_ids_missing_steps(p_repo_id INTEGER)
 RETURNS TABLE(run_id BIGINT) AS $$
 BEGIN
   RETURN QUERY
     SELECT DISTINCT r.id
     FROM runs r
-    JOIN jobs j ON j.run_id = r.id
-    LEFT JOIN steps s ON j.id = s.job_id
     WHERE r.repo_id = p_repo_id
-      AND j.conclusion NOT IN ('skipped', 'cancelled')
-      AND s.job_id IS NULL
+      -- Has at least one eligible (non-skipped/non-cancelled) job
+      AND EXISTS (
+        SELECT 1
+        FROM jobs j
+        WHERE j.run_id = r.id
+          AND j.conclusion NOT IN ('skipped', 'cancelled')
+      )
+      -- None of the eligible jobs have steps
+      AND NOT EXISTS (
+        SELECT 1
+        FROM jobs j
+        INNER JOIN steps s ON s.job_id = j.id
+        WHERE j.run_id = r.id
+          AND j.conclusion NOT IN ('skipped', 'cancelled')
+      )
     ORDER BY r.id;
 END;
 $$ LANGUAGE plpgsql;

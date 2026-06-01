@@ -44,7 +44,9 @@ export function buildCollectionWindows({
     if (latest && !forceFullBackfill && !hasIncompleteHistory) {
       return buildReverseCollectionWindows(latest, today, windowDays);
     }
-    return buildReverseCollectionWindows(forwardStart, today, windowDays);
+    // For forceFullBackfill, always start from oldest to ensure complete rebuild.
+    const reverseStart = forceFullBackfill ? oldest : forwardStart;
+    return buildReverseCollectionWindows(reverseStart, today, windowDays);
   }
 
   if (latest && !forceFullBackfill && !hasIncompleteHistory) {
