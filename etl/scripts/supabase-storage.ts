@@ -390,15 +390,15 @@ export async function getExistingRunIdsWithJobsFromSupabase(repo: string): Promi
   return runIds;
 }
 
-export async function getExistingRunIdsWithStepsFromSupabase(repo: string): Promise<Set<number>> {
+export async function getExistingRunIdsWithStepsFromSupabase(repo: string): Promise<Map<number, string>> {
   const supabase = getSupabase();
-  if (!supabase) return new Set();
+  if (!supabase) return new Map();
 
   const [owner, repoName] = repo.split('/');
   const repoId = await ensureRepo(owner, repoName);
-  if (!repoId) return new Set();
+  if (!repoId) return new Map();
 
-  const runIds = new Set<number>();
+  const runIds = new Map<number, string>();
   let from = 0;
 
   while (true) {
@@ -415,7 +415,7 @@ export async function getExistingRunIdsWithStepsFromSupabase(repo: string): Prom
     if (!data || data.length === 0) break;
 
     for (const row of data) {
-      runIds.add(Number(row.run_id));
+      runIds.set(Number(row.run_id), row.updated_at);
     }
 
     if (data.length < SUPABASE_PAGE_SIZE) break;

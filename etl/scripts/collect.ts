@@ -376,7 +376,11 @@ export async function collectRepo(
         const runId = run.id;
         let jobs: Job[] = [];
 
-        if (existingRunIdsWithSteps.has(runId)) {
+        const cachedUpdatedAt = existingRunIdsWithSteps.get(runId);
+        const isCachedRunFresh =
+          cachedUpdatedAt && new Date(cachedUpdatedAt).getTime() >= new Date(run.updated_at).getTime();
+
+        if (isCachedRunFresh) {
           skippedJobsCount++;
           log(`Skipping jobs for run #${runId} - already cached with steps`);
         } else {

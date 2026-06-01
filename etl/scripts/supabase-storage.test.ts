@@ -14,8 +14,8 @@ function mockSupabaseClient(options: {
     status?: string;
     error_message?: string | null;
   }>;
-  rpcRows?: Array<{ run_id: number | string }>;
-  rpcPages?: Array<Array<{ run_id: number | string }>>;
+  rpcRows?: Array<{ run_id: number | string; updated_at?: string }>;
+  rpcPages?: Array<Array<{ run_id: number | string; updated_at?: string }>>;
   rpcError?: { message: string } | null;
   runUpsertError?: { message: string } | null;
   jobUpsertError?: { message: string } | null;
@@ -418,29 +418,38 @@ describe('supabase-storage', () => {
 
   it('uses the server-side RPC to read run IDs with checked steps', async () => {
     const { supabase, rpcRange } = mockSupabaseClient({
-      rpcRows: [{ run_id: '101' }, { run_id: 102 }],
+      rpcRows: [
+        { run_id: '101', updated_at: '2026-05-01T00:00:00Z' },
+        { run_id: 102, updated_at: '2026-05-01T00:10:00Z' },
+      ],
     });
     const { getExistingRunIdsWithStepsFromSupabase } = await importStorageWithSupabase(supabase);
 
     const runIds = await getExistingRunIdsWithStepsFromSupabase('acme/widgets');
 
-    expect(runIds).toEqual(new Set([101, 102]));
+    expect(runIds).toEqual(new Map([
+      [101, '2026-05-01T00:00:00Z'],
+      [102, '2026-05-01T00:10:00Z'],
+    ]));
     expect(supabase.rpc).toHaveBeenCalledWith('get_run_ids_with_steps', { p_repo_id: 7 });
     expect(rpcRange).toHaveBeenCalledWith(0, 999);
   });
 
   it('paginates the checked-steps RPC', async () => {
-    const firstPage = Array.from({ length: 1000 }, (_, i) => ({ run_id: i + 1 }));
+    const firstPage = Array.from({ length: 1000 }, (_, i) => ({
+      run_id: i + 1,
+      updated_at: '2026-05-01T00:00:00Z',
+    }));
     const { supabase, rpcRange } = mockSupabaseClient({
-      rpcPages: [firstPage, [{ run_id: '1001' }]],
+      rpcPages: [firstPage, [{ run_id: '1001', updated_at: '2026-05-01T00:10:00Z' }]],
     });
     const { getExistingRunIdsWithStepsFromSupabase } = await importStorageWithSupabase(supabase);
 
     const runIds = await getExistingRunIdsWithStepsFromSupabase('acme/widgets');
 
     expect(runIds.size).toBe(1001);
-    expect(runIds.has(1)).toBe(true);
-    expect(runIds.has(1001)).toBe(true);
+    expect(runIds.get(1)).toBe('2026-05-01T00:00:00Z');
+    expect(runIds.get(1001)).toBe('2026-05-01T00:10:00Z');
     expect(rpcRange).toHaveBeenCalledWith(0, 999);
     expect(rpcRange).toHaveBeenCalledWith(1000, 1999);
   });

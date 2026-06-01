@@ -179,14 +179,15 @@ $$ LANGUAGE plpgsql;
 
 DROP FUNCTION IF EXISTS get_run_ids_missing_steps(INTEGER);
 DROP FUNCTION IF EXISTS get_run_ids_missing_steps(INTEGER, BIGINT);
+DROP FUNCTION IF EXISTS get_run_ids_with_steps(INTEGER);
 
 -- 10. RPC: Get run IDs that have already had steps checked for a repo.
 -- Usage: SELECT * FROM get_run_ids_with_steps(repo_id);
 CREATE OR REPLACE FUNCTION get_run_ids_with_steps(p_repo_id INTEGER)
-RETURNS TABLE(run_id BIGINT) AS $$
+RETURNS TABLE(run_id BIGINT, updated_at TIMESTAMPTZ) AS $$
 BEGIN
   RETURN QUERY
-    SELECT r.id
+    SELECT r.id, r.updated_at
     FROM runs r
     WHERE r.repo_id = p_repo_id
       AND r.steps_checked_at IS NOT NULL
