@@ -12,6 +12,7 @@ type FetchRunsRequest = {
   repo: string;
   startDate: string;
   endDate: string;
+  includeSteps?: boolean;
 };
 
 type FetchLatestRunsRequest = {
@@ -88,6 +89,7 @@ export async function POST(request: Request) {
         const runs = await fetchRuns(body.owner, body.repo, {
           startDate: body.startDate,
           endDate: body.endDate,
+          includeSteps: body.includeSteps,
         });
         return NextResponse.json({ data: runs });
       }
