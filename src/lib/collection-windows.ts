@@ -46,6 +46,21 @@ export function buildCollectionWindows({
     }
     // For forceFullBackfill, always start from oldest to ensure complete rebuild.
     const reverseStart = forceFullBackfill ? oldest : forwardStart;
+
+    // When history is incomplete but we have a latest date, split into
+    // incremental + backfill windows (mirroring forward mode) to avoid
+    // redundant API requests for already-collected dates.
+    if (latest && !forceFullBackfill && hasIncompleteHistory) {
+      const recentWindows = buildReverseCollectionWindows(latest, today, windowDays);
+      const backfillEnd = format(subDays(new Date(`${latest}T00:00:00Z`), 1), 'yyyy-MM-dd');
+
+      if (reverseStart > backfillEnd) {
+        return recentWindows;
+      }
+
+      return [...recentWindows, ...buildReverseCollectionWindows(reverseStart, backfillEnd, windowDays)];
+    }
+
     return buildReverseCollectionWindows(reverseStart, today, windowDays);
   }
 

@@ -72,6 +72,7 @@ export function parseCollectCliOptions(argv: string[]): CollectCliOptions {
 
     if (arg === '--reverse') {
       reverse = true;
+      forward = false;
     }
 
     if (arg === '--forward') {

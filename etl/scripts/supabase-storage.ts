@@ -397,17 +397,15 @@ export async function getExistingRunIdsMissingStepsFromSupabase(repo: string): P
   const repoId = await ensureRepo(owner, repoName);
   if (!repoId) return new Set();
 
-  // Use RPC to find run IDs that have jobs missing steps.
-  // The database-side query joins runs → jobs → steps in a single pass,
-  // avoiding OOM risk and N+1 queries from client-side chunking.
+  // Use keyset (cursor) pagination via RPC for efficient iteration on large datasets.
+  // Unlike offset-based pagination which requires scanning and skipping rows,
+  // keyset pagination uses WHERE id > last_id which leverages the primary key index.
   const runIds = new Set<number>();
-  let from = 0;
+  let afterId = 0;
 
   while (true) {
-    const to = from + SUPABASE_PAGE_SIZE - 1;
     const { data, error } = await supabase
-      .rpc('get_run_ids_missing_steps', { p_repo_id: repoId })
-      .range(from, to);
+      .rpc('get_run_ids_missing_steps', { p_repo_id: repoId, p_after_id: afterId });
 
     if (error) {
       console.error(`  [Supabase] Error fetching run IDs missing steps: ${error.message}`);
@@ -417,11 +415,12 @@ export async function getExistingRunIdsMissingStepsFromSupabase(repo: string): P
     if (!data || data.length === 0) break;
 
     for (const row of data) {
-      runIds.add(Number(row.run_id));
+      const id = Number(row.run_id);
+      runIds.add(id);
+      afterId = id;
     }
 
-    if (data.length < SUPABASE_PAGE_SIZE) break;
-    from += SUPABASE_PAGE_SIZE;
+    if (data.length < 1000) break;
   }
 
   return runIds;
