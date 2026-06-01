@@ -17,6 +17,7 @@ import { isGitHubRateLimitError, getRateLimitDetails, type RateLimitDetails } fr
 import {
   writeRunsToSupabase,
   getExistingRunIdsWithJobsFromSupabase,
+  getExistingRunIdsMissingStepsFromSupabase,
   readCollectionState,
   writeCollectionState,
   getCollectedDatesFromSupabase,
@@ -317,6 +318,9 @@ export async function collectRepo(
   const existingRunIdsWithJobs = await getExistingRunIdsWithJobsFromSupabase(repo);
   log(`Existing runs with cached jobs from Supabase: ${existingRunIdsWithJobs.size}`);
 
+  const runIdsMissingSteps = await getExistingRunIdsMissingStepsFromSupabase(repo);
+  log(`Existing runs with jobs missing steps (need re-fetch): ${runIdsMissingSteps.size}`);
+
   function toCreatedParam(window: CollectionWindow): string {
     return toCreatedRange(window);
   }
@@ -376,9 +380,9 @@ export async function collectRepo(
         const runId = run.id;
         let jobs: Job[] = [];
 
-        if (existingRunIdsWithJobs.has(runId)) {
+        if (existingRunIdsWithJobs.has(runId) && !runIdsMissingSteps.has(runId)) {
           skippedJobsCount++;
-          log(`Skipping jobs for run #${runId} - already cached`);
+          log(`Skipping jobs for run #${runId} - already cached with steps`);
         } else {
           log(`Fetching jobs for run #${runId} (${run.name})...`);
           const jobsStartTime = Date.now();

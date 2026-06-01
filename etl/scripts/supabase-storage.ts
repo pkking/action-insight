@@ -389,6 +389,60 @@ export async function getExistingRunIdsWithJobsFromSupabase(repo: string): Promi
   return runIds;
 }
 
+export async function getExistingRunIdsMissingStepsFromSupabase(repo: string): Promise<Set<number>> {
+  const supabase = getSupabase();
+  if (!supabase) return new Set();
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return new Set();
+
+  // Find jobs that have NO corresponding steps in the steps table
+  // Only for completed jobs (skipped jobs legitimately have no steps)
+  const runIds = new Set<number>();
+  let from = 0;
+
+  while (true) {
+    const to = from + SUPABASE_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from('jobs')
+      .select('run_id, id, conclusion')
+      .eq('repo_id', repoId)
+      .neq('conclusion', 'skipped')
+      .range(from, to);
+
+    if (error) {
+      console.error(`  [Supabase] Error fetching jobs missing steps: ${error.message}`);
+      return runIds;
+    }
+
+    if (!data || data.length === 0) break;
+
+    // Get job IDs from this batch
+    const jobIds = data.map((j: { id: number }) => j.id);
+
+    // Find which of these jobs already have steps
+    const { data: existingSteps } = await supabase
+      .from('steps')
+      .select('job_id')
+      .in('job_id', jobIds);
+
+    const jobsWithSteps = new Set((existingSteps || []).map((s: { job_id: number }) => s.job_id));
+
+    // Add run_ids for jobs that DON'T have steps
+    for (const job of data) {
+      if (!jobsWithSteps.has(job.id)) {
+        runIds.add(Number(job.run_id));
+      }
+    }
+
+    if (data.length < SUPABASE_PAGE_SIZE) break;
+    from += SUPABASE_PAGE_SIZE;
+  }
+
+  return runIds;
+}
+
 export async function readPullRequestResolutionCacheFromSupabase(
   repo: string,
   shas: string[],

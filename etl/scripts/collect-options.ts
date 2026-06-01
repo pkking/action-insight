@@ -1,6 +1,7 @@
 export interface CollectCliOptions {
   forceFullBackfill: boolean;
   reverse: boolean;
+  forward: boolean;
   repoName?: string;
   help: boolean;
 }
@@ -16,7 +17,9 @@ Options:
   --force-full-backfill, --full Restart history backfill from the earliest retained day
                                 Rebuilds the full retention window (default: 90 days)
   --reverse                     Collect from today backward instead of oldest-first
-                                Useful for quickly inspecting recent runs
+                                This is the DEFAULT behavior
+  --forward                     Collect from oldest to today (legacy behavior)
+                                Useful for rebuilding history in chronological order
   -h, --help                    Show this help message
 
 Environment Variables:
@@ -45,7 +48,8 @@ Examples:
 export function parseCollectCliOptions(argv: string[]): CollectCliOptions {
   let repoName: string | undefined;
   let forceFullBackfill = false;
-  let reverse = false;
+  let reverse = true;
+  let forward = false;
   let help = false;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -69,9 +73,14 @@ export function parseCollectCliOptions(argv: string[]): CollectCliOptions {
     if (arg === '--reverse') {
       reverse = true;
     }
+
+    if (arg === '--forward') {
+      reverse = false;
+      forward = true;
+    }
   }
 
-  return { forceFullBackfill, reverse, repoName, help };
+  return { forceFullBackfill, reverse, forward, repoName, help };
 }
 
 export function resolveTargetRepos(configuredRepos: string[], repoName?: string): string[] {
