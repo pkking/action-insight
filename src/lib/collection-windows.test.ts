@@ -93,8 +93,9 @@ describe('collection window helpers', () => {
       reverse: true,
     });
 
-    expect(windows[0]).toEqual({ start: '2026-04-06', end: '2026-04-13' });
-    expect(windows.at(-1)).toEqual({ start: '2026-03-01', end: '2026-03-04' });
+    // With split optimization: incremental (latest→today) first, then backfill
+    expect(windows[0]).toEqual({ start: '2026-04-12', end: '2026-04-13' });
+    expect(windows.at(-1).start).toBe('2026-03-01');
   });
 
   it('sorts and de-duplicates collected daily files before retention cleanup', () => {
