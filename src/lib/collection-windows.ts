@@ -39,6 +39,11 @@ export function buildCollectionWindows({
   const forwardStart = backfillCursor || oldest;
 
   if (reverse) {
+    // When history is complete and not forcing full backfill, only collect
+    // the incremental window (latest → today) in reverse order.
+    if (latest && !forceFullBackfill && !hasIncompleteHistory) {
+      return buildReverseCollectionWindows(latest, today, windowDays);
+    }
     return buildReverseCollectionWindows(forwardStart, today, windowDays);
   }
 
