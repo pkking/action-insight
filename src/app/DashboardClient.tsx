@@ -1651,7 +1651,6 @@ function DashboardContent({
           repo: selectedRepo.repo,
           startDate: format(dateRange.start, 'yyyy-MM-dd'),
           endDate: format(dateRange.end, 'yyyy-MM-dd'),
-          includeSteps: true,
         }, controller.signal);
 
         if (cancelled) {
