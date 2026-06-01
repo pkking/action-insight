@@ -378,7 +378,7 @@ export async function collectRepo(
 
         const cachedUpdatedAt = existingRunIdsWithSteps.get(runId);
         const isCachedRunFresh =
-          cachedUpdatedAt && new Date(cachedUpdatedAt).getTime() >= new Date(run.updated_at).getTime();
+          cachedUpdatedAt && Date.parse(cachedUpdatedAt) >= Date.parse(run.updated_at);
 
         if (isCachedRunFresh) {
           skippedJobsCount++;
