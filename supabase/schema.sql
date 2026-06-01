@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS runs (
   updated_at TIMESTAMPTZ NOT NULL,
   html_url TEXT NOT NULL,
   duration_seconds INTEGER NOT NULL DEFAULT 0,
-  date DATE NOT NULL  -- Denormalized for efficient date-range queries
+  date DATE NOT NULL,  -- Denormalized for efficient date-range queries
+  steps_checked_at TIMESTAMPTZ  -- Tracks when steps were last checked; NULL means never checked
 );
 
 -- Index for common query patterns: by repo + date range
@@ -172,8 +173,12 @@ $$ LANGUAGE plpgsql;
 -- 10. RPC: Get run IDs where ALL non-skipped/non-cancelled jobs lack steps.
 -- Usage: SELECT * FROM get_run_ids_missing_steps(repo_id, after_id);
 -- Supports keyset pagination via p_after_id (pass 0 or NULL to start from beginning).
--- A run is returned ONLY if it has at least one eligible job AND none of them have steps.
+-- A run is returned ONLY if:
+--   1. It has at least one eligible job (non-skipped/non-cancelled)
+--   2. None of those jobs have steps
+--   3. steps_checked_at IS NULL or is older than updated_at (needs re-check)
 -- Runs with even a single job that has steps are excluded to prevent infinite retries.
+-- After fetching, the ETL should set steps_checked_at = now() on the run.
 CREATE OR REPLACE FUNCTION get_run_ids_missing_steps(p_repo_id INTEGER, p_after_id BIGINT DEFAULT 0)
 RETURNS TABLE(run_id BIGINT) AS $$
 BEGIN
@@ -182,6 +187,8 @@ BEGIN
     FROM runs r
     WHERE r.repo_id = p_repo_id
       AND r.id > COALESCE(NULLIF(p_after_id, 0), 0)
+      -- Has not been checked for steps, or was updated since last check
+      AND (r.steps_checked_at IS NULL OR r.steps_checked_at < r.updated_at)
       -- Has at least one eligible (non-skipped/non-cancelled) job
       AND EXISTS (
         SELECT 1
