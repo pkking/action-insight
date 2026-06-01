@@ -35,9 +35,8 @@ CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs(created_at DESC);
 -- Backfill: add steps_checked_at column to existing runs tables (safe to run multiple times)
 ALTER TABLE runs ADD COLUMN IF NOT EXISTS steps_checked_at TIMESTAMPTZ;
 
--- Partial index for run IDs that have already had steps checked
-CREATE INDEX IF NOT EXISTS idx_runs_steps_checked ON runs(repo_id, id)
-  WHERE steps_checked_at IS NOT NULL;
+-- Drop previously-added redundant partial index; idx_runs_repo_id_id already covers (repo_id, id).
+DROP INDEX IF EXISTS idx_runs_steps_checked;
 
 -- 3. Jobs table (individual jobs within runs)
 CREATE TABLE IF NOT EXISTS jobs (
