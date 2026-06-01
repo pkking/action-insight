@@ -215,6 +215,7 @@ export async function writeRunsToSupabase(repo: string, runs: Run[], date: strin
     html_url: run.html_url,
     duration_seconds: run.durationInSeconds,
     date,
+    steps_checked_at: run.updated_at,
   }));
 
   for (const batch of chunkArray(runRows, RUN_UPSERT_BATCH_SIZE)) {
@@ -382,6 +383,42 @@ export async function getExistingRunIdsWithJobsFromSupabase(repo: string): Promi
     if (!data || data.length < SUPABASE_PAGE_SIZE) {
       break;
     }
+
+    from += SUPABASE_PAGE_SIZE;
+  }
+
+  return runIds;
+}
+
+export async function getExistingRunIdsWithStepsFromSupabase(repo: string): Promise<Map<number, string>> {
+  const supabase = getSupabase();
+  if (!supabase) return new Map();
+
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(owner, repoName);
+  if (!repoId) return new Map();
+
+  const runIds = new Map<number, string>();
+  let from = 0;
+
+  while (true) {
+    const to = from + SUPABASE_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .rpc('get_run_ids_with_steps', { p_repo_id: repoId })
+      .range(from, to);
+
+    if (error) {
+      console.error(`  [Supabase] Error fetching run IDs with steps: ${error.message}`);
+      return runIds;
+    }
+
+    if (!data || data.length === 0) break;
+
+    for (const row of data) {
+      runIds.set(Number(row.run_id), row.updated_at);
+    }
+
+    if (data.length < SUPABASE_PAGE_SIZE) break;
 
     from += SUPABASE_PAGE_SIZE;
   }

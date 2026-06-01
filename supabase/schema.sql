@@ -23,13 +23,20 @@ CREATE TABLE IF NOT EXISTS runs (
   updated_at TIMESTAMPTZ NOT NULL,
   html_url TEXT NOT NULL,
   duration_seconds INTEGER NOT NULL DEFAULT 0,
-  date DATE NOT NULL  -- Denormalized for efficient date-range queries
+  date DATE NOT NULL,  -- Denormalized for efficient date-range queries
+  steps_checked_at TIMESTAMPTZ  -- Tracks when steps were last checked; NULL means never checked
 );
 
 -- Index for common query patterns: by repo + date range
 CREATE INDEX IF NOT EXISTS idx_runs_repo_date ON runs(repo_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_runs_repo_id_id ON runs(repo_id, id);
 CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs(created_at DESC);
+
+-- Backfill: add steps_checked_at column to existing runs tables (safe to run multiple times)
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS steps_checked_at TIMESTAMPTZ;
+
+-- Drop previously-added redundant partial index; idx_runs_repo_id_id already covers (repo_id, id).
+DROP INDEX IF EXISTS idx_runs_steps_checked;
 
 -- 3. Jobs table (individual jobs within runs)
 CREATE TABLE IF NOT EXISTS jobs (
@@ -166,6 +173,25 @@ BEGIN
     FROM runs r
     WHERE r.repo_id = p_repo_id
     ORDER BY r.date DESC;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP FUNCTION IF EXISTS get_run_ids_missing_steps(INTEGER);
+DROP FUNCTION IF EXISTS get_run_ids_missing_steps(INTEGER, BIGINT);
+DROP FUNCTION IF EXISTS get_run_ids_with_steps(INTEGER);
+
+-- 10. RPC: Get run IDs that have already had steps checked for a repo.
+-- Usage: SELECT * FROM get_run_ids_with_steps(repo_id);
+CREATE OR REPLACE FUNCTION get_run_ids_with_steps(p_repo_id INTEGER)
+RETURNS TABLE(run_id BIGINT, updated_at TIMESTAMPTZ) AS $$
+BEGIN
+  RETURN QUERY
+    SELECT r.id, r.updated_at
+    FROM runs r
+    WHERE r.repo_id = p_repo_id
+      AND r.steps_checked_at IS NOT NULL
+      AND r.steps_checked_at >= r.updated_at
+    ORDER BY r.id;
 END;
 $$ LANGUAGE plpgsql;
 

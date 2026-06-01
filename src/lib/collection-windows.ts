@@ -1,4 +1,13 @@
-import { addDays, format, subDays } from 'date-fns';
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function addUtcDays(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * DAY_MS);
+}
+
+// UTC-safe date formatting: avoids timezone-related off-by-one errors
+function utcDateString(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
 
 export interface CollectionWindow {
   start: string;
@@ -34,12 +43,34 @@ export function buildCollectionWindows({
     historyComplete === false ||
     Boolean(backfillCursor) ||
     (historyComplete === undefined && Boolean(latest) && existingFileCount <= 1);
-  const today = format(now, 'yyyy-MM-dd');
-  const oldest = format(subDays(now, retentionDays), 'yyyy-MM-dd');
+  const today = utcDateString(now);
+  const oldest = utcDateString(addUtcDays(now, -retentionDays));
   const forwardStart = backfillCursor || oldest;
 
   if (reverse) {
-    return buildReverseCollectionWindows(forwardStart, today, windowDays);
+    // When history is complete and not forcing full backfill, only collect
+    // the incremental window (latest → today) in reverse order.
+    if (latest && !forceFullBackfill && !hasIncompleteHistory) {
+      return buildReverseCollectionWindows(latest, today, windowDays);
+    }
+    // For forceFullBackfill, always start from oldest to ensure complete rebuild.
+    const reverseStart = forceFullBackfill ? oldest : forwardStart;
+
+    // When history is incomplete but we have a latest date, split into
+    // incremental + backfill windows (mirroring forward mode) to avoid
+    // redundant API requests for already-collected dates.
+    if (latest && !forceFullBackfill && hasIncompleteHistory) {
+      const recentWindows = buildReverseCollectionWindows(latest, today, windowDays);
+      const backfillEnd = utcDateString(addUtcDays(new Date(`${latest}T00:00:00Z`), -1));
+
+      if (reverseStart > backfillEnd) {
+        return recentWindows;
+      }
+
+      return [...recentWindows, ...buildReverseCollectionWindows(reverseStart, backfillEnd, windowDays)];
+    }
+
+    return buildReverseCollectionWindows(reverseStart, today, windowDays);
   }
 
   if (latest && !forceFullBackfill && !hasIncompleteHistory) {
@@ -48,7 +79,7 @@ export function buildCollectionWindows({
 
   if (latest && !forceFullBackfill && hasIncompleteHistory) {
     const recentWindows = buildForwardCollectionWindows(latest, today, windowDays);
-    const backfillEnd = format(subDays(new Date(`${latest}T00:00:00Z`), 1), 'yyyy-MM-dd');
+    const backfillEnd = utcDateString(addUtcDays(new Date(`${latest}T00:00:00Z`), -1));
 
     if (forwardStart > backfillEnd) {
       return recentWindows;
@@ -66,13 +97,13 @@ function buildForwardCollectionWindows(startDate: string, endDate: string, windo
   const end = new Date(`${endDate}T00:00:00Z`);
 
   while (start <= end) {
-    const windowEnd = addDays(start, windowDays);
+    const windowEnd = addUtcDays(start, windowDays);
     windows.push({
-      start: format(start, 'yyyy-MM-dd'),
-      end: format(windowEnd > end ? end : windowEnd, 'yyyy-MM-dd'),
+      start: utcDateString(start),
+      end: utcDateString(windowEnd > end ? end : windowEnd),
     });
 
-    start = addDays(windowEnd, 1);
+    start = addUtcDays(windowEnd, 1);
   }
 
   return windows;
@@ -84,13 +115,13 @@ function buildReverseCollectionWindows(startDate: string, endDate: string, windo
   let end = new Date(`${endDate}T00:00:00Z`);
 
   while (end >= oldest) {
-    const windowStart = subDays(end, windowDays);
+    const windowStart = addUtcDays(end, -windowDays);
     windows.push({
-      start: format(windowStart < oldest ? oldest : windowStart, 'yyyy-MM-dd'),
-      end: format(end, 'yyyy-MM-dd'),
+      start: utcDateString(windowStart < oldest ? oldest : windowStart),
+      end: utcDateString(end),
     });
 
-    end = addDays(windowStart < oldest ? oldest : windowStart, -1);
+    end = addUtcDays(windowStart < oldest ? oldest : windowStart, -1);
   }
 
   return windows;
