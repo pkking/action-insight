@@ -1,4 +1,4 @@
-type FetchRunsParams = { owner: string; repo: string; startDate: string; endDate: string };
+type FetchRunsParams = { owner: string; repo: string; startDate: string; endDate: string; includeSteps?: boolean };
 type FetchLatestRunsParams = { owner: string; repo: string; maxFiles?: number };
 type FetchPullRequestDetailParams = { owner: string; repo: string; number: number };
 
