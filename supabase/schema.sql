@@ -169,6 +169,23 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- 10. RPC: Get run IDs that have jobs missing steps for a repo
+-- Usage: SELECT * FROM get_run_ids_missing_steps(repo_id);
+CREATE OR REPLACE FUNCTION get_run_ids_missing_steps(p_repo_id INTEGER)
+RETURNS TABLE(run_id BIGINT) AS $$
+BEGIN
+  RETURN QUERY
+    SELECT DISTINCT r.id
+    FROM runs r
+    JOIN jobs j ON j.run_id = r.id
+    LEFT JOIN steps s ON j.id = s.job_id
+    WHERE r.repo_id = p_repo_id
+      AND j.conclusion IS DISTINCT FROM 'skipped'
+      AND s.job_id IS NULL
+    ORDER BY r.id;
+END;
+$$ LANGUAGE plpgsql;
+
 -- 10. Test case statistics (per repo, per window)
 CREATE TABLE IF NOT EXISTS test_case_stats (
   id SERIAL PRIMARY KEY,

@@ -397,80 +397,34 @@ export async function getExistingRunIdsMissingStepsFromSupabase(repo: string): P
   const repoId = await ensureRepo(owner, repoName);
   if (!repoId) return new Set();
 
-  // Step 1: get all run_ids for this repo
-  const { data: allRunIds, error: runsError } = await supabase
-    .from('runs')
-    .select('id')
-    .eq('repo_id', repoId);
+  // Use RPC to find run IDs that have jobs missing steps.
+  // The database-side query joins runs → jobs → steps in a single pass,
+  // avoiding OOM risk and N+1 queries from client-side chunking.
+  const runIds = new Set<number>();
+  let from = 0;
 
-  if (runsError) {
-    console.error(`  [Supabase] Error fetching run IDs: ${runsError.message}`);
-    return new Set();
+  while (true) {
+    const to = from + SUPABASE_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .rpc('get_run_ids_missing_steps', { p_repo_id: repoId })
+      .range(from, to);
+
+    if (error) {
+      console.error(`  [Supabase] Error fetching run IDs missing steps: ${error.message}`);
+      return runIds;
+    }
+
+    if (!data || data.length === 0) break;
+
+    for (const row of data) {
+      runIds.add(Number(row.run_id));
+    }
+
+    if (data.length < SUPABASE_PAGE_SIZE) break;
+    from += SUPABASE_PAGE_SIZE;
   }
 
-  if (!allRunIds || allRunIds.length === 0) return new Set();
-  const runIdSet = new Set(allRunIds.map((r: { id: number }) => r.id));
-
-  // Step 2: fetch all non-skipped jobs for these runs
-  const runIdsArray = Array.from(runIdSet);
-  const jobsWithStepsMap = new Map<number, number[]>(); // runId -> jobIds that have steps
-  const allNonSkippedJobIds = new Set<number>();
-  const jobIdToRunId = new Map<number, number>();
-
-  for (let i = 0; i < runIdArray.length; i += SUPABASE_PAGE_SIZE) {
-    const chunk = runIdArray.slice(i, i + SUPABASE_PAGE_SIZE);
-    const { data: jobs, error: jobsError } = await supabase
-      .from('jobs')
-      .select('id, run_id, conclusion')
-      .in('run_id', chunk);
-
-    if (jobsError) {
-      console.error(`  [Supabase] Error fetching jobs: ${jobsError.message}`);
-      continue;
-    }
-
-    for (const job of jobs || []) {
-      if (job.conclusion === 'skipped') continue;
-      allNonSkippedJobIds.add(job.id);
-      jobIdToRunId.set(job.id, job.run_id);
-    }
-  }
-
-  if (allNonSkippedJobIds.size === 0) return new Set();
-
-  // Step 3: find which jobs already have steps
-  const jobIdsArray = Array.from(allNonSkippedJobIds);
-  const jobsWithSteps = new Set<number>();
-
-  for (let i = 0; i < jobIdsArray.length; i += SUPABASE_PAGE_SIZE) {
-    const chunk = jobIdsArray.slice(i, i + SUPABASE_PAGE_SIZE);
-    const { data: steps, error: stepsError } = await supabase
-      .from('steps')
-      .select('job_id')
-      .in('job_id', chunk);
-
-    if (stepsError) {
-      console.error(`  [Supabase] Error checking steps: ${stepsError.message}`);
-      continue;
-    }
-
-    for (const s of steps || []) {
-      jobsWithSteps.add(s.job_id);
-    }
-  }
-
-  // Step 4: collect run_ids that have at least one job missing steps
-  const runIdsMissingSteps = new Set<number>();
-  for (const jobId of allNonSkippedJobIds) {
-    if (!jobsWithSteps.has(jobId)) {
-      const runId = jobIdToRunId.get(jobId);
-      if (runId !== undefined) {
-        runIdsMissingSteps.add(runId);
-      }
-    }
-  }
-
-  return runIdsMissingSteps;
+  return runIds;
 }
 
 export async function readPullRequestResolutionCacheFromSupabase(
