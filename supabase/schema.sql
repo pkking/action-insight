@@ -32,6 +32,17 @@ CREATE INDEX IF NOT EXISTS idx_runs_repo_date ON runs(repo_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_runs_repo_id_id ON runs(repo_id, id);
 CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs(created_at DESC);
 
+-- Backfill: add steps_checked_at column to existing runs tables (safe to run multiple times)
+DO $$ BEGIN
+  ALTER TABLE runs ADD COLUMN steps_checked_at TIMESTAMPTZ;
+EXCEPTION
+  WHEN duplicate_column THEN NULL;
+END $$;
+
+-- Partial index for the steps missing RPC: only indexes runs that need step checking
+CREATE INDEX IF NOT EXISTS idx_runs_steps_pending ON runs(repo_id, id)
+  WHERE steps_checked_at IS NULL OR steps_checked_at < updated_at;
+
 -- 3. Jobs table (individual jobs within runs)
 CREATE TABLE IF NOT EXISTS jobs (
   id BIGINT PRIMARY KEY,  -- GitHub job ID
