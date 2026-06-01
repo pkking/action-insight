@@ -416,6 +416,35 @@ describe('supabase-storage', () => {
     expect(rpcRange).toHaveBeenCalledWith(1000, 1999);
   });
 
+  it('uses the server-side RPC to read run IDs with checked steps', async () => {
+    const { supabase, rpcRange } = mockSupabaseClient({
+      rpcRows: [{ run_id: '101' }, { run_id: 102 }],
+    });
+    const { getExistingRunIdsWithStepsFromSupabase } = await importStorageWithSupabase(supabase);
+
+    const runIds = await getExistingRunIdsWithStepsFromSupabase('acme/widgets');
+
+    expect(runIds).toEqual(new Set([101, 102]));
+    expect(supabase.rpc).toHaveBeenCalledWith('get_run_ids_with_steps', { p_repo_id: 7 });
+    expect(rpcRange).toHaveBeenCalledWith(0, 999);
+  });
+
+  it('paginates the checked-steps RPC', async () => {
+    const firstPage = Array.from({ length: 1000 }, (_, i) => ({ run_id: i + 1 }));
+    const { supabase, rpcRange } = mockSupabaseClient({
+      rpcPages: [firstPage, [{ run_id: '1001' }]],
+    });
+    const { getExistingRunIdsWithStepsFromSupabase } = await importStorageWithSupabase(supabase);
+
+    const runIds = await getExistingRunIdsWithStepsFromSupabase('acme/widgets');
+
+    expect(runIds.size).toBe(1001);
+    expect(runIds.has(1)).toBe(true);
+    expect(runIds.has(1001)).toBe(true);
+    expect(rpcRange).toHaveBeenCalledWith(0, 999);
+    expect(rpcRange).toHaveBeenCalledWith(1000, 1999);
+  });
+
   it('does not overwrite higher-confidence PR resolution cache entries with run payload refs', async () => {
     const { supabase, upsertedCacheRows } = mockSupabaseClient({
       cacheRows: [

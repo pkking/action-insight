@@ -16,8 +16,7 @@ import collectionWindows, { type CollectionWindow } from '../../src/lib/collecti
 import { isGitHubRateLimitError, getRateLimitDetails, type RateLimitDetails } from './github.ts';
 import {
   writeRunsToSupabase,
-  getExistingRunIdsWithJobsFromSupabase,
-  getExistingRunIdsMissingStepsFromSupabase,
+  getExistingRunIdsWithStepsFromSupabase,
   readCollectionState,
   writeCollectionState,
   getCollectedDatesFromSupabase,
@@ -315,11 +314,8 @@ export async function collectRepo(
   const state = await loadRepoState(repo, retentionDays, now);
   log(`State: latest=${state.latest}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
 
-  const existingRunIdsWithJobs = await getExistingRunIdsWithJobsFromSupabase(repo);
-  log(`Existing runs with cached jobs from Supabase: ${existingRunIdsWithJobs.size}`);
-
-  const runIdsMissingSteps = await getExistingRunIdsMissingStepsFromSupabase(repo);
-  log(`Existing runs with jobs missing steps (need re-fetch): ${runIdsMissingSteps.size}`);
+  const existingRunIdsWithSteps = await getExistingRunIdsWithStepsFromSupabase(repo);
+  log(`Existing runs with cached steps from Supabase: ${existingRunIdsWithSteps.size}`);
 
   function toCreatedParam(window: CollectionWindow): string {
     return toCreatedRange(window);
@@ -380,7 +376,7 @@ export async function collectRepo(
         const runId = run.id;
         let jobs: Job[] = [];
 
-        if (existingRunIdsWithJobs.has(runId) && !runIdsMissingSteps.has(runId)) {
+        if (existingRunIdsWithSteps.has(runId)) {
           skippedJobsCount++;
           log(`Skipping jobs for run #${runId} - already cached with steps`);
         } else {

@@ -29,7 +29,7 @@ Environment Variables:
   VERBOSE                       Enable verbose logging (true or 1)
 
 Examples:
-  # Collect all configured repos (oldest-first backfill)
+  # Collect all configured repos (recent data first)
   GITHUB_TOKEN=your_token npx tsx etl/scripts/collect.ts
 
   # Collect a specific repo
@@ -38,8 +38,11 @@ Examples:
   # Force full backfill for a repo
   GITHUB_TOKEN=your_token npx tsx etl/scripts/collect.ts --repo tile-ai/tilelang-ascend --force-full-backfill
 
-  # Collect recent data first (reverse order)
+  # Collect recent data first (reverse order; explicit)
   GITHUB_TOKEN=your_token npx tsx etl/scripts/collect.ts --repo tile-ai/tilelang-ascend --reverse
+
+  # Collect oldest-first
+  GITHUB_TOKEN=your_token npx tsx etl/scripts/collect.ts --repo tile-ai/tilelang-ascend --forward
 
   # Show help
   npx tsx etl/scripts/collect.ts --help

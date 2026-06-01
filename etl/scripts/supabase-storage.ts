@@ -390,7 +390,7 @@ export async function getExistingRunIdsWithJobsFromSupabase(repo: string): Promi
   return runIds;
 }
 
-export async function getExistingRunIdsMissingStepsFromSupabase(repo: string): Promise<Set<number>> {
+export async function getExistingRunIdsWithStepsFromSupabase(repo: string): Promise<Set<number>> {
   const supabase = getSupabase();
   if (!supabase) return new Set();
 
@@ -398,30 +398,29 @@ export async function getExistingRunIdsMissingStepsFromSupabase(repo: string): P
   const repoId = await ensureRepo(owner, repoName);
   if (!repoId) return new Set();
 
-  // Use keyset (cursor) pagination via RPC for efficient iteration on large datasets.
-  // Unlike offset-based pagination which requires scanning and skipping rows,
-  // keyset pagination uses WHERE id > last_id which leverages the primary key index.
   const runIds = new Set<number>();
-  let afterId = 0;
+  let from = 0;
 
   while (true) {
+    const to = from + SUPABASE_PAGE_SIZE - 1;
     const { data, error } = await supabase
-      .rpc('get_run_ids_missing_steps', { p_repo_id: repoId, p_after_id: afterId });
+      .rpc('get_run_ids_with_steps', { p_repo_id: repoId })
+      .range(from, to);
 
     if (error) {
-      console.error(`  [Supabase] Error fetching run IDs missing steps: ${error.message}`);
+      console.error(`  [Supabase] Error fetching run IDs with steps: ${error.message}`);
       return runIds;
     }
 
     if (!data || data.length === 0) break;
 
     for (const row of data) {
-      const id = Number(row.run_id);
-      runIds.add(id);
-      afterId = id;
+      runIds.add(Number(row.run_id));
     }
 
-    if (data.length < 1000) break;
+    if (data.length < SUPABASE_PAGE_SIZE) break;
+
+    from += SUPABASE_PAGE_SIZE;
   }
 
   return runIds;

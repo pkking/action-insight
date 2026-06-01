@@ -33,15 +33,11 @@ CREATE INDEX IF NOT EXISTS idx_runs_repo_id_id ON runs(repo_id, id);
 CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs(created_at DESC);
 
 -- Backfill: add steps_checked_at column to existing runs tables (safe to run multiple times)
-DO $$ BEGIN
-  ALTER TABLE runs ADD COLUMN steps_checked_at TIMESTAMPTZ;
-EXCEPTION
-  WHEN duplicate_column THEN NULL;
-END $$;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS steps_checked_at TIMESTAMPTZ;
 
--- Partial index for the steps missing RPC: only indexes runs that need step checking
-CREATE INDEX IF NOT EXISTS idx_runs_steps_pending ON runs(repo_id, id)
-  WHERE steps_checked_at IS NULL OR steps_checked_at < updated_at;
+-- Partial index for run IDs that have already had steps checked
+CREATE INDEX IF NOT EXISTS idx_runs_steps_checked ON runs(repo_id, id)
+  WHERE steps_checked_at IS NOT NULL;
 
 -- 3. Jobs table (individual jobs within runs)
 CREATE TABLE IF NOT EXISTS jobs (
@@ -181,42 +177,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 10. RPC: Get run IDs where ALL non-skipped/non-cancelled jobs lack steps.
--- Usage: SELECT * FROM get_run_ids_missing_steps(repo_id, after_id);
--- Supports keyset pagination via p_after_id (pass 0 or NULL to start from beginning).
--- A run is returned ONLY if:
---   1. It has at least one eligible job (non-skipped/non-cancelled)
---   2. None of those jobs have steps
---   3. steps_checked_at IS NULL or is older than updated_at (needs re-check)
--- Runs with even a single job that has steps are excluded to prevent infinite retries.
--- After fetching, the ETL should set steps_checked_at = now() on the run.
-CREATE OR REPLACE FUNCTION get_run_ids_missing_steps(p_repo_id INTEGER, p_after_id BIGINT DEFAULT 0)
+DROP FUNCTION IF EXISTS get_run_ids_missing_steps(INTEGER);
+DROP FUNCTION IF EXISTS get_run_ids_missing_steps(INTEGER, BIGINT);
+
+-- 10. RPC: Get run IDs that have already had steps checked for a repo.
+-- Usage: SELECT * FROM get_run_ids_with_steps(repo_id);
+CREATE OR REPLACE FUNCTION get_run_ids_with_steps(p_repo_id INTEGER)
 RETURNS TABLE(run_id BIGINT) AS $$
 BEGIN
   RETURN QUERY
     SELECT r.id
     FROM runs r
     WHERE r.repo_id = p_repo_id
-      AND r.id > COALESCE(NULLIF(p_after_id, 0), 0)
-      -- Has not been checked for steps, or was updated since last check
-      AND (r.steps_checked_at IS NULL OR r.steps_checked_at < r.updated_at)
-      -- Has at least one eligible (non-skipped/non-cancelled) job
-      AND EXISTS (
-        SELECT 1
-        FROM jobs j
-        WHERE j.run_id = r.id
-          AND j.conclusion NOT IN ('skipped', 'cancelled')
-      )
-      -- None of the eligible jobs have steps
-      AND NOT EXISTS (
-        SELECT 1
-        FROM jobs j
-        INNER JOIN steps s ON s.job_id = j.id
-        WHERE j.run_id = r.id
-          AND j.conclusion NOT IN ('skipped', 'cancelled')
-      )
-    ORDER BY r.id
-    LIMIT 1000;
+      AND r.steps_checked_at IS NOT NULL
+      AND r.steps_checked_at >= r.updated_at
+    ORDER BY r.id;
 END;
 $$ LANGUAGE plpgsql;
 

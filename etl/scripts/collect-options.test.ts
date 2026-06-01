@@ -53,6 +53,24 @@ describe('collect option helpers', () => {
     });
   });
 
+  it('lets the last explicit direction win', () => {
+    expect(parseCollectCliOptions(['--forward', '--reverse'])).toEqual({
+      forceFullBackfill: false,
+      forward: false,
+      help: false,
+      reverse: true,
+      repoName: undefined,
+    });
+
+    expect(parseCollectCliOptions(['--reverse', '--forward'])).toEqual({
+      forceFullBackfill: false,
+      forward: true,
+      help: false,
+      reverse: false,
+      repoName: undefined,
+    });
+  });
+
   it('prefers an explicit repo over configured repos', () => {
     expect(resolveTargetRepos(['vllm-project/vllm-ascend', 'openai/action-insight'], 'openai/action-insight')).toEqual([
       'openai/action-insight',

@@ -99,6 +99,38 @@ describe('collection window helpers', () => {
     expect(lastWindow?.start).toBe('2026-03-01');
   });
 
+  it('forces reverse full backfill from the oldest retained date despite a saved cursor', () => {
+    const windows = buildCollectionWindows({
+      latest: '2026-04-12',
+      existingFileCount: 3,
+      backfillCursor: '2026-03-01',
+      retentionDays: 90,
+      now: new Date('2026-04-13T00:00:00Z'),
+      windowDays: 7,
+      forceFullBackfill: true,
+      reverse: true,
+    });
+
+    expect(windows[0]).toEqual({ start: '2026-04-06', end: '2026-04-13' });
+    expect(windows.at(-1)).toEqual({ start: '2026-01-13', end: '2026-01-15' });
+  });
+
+  it('uses UTC arithmetic when splitting incomplete backfill before the latest date', () => {
+    const windows = buildCollectionWindows({
+      latest: '2026-04-12',
+      existingFileCount: 3,
+      backfillCursor: '2026-04-10',
+      retentionDays: 90,
+      now: new Date('2026-04-13T00:00:00Z'),
+      windowDays: 7,
+    });
+
+    expect(windows).toEqual([
+      { start: '2026-04-12', end: '2026-04-13' },
+      { start: '2026-04-10', end: '2026-04-11' },
+    ]);
+  });
+
   it('sorts and de-duplicates collected daily files before retention cleanup', () => {
     expect(
       mergeCollectedDates(['2026-04-12.json', '2026-04-10.json'], ['2026-04-11', '2026-04-10'])

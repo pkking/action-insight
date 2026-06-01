@@ -15,7 +15,7 @@ vi.mock('./supabase-storage.ts', async () => {
     writeCollectionState: vi.fn().mockResolvedValue(undefined),
     getCollectedDatesFromSupabase: vi.fn().mockResolvedValue([]),
     getExistingRunIdsFromSupabase: vi.fn().mockResolvedValue(new Set()),
-    getExistingRunIdsWithJobsFromSupabase: vi.fn().mockResolvedValue(new Set()),
+    getExistingRunIdsWithStepsFromSupabase: vi.fn().mockResolvedValue(new Set()),
     writeRunsToSupabase: vi.fn().mockResolvedValue(undefined),
   };
 });
@@ -25,7 +25,7 @@ import {
   writeCollectionState,
   getCollectedDatesFromSupabase,
   getExistingRunIdsFromSupabase,
-  getExistingRunIdsWithJobsFromSupabase,
+  getExistingRunIdsWithStepsFromSupabase,
   writeRunsToSupabase,
 } from './supabase-storage';
 
@@ -52,7 +52,7 @@ describe('collect rate limit handling', () => {
     vi.mocked(readCollectionState).mockResolvedValue(null);
     vi.mocked(getCollectedDatesFromSupabase).mockResolvedValue([]);
     vi.mocked(getExistingRunIdsFromSupabase).mockResolvedValue(new Set());
-    vi.mocked(getExistingRunIdsWithJobsFromSupabase).mockResolvedValue(new Set());
+    vi.mocked(getExistingRunIdsWithStepsFromSupabase).mockResolvedValue(new Set());
     vi.mocked(writeRunsToSupabase).mockResolvedValue(undefined);
     vi.mocked(writeCollectionState).mockResolvedValue(undefined);
   });
@@ -552,14 +552,14 @@ describe('collect rate limit handling', () => {
     }
   });
 
-  it('refetches jobs for existing runs when no cached jobs are present', async () => {
+  it('refetches jobs for existing runs when steps have not been checked', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-18T00:00:00Z'));
 
     const repo = 'acme/widgets';
     mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
     vi.mocked(getExistingRunIdsFromSupabase).mockResolvedValue(new Set([101]));
-    vi.mocked(getExistingRunIdsWithJobsFromSupabase).mockResolvedValue(new Set());
+    vi.mocked(getExistingRunIdsWithStepsFromSupabase).mockResolvedValue(new Set());
 
     const request = vi.fn().mockImplementation((route: string, params: Record<string, unknown>) => {
       if (route === 'GET /repos/{owner}/{repo}/actions/runs') {
