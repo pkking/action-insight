@@ -1454,6 +1454,7 @@ function DashboardContent({
   const [prPage, setPrPage] = useState(1);
   const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
   const detailAbortControllerRef = useRef<AbortController | null>(null);
+  const lastWrittenUrlRef = useRef<string>('');
   const debouncedFilterName = useDebouncedValue(filterName, 250);
 
   const selectedRepo = useMemo(() => {
@@ -1536,13 +1537,23 @@ function DashboardContent({
     if (selectedJobName) params.set('jobName', selectedJobName);
 
     const query = params.toString();
-    const current = searchParams.toString();
+    const nextUrl = query ? `${pathname}?${query}` : pathname;
 
-    if (query === current) {
+    // Use ref-based comparison instead of searchParams string comparison
+    // to avoid infinite loops when searchParams changes identity but content is the same
+    if (lastWrittenUrlRef.current === nextUrl) {
       return;
     }
 
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    // Also compare against current URL to avoid unnecessary replaces
+    const current = searchParams.toString();
+    if (query === current && !lastWrittenUrlRef.current) {
+      lastWrittenUrlRef.current = nextUrl;
+      return;
+    }
+
+    lastWrittenUrlRef.current = nextUrl;
+    router.replace(nextUrl, { scroll: false });
   }, [days, debouncedFilterName, endDate, pathname, router, searchParams, selectedRepo, startDate, useCustomRange, selectedJobName]);
 
   useEffect(() => {
