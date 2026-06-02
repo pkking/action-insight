@@ -1,0 +1,459 @@
+name: Collect CI Data (All Repos)
+on:
+  schedule:
+    - cron: '48 * * * *'
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'Collect a specific repo only (owner/repo). Leave empty to collect all repos.'
+        required: false
+        type: string
+      force:
+        description: 'Restart history backfill from the earliest retained day'
+        required: false
+        default: false
+        type: boolean
+      reverse:
+        description: 'Collect from today backward instead of oldest-first backfill'
+        required: false
+        default: false
+        type: boolean
+      skip_rebuild:
+        description: 'Skip the rebuild step after collection'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  collect-vllm-ascend:
+    if: inputs.repo == '' || inputs.repo == 'vllm-project/vllm-ascend'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm config set registry https://registry.npmjs.org
+      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
+      - name: Apply Supabase migrations
+        run: npm run migrate:supabase
+        env:
+          AUTO_MIGRATE_SUPABASE: 1
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+          SUPABASE_DB_SSL: no-verify
+      - id: collect
+        continue-on-error: true
+        run: |
+          args=(--repo "vllm-project/vllm-ascend")
+          if [ "${WORKFLOW_FORCE}" = "true" ]; then
+            args+=(--force-full-backfill)
+          fi
+          if [ "${WORKFLOW_REVERSE}" = "true" ]; then
+            args+=(--reverse)
+          fi
+          npx tsx etl/scripts/collect.ts "${args[@]}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.VLLM_PROJECT_VLLM_ASCEND }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: 90
+          VERBOSE: 1
+          WORKFLOW_FORCE: ${{ inputs.force }}
+          WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - id: test-case-stats
+        continue-on-error: true
+        run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "vllm-project/vllm-ascend"
+        env:
+          GITHUB_TOKEN: ${{ secrets.VLLM_PROJECT_VLLM_ASCEND }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERBOSE: 1
+      - if: always() && steps.collect.outcome == 'failure'
+        run: |
+          echo "Collection completed with partial failures. Data was written to Supabase."
+          exit 1
+
+  collect-verl:
+    if: inputs.repo == '' || inputs.repo == 'verl-project/verl'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm config set registry https://registry.npmjs.org
+      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
+      - name: Apply Supabase migrations
+        run: npm run migrate:supabase
+        env:
+          AUTO_MIGRATE_SUPABASE: 1
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+          SUPABASE_DB_SSL: no-verify
+      - id: collect
+        continue-on-error: true
+        run: |
+          args=(--repo "verl-project/verl")
+          if [ "${WORKFLOW_FORCE}" = "true" ]; then
+            args+=(--force-full-backfill)
+          fi
+          if [ "${WORKFLOW_REVERSE}" = "true" ]; then
+            args+=(--reverse)
+          fi
+          npx tsx etl/scripts/collect.ts "${args[@]}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.VERL_PROJECT_VERL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: 90
+          VERBOSE: 1
+          WORKFLOW_FORCE: ${{ inputs.force }}
+          WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - id: test-case-stats
+        continue-on-error: true
+        run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "verl-project/verl"
+        env:
+          GITHUB_TOKEN: ${{ secrets.VERL_PROJECT_VERL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERBOSE: 1
+      - if: always() && steps.collect.outcome == 'failure'
+        run: |
+          echo "Collection completed with partial failures. Data was written to Supabase."
+          exit 1
+
+  collect-triton-ascend:
+    if: inputs.repo == '' || inputs.repo == 'triton-lang/triton-ascend'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm config set registry https://registry.npmjs.org
+      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
+      - name: Apply Supabase migrations
+        run: npm run migrate:supabase
+        env:
+          AUTO_MIGRATE_SUPABASE: 1
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+          SUPABASE_DB_SSL: no-verify
+      - id: collect
+        continue-on-error: true
+        run: |
+          args=(--repo "triton-lang/triton-ascend")
+          if [ "${WORKFLOW_FORCE}" = "true" ]; then
+            args+=(--force-full-backfill)
+          fi
+          if [ "${WORKFLOW_REVERSE}" = "true" ]; then
+            args+=(--reverse)
+          fi
+          npx tsx etl/scripts/collect.ts "${args[@]}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.TRITON_LANG_TRITON_ASCEND }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: 90
+          VERBOSE: 1
+          WORKFLOW_FORCE: ${{ inputs.force }}
+          WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - id: test-case-stats
+        continue-on-error: true
+        run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "triton-lang/triton-ascend"
+        env:
+          GITHUB_TOKEN: ${{ secrets.TRITON_LANG_TRITON_ASCEND }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERBOSE: 1
+      - if: always() && steps.collect.outcome == 'failure'
+        run: |
+          echo "Collection completed with partial failures. Data was written to Supabase."
+          exit 1
+
+  collect-llamafactory:
+    if: inputs.repo == '' || inputs.repo == 'hiyouga/LlamaFactory'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm config set registry https://registry.npmjs.org
+      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
+      - name: Apply Supabase migrations
+        run: npm run migrate:supabase
+        env:
+          AUTO_MIGRATE_SUPABASE: 1
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+          SUPABASE_DB_SSL: no-verify
+      - id: collect
+        continue-on-error: true
+        run: |
+          args=(--repo "hiyouga/LlamaFactory")
+          if [ "${WORKFLOW_FORCE}" = "true" ]; then
+            args+=(--force-full-backfill)
+          fi
+          if [ "${WORKFLOW_REVERSE}" = "true" ]; then
+            args+=(--reverse)
+          fi
+          npx tsx etl/scripts/collect.ts "${args[@]}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.HIYOUGA_LLAMAFACTORY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: 90
+          VERBOSE: 1
+          WORKFLOW_FORCE: ${{ inputs.force }}
+          WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - id: test-case-stats
+        continue-on-error: true
+        run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "hiyouga/LlamaFactory"
+        env:
+          GITHUB_TOKEN: ${{ secrets.HIYOUGA_LLAMAFACTORY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERBOSE: 1
+      - if: always() && steps.collect.outcome == 'failure'
+        run: |
+          echo "Collection completed with partial failures. Data was written to Supabase."
+          exit 1
+
+  collect-ms-swift:
+    if: inputs.repo == '' || inputs.repo == 'modelscope/ms-swift'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm config set registry https://registry.npmjs.org
+      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
+      - name: Apply Supabase migrations
+        run: npm run migrate:supabase
+        env:
+          AUTO_MIGRATE_SUPABASE: 1
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+          SUPABASE_DB_SSL: no-verify
+      - id: collect
+        continue-on-error: true
+        run: |
+          args=(--repo "modelscope/ms-swift")
+          if [ "${WORKFLOW_FORCE}" = "true" ]; then
+            args+=(--force-full-backfill)
+          fi
+          if [ "${WORKFLOW_REVERSE}" = "true" ]; then
+            args+=(--reverse)
+          fi
+          npx tsx etl/scripts/collect.ts "${args[@]}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.MODELSCOPE_MS_SWIFT }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: 90
+          VERBOSE: 1
+          WORKFLOW_FORCE: ${{ inputs.force }}
+          WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - id: test-case-stats
+        continue-on-error: true
+        run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "modelscope/ms-swift"
+        env:
+          GITHUB_TOKEN: ${{ secrets.MODELSCOPE_MS_SWIFT }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERBOSE: 1
+      - if: always() && steps.collect.outcome == 'failure'
+        run: |
+          echo "Collection completed with partial failures. Data was written to Supabase."
+          exit 1
+
+  collect-sglang:
+    if: inputs.repo == '' || inputs.repo == 'sgl-project/sglang'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm config set registry https://registry.npmjs.org
+      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
+      - name: Apply Supabase migrations
+        run: npm run migrate:supabase
+        env:
+          AUTO_MIGRATE_SUPABASE: 1
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+          SUPABASE_DB_SSL: no-verify
+      - id: collect
+        continue-on-error: true
+        run: |
+          args=(--repo "sgl-project/sglang")
+          if [ "${WORKFLOW_FORCE}" = "true" ]; then
+            args+=(--force-full-backfill)
+          fi
+          if [ "${WORKFLOW_REVERSE}" = "true" ]; then
+            args+=(--reverse)
+          fi
+          npx tsx etl/scripts/collect.ts "${args[@]}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.SGL_PROJECT_SGLANG }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: 90
+          VERBOSE: 1
+          WORKFLOW_FORCE: ${{ inputs.force }}
+          WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - id: test-case-stats
+        continue-on-error: true
+        run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "sgl-project/sglang"
+        env:
+          GITHUB_TOKEN: ${{ secrets.SGL_PROJECT_SGLANG }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERBOSE: 1
+      - if: always() && steps.collect.outcome == 'failure'
+        run: |
+          echo "Collection completed with partial failures. Data was written to Supabase."
+          exit 1
+
+  collect-tilelang-ascend:
+    if: inputs.repo == '' || inputs.repo == 'tile-ai/tilelang-ascend'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm config set registry https://registry.npmjs.org
+      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
+      - name: Apply Supabase migrations
+        run: npm run migrate:supabase
+        env:
+          AUTO_MIGRATE_SUPABASE: 1
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+          SUPABASE_DB_SSL: no-verify
+      - id: collect
+        continue-on-error: true
+        run: |
+          args=(--repo "tile-ai/tilelang-ascend")
+          if [ "${WORKFLOW_FORCE}" = "true" ]; then
+            args+=(--force-full-backfill)
+          fi
+          if [ "${WORKFLOW_REVERSE}" = "true" ]; then
+            args+=(--reverse)
+          fi
+          npx tsx etl/scripts/collect.ts "${args[@]}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.TILE_AI_TILELANG_ASCEND }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: 90
+          VERBOSE: 1
+          WORKFLOW_FORCE: ${{ inputs.force }}
+          WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - id: test-case-stats
+        continue-on-error: true
+        run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "tile-ai/tilelang-ascend"
+        env:
+          GITHUB_TOKEN: ${{ secrets.TILE_AI_TILELANG_ASCEND }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERBOSE: 1
+      - if: always() && steps.collect.outcome == 'failure'
+        run: |
+          echo "Collection completed with partial failures. Data was written to Supabase."
+          exit 1
+
+  rebuild:
+    needs:
+      - collect-vllm-ascend
+      - collect-verl
+      - collect-triton-ascend
+      - collect-llamafactory
+      - collect-ms-swift
+      - collect-sglang
+      - collect-tilelang-ascend
+    if: always() && inputs.skip_rebuild != true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm config set registry https://registry.npmjs.org
+      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
+      - name: Apply Supabase migrations
+        run: npm run migrate:supabase
+        env:
+          AUTO_MIGRATE_SUPABASE: 1
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+          SUPABASE_DB_SSL: no-verify
+      - name: Set default date range for scheduled runs
+        if: github.event_name == 'schedule'
+        run: |
+          echo "SCHEDULED_START_DATE=$(date -u -d '2 days ago' +%Y-%m-%d)" >> "$GITHUB_ENV"
+          echo "SCHEDULED_END_DATE=$(date -u -d '1 day ago' +%Y-%m-%d)" >> "$GITHUB_ENV"
+      - name: Rebuild PR artifacts
+        run: |
+          args=()
+          if [ -n "${REBUILD_REPO}" ]; then
+            args+=(--repo "${REBUILD_REPO}")
+          fi
+          if [ -n "${REBUILD_START_DATE}" ]; then
+            args+=(--start-date "${REBUILD_START_DATE}")
+          fi
+          if [ -n "${REBUILD_END_DATE}" ]; then
+            args+=(--end-date "${REBUILD_END_DATE}")
+          fi
+          npx tsx etl/scripts/rebuild-pr-artifacts.ts "${args[@]}"
+        env:
+          REBUILD_REPO: ${{ inputs.repo || '' }}
+          REBUILD_START_DATE: ${{ inputs.start_date || env.SCHEDULED_START_DATE || '' }}
+          REBUILD_END_DATE: ${{ inputs.end_date || env.SCHEDULED_END_DATE || '' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT: 20
+          PR_ARTIFACT_SHA_RESOLUTION_LIMIT: 1000
+          GITHUB_TOKEN_PER_REPO_HIYOUGA_LLAMAFACTORY: ${{ secrets.HIYOUGA_LLAMAFACTORY }}
+          GITHUB_TOKEN_PER_REPO_MODELSCOPE_MS_SWIFT: ${{ secrets.MODELSCOPE_MS_SWIFT }}
+          GITHUB_TOKEN_PER_REPO_SGL_PROJECT_SGLANG: ${{ secrets.SGL_PROJECT_SGLANG }}
+          GITHUB_TOKEN_PER_REPO_TILE_AI_TILELANG_ASCEND: ${{ secrets.TILE_AI_TILELANG_ASCEND }}
+          GITHUB_TOKEN_PER_REPO_TRITON_LANG_TRITON_ASCEND: ${{ secrets.TRITON_LANG_TRITON_ASCEND }}
+          GITHUB_TOKEN_PER_REPO_VERL_PROJECT_VERL: ${{ secrets.VERL_PROJECT_VERL }}
+          GITHUB_TOKEN_PER_REPO_VLLM_PROJECT_VLLM_ASCEND: ${{ secrets.VLLM_PROJECT_VLLM_ASCEND }}
