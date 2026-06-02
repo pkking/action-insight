@@ -23,6 +23,14 @@ on:
         required: false
         default: false
         type: boolean
+      start_date:
+        description: 'Rebuild start date (yyyy-mm-dd). Only used when rebuilding.'
+        required: false
+        type: string
+      end_date:
+        description: 'Rebuild end date (yyyy-mm-dd). Only used when rebuilding.'
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}
