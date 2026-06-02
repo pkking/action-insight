@@ -1547,8 +1547,11 @@ function DashboardContent({
 
     // If the URL is already correct (initial load, browser back/forward),
     // sync the ref and skip router.replace to preserve history
-    const current = searchParams.toString();
-    if (query === current) {
+    const currentParams = new URLSearchParams(searchParams.toString());
+    currentParams.sort();
+    const targetParams = new URLSearchParams(query);
+    targetParams.sort();
+    if (targetParams.toString() === currentParams.toString()) {
       lastWrittenUrlRef.current = nextUrl;
       return;
     }
