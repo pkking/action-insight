@@ -1545,9 +1545,10 @@ function DashboardContent({
       return;
     }
 
-    // Also compare against current URL to avoid unnecessary replaces
+    // If the URL is already correct (initial load, browser back/forward),
+    // sync the ref and skip router.replace to preserve history
     const current = searchParams.toString();
-    if (query === current && !lastWrittenUrlRef.current) {
+    if (query === current) {
       lastWrittenUrlRef.current = nextUrl;
       return;
     }
