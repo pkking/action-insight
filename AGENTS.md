@@ -41,5 +41,22 @@ AI 助手在维护 ETL、Supabase 数据或恢复指标时，应优先使用以�
 5.  **回填策略**：只有在需要从保留窗口最早日期重新构建 raw history 时才使用 `collect.ts --force-full-backfill`；当最新数据优先级更高时使用 `collect.ts --reverse`。
 6.  **验证命令**：改动完成后至少运行与改动相关的测试；通用验证为 `npm run lint` 和 `npm test`。ETL 脚本改动应额外跑相关 `vitest` 文件和脚本 `--help`。
 
+## CI 工具规范 (CI Tool Requirements)
+
+AI 助手在提交变更之前，**必须先在本地跑过与改动相关的 CI 工具**，确保不会在 PR 里制造可预见的 CI 失败。
+
+| 改动范围 | 必须跑的命令 | CI 对应 workflow |
+|---------|-------------|-----------------|
+| `src/**`, `package.json`, 配置 | `npm run lint` + `npm test` | `ci.yml`, `build.yml`, `type-check.yml` |
+| `.github/workflows/**`, `.github/actions/**` | `actionlint`（或 CI 兼容的等价命令） | `actionlint.yml` |
+| `etl/**` | `npm run lint` + ETL validate | `etl-validate.yml` |
+| `supabase/schema.sql` | `npm run migrate:supabase`（dry-run 或本地库） | — |
+| 文档 / Markdown | `npm run lint`（如有 markdown lint） | `link-check.yml` |
+
+**安装 actionlint**：`bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)`
+**actionlint 用法**：`./actionlint -color -ignore 'got unexpected character'`
+
+原则：**CI 失败能本地预判的，必须在 commit 前修掉。**
+
 ## 相关关联 (Relations)
 此仓库针对 `vllm-project/vllm-ascend` 等带有复杂 CI/CD 标签的仓库进行了专门的适配（例如针对 `npu` 或 `large-disk` 标签）。
