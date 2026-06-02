@@ -1471,9 +1471,12 @@ function DashboardContent({
         days,
         startDate: useCustomRange ? startDate : undefined,
         endDate: useCustomRange ? endDate : undefined,
-        now: latestPrDate,
+        // Always anchor to current date so newly collected runs data
+        // (before PR metrics are rebuilt) is included in the date range.
+        // latestPrDate could be stale if only collect.ts ran without
+        // rebuild:pr-artifacts.
       }),
-    [days, endDate, latestPrDate, startDate, useCustomRange]
+    [days, endDate, startDate, useCustomRange]
   );
 
   useEffect(() => {
