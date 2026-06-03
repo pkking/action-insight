@@ -2821,85 +2821,103 @@ function DashboardContent({
                       </div>
 
                       {/* Workflow Trend Chart — scatter of individual success runs */}
-                      {selectedWorkflowSummaryName && selectedWorkflowScatterData.size > 0 ? (
-                        <div className="border-t border-neutral-100 p-6 dark:border-neutral-800">
-                          <div className="mb-4 flex items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedWorkflowSummaryName(null)}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950"
-                            >
-                              <ArrowLeft className="h-4 w-4" />
-                              返回
-                            </button>
-                            <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
-                              {selectedWorkflowSummaryName} — 单次运行耗时
-                            </h4>
+                      {selectedWorkflowSummaryName ? (() => {
+                        const successRuns = selectedWorkflowScatterData.get('success') || [];
+                        const totalRuns = allWorkflows.filter((r) => r.name === selectedWorkflowSummaryName).length;
+
+                        if (totalRuns === 0) {
+                          return (
+                            <div className="border-t border-neutral-100 p-8 text-center text-sm text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+                              该 Workflow 在当前周期内没有运行数据。
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="border-t border-neutral-100 p-6 dark:border-neutral-800">
+                            <div className="mb-4 flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedWorkflowSummaryName(null)}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950"
+                              >
+                                <ArrowLeft className="h-4 w-4" />
+                                返回
+                              </button>
+                              <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
+                                {selectedWorkflowSummaryName} — 单次运行耗时
+                              </h4>
+                              <span className="text-xs text-neutral-400 dark:text-neutral-500">
+                                （共 {totalRuns} 次运行，{successRuns.length} 次成功）
+                              </span>
+                            </div>
+                            {successRuns.length === 0 ? (
+                              <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">
+                                该 Workflow 在当前周期内没有成功的运行。
+                              </div>
+                            ) : (
+                              <div className="h-72">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <ComposedChart>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
+                                    <XAxis
+                                      type="number"
+                                      dataKey="x"
+                                      tick={{ fontSize: 11, fill: '#888' }}
+                                      tickLine={false}
+                                      axisLine={false}
+                                      domain={['dataMin - 0.5', 'dataMax + 0.5']}
+                                      tickFormatter={(val) => {
+                                        const d = new Date(dateRange.start);
+                                        d.setDate(d.getDate() + Math.round(val));
+                                        return format(d, 'MMM dd');
+                                      }}
+                                      angle={-30}
+                                      textAnchor="end"
+                                      height={50}
+                                    />
+                                    <YAxis
+                                      yAxisId="left"
+                                      tick={{ fontSize: 12, fill: '#888' }}
+                                      tickLine={false}
+                                      axisLine={false}
+                                      tickFormatter={(val) => `${Math.round(val / 60)}m`}
+                                      domain={[0, Math.max(workflowScatterMaxY, 60) * 1.1]}
+                                      label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
+                                    />
+                                    <Tooltip content={({ payload }) => {
+                                      if (!payload || payload.length === 0) return null;
+                                      const entry = payload[0];
+                                      if (!entry || !entry.payload) return null;
+                                      const { x, y } = entry.payload;
+                                      const runDate = new Date(dateRange.start);
+                                      runDate.setDate(runDate.getDate() + Math.round(x));
+                                      return (
+                                        <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs shadow-md dark:border-neutral-700 dark:bg-neutral-800">
+                                          <div className="mb-1 font-medium text-neutral-700 dark:text-neutral-200">{format(runDate, 'yyyy-MM-dd')}</div>
+                                          <div className="flex items-center gap-2">
+                                            <span className="h-2 w-2 rounded-full bg-green-500" />
+                                            <span className="text-neutral-500 dark:text-neutral-400">耗时:</span>
+                                            <span className="font-mono text-neutral-700 dark:text-neutral-200">{Math.round(y / 60)}m</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    }} />
+                                    <Scatter
+                                      name="成功运行"
+                                      data={successRuns}
+                                      fill="#22c55e"
+                                      stroke="#fff"
+                                      strokeWidth={1.5}
+                                      shape="circle"
+                                    />
+                                  </ComposedChart>
+                                </ResponsiveContainer>
+                              </div>
+                            )}
                           </div>
-                          <div className="h-72">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <ComposedChart data={selectedWorkflowScatterData.get('success') || []}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
-                                <XAxis
-                                  type="number"
-                                  dataKey="x"
-                                  tick={{ fontSize: 11, fill: '#888' }}
-                                  tickLine={false}
-                                  axisLine={false}
-                                  domain={['dataMin - 0.5', 'dataMax + 0.5']}
-                                  tickFormatter={(val) => {
-                                    const d = new Date(dateRange.start);
-                                    d.setDate(d.getDate() + Math.round(val));
-                                    return format(d, 'MMM dd');
-                                  }}
-                                  angle={-30}
-                                  textAnchor="end"
-                                  height={50}
-                                />
-                                <YAxis
-                                  yAxisId="left"
-                                  tick={{ fontSize: 12, fill: '#888' }}
-                                  tickLine={false}
-                                  axisLine={false}
-                                  tickFormatter={(val) => `${Math.round(val / 60)}m`}
-                                  domain={[0, Math.max(workflowScatterMaxY, 60) * 1.1]}
-                                  label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
-                                />
-                                <Tooltip content={({ payload }) => {
-                                  if (!payload || payload.length === 0) return null;
-                                  const entry = payload[0];
-                                  if (!entry || !entry.payload) return null;
-                                  const { x, y } = entry.payload;
-                                  const runDate = new Date(dateRange.start);
-                                  runDate.setDate(runDate.getDate() + Math.round(x));
-                                  return (
-                                    <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs shadow-md dark:border-neutral-700 dark:bg-neutral-800">
-                                      <div className="mb-1 font-medium text-neutral-700 dark:text-neutral-200">{format(runDate, 'yyyy-MM-dd')}</div>
-                                      <div className="flex items-center gap-2">
-                                        <span className="h-2 w-2 rounded-full bg-green-500" />
-                                        <span className="text-neutral-500 dark:text-neutral-400">耗时:</span>
-                                        <span className="font-mono text-neutral-700 dark:text-neutral-200">{Math.round(y / 60)}m</span>
-                                      </div>
-                                    </div>
-                                  );
-                                }} />
-                                <Scatter
-                                  name="成功运行"
-                                  data={selectedWorkflowScatterData.get('success') || []}
-                                  fill="#22c55e"
-                                  stroke="#fff"
-                                  strokeWidth={1.5}
-                                  shape="circle"
-                                />
-                              </ComposedChart>
-                            </ResponsiveContainer>
-                          </div>
-                        </div>
-                      ) : selectedWorkflowSummaryName ? (
-                        <div className="border-t border-neutral-100 p-8 text-center text-sm text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
-                          该 Workflow 在当前周期内没有足够的数据展示趋势图。
-                        </div>
-                      ) : (
+                        );
+                      })() : (
                         <div className="border-t border-neutral-100 p-8 text-center text-sm text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
                           点击上方某个 Workflow 查看其耗时趋势。
                         </div>
