@@ -2105,6 +2105,21 @@ function DashboardContent({
     return max;
   }, [selectedWorkflowScatterData]);
 
+  const successRunLineData = useMemo(() => {
+    if (!selectedWorkflowSummaryName) return [];
+    const matchingRuns = allWorkflows.filter(
+      (r) => r.name === selectedWorkflowSummaryName && r.conclusion === 'success'
+    );
+    return matchingRuns
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .map((run, idx) => ({
+        index: idx,
+        date: run.created_at,
+        label: format(new Date(run.created_at), 'MMM dd HH:mm'),
+        duration: run.durationInSeconds,
+      }));
+  }, [allWorkflows, selectedWorkflowSummaryName]);
+
   const buildWorkflowFileUrl = (workflowName: string): string => {
     if (!selectedRepo) return '#';
     // Link to GitHub Actions page filtered by workflow name
@@ -2865,61 +2880,52 @@ function DashboardContent({
                             ) : (
                               <div className="h-72">
                                 <ResponsiveContainer width="100%" height="100%">
-                                  <ScatterChart data={successRuns}>
+                                  <LineChart data={successRunLineData}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
                                     <XAxis
-                                      type="number"
-                                      dataKey="x"
-                                      tick={{ fontSize: 11, fill: '#888' }}
+                                      dataKey="label"
+                                      tick={{ fontSize: 10, fill: '#888' }}
                                       tickLine={false}
                                       axisLine={false}
-                                      domain={['dataMin - 0.5', 'dataMax + 0.5']}
-                                      tickFormatter={(val) => {
-                                        const d = new Date(dateRange.start);
-                                        d.setDate(d.getDate() + Math.round(val));
-                                        return format(d, 'MMM dd');
-                                      }}
                                       angle={-30}
                                       textAnchor="end"
                                       height={50}
+                                      interval="preserveStartEnd"
                                     />
                                     <YAxis
-                                      type="number"
-                                      dataKey="y"
                                       tick={{ fontSize: 12, fill: '#888' }}
                                       tickLine={false}
                                       axisLine={false}
                                       tickFormatter={(val) => `${Math.round(val / 60)}m`}
-                                      domain={[0, Math.max(workflowScatterMaxY, 60) * 1.1]}
+                                      domain={[0, Math.max(...successRunLineData.map((d) => d.duration), 60) * 1.1]}
                                       label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
                                     />
-                                    <Tooltip content={({ payload }) => {
+                                    <Tooltip content={({ payload, label }) => {
                                       if (!payload || payload.length === 0) return null;
                                       const entry = payload[0];
                                       if (!entry || !entry.payload) return null;
-                                      const { x, y } = entry.payload;
-                                      const runDate = new Date(dateRange.start);
-                                      runDate.setDate(runDate.getDate() + Math.round(x));
+                                      const { date, duration } = entry.payload;
                                       return (
                                         <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs shadow-md dark:border-neutral-700 dark:bg-neutral-800">
-                                          <div className="mb-1 font-medium text-neutral-700 dark:text-neutral-200">{format(runDate, 'yyyy-MM-dd')}</div>
+                                          <div className="mb-1 font-medium text-neutral-700 dark:text-neutral-200">{label}</div>
                                           <div className="flex items-center gap-2">
                                             <span className="h-2 w-2 rounded-full bg-green-500" />
                                             <span className="text-neutral-500 dark:text-neutral-400">耗时:</span>
-                                            <span className="font-mono text-neutral-700 dark:text-neutral-200">{Math.round(y / 60)}m</span>
+                                            <span className="font-mono text-neutral-700 dark:text-neutral-200">{Math.round(duration / 60)}m</span>
                                           </div>
                                         </div>
                                       );
                                     }} />
-                                    <Scatter
-                                      name="成功运行"
-                                      data={successRuns}
-                                      fill="#22c55e"
-                                      stroke="#fff"
-                                      strokeWidth={1.5}
-                                      shape="circle"
+                                    <Line
+                                      type="monotone"
+                                      dataKey="duration"
+                                      name="成功运行耗时"
+                                      stroke="#22c55e"
+                                      strokeWidth={2}
+                                      dot={{ r: 4, fill: '#22c55e', stroke: '#fff', strokeWidth: 1.5 }}
+                                      activeDot={{ r: 6 }}
                                     />
-                                  </ScatterChart>
+                                  </LineChart>
                                 </ResponsiveContainer>
                               </div>
                             )}
