@@ -2793,44 +2793,132 @@ function DashboardContent({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                            {sortedWorkflowSummaries.map((summary) => (
-                              <tr
-                                key={summary.name}
-                                onClick={() => setSelectedWorkflowSummaryName(selectedWorkflowSummaryName === summary.name ? null : summary.name)}
-                                className={`cursor-pointer transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-950/50 ${
-                                  selectedWorkflowSummaryName === summary.name ? 'bg-blue-50/60 dark:bg-blue-900/10' : ''
-                                }`}
-                              >
-                                <td className="px-6 py-4">
-                                  <div className="flex items-center gap-2">
-                                    <span className={`h-2 w-2 rounded-full ${selectedWorkflowSummaryName === summary.name ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`} />
-                                    <a
-                                      href={buildWorkflowFileUrl(summary.name)}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="font-medium text-blue-600 hover:underline dark:text-blue-400"
-                                      title="查看 Workflow 文件"
-                                    >
-                                      {summary.name}
-                                    </a>
-                                    <ExternalLink className="h-3 w-3 text-neutral-400" />
-                                  </div>
-                                </td>
-                                <td className="px-6 py-4 text-center font-mono text-neutral-600 dark:text-neutral-400">{summary.runCount}</td>
-                                <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatDurationMinutes(summary.p90Duration)}</td>
-                                <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatDurationMinutes(summary.p50Duration)}</td>
-                                <td className="px-6 py-4">
-                                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                                    summary.successRate >= 90 ? 'border border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400' :
-                                    summary.successRate >= 70 ? 'border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400' :
-                                    'border border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400'
-                                  }`}>
-                                    {summary.successRate}%
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
+                            {sortedWorkflowSummaries.map((summary) => {
+                              const isExpanded = selectedWorkflowSummaryName === summary.name;
+                              const totalRuns = allWorkflows.filter((r) => r.name === summary.name).length;
+                              const conclusionCounts = new Map<string, number>();
+                              for (const run of allWorkflows.filter((r) => r.name === summary.name)) {
+                                conclusionCounts.set(run.conclusion, (conclusionCounts.get(run.conclusion) || 0) + 1);
+                              }
+                              const debugInfo = [...conclusionCounts.entries()].map(([k, v]) => `${k}:${v}`).join(', ');
+
+                              return (
+                                <React.Fragment key={summary.name}>
+                                  <tr
+                                    onClick={() => setSelectedWorkflowSummaryName(isExpanded ? null : summary.name)}
+                                    className={`cursor-pointer transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-950/50 ${
+                                      isExpanded ? 'bg-blue-50/60 dark:bg-blue-900/10' : ''
+                                    }`}
+                                  >
+                                    <td className="px-6 py-4">
+                                      <div className="flex items-center gap-2">
+                                        <span className="flex w-4 shrink-0 items-center justify-center text-neutral-400">
+                                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                        </span>
+                                        <span className={`h-2 w-2 rounded-full ${isExpanded ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`} />
+                                        <a
+                                          href={buildWorkflowFileUrl(summary.name)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                                          title="查看 Workflow 文件"
+                                        >
+                                          {summary.name}
+                                        </a>
+                                        <ExternalLink className="h-3 w-3 text-neutral-400" />
+                                      </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-center font-mono text-neutral-600 dark:text-neutral-400">{summary.runCount}</td>
+                                    <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatDurationMinutes(summary.p90Duration)}</td>
+                                    <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatDurationMinutes(summary.p50Duration)}</td>
+                                    <td className="px-6 py-4">
+                                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                                        summary.successRate >= 90 ? 'border border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                                        summary.successRate >= 70 ? 'border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400' :
+                                        'border border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                      }`}>
+                                        {summary.successRate}%
+                                      </span>
+                                    </td>
+                                  </tr>
+                                  {isExpanded && (
+                                    <tr>
+                                      <td colSpan={5} className="p-0">
+                                        <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
+                                          {successRunLineData.length === 0 ? (
+                                            <div className="p-8 text-center text-sm text-amber-600 dark:text-amber-400">
+                                              该 Workflow 在当前周期内没有成功的运行。结论分布：{debugInfo}
+                                            </div>
+                                          ) : (
+                                            <>
+                                              <div className="mb-3 flex items-center gap-2">
+                                                <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
+                                                  {summary.name} — 单次运行耗时
+                                                </h4>
+                                                <span className="text-xs text-neutral-400 dark:text-neutral-500">
+                                                  （共 {totalRuns} 次运行，{successRunLineData.length} 次成功 | {debugInfo}）
+                                                </span>
+                                              </div>
+                                              <div className="h-72">
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                  <LineChart data={successRunLineData}>
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
+                                                    <XAxis
+                                                      dataKey="label"
+                                                      tick={{ fontSize: 10, fill: '#888' }}
+                                                      tickLine={false}
+                                                      axisLine={false}
+                                                      angle={-30}
+                                                      textAnchor="end"
+                                                      height={50}
+                                                      interval="preserveStartEnd"
+                                                    />
+                                                    <YAxis
+                                                      tick={{ fontSize: 12, fill: '#888' }}
+                                                      tickLine={false}
+                                                      axisLine={false}
+                                                      tickFormatter={(val) => `${Math.round(val / 60)}m`}
+                                                      domain={[0, Math.max(...successRunLineData.map((d) => d.duration), 60) * 1.1]}
+                                                      label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
+                                                    />
+                                                    <Tooltip content={({ payload, label }) => {
+                                                      if (!payload || payload.length === 0) return null;
+                                                      const entry = payload[0];
+                                                      if (!entry || !entry.payload) return null;
+                                                      const { date, duration } = entry.payload;
+                                                      return (
+                                                        <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs shadow-md dark:border-neutral-700 dark:bg-neutral-800">
+                                                          <div className="mb-1 font-medium text-neutral-700 dark:text-neutral-200">{label}</div>
+                                                          <div className="flex items-center gap-2">
+                                                            <span className="h-2 w-2 rounded-full bg-green-500" />
+                                                            <span className="text-neutral-500 dark:text-neutral-400">耗时:</span>
+                                                            <span className="font-mono text-neutral-700 dark:text-neutral-200">{Math.round(duration / 60)}m</span>
+                                                          </div>
+                                                        </div>
+                                                      );
+                                                    }} />
+                                                    <Line
+                                                      type="monotone"
+                                                      dataKey="duration"
+                                                      name="成功运行耗时"
+                                                      stroke="#22c55e"
+                                                      strokeWidth={2}
+                                                      dot={{ r: 4, fill: '#22c55e', stroke: '#fff', strokeWidth: 1.5 }}
+                                                      activeDot={{ r: 6 }}
+                                                    />
+                                                  </LineChart>
+                                                </ResponsiveContainer>
+                                              </div>
+                                            </>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
