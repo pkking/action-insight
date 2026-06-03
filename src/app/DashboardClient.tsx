@@ -317,14 +317,19 @@ function buildJobTimingData(runs: Run[]): JobTimingData[] {
   const jobs: JobTimingData[] = [];
   for (const run of runs) {
     if (!run.jobs || run.jobs.length === 0) continue;
+    const runCreatedAtMs = new Date(run.created_at).getTime();
     for (const job of run.jobs) {
+      const startedAtMs = new Date(job.started_at || job.created_at || 0).getTime();
+      const completedAtMs = new Date(job.completed_at || job.started_at || 0).getTime();
+      const queueTimeSeconds = startedAtMs > 0 && runCreatedAtMs > 0 ? Math.max(0, (startedAtMs - runCreatedAtMs) / 1000) : 0;
+      const e2eTimeSeconds = completedAtMs > 0 && startedAtMs > 0 ? Math.max(0, (completedAtMs - startedAtMs) / 1000) : 0;
       jobs.push({
         id: job.id,
         name: job.name,
         workflowName: run.name,
         workflowId: run.id,
-        queueTimeSeconds: job.queueDurationInSeconds,
-        e2eTimeSeconds: job.durationInSeconds,
+        queueTimeSeconds,
+        e2eTimeSeconds,
         conclusion: job.conclusion,
         created_at: run.created_at,
         html_url: job.html_url,
