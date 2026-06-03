@@ -3248,8 +3248,10 @@ function DashboardContent({
                                                       tickFormatter={(val) => `${Math.round(val / 60)}m`}
                                                       label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
                                                     />
-                                                    <Tooltip content={({ payload, label }) => {
+                                                    <Tooltip cursor={false} content={({ payload, label }) => {
                                                       if (!payload || payload.length === 0) return null;
+                                                      const itemPayload = payload[0]?.payload;
+                                                      const jobUrl = itemPayload?.html_url;
                                                       return (
                                                         <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs shadow-md dark:border-neutral-700 dark:bg-neutral-800">
                                                           <div className="mb-1 font-medium text-neutral-700 dark:text-neutral-200">{label}</div>
@@ -3268,6 +3270,18 @@ function DashboardContent({
                                                               );
                                                             })}
                                                           </div>
+                                                          {jobUrl && (
+                                                            <div className="mt-1.5 border-t border-neutral-100 pt-1.5 dark:border-neutral-700">
+                                                              <a
+                                                                href={jobUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400"
+                                                              >
+                                                                View Logs <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6" /></svg>
+                                                              </a>
+                                                            </div>
+                                                          )}
                                                         </div>
                                                       );
                                                     }} />
