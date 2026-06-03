@@ -1466,6 +1466,10 @@ function DashboardContent({
   const [workflowSummarySortField, setWorkflowSummarySortField] = useState<WorkflowSortField>('p90');
   const [workflowSummarySortOrder, setWorkflowSummarySortOrder] = useState<'asc' | 'desc'>('desc');
   const [showWorkflowIndividualRuns, setShowWorkflowIndividualRuns] = useState(true);
+  const [workflowDays, setWorkflowDays] = useState(30);
+  const [workflowStartDate, setWorkflowStartDate] = useState('');
+  const [workflowEndDate, setWorkflowEndDate] = useState('');
+  const [workflowUseCustomRange, setWorkflowUseCustomRange] = useState(false);
   const [allWorkflows, setAllWorkflows] = useState<Run[]>([]);
   const [allWorkflowsLoading, setAllWorkflowsLoading] = useState(false);
   const [allWorkflowsError, setAllWorkflowsError] = useState('');
@@ -1486,6 +1490,17 @@ function DashboardContent({
 
     return repoOptions.find((repo) => repo.key === selectedRepoKey) ?? repoOptions[0];
   }, [repoOptions, selectedRepoKey]);
+
+  const workflowDateRange = useMemo(
+    () =>
+      createDateRange({
+        days: workflowDays,
+        startDate: workflowUseCustomRange ? workflowStartDate : undefined,
+        endDate: workflowUseCustomRange ? workflowEndDate : undefined,
+        now: latestPrDate,
+      }),
+    [workflowDays, workflowEndDate, latestPrDate, workflowStartDate, workflowUseCustomRange]
+  );
 
   const dateRange = useMemo(
     () =>
@@ -1757,8 +1772,8 @@ function DashboardContent({
         const runs = await callApi<Run[]>('fetchRuns', {
           owner: selectedRepo.owner,
           repo: selectedRepo.repo,
-          startDate: format(dateRange.start, 'yyyy-MM-dd'),
-          endDate: format(dateRange.end, 'yyyy-MM-dd'),
+          startDate: format(workflowDateRange.start, 'yyyy-MM-dd'),
+          endDate: format(workflowDateRange.end, 'yyyy-MM-dd'),
           includeSteps: prLifecycleViewMode === 'event',
         }, controller.signal);
 
@@ -1785,7 +1800,7 @@ function DashboardContent({
       cancelled = true;
       controller.abort();
     };
-  }, [dateRange.end, dateRange.start, selectedRepo, prLifecycleViewMode]);
+  }, [workflowDateRange.end, workflowDateRange.start, selectedRepo, prLifecycleViewMode]);
 
   const unsortedFallbackRuns = useMemo(() => {
     let result = fallbackRuns;
@@ -2772,6 +2787,45 @@ function DashboardContent({
                     <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">No workflows found for the selected date range.</div>
                   ) : (
                     <>
+                      {/* Workflow Time Range Selector */}
+                      <div className="border-b border-neutral-100 px-6 py-3 dark:border-neutral-800">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">时间范围:</span>
+                          {[7, 14, 30, 90].map((value) => (
+                            <button
+                              type="button"
+                              key={value}
+                              onClick={() => { setWorkflowUseCustomRange(false); setWorkflowDays(value); }}
+                              className={`rounded-md border px-3 py-1 text-xs font-medium transition-all ${
+                                workflowDays === value && !workflowUseCustomRange
+                                  ? 'border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/50 dark:text-blue-400'
+                                  : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950'
+                              }`}
+                            >
+                              {value} 天
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setWorkflowUseCustomRange(true)}
+                            className={`flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all ${
+                              workflowUseCustomRange
+                                ? 'border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/50 dark:text-blue-400'
+                                : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950'
+                            }`}
+                          >
+                            <CalendarIcon className="h-3 w-3" />
+                            自定义
+                          </button>
+                          {workflowUseCustomRange && (
+                            <div className="flex items-center gap-1.5 rounded-md border border-neutral-200 bg-white p-1 dark:border-neutral-700 dark:bg-neutral-900">
+                              <input type="date" value={workflowStartDate} onChange={(e) => setWorkflowStartDate(e.target.value)} className="bg-transparent px-1.5 py-0.5 text-xs text-neutral-700 outline-none dark:text-neutral-300" />
+                              <span className="text-neutral-400">-</span>
+                              <input type="date" value={workflowEndDate} onChange={(e) => setWorkflowEndDate(e.target.value)} className="bg-transparent px-1.5 py-0.5 text-xs text-neutral-700 outline-none dark:text-neutral-300" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
                       {/* Workflow Summary Table */}
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
