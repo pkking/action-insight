@@ -1417,7 +1417,7 @@ interface WorkflowDotProps {
 
 function CustomWorkflowDot(props: WorkflowDotProps) {
   const { cx, cy, payload } = props;
-  if (!cx || !cy || !payload?.html_url) return null;
+  if (cx === undefined || cy === undefined || !payload?.html_url) return null;
   return (
     <circle
       cx={cx}
@@ -2490,7 +2490,13 @@ function DashboardContent({
                 ))}
                 <button
                   type="button"
-                  onClick={() => setWorkflowUseCustomRange(true)}
+                  onClick={() => {
+                    setWorkflowUseCustomRange(true);
+                    if (!workflowStartDate && !workflowEndDate) {
+                      setWorkflowStartDate(format(workflowDateRange.start, 'yyyy-MM-dd'));
+                      setWorkflowEndDate(format(workflowDateRange.end, 'yyyy-MM-dd'));
+                    }
+                  }}
                   className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-all ${
                     workflowUseCustomRange
                       ? 'border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/50 dark:text-blue-400'
@@ -2810,10 +2816,6 @@ function DashboardContent({
                                 <React.Fragment key={summary.name}>
                                   <tr
                                     onClick={() => setSelectedWorkflowSummaryName(isExpanded ? null : summary.name)}
-                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedWorkflowSummaryName(isExpanded ? null : summary.name); } }}
-                                    tabIndex={0}
-                                    role="button"
-                                    aria-expanded={isExpanded}
                                     className={`cursor-pointer transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-950/50 ${
                                       isExpanded ? 'bg-blue-50/60 dark:bg-blue-900/10' : ''
                                     }`}
@@ -2831,7 +2833,7 @@ function DashboardContent({
                                           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
                                           onClick={(e) => e.stopPropagation()}
                                           className="font-medium text-blue-600 hover:underline dark:text-blue-400"
-                                          title="查看 Workflow 文件"
+                                          title="查看 Workflow 运行历史"
                                         >
                                           {summary.name}
                                         </a>
@@ -2888,7 +2890,7 @@ function DashboardContent({
                                                       tickLine={false}
                                                       axisLine={false}
                                                       tickFormatter={(val) => `${Math.round(val / 60)}m`}
-                                                      domain={[0, Math.max(...successRunLineData.map((d) => d.duration), 60) * 1.1]}
+                                                      domain={[0, successRunLineData.reduce((max, d) => Math.max(max, d.duration), 60) * 1.1]}
                                                       label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
                                                     />
                                                     <Tooltip content={({ payload, label }) => {
