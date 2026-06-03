@@ -1416,6 +1416,29 @@ function JobDetailView({
   );
 }
 
+interface WorkflowDotProps {
+  cx?: number;
+  cy?: number;
+  payload?: { html_url?: string };
+  index?: number;
+}
+
+function CustomWorkflowDot(props: WorkflowDotProps) {
+  const { cx, cy, payload } = props;
+  if (!cx || !cy || !payload?.html_url) return null;
+  return (
+    <a
+      href={payload.html_url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="cursor-pointer"
+      title="在 GitHub 上打开"
+    >
+      <circle cx={cx} cy={cy} r={5} fill="#22c55e" stroke="#fff" strokeWidth={2} />
+    </a>
+  );
+}
+
 function DashboardContent({
   initialFailedRepoKeys,
   initialRepoIndexesByKey,
@@ -2132,6 +2155,8 @@ function DashboardContent({
         date: run.created_at,
         label: format(new Date(run.created_at), 'MMM dd HH:mm'),
         duration: run.durationInSeconds,
+        runId: run.id,
+        html_url: run.html_url,
       }));
   }, [allWorkflows, selectedWorkflowSummaryName]);
 
@@ -2899,10 +2924,6 @@ function DashboardContent({
                                     <tr>
                                       <td colSpan={5} className="p-0">
                                         <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
-                                          {/* Debug: show state */}
-                                          <div className="mb-2 rounded-md bg-yellow-50 px-3 py-2 text-xs text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300">
-                                            调试：selectedWorkflowSummaryName={selectedWorkflowSummaryName || '(null)'} | successRunLineData.length={successRunLineData.length} | allWorkflows.length={allWorkflows.length}
-                                          </div>
                                           {successRunLineData.length === 0 ? (
                                             <div className="p-8 text-center text-sm text-amber-600 dark:text-amber-400">
                                               该 Workflow 在当前周期内没有成功的运行。结论分布：{debugInfo}
@@ -2961,8 +2982,8 @@ function DashboardContent({
                                                       name="成功运行耗时"
                                                       stroke="#22c55e"
                                                       strokeWidth={2}
-                                                      dot={{ r: 4, fill: '#22c55e', stroke: '#fff', strokeWidth: 1.5 }}
-                                                      activeDot={{ r: 6 }}
+                                                      dot={CustomWorkflowDot}
+                                                      activeDot={{ r: 7, fill: '#22c55e', stroke: '#fff', strokeWidth: 2 }}
                                                     />
                                                   </LineChart>
                                                 </ResponsiveContainer>
