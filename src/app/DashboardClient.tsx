@@ -3229,7 +3229,15 @@ function DashboardContent({
                                               </div>
                                               <div className="h-72">
                                                 <ResponsiveContainer width="100%" height="100%">
-                                                  <LineChart data={jobSuccessRunLineData}>
+                                                  <LineChart
+                                                    data={jobSuccessRunLineData}
+                                                    onClick={(data) => {
+                                                      const idx = data?.activeIndex;
+                                                      if (typeof idx === 'number' && jobSuccessRunLineData[idx]?.html_url) {
+                                                        window.open(jobSuccessRunLineData[idx].html_url, '_blank', 'noopener,noreferrer');
+                                                      }
+                                                    }}
+                                                  >
                                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
                                                     <XAxis
                                                       dataKey="label"
