@@ -2038,8 +2038,6 @@ function DashboardContent({
     return Array.from(byName.entries()).map(([name, runs]) => {
       const durations = runs.map((r) => r.durationInSeconds).sort((a, b) => a - b);
       const successCount = runs.filter((r) => r.conclusion === 'success').length;
-      const p50Idx = Math.max(0, Math.ceil(durations.length * 0.5) - 1);
-      const p90Idx = Math.max(0, Math.ceil(durations.length * 0.9) - 1);
       const conclusionCounts = new Map<string, number>();
       for (const run of runs) {
         conclusionCounts.set(run.conclusion, (conclusionCounts.get(run.conclusion) || 0) + 1);
@@ -2050,8 +2048,8 @@ function DashboardContent({
         runCount: runs.length,
         successCount,
         successRate: runs.length > 0 ? Math.round((successCount / runs.length) * 100) : 0,
-        p50Duration: durations[p50Idx] ?? 0,
-        p90Duration: durations[p90Idx] ?? 0,
+        p50Duration: computePercentile(durations, 0.5),
+        p90Duration: computePercentile(durations, 0.9),
         debugInfo,
       };
     });
@@ -2830,6 +2828,7 @@ function DashboardContent({
                                           href={buildWorkflowFileUrl(summary.name)}
                                           target="_blank"
                                           rel="noopener noreferrer"
+                                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
                                           onClick={(e) => e.stopPropagation()}
                                           className="font-medium text-blue-600 hover:underline dark:text-blue-400"
                                           title="查看 Workflow 文件"
