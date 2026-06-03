@@ -3109,7 +3109,7 @@ function DashboardContent({
                                 tabIndex={0}
                                 role="button"
                               >
-                                <span className="inline-flex items-center gap-1">P90 排队 {jobSummarySortField === 'p90Queue' ? (jobSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
+                                <span className="inline-flex items-center gap-1">P90 Queue {jobSummarySortField === 'p90Queue' ? (jobSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
                               </th>
                               <th
                                 className="cursor-pointer px-6 py-3 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
@@ -3118,7 +3118,7 @@ function DashboardContent({
                                 tabIndex={0}
                                 role="button"
                               >
-                                <span className="inline-flex items-center gap-1">P90 耗时 {jobSummarySortField === 'p90E2e' ? (jobSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
+                                <span className="inline-flex items-center gap-1">P90 E2E {jobSummarySortField === 'p90E2e' ? (jobSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
                               </th>
                               <th
                                 className="cursor-pointer px-6 py-3 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
@@ -3127,7 +3127,7 @@ function DashboardContent({
                                 tabIndex={0}
                                 role="button"
                               >
-                                <span className="inline-flex items-center gap-1">P50 耗时 {jobSummarySortField === 'p50E2e' ? (jobSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
+                                <span className="inline-flex items-center gap-1">P50 E2E {jobSummarySortField === 'p50E2e' ? (jobSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
                               </th>
                               <th
                                 className="cursor-pointer px-6 py-3 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
@@ -3136,7 +3136,7 @@ function DashboardContent({
                                 tabIndex={0}
                                 role="button"
                               >
-                                <span className="inline-flex items-center gap-1">成功率 {jobSummarySortField === 'successRate' ? (jobSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
+                                <span className="inline-flex items-center gap-1">Success Rate {jobSummarySortField === 'successRate' ? (jobSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
                               </th>
                             </tr>
                           </thead>
@@ -3223,19 +3223,11 @@ function DashboardContent({
                                                       interval="preserveStartEnd"
                                                     />
                                                     <YAxis
-                                                      yAxisId="left"
                                                       tick={{ fontSize: 12, fill: '#888' }}
                                                       tickLine={false}
                                                       axisLine={false}
                                                       tickFormatter={(val) => `${Math.round(val / 60)}m`}
                                                       label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
-                                                    />
-                                                    <YAxis
-                                                      yAxisId="right"
-                                                      orientation="right"
-                                                      tick={{ fontSize: 12, fill: '#888' }}
-                                                      tickLine={false}
-                                                      axisLine={false}
                                                     />
                                                     <Tooltip content={({ payload, label }) => {
                                                       if (!payload || payload.length === 0) return null;
@@ -3272,7 +3264,6 @@ function DashboardContent({
                                                       activeDot={{ r: 7 }}
                                                     />
                                                     <Line
-                                                      yAxisId="right"
                                                       type="monotone"
                                                       dataKey="queueTime"
                                                       name="Queue Time"
@@ -3295,9 +3286,6 @@ function DashboardContent({
                             })}
                           </tbody>
                         </table>
-                      </div>
-                      <div className="border-t border-neutral-100 p-6 dark:border-neutral-800">
-                        <TimingChart data={selectedJobTimingData} label="Job" />
                       </div>
                     </>
                   )}
