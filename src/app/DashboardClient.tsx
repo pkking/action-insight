@@ -23,7 +23,7 @@ import {
   TestTube,
   XCircle,
 } from 'lucide-react';
-import { Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, LineChart, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, LineChart, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
 import type { LegendPayload } from 'recharts';
 import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 
