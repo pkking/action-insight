@@ -1455,10 +1455,8 @@ function CustomJobDot(props: WorkflowDotProps) {
       fill="#3b82f6"
       stroke="#fff"
       strokeWidth={2}
-      style={{ cursor: 'pointer', transition: 'r 0.15s ease' }}
+      style={{ cursor: 'pointer' }}
       onClick={() => window.open(payload.html_url, '_blank', 'noopener,noreferrer')}
-      onMouseEnter={(e) => { (e.target as SVGCircleElement).setAttribute('r', '8'); }}
-      onMouseLeave={(e) => { (e.target as SVGCircleElement).setAttribute('r', '6'); }}
     />
   );
 }
@@ -3274,7 +3272,7 @@ function DashboardContent({
                                                       stroke="#f59e0b"
                                                       strokeWidth={2}
                                                       dot={false}
-                                                      activeDot={{ r: 7 }}
+                                                      activeDot={false}
                                                     />
                                                   </LineChart>
                                                 </ResponsiveContainer>
