@@ -42,7 +42,7 @@ import type {
 } from '@/lib/types';
 
 type JobSortField = 'queue' | 'duration' | 'name';
-type WorkflowSortField = 'date' | 'duration' | 'name';
+type WorkflowSortField = 'date' | 'duration' | 'name' | 'p90' | 'p50' | 'successRate';
 type WorkflowSortOrder = 'asc' | 'desc' | 'none';
 type PrLifecycleViewMode = 'pr' | 'workflow' | 'job' | 'event';
 type WorkflowTimingData = {
@@ -52,6 +52,24 @@ type WorkflowTimingData = {
   e2eTimeSeconds: number;
   conclusion: string;
   created_at: string;
+};
+type WorkflowSummary = {
+  name: string;
+  runCount: number;
+  successCount: number;
+  successRate: number;
+  p50Duration: number;
+  p90Duration: number;
+  sampleHtmlUrl: string;
+};
+type WorkflowDailyTrendPoint = {
+  date: string;
+  label: string;
+  dayIndex: number;
+  runCount: number;
+  p50Duration: number;
+  p90Duration: number;
+  successRate: number;
 };
 type JobTimingData = {
   id: number;
@@ -1444,6 +1462,9 @@ function DashboardContent({
   const [prLifecycleViewMode, setPrLifecycleViewMode] = useState<PrLifecycleViewMode>('pr');
   const [selectedWorkflowIds, setSelectedWorkflowIds] = useState<Set<number>>(new Set());
   const [selectedJobIds, setSelectedJobIds] = useState<Set<number>>(new Set());
+  const [selectedWorkflowSummaryName, setSelectedWorkflowSummaryName] = useState<string | null>(null);
+  const [workflowSummarySortField, setWorkflowSummarySortField] = useState<WorkflowSortField>('p90');
+  const [workflowSummarySortOrder, setWorkflowSummarySortOrder] = useState<'asc' | 'desc'>('desc');
   const [allWorkflows, setAllWorkflows] = useState<Run[]>([]);
   const [allWorkflowsLoading, setAllWorkflowsLoading] = useState(false);
   const [allWorkflowsError, setAllWorkflowsError] = useState('');
@@ -1962,6 +1983,103 @@ function DashboardContent({
     setPrLifecycleViewMode(mode);
     setSelectedWorkflowIds(new Set());
     setSelectedJobIds(new Set());
+    setSelectedWorkflowSummaryName(null);
+  };
+
+  const toggleWorkflowSummarySort = (field: WorkflowSortField) => {
+    if (workflowSummarySortField === field) {
+      setWorkflowSummarySortOrder(workflowSummarySortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setWorkflowSummarySortField(field);
+      setWorkflowSummarySortOrder('desc');
+    }
+  };
+
+  const workflowSummaries = useMemo<WorkflowSummary[]>(() => {
+    const byName = new Map<string, Run[]>();
+    for (const run of allWorkflows) {
+      const existing = byName.get(run.name) || [];
+      existing.push(run);
+      byName.set(run.name, existing);
+    }
+
+    return Array.from(byName.entries()).map(([name, runs]) => {
+      const durations = runs.map((r) => r.durationInSeconds).sort((a, b) => a - b);
+      const successCount = runs.filter((r) => r.conclusion === 'success').length;
+      const p50Idx = Math.max(0, Math.ceil(durations.length * 0.5) - 1);
+      const p90Idx = Math.max(0, Math.ceil(durations.length * 0.9) - 1);
+      return {
+        name,
+        runCount: runs.length,
+        successCount,
+        successRate: runs.length > 0 ? Math.round((successCount / runs.length) * 100) : 0,
+        p50Duration: durations[p50Idx] ?? 0,
+        p90Duration: durations[p90Idx] ?? 0,
+        sampleHtmlUrl: runs[0]?.html_url ?? '',
+      };
+    });
+  }, [allWorkflows]);
+
+  const sortedWorkflowSummaries = useMemo(() => {
+    const sorted = [...workflowSummaries];
+    if (filterName) {
+      const query = filterName.toLowerCase();
+      const filtered = sorted.filter((s) => s.name.toLowerCase().includes(query));
+      sorted.length = 0;
+      sorted.push(...filtered);
+    }
+    sorted.sort((a, b) => {
+      let cmp = 0;
+      switch (workflowSummarySortField) {
+        case 'name': cmp = a.name.localeCompare(b.name); break;
+        case 'p90': cmp = a.p90Duration - b.p90Duration; break;
+        case 'p50': cmp = a.p50Duration - b.p50Duration; break;
+        case 'successRate': cmp = a.successRate - b.successRate; break;
+        default: cmp = a.runCount - b.runCount; break;
+      }
+      return workflowSummarySortOrder === 'asc' ? cmp : -cmp;
+    });
+    return sorted;
+  }, [workflowSummaries, filterName, workflowSummarySortField, workflowSummarySortOrder]);
+
+  const selectedWorkflowTrendData = useMemo<WorkflowDailyTrendPoint[]>(() => {
+    if (!selectedWorkflowSummaryName) return [];
+    const matchingRuns = allWorkflows.filter((r) => r.name === selectedWorkflowSummaryName);
+    if (matchingRuns.length === 0) return [];
+
+    const byDay = new Map<string, Run[]>();
+    for (const run of matchingRuns) {
+      const runDate = new Date(run.created_at);
+      const dayStr = format(runDate, 'yyyy-MM-dd');
+      const existing = byDay.get(dayStr) || [];
+      existing.push(run);
+      byDay.set(dayStr, existing);
+    }
+
+    const sortedDays = [...byDay.keys()].sort();
+    return sortedDays.map((day) => {
+      const runs = byDay.get(day)!;
+      const durations = runs.map((r) => r.durationInSeconds).sort((a, b) => a - b);
+      const successCount = runs.filter((r) => r.conclusion === 'success').length;
+      const p50Idx = Math.max(0, Math.ceil(durations.length * 0.5) - 1);
+      const p90Idx = Math.max(0, Math.ceil(durations.length * 0.9) - 1);
+      const dayIndex = differenceInCalendarDays(parseISO(day), dateRange.start);
+      return {
+        date: day,
+        label: format(parseISO(day), 'MMM dd'),
+        dayIndex,
+        runCount: runs.length,
+        p50Duration: durations[p50Idx] ?? 0,
+        p90Duration: durations[p90Idx] ?? 0,
+        successRate: runs.length > 0 ? Math.round((successCount / runs.length) * 100) : 0,
+      };
+    });
+  }, [allWorkflows, selectedWorkflowSummaryName, dateRange.start]);
+
+  const buildWorkflowFileUrl = (workflowName: string): string => {
+    if (!selectedRepo) return '#';
+    // Link to GitHub Actions page filtered by workflow name
+    return `https://github.com/${selectedRepo.owner}/${selectedRepo.repo}/actions?query=workflow%3A%22${encodeURIComponent(workflowName)}%22`;
   };
 
   const toggleJobSort = (field: JobSortField) => {
@@ -2600,72 +2718,193 @@ function DashboardContent({
                   )}
                 </div>
                ) : prLifecycleViewMode === 'workflow' ? (
-                /* ===== WORKFLOW VIEW ===== */
+                /* ===== WORKFLOW SUMMARY VIEW ===== */
                 <div>
                   {allWorkflowsError ? (
                     <div className="p-8 text-center text-sm text-red-500 dark:text-red-400">Failed to load workflows. Please try again later.</div>
                   ) : allWorkflowsLoading ? (
                     <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">Loading workflows...</div>
-                  ) : sortedAllWorkflows.length === 0 ? (
+                  ) : workflowSummaries.length === 0 ? (
                     <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">No workflows found for the selected date range.</div>
                   ) : (
                     <>
+                      {/* Workflow Summary Table */}
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
                           <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
                             <tr>
-                              <th className="px-4 py-3">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedWorkflowIds.size === sortedAllWorkflows.length && sortedAllWorkflows.length > 0}
-                                  onChange={toggleAllWorkflows}
-                                  aria-label="Select all workflows"
-                                />
+                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSummarySort('name')}>
+                                <span className="inline-flex items-center gap-1">Workflow {workflowSummarySortField === 'name' ? (workflowSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
                               </th>
-                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('name')}>Workflow</th>
-                              <th className="px-6 py-3">Branch</th>
-                              <th className="px-6 py-3">Status</th>
-                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('date')}>Created</th>
-                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSort('duration')}>Duration</th>
-                              <th className="px-6 py-3">Queue Time</th>
-                              <th className="px-6 py-3">E2E Time</th>
-                              <th className="px-6 py-3 text-right">Link</th>
+                              <th className="px-6 py-3 text-center">Runs</th>
+                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSummarySort('p90')}>
+                                <span className="inline-flex items-center gap-1">P90 耗时 {workflowSummarySortField === 'p90' ? (workflowSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
+                              </th>
+                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSummarySort('p50')}>
+                                <span className="inline-flex items-center gap-1">P50 耗时 {workflowSummarySortField === 'p50' ? (workflowSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
+                              </th>
+                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSummarySort('successRate')}>
+                                <span className="inline-flex items-center gap-1">成功率 {workflowSummarySortField === 'successRate' ? (workflowSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
+                              </th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                            {sortedAllWorkflows.map((workflow) => {
-                              const queueTime = calculateWorkflowQueueTime(workflow);
-                              return (
-                                <tr key={workflow.id} className={`hover:bg-neutral-50 dark:hover:bg-neutral-950/50 ${selectedWorkflowIds.has(workflow.id) ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
-                                  <td className="px-4 py-4">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedWorkflowIds.has(workflow.id)}
-                                      onChange={() => toggleWorkflowSelection(workflow.id)}
-                                      aria-label={`Select ${workflow.name}`}
-                                    />
-                                  </td>
-                                  <td className="px-6 py-4 font-medium text-neutral-900 dark:text-neutral-100">{workflow.name}</td>
-                                  <td className="px-6 py-4 font-mono text-xs text-neutral-500 dark:text-neutral-400">{workflow.head_branch}</td>
-                                  <td className="px-6 py-4"><StatusBadge conclusion={workflow.conclusion} /></td>
-                                  <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(workflow.created_at), 'MMM dd, HH:mm')}</td>
-                                  <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(workflow.durationInSeconds)}</td>
-                                  <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{queueTime !== undefined ? formatDurationMinutes(queueTime) : 'N/A'}</td>
-                                  <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(workflow.durationInSeconds)}</td>
-                                  <td className="px-6 py-4 text-right">
-                                    <a href={workflow.html_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
-                                      <ExternalLink className="h-4 w-4" />
+                            {sortedWorkflowSummaries.map((summary) => (
+                              <tr
+                                key={summary.name}
+                                onClick={() => setSelectedWorkflowSummaryName(selectedWorkflowSummaryName === summary.name ? null : summary.name)}
+                                className={`cursor-pointer transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-950/50 ${
+                                  selectedWorkflowSummaryName === summary.name ? 'bg-blue-50/60 dark:bg-blue-900/10' : ''
+                                }`}
+                              >
+                                <td className="px-6 py-4">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`h-2 w-2 rounded-full ${selectedWorkflowSummaryName === summary.name ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`} />
+                                    <a
+                                      href={buildWorkflowFileUrl(summary.name)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                                      title="查看 Workflow 文件"
+                                    >
+                                      {summary.name}
                                     </a>
-                                  </td>
-                                </tr>
-                              );
-                            })}
+                                    <ExternalLink className="h-3 w-3 text-neutral-400" />
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 text-center font-mono text-neutral-600 dark:text-neutral-400">{summary.runCount}</td>
+                                <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatDurationMinutes(summary.p90Duration)}</td>
+                                <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatDurationMinutes(summary.p50Duration)}</td>
+                                <td className="px-6 py-4">
+                                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                                    summary.successRate >= 90 ? 'border border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                                    summary.successRate >= 70 ? 'border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400' :
+                                    'border border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                  }`}>
+                                    {summary.successRate}%
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
                           </tbody>
                         </table>
                       </div>
-                      <div className="border-t border-neutral-100 p-6 dark:border-neutral-800">
-                        <TimingChart data={selectedWorkflowTimingData} label="Workflow" />
-                      </div>
+
+                      {/* Workflow Trend Chart */}
+                      {selectedWorkflowSummaryName && selectedWorkflowTrendData.length > 0 ? (
+                        <div className="border-t border-neutral-100 p-6 dark:border-neutral-800">
+                          <div className="mb-4 flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedWorkflowSummaryName(null)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950"
+                            >
+                              <ArrowLeft className="h-4 w-4" />
+                              返回
+                            </button>
+                            <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
+                              {selectedWorkflowSummaryName} — 耗时趋势
+                            </h4>
+                          </div>
+                          <div className="h-72">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={selectedWorkflowTrendData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
+                                <XAxis
+                                  dataKey="label"
+                                  tick={{ fontSize: 11, fill: '#888' }}
+                                  tickLine={false}
+                                  axisLine={false}
+                                  minTickGap={24}
+                                  angle={-30}
+                                  textAnchor="end"
+                                  height={50}
+                                />
+                                <YAxis
+                                  yAxisId="left"
+                                  tick={{ fontSize: 12, fill: '#888' }}
+                                  tickLine={false}
+                                  axisLine={false}
+                                  tickFormatter={(val) => `${Math.round(val / 60)}m`}
+                                  label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
+                                />
+                                <YAxis
+                                  yAxisId="right"
+                                  orientation="right"
+                                  domain={[0, 100]}
+                                  tick={{ fontSize: 12, fill: '#888' }}
+                                  tickLine={false}
+                                  axisLine={false}
+                                />
+                                <Tooltip content={({ payload, label }) => {
+                                  if (!payload || payload.length === 0) return null;
+                                  return (
+                                    <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs shadow-md dark:border-neutral-700 dark:bg-neutral-800">
+                                      <div className="mb-1.5 font-medium text-neutral-700 dark:text-neutral-200">{label}</div>
+                                      <div className="space-y-0.5">
+                                        {payload.map((entry, i) => {
+                                          const { dataKey, value, color, name } = entry;
+                                          const displayValue = dataKey === 'p50Duration' || dataKey === 'p90Duration'
+                                            ? `${Math.round(Number(value) / 60)}m`
+                                            : dataKey === 'successRate'
+                                              ? `${value}%`
+                                              : String(value);
+                                          return (
+                                            <div key={i} className="flex items-center gap-2">
+                                              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+                                              <span className="text-neutral-500 dark:text-neutral-400">{name}:</span>
+                                              <span className="font-mono text-neutral-700 dark:text-neutral-200">{displayValue}</span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                }} />
+                                <Legend />
+                                <Line
+                                  yAxisId="left"
+                                  type="monotone"
+                                  dataKey="p90Duration"
+                                  name="P90 耗时"
+                                  stroke="#ea580c"
+                                  strokeWidth={2.5}
+                                  dot={{ r: 4 }}
+                                  activeDot={{ r: 6 }}
+                                />
+                                <Line
+                                  yAxisId="left"
+                                  type="monotone"
+                                  dataKey="p50Duration"
+                                  name="P50 耗时"
+                                  stroke="#2563eb"
+                                  strokeWidth={2.5}
+                                  dot={{ r: 4 }}
+                                  activeDot={{ r: 6 }}
+                                />
+                                <Line
+                                  yAxisId="right"
+                                  type="monotone"
+                                  dataKey="successRate"
+                                  name="成功率"
+                                  stroke="#22c55e"
+                                  strokeWidth={2}
+                                  dot={{ r: 3 }}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      ) : selectedWorkflowSummaryName ? (
+                        <div className="border-t border-neutral-100 p-8 text-center text-sm text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+                          该 Workflow 在当前周期内没有足够的数据展示趋势图。
+                        </div>
+                      ) : (
+                        <div className="border-t border-neutral-100 p-8 text-center text-sm text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+                          点击上方某个 Workflow 查看其耗时趋势。
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
