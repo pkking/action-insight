@@ -3278,7 +3278,7 @@ function DashboardContent({
                                                       stroke="#3b82f6"
                                                       strokeWidth={2}
                                                       dot={CustomJobDot}
-                                                      activeDot={{ r: 7, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }}
+                                                      activeDot={CustomJobDot}
                                                     />
                                                     <Line
                                                       type="monotone"
