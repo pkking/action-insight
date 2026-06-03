@@ -2412,14 +2412,28 @@ function DashboardContent({
     );
     return matchingRuns
       .sort((a, b) => a.created_at.localeCompare(b.created_at))
-      .map((run, idx) => ({
-        index: idx,
-        date: run.created_at,
-        label: format(new Date(run.created_at), 'MMM dd HH:mm'),
-        duration: run.durationInSeconds,
-        runId: run.id,
-        html_url: run.html_url,
-      }));
+      .map((run, idx) => {
+        // Compute duration from jobs' actual start/end times instead of (updated_at - created_at)
+        // which includes queue/wait time
+        let duration = run.durationInSeconds;
+        if (run.jobs && run.jobs.length > 0) {
+          const startedTimes = run.jobs.map((j) => new Date(j.started_at || j.created_at || 0).getTime());
+          const completedTimes = run.jobs.map((j) => new Date(j.completed_at || j.started_at || 0).getTime());
+          const earliestStart = Math.min(...startedTimes.filter((t) => t > 0));
+          const latestEnd = Math.max(...completedTimes.filter((t) => t > 0));
+          if (earliestStart > 0 && latestEnd > 0) {
+            duration = Math.max(0, (latestEnd - earliestStart) / 1000);
+          }
+        }
+        return {
+          index: idx,
+          date: run.created_at,
+          label: format(new Date(run.created_at), 'MMM dd HH:mm'),
+          duration,
+          runId: run.id,
+          html_url: run.html_url,
+        };
+      });
   }, [allWorkflows, selectedWorkflowSummaryName]);
 
   const buildWorkflowFileUrl = (workflowName: string): string => {
