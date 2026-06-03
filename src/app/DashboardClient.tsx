@@ -60,17 +60,9 @@ type WorkflowSummary = {
   successRate: number;
   p50Duration: number;
   p90Duration: number;
-  sampleHtmlUrl: string;
+  debugInfo: string;
 };
-type WorkflowDailyTrendPoint = {
-  date: string;
-  label: string;
-  dayIndex: number;
-  runCount: number;
-  p50Duration: number;
-  p90Duration: number;
-  successRate: number;
-};
+
 type JobTimingData = {
   id: number;
   name: string;
@@ -1489,7 +1481,6 @@ function DashboardContent({
   const [selectedWorkflowSummaryName, setSelectedWorkflowSummaryName] = useState<string | null>(null);
   const [workflowSummarySortField, setWorkflowSummarySortField] = useState<WorkflowSortField>('p90');
   const [workflowSummarySortOrder, setWorkflowSummarySortOrder] = useState<'asc' | 'desc'>('desc');
-  const [showWorkflowIndividualRuns, setShowWorkflowIndividualRuns] = useState(true);
   const [workflowDays, setWorkflowDays] = useState(30);
   const [workflowStartDate, setWorkflowStartDate] = useState('');
   const [workflowEndDate, setWorkflowEndDate] = useState('');
@@ -1574,6 +1565,7 @@ function DashboardContent({
     setPrLifecycleViewMode('pr');
     setSelectedWorkflowIds(new Set());
     setSelectedJobIds(new Set());
+    setSelectedWorkflowSummaryName(null);
     setAllWorkflows([]);
     setAllWorkflowsError('');
     setSelectedJobName(null);
@@ -2048,6 +2040,11 @@ function DashboardContent({
       const successCount = runs.filter((r) => r.conclusion === 'success').length;
       const p50Idx = Math.max(0, Math.ceil(durations.length * 0.5) - 1);
       const p90Idx = Math.max(0, Math.ceil(durations.length * 0.9) - 1);
+      const conclusionCounts = new Map<string, number>();
+      for (const run of runs) {
+        conclusionCounts.set(run.conclusion, (conclusionCounts.get(run.conclusion) || 0) + 1);
+      }
+      const debugInfo = [...conclusionCounts.entries()].map(([k, v]) => `${k}:${v}`).join(', ');
       return {
         name,
         runCount: runs.length,
@@ -2055,18 +2052,16 @@ function DashboardContent({
         successRate: runs.length > 0 ? Math.round((successCount / runs.length) * 100) : 0,
         p50Duration: durations[p50Idx] ?? 0,
         p90Duration: durations[p90Idx] ?? 0,
-        sampleHtmlUrl: runs[0]?.html_url ?? '',
+        debugInfo,
       };
     });
   }, [allWorkflows]);
 
   const sortedWorkflowSummaries = useMemo(() => {
-    const sorted = [...workflowSummaries];
+    let sorted = [...workflowSummaries];
     if (filterName) {
       const query = filterName.toLowerCase();
-      const filtered = sorted.filter((s) => s.name.toLowerCase().includes(query));
-      sorted.length = 0;
-      sorted.push(...filtered);
+      sorted = sorted.filter((s) => s.name.toLowerCase().includes(query));
     }
     sorted.sort((a, b) => {
       let cmp = 0;
@@ -2082,75 +2077,13 @@ function DashboardContent({
     return sorted;
   }, [workflowSummaries, filterName, workflowSummarySortField, workflowSummarySortOrder]);
 
-  const selectedWorkflowTrendData = useMemo<WorkflowDailyTrendPoint[]>(() => {
-    if (!selectedWorkflowSummaryName) return [];
-    const matchingRuns = allWorkflows.filter((r) => r.name === selectedWorkflowSummaryName);
-    if (matchingRuns.length === 0) return [];
-
-    const byDay = new Map<string, Run[]>();
-    for (const run of matchingRuns) {
-      const runDate = new Date(run.created_at);
-      const dayStr = format(runDate, 'yyyy-MM-dd');
-      const existing = byDay.get(dayStr) || [];
-      existing.push(run);
-      byDay.set(dayStr, existing);
-    }
-
-    const sortedDays = [...byDay.keys()].sort();
-    return sortedDays.map((day) => {
-      const runs = byDay.get(day)!;
-      const durations = runs.map((r) => r.durationInSeconds).sort((a, b) => a - b);
-      const successCount = runs.filter((r) => r.conclusion === 'success').length;
-      const p50Idx = Math.max(0, Math.ceil(durations.length * 0.5) - 1);
-      const p90Idx = Math.max(0, Math.ceil(durations.length * 0.9) - 1);
-      const dayIndex = differenceInCalendarDays(parseISO(day), dateRange.start);
-      return {
-        date: day,
-        label: format(parseISO(day), 'MMM dd'),
-        dayIndex,
-        runCount: runs.length,
-        p50Duration: durations[p50Idx] ?? 0,
-        p90Duration: durations[p90Idx] ?? 0,
-        successRate: runs.length > 0 ? Math.round((successCount / runs.length) * 100) : 0,
-      };
-    });
-  }, [allWorkflows, selectedWorkflowSummaryName, dateRange.start]);
-
-  const selectedWorkflowScatterData = useMemo(() => {
-    if (!selectedWorkflowSummaryName) return new Map<string, { x: number; y: number }[]>();
-    const matchingRuns = allWorkflows.filter((r) => r.name === selectedWorkflowSummaryName);
-    const byConclusion = new Map<string, { x: number; y: number }[]>();
-
-    for (const run of matchingRuns) {
-      const runDate = new Date(run.created_at);
-      const dayIndex = differenceInCalendarDays(runDate, dateRange.start);
-      const seed = run.created_at.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) + run.conclusion.charCodeAt(0);
-      const jitter = ((seed * 9301 + 49297) % 233280) / 233280 * 0.6 - 0.3;
-      const group = byConclusion.get(run.conclusion) || [];
-      group.push({ x: dayIndex + jitter, y: run.durationInSeconds });
-      byConclusion.set(run.conclusion, group);
-    }
-
-    return byConclusion;
-  }, [allWorkflows, selectedWorkflowSummaryName, dateRange.start]);
-
-  const workflowScatterMaxY = useMemo(() => {
-    let max = 0;
-    for (const points of selectedWorkflowScatterData.values()) {
-      for (const p of points) {
-        if (p.y > max) max = p.y;
-      }
-    }
-    return max;
-  }, [selectedWorkflowScatterData]);
-
   const successRunLineData = useMemo(() => {
     if (!selectedWorkflowSummaryName) return [];
     const matchingRuns = allWorkflows.filter(
       (r) => r.name === selectedWorkflowSummaryName && r.conclusion === 'success'
     );
     return matchingRuns
-      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
       .map((run, idx) => ({
         index: idx,
         date: run.created_at,
@@ -2874,17 +2807,15 @@ function DashboardContent({
                           <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                             {sortedWorkflowSummaries.map((summary) => {
                               const isExpanded = selectedWorkflowSummaryName === summary.name;
-                              const totalRuns = allWorkflows.filter((r) => r.name === summary.name).length;
-                              const conclusionCounts = new Map<string, number>();
-                              for (const run of allWorkflows.filter((r) => r.name === summary.name)) {
-                                conclusionCounts.set(run.conclusion, (conclusionCounts.get(run.conclusion) || 0) + 1);
-                              }
-                              const debugInfo = [...conclusionCounts.entries()].map(([k, v]) => `${k}:${v}`).join(', ');
 
                               return (
                                 <React.Fragment key={summary.name}>
                                   <tr
                                     onClick={() => setSelectedWorkflowSummaryName(isExpanded ? null : summary.name)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedWorkflowSummaryName(isExpanded ? null : summary.name); } }}
+                                    tabIndex={0}
+                                    role="button"
+                                    aria-expanded={isExpanded}
                                     className={`cursor-pointer transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-950/50 ${
                                       isExpanded ? 'bg-blue-50/60 dark:bg-blue-900/10' : ''
                                     }`}
@@ -2927,7 +2858,7 @@ function DashboardContent({
                                         <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
                                           {successRunLineData.length === 0 ? (
                                             <div className="p-8 text-center text-sm text-amber-600 dark:text-amber-400">
-                                              该 Workflow 在当前周期内没有成功的运行。结论分布：{debugInfo}
+                                              该 Workflow 在当前周期内没有成功的运行。结论分布：{summary.debugInfo}
                                             </div>
                                           ) : (
                                             <>
@@ -2936,7 +2867,7 @@ function DashboardContent({
                                                   {summary.name} — 单次运行耗时
                                                 </h4>
                                                 <span className="text-xs text-neutral-400 dark:text-neutral-500">
-                                                  （共 {totalRuns} 次运行，{successRunLineData.length} 次成功 | {debugInfo}）
+                                                  （共 {summary.runCount} 次运行，{successRunLineData.length} 次成功 | {summary.debugInfo}）
                                                 </span>
                                               </div>
                                               <div className="h-72">
