@@ -1444,6 +1444,23 @@ function CustomWorkflowDot(props: WorkflowDotProps) {
   );
 }
 
+function CustomJobDot(props: WorkflowDotProps) {
+  const { cx, cy, payload } = props;
+  if (cx === undefined || cy === undefined || !payload?.html_url) return null;
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={5}
+      fill="#3b82f6"
+      stroke="#fff"
+      strokeWidth={2}
+      style={{ cursor: 'pointer' }}
+      onClick={() => window.open(payload.html_url, '_blank', 'noopener,noreferrer')}
+    />
+  );
+}
+
 function DashboardContent({
   initialFailedRepoKeys,
   initialRepoIndexesByKey,
@@ -3260,22 +3277,8 @@ function DashboardContent({
                                                       name="E2E Time"
                                                       stroke="#3b82f6"
                                                       strokeWidth={2}
-                                                      dot={(props) => {
-                                                        const { cx, cy, payload } = props;
-                                                        if (cx === undefined || cy === undefined || !payload?.html_url) return null;
-                                                        return (
-                                                          <circle
-                                                            cx={cx}
-                                                            cy={cy}
-                                                            r={5}
-                                                    <Line
-                                                      type="monotone"
-                                                      dataKey="e2eTime"
-                                                      name="E2E Time"
-                                                      stroke="#3b82f6"
-                                                      strokeWidth={2}
-                                                      dot={false}
-                                                      activeDot={{ r: 7 }}
+                                                      dot={CustomJobDot}
+                                                      activeDot={{ r: 7, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }}
                                                     />
                                                     <Line
                                                       type="monotone"
