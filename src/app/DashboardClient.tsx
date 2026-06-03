@@ -1479,7 +1479,7 @@ function DashboardContent({
   const [selectedWorkflowIds, setSelectedWorkflowIds] = useState<Set<number>>(new Set());
   const [selectedJobIds, setSelectedJobIds] = useState<Set<number>>(new Set());
   const [selectedWorkflowSummaryName, setSelectedWorkflowSummaryName] = useState<string | null>(null);
-  const [workflowSummarySortField, setWorkflowSummarySortField] = useState<WorkflowSortField>('p90');
+  const [workflowSummarySortField, setWorkflowSummarySortField] = useState<'name' | 'p90' | 'p50' | 'successRate'>('p90');
   const [workflowSummarySortOrder, setWorkflowSummarySortOrder] = useState<'asc' | 'desc'>('desc');
   const [workflowDays, setWorkflowDays] = useState(30);
   const [workflowStartDate, setWorkflowStartDate] = useState('');
