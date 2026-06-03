@@ -1722,8 +1722,8 @@ function DashboardContent({
         const runs = await callApi<Run[]>('fetchRuns', {
           owner: selectedRepo.owner,
           repo: selectedRepo.repo,
-          startDate: format(dateRange.start, 'yyyy-MM-dd'),
-          endDate: format(dateRange.end, 'yyyy-MM-dd'),
+          startDate: format(workflowDateRange.start, 'yyyy-MM-dd'),
+          endDate: format(workflowDateRange.end, 'yyyy-MM-dd'),
         }, controller.signal);
 
         if (cancelled) {
@@ -1768,7 +1768,7 @@ function DashboardContent({
       cancelled = true;
       controller.abort();
     };
-  }, [dateRange.end, dateRange.start, selectedRepo, shouldLoadWorkflowFallback]);
+  }, [workflowDateRange.end, workflowDateRange.start, selectedRepo, shouldLoadWorkflowFallback]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1824,7 +1824,7 @@ function DashboardContent({
     let result = fallbackRuns;
 
     if (fallbackRunsScope === 'selected-range') {
-      result = filterByDateRange(result, dateRange);
+      result = filterByDateRange(result, workflowDateRange);
     }
 
     if (filterName) {

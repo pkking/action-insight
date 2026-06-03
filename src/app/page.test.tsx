@@ -602,7 +602,7 @@ describe('Dashboard PR view', () => {
       expect(fetchRunsFromIndexMock).toHaveBeenCalledTimes(1);
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /last 14 days/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^14d$/i }));
 
     await waitFor(() => {
       expect(fetchRunsFromIndexMock).toHaveBeenCalledTimes(2);
