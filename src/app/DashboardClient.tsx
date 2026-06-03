@@ -1465,6 +1465,7 @@ function DashboardContent({
   const [selectedWorkflowSummaryName, setSelectedWorkflowSummaryName] = useState<string | null>(null);
   const [workflowSummarySortField, setWorkflowSummarySortField] = useState<WorkflowSortField>('p90');
   const [workflowSummarySortOrder, setWorkflowSummarySortOrder] = useState<'asc' | 'desc'>('desc');
+  const [showWorkflowIndividualRuns, setShowWorkflowIndividualRuns] = useState(true);
   const [allWorkflows, setAllWorkflows] = useState<Run[]>([]);
   const [allWorkflowsLoading, setAllWorkflowsLoading] = useState(false);
   const [allWorkflowsError, setAllWorkflowsError] = useState('');
@@ -2074,6 +2075,24 @@ function DashboardContent({
         successRate: runs.length > 0 ? Math.round((successCount / runs.length) * 100) : 0,
       };
     });
+  }, [allWorkflows, selectedWorkflowSummaryName, dateRange.start]);
+
+  const selectedWorkflowScatterData = useMemo(() => {
+    if (!selectedWorkflowSummaryName) return new Map<string, { x: number; y: number }[]>();
+    const matchingRuns = allWorkflows.filter((r) => r.name === selectedWorkflowSummaryName);
+    const byConclusion = new Map<string, { x: number; y: number }[]>();
+
+    for (const run of matchingRuns) {
+      const runDate = new Date(run.created_at);
+      const dayIndex = differenceInCalendarDays(runDate, dateRange.start);
+      const seed = run.created_at.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) + run.conclusion.charCodeAt(0);
+      const jitter = ((seed * 9301 + 49297) % 233280) / 233280 * 0.6 - 0.3;
+      const group = byConclusion.get(run.conclusion) || [];
+      group.push({ x: dayIndex + jitter, y: run.durationInSeconds });
+      byConclusion.set(run.conclusion, group);
+    }
+
+    return byConclusion;
   }, [allWorkflows, selectedWorkflowSummaryName, dateRange.start]);
 
   const buildWorkflowFileUrl = (workflowName: string): string => {
@@ -2794,32 +2813,50 @@ function DashboardContent({
                       {/* Workflow Trend Chart */}
                       {selectedWorkflowSummaryName && selectedWorkflowTrendData.length > 0 ? (
                         <div className="border-t border-neutral-100 p-6 dark:border-neutral-800">
-                          <div className="mb-4 flex items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedWorkflowSummaryName(null)}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950"
-                            >
-                              <ArrowLeft className="h-4 w-4" />
-                              返回
-                            </button>
-                            <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
-                              {selectedWorkflowSummaryName} — 耗时趋势
-                            </h4>
+                          <div className="mb-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedWorkflowSummaryName(null)}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950"
+                              >
+                                <ArrowLeft className="h-4 w-4" />
+                                返回
+                              </button>
+                              <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
+                                {selectedWorkflowSummaryName} — 耗时趋势
+                              </h4>
+                            </div>
+                            <label className="inline-flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
+                              <input
+                                type="checkbox"
+                                checked={showWorkflowIndividualRuns}
+                                onChange={(e) => setShowWorkflowIndividualRuns(e.target.checked)}
+                                className="rounded border-neutral-300 text-blue-600 focus:ring-blue-500 dark:border-neutral-600"
+                              />
+                              展示单次运行
+                            </label>
                           </div>
                           <div className="h-72">
                             <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={selectedWorkflowTrendData}>
+                              <ComposedChart data={selectedWorkflowTrendData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
                                 <XAxis
-                                  dataKey="label"
+                                  type="number"
+                                  dataKey="dayIndex"
                                   tick={{ fontSize: 11, fill: '#888' }}
                                   tickLine={false}
                                   axisLine={false}
-                                  minTickGap={24}
+                                  interval="preserveStartEnd"
+                                  ticks={selectedWorkflowTrendData.map((r) => r.dayIndex)}
+                                  tickFormatter={(val) => {
+                                    const row = selectedWorkflowTrendData.find((r) => r.dayIndex === val);
+                                    return row ? row.label : '';
+                                  }}
                                   angle={-30}
                                   textAnchor="end"
                                   height={50}
+                                  domain={['dataMin - 0.5', 'dataMax + 0.5']}
                                 />
                                 <YAxis
                                   yAxisId="left"
@@ -2892,7 +2929,17 @@ function DashboardContent({
                                   strokeWidth={2}
                                   dot={{ r: 3 }}
                                 />
-                              </LineChart>
+                                {showWorkflowIndividualRuns &&
+                                  [...selectedWorkflowScatterData.entries()].map(([conclusion, points]) => (
+                                    <Scatter
+                                      key={conclusion}
+                                      name={conclusion === 'success' ? '成功' : conclusion === 'failure' || conclusion === 'cancelled' ? '失败' : conclusion}
+                                      data={points}
+                                      fill={conclusion === 'success' ? '#22c55e' : conclusion === 'skipped' ? '#9ca3af' : '#ef4444'}
+                                      shape="circle"
+                                    />
+                                  ))}
+                              </ComposedChart>
                             </ResponsiveContainer>
                           </div>
                         </div>
