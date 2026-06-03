@@ -2900,6 +2900,10 @@ function DashboardContent({
                                     <tr>
                                       <td colSpan={5} className="p-0">
                                         <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
+                                          {/* Debug: show state */}
+                                          <div className="mb-2 rounded-md bg-yellow-50 px-3 py-2 text-xs text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300">
+                                            调试：selectedWorkflowSummaryName={selectedWorkflowSummaryName || '(null)'} | successRunLineData.length={successRunLineData.length} | allWorkflows.length={allWorkflows.length}
+                                          </div>
                                           {successRunLineData.length === 0 ? (
                                             <div className="p-8 text-center text-sm text-amber-600 dark:text-amber-400">
                                               该 Workflow 在当前周期内没有成功的运行。结论分布：{debugInfo}
