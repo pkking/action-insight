@@ -1427,15 +1427,16 @@ function CustomWorkflowDot(props: WorkflowDotProps) {
   const { cx, cy, payload } = props;
   if (!cx || !cy || !payload?.html_url) return null;
   return (
-    <a
-      href={payload.html_url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="cursor-pointer"
-      title="在 GitHub 上打开"
-    >
-      <circle cx={cx} cy={cy} r={5} fill="#22c55e" stroke="#fff" strokeWidth={2} />
-    </a>
+    <circle
+      cx={cx}
+      cy={cy}
+      r={5}
+      fill="#22c55e"
+      stroke="#fff"
+      strokeWidth={2}
+      style={{ cursor: 'pointer' }}
+      onClick={() => window.open(payload.html_url, '_blank', 'noopener,noreferrer')}
+    />
   );
 }
 
