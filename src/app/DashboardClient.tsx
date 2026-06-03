@@ -3092,14 +3092,6 @@ function DashboardContent({
                         <table className="w-full text-left text-sm">
                           <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
                             <tr>
-                              <th className="px-4 py-3">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedJobIds.size === sortedAllJobTimingData.length && sortedAllJobTimingData.length > 0}
-                                  onChange={toggleAllJobs}
-                                  aria-label="Select all jobs"
-                                />
-                              </th>
                               <th
                                 className="cursor-pointer px-6 py-3 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                                 onClick={() => toggleJobSummarySort('name')}
@@ -3155,18 +3147,11 @@ function DashboardContent({
                               return (
                                 <React.Fragment key={summary.name}>
                                   <tr
+                                    onClick={() => setSelectedJobSummaryName(isExpanded ? null : summary.name)}
                                     className={`cursor-pointer transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-950/50 ${
                                       isExpanded ? 'bg-blue-50/60 dark:bg-blue-900/10' : ''
                                     }`}
                                   >
-                                    <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedJobIds.size === sortedAllJobTimingData.length && sortedAllJobTimingData.length > 0}
-                                        onChange={toggleAllJobs}
-                                        aria-label="Select all jobs"
-                                      />
-                                    </td>
                                     <td className="px-6 py-4">
                                       <div className="flex items-center gap-2">
                                         <button
@@ -3207,7 +3192,7 @@ function DashboardContent({
                                   </tr>
                                   {isExpanded && (
                                     <tr>
-                                      <td colSpan={7} className="p-0">
+                                      <td colSpan={6} className="p-0">
                                         <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
                                           {jobSuccessRunLineData.length === 0 ? (
                                             <div className="p-8 text-center text-sm text-amber-600 dark:text-amber-400">
