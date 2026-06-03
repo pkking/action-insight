@@ -2825,6 +2825,13 @@ function DashboardContent({
                         const successRuns = selectedWorkflowScatterData.get('success') || [];
                         const totalRuns = allWorkflows.filter((r) => r.name === selectedWorkflowSummaryName).length;
 
+                        // Debug info: show all conclusion types and counts
+                        const conclusionCounts = new Map<string, number>();
+                        for (const run of allWorkflows.filter((r) => r.name === selectedWorkflowSummaryName)) {
+                          conclusionCounts.set(run.conclusion, (conclusionCounts.get(run.conclusion) || 0) + 1);
+                        }
+                        const debugInfo = [...conclusionCounts.entries()].map(([k, v]) => `${k}:${v}`).join(', ');
+
                         if (totalRuns === 0) {
                           return (
                             <div className="border-t border-neutral-100 p-8 text-center text-sm text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
@@ -2848,12 +2855,12 @@ function DashboardContent({
                                 {selectedWorkflowSummaryName} — 单次运行耗时
                               </h4>
                               <span className="text-xs text-neutral-400 dark:text-neutral-500">
-                                （共 {totalRuns} 次运行，{successRuns.length} 次成功）
+                                （共 {totalRuns} 次运行，{successRuns.length} 次成功 | {debugInfo}）
                               </span>
                             </div>
                             {successRuns.length === 0 ? (
-                              <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">
-                                该 Workflow 在当前周期内没有成功的运行。
+                              <div className="p-8 text-center text-sm text-amber-600 dark:text-amber-400">
+                                该 Workflow 在当前周期内没有成功的运行。结论分布：{debugInfo}
                               </div>
                             ) : (
                               <div className="h-72">
