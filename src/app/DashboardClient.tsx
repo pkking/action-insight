@@ -2020,7 +2020,7 @@ function DashboardContent({
     setSelectedWorkflowSummaryName(null);
   };
 
-  const toggleWorkflowSummarySort = (field: WorkflowSortField) => {
+  const toggleWorkflowSummarySort = (field: 'name' | 'p90' | 'p50' | 'successRate') => {
     if (workflowSummarySortField === field) {
       setWorkflowSummarySortOrder(workflowSummarySortOrder === 'asc' ? 'desc' : 'asc');
     } else {
