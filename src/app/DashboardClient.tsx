@@ -42,6 +42,7 @@ import type {
 } from '@/lib/types';
 
 type JobSortField = 'queue' | 'duration' | 'name';
+type JobSummarySortField = 'name' | 'p90E2e' | 'p50E2e' | 'successRate' | 'p90Queue';
 type WorkflowSortField = 'date' | 'duration' | 'name' | 'p90' | 'p50' | 'successRate';
 type WorkflowSortOrder = 'asc' | 'desc' | 'none';
 type PrLifecycleViewMode = 'pr' | 'workflow' | 'job' | 'event';
@@ -73,6 +74,17 @@ type JobTimingData = {
   conclusion: string;
   created_at: string;
   html_url: string;
+};
+type JobSummary = {
+  name: string;
+  runCount: number;
+  successCount: number;
+  successRate: number;
+  p50Queue: number;
+  p90Queue: number;
+  p50E2e: number;
+  p90E2e: number;
+  debugInfo: string;
 };
 type MetricKey = 'prE2EP90Minutes' | 'ciE2EP90Minutes' | 'reviewP90Minutes' | 'ciE2ESlaRate';
 type DashboardQueryState = {
@@ -309,13 +321,15 @@ function buildJobTimingData(runs: Run[]): JobTimingData[] {
     for (const job of run.jobs) {
       const startedAtMs = new Date(job.started_at || job.created_at || 0).getTime();
       const completedAtMs = new Date(job.completed_at || job.started_at || 0).getTime();
+      const queueTimeSeconds = startedAtMs > 0 && runCreatedAtMs > 0 ? Math.max(0, (startedAtMs - runCreatedAtMs) / 1000) : 0;
+      const e2eTimeSeconds = completedAtMs > 0 && startedAtMs > 0 ? Math.max(0, (completedAtMs - startedAtMs) / 1000) : 0;
       jobs.push({
         id: job.id,
         name: job.name,
         workflowName: run.name,
         workflowId: run.id,
-        queueTimeSeconds: Math.max(0, (startedAtMs - runCreatedAtMs) / 1000),
-        e2eTimeSeconds: Math.max(0, (completedAtMs - runCreatedAtMs) / 1000),
+        queueTimeSeconds,
+        e2eTimeSeconds,
         conclusion: job.conclusion,
         created_at: run.created_at,
         html_url: job.html_url,
@@ -1432,6 +1446,244 @@ function CustomWorkflowDot(props: WorkflowDotProps) {
   );
 }
 
+function CustomJobDot(props: WorkflowDotProps) {
+  const { cx, cy, payload } = props;
+  if (cx === undefined || cy === undefined || !payload?.html_url) return null;
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={6}
+      fill="#3b82f6"
+      stroke="#fff"
+      strokeWidth={2}
+      style={{ cursor: 'pointer' }}
+      onClick={() => window.open(payload.html_url, '_blank', 'noopener,noreferrer')}
+    />
+  );
+}
+
+type JobLineChartViewProps = {
+  summary: {
+    name: string;
+    runCount: number;
+    debugInfo: string;
+  };
+  lineData: Array<{
+    index: number;
+    date: string;
+    label: string;
+    queueTime: number;
+    e2eTime: number;
+    jobId: number;
+    workflowName: string;
+    html_url: string;
+  }>;
+};
+
+function JobLineChartView({ summary, lineData }: JobLineChartViewProps) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const hoveredPoint = hoverIndex !== null && lineData[hoverIndex] ? lineData[hoverIndex] : null;
+
+  if (lineData.length === 0) {
+    return (
+      <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
+        <div className="p-8 text-center text-sm text-amber-600 dark:text-amber-400">
+          No successful runs for this job. Conclusion distribution: {summary.debugInfo}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
+      <div className="mb-3 flex items-center gap-2">
+        <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
+          {summary.name} — Run Durations
+        </h4>
+        <span className="text-xs text-neutral-400 dark:text-neutral-500">
+          ({summary.runCount} runs, {lineData.length} successful | {summary.debugInfo})
+        </span>
+      </div>
+
+      {/* Hover Info Bar */}
+      {hoveredPoint && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-2 text-xs dark:border-neutral-700 dark:bg-neutral-800">
+          <span className="font-medium text-neutral-700 dark:text-neutral-200">{hoveredPoint.label}</span>
+          <span className="text-neutral-500 dark:text-neutral-400">E2E: <span className="font-mono font-semibold text-blue-600 dark:text-blue-400">{Math.round(hoveredPoint.e2eTime / 60)}m</span></span>
+          <span className="text-neutral-500 dark:text-neutral-400">Queue: <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">{Math.round(hoveredPoint.queueTime / 60)}m</span></span>
+          <span className="text-neutral-500 dark:text-neutral-400">Workflow: <span className="font-mono text-neutral-600 dark:text-neutral-400">{hoveredPoint.workflowName}</span></span>
+          <a href={hoveredPoint.html_url} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400">
+            View Logs <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6" /></svg>
+          </a>
+        </div>
+      )}
+
+      <div className="h-72">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart
+            data={lineData}
+            onMouseMove={(data) => {
+              const idx = data?.activeIndex;
+              setHoverIndex(typeof idx === 'number' ? idx : null);
+            }}
+            onMouseLeave={() => setHoverIndex(null)}
+            onClick={(data) => {
+              const idx = data?.activeIndex;
+              if (typeof idx === 'number' && lineData[idx]?.html_url) {
+                window.open(lineData[idx].html_url, '_blank', 'noopener,noreferrer');
+              }
+            }}
+          >
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 10, fill: '#888' }}
+              tickLine={false}
+              axisLine={false}
+              angle={-30}
+              textAnchor="end"
+              height={50}
+              interval="preserveStartEnd"
+            />
+            <YAxis
+              tick={{ fontSize: 12, fill: '#888' }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(val) => `${Math.round(val / 60)}m`}
+              label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
+            />
+            <Legend />
+            <Line
+              yAxisId="left"
+              type="monotone"
+              dataKey="e2eTime"
+              name="E2E Time"
+              stroke="#3b82f6"
+              strokeWidth={2}
+              dot={CustomJobDot}
+              activeDot={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="queueTime"
+              name="Queue Time"
+              stroke="#f59e0b"
+              strokeWidth={2}
+              dot={false}
+              activeDot={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+type WorkflowLineChartViewProps = {
+  summary: {
+    name: string;
+    runCount: number;
+    debugInfo: string;
+  };
+  lineData: Array<{
+    index: number;
+    date: string;
+    label: string;
+    duration: number;
+    runId: number;
+    html_url: string;
+  }>;
+};
+
+function WorkflowLineChartView({ summary, lineData }: WorkflowLineChartViewProps) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const hoveredPoint = hoverIndex !== null && lineData[hoverIndex] ? lineData[hoverIndex] : null;
+
+  if (lineData.length === 0) {
+    return (
+      <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
+        <div className="p-8 text-center text-sm text-amber-600 dark:text-amber-400">
+          No successful runs for this workflow. Conclusion distribution: {summary.debugInfo}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
+      <div className="mb-3 flex items-center gap-2">
+        <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
+          {summary.name} — Run Durations
+        </h4>
+        <span className="text-xs text-neutral-400 dark:text-neutral-500">
+          ({summary.runCount} runs, {lineData.length} successful | {summary.debugInfo})
+        </span>
+      </div>
+
+      {/* Hover Info Bar */}
+      {hoveredPoint && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-2 text-xs dark:border-neutral-700 dark:bg-neutral-800">
+          <span className="font-medium text-neutral-700 dark:text-neutral-200">{hoveredPoint.label}</span>
+          <span className="text-neutral-500 dark:text-neutral-400">Duration: <span className="font-mono font-semibold text-green-600 dark:text-green-400">{Math.round(hoveredPoint.duration / 60)}m</span></span>
+          <a href={hoveredPoint.html_url} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400">
+            View Run <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6" /></svg>
+          </a>
+        </div>
+      )}
+
+      <div className="h-72">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart
+            data={lineData}
+            onMouseMove={(data) => {
+              const idx = data?.activeIndex;
+              setHoverIndex(typeof idx === 'number' ? idx : null);
+            }}
+            onMouseLeave={() => setHoverIndex(null)}
+            onClick={(data) => {
+              const idx = data?.activeIndex;
+              if (typeof idx === 'number' && lineData[idx]?.html_url) {
+                window.open(lineData[idx].html_url, '_blank', 'noopener,noreferrer');
+              }
+            }}
+          >
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 10, fill: '#888' }}
+              tickLine={false}
+              axisLine={false}
+              angle={-30}
+              textAnchor="end"
+              height={50}
+              interval="preserveStartEnd"
+            />
+            <YAxis
+              tick={{ fontSize: 12, fill: '#888' }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(val) => `${Math.round(val / 60)}m`}
+              domain={[0, lineData.reduce((max, d) => Math.max(max, d.duration), 60) * 1.1]}
+              label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
+            />
+            <Legend />
+            <Line
+              type="monotone"
+              dataKey="duration"
+              name="Successful run duration"
+              stroke="#22c55e"
+              strokeWidth={2}
+              dot={CustomWorkflowDot}
+              activeDot={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 function DashboardContent({
   initialFailedRepoKeys,
   initialRepoIndexesByKey,
@@ -1491,6 +1743,9 @@ function DashboardContent({
   const [jobSortField, setJobSortField] = useState<JobSortField>('duration');
   const [jobSortOrder, setJobSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedJobName, setSelectedJobName] = useState<string | null>(() => initialQuery.jobName || null);
+  const [selectedJobSummaryName, setSelectedJobSummaryName] = useState<string | null>(null);
+  const [jobSummarySortField, setJobSummarySortField] = useState<JobSummarySortField>('p90E2e');
+  const [jobSummarySortOrder, setJobSummarySortOrder] = useState<'asc' | 'desc'>('desc');
   const [prPageSize, setPrPageSize] = useState<10 | 50 | 200>(50);
   const [prPage, setPrPage] = useState(1);
   const previousSelectedRepoKeyRef = useRef(selectedRepoKey);
@@ -1571,6 +1826,7 @@ function DashboardContent({
     setAllWorkflows([]);
     setAllWorkflowsError('');
     setSelectedJobName(null);
+    setSelectedJobSummaryName(null);
   }, [selectedRepoKey]);
 
   // Abort pending PR detail request on unmount
@@ -2013,11 +2269,87 @@ function DashboardContent({
     [sortedAllJobTimingData, selectedJobIds]
   );
 
+  const jobSummaries = useMemo<JobSummary[]>(() => {
+    const byName = new Map<string, JobTimingData[]>();
+    for (const job of allJobTimingData) {
+      const existing = byName.get(job.name) || [];
+      existing.push(job);
+      byName.set(job.name, existing);
+    }
+
+    return Array.from(byName.entries()).map(([name, jobs]) => {
+      const queueDurations = jobs.map((j) => j.queueTimeSeconds).sort((a, b) => a - b);
+      const e2eDurations = jobs.map((j) => j.e2eTimeSeconds).sort((a, b) => a - b);
+      let successCount = 0;
+      const conclusionCounts = new Map<string, number>();
+      for (const job of jobs) {
+        if (job.conclusion === 'success') successCount++;
+        conclusionCounts.set(job.conclusion, (conclusionCounts.get(job.conclusion) || 0) + 1);
+      }
+      const debugInfo = [...conclusionCounts.entries()].map(([k, v]) => `${k}:${v}`).join(', ');
+      return {
+        name,
+        runCount: jobs.length,
+        successCount,
+        successRate: jobs.length > 0 ? Math.round((successCount / jobs.length) * 100) : 0,
+        p50Queue: computePercentile(queueDurations, 0.5),
+        p90Queue: computePercentile(queueDurations, 0.9),
+        p50E2e: computePercentile(e2eDurations, 0.5),
+        p90E2e: computePercentile(e2eDurations, 0.9),
+        debugInfo,
+      };
+    });
+  }, [allJobTimingData]);
+
+  const sortedJobSummaries = useMemo(() => {
+    let sorted = [...jobSummaries];
+    if (filterName) {
+      const query = filterName.toLowerCase();
+      sorted = sorted.filter((s) => s.name.toLowerCase().includes(query));
+    }
+    sorted.sort((a, b) => {
+      let cmp = 0;
+      switch (jobSummarySortField) {
+        case 'name': cmp = a.name.localeCompare(b.name); break;
+        case 'p90E2e': cmp = a.p90E2e - b.p90E2e; break;
+        case 'p50E2e': cmp = a.p50E2e - b.p50E2e; break;
+        case 'p90Queue': cmp = a.p90Queue - b.p90Queue; break;
+        case 'successRate': cmp = a.successRate - b.successRate; break;
+        default: cmp = a.runCount - b.runCount; break;
+      }
+      return jobSummarySortOrder === 'asc' ? cmp : -cmp;
+    });
+    return sorted;
+  }, [jobSummaries, filterName, jobSummarySortField, jobSummarySortOrder]);
+
+  // Filter out jobs with abnormally long duration (runner timeout/disconnect)
+  const MAX_REASONABLE_DURATION = 2 * 60 * 60; // 2 hours in seconds
+
+  const jobSuccessRunLineData = useMemo(() => {
+    if (!selectedJobSummaryName) return [];
+    const matchingJobs = allJobTimingData.filter(
+      (j) => j.name === selectedJobSummaryName && j.conclusion === 'success' && j.e2eTimeSeconds <= MAX_REASONABLE_DURATION
+    );
+    return matchingJobs
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
+      .map((job, idx) => ({
+        index: idx,
+        date: job.created_at,
+        label: format(new Date(job.created_at), 'MMM dd HH:mm'),
+        queueTime: job.queueTimeSeconds,
+        e2eTime: job.e2eTimeSeconds,
+        jobId: job.id,
+        workflowName: job.workflowName,
+        html_url: job.html_url,
+      }));
+  }, [allJobTimingData, selectedJobSummaryName]);
+
   const handleViewModeChange = (mode: PrLifecycleViewMode) => {
     setPrLifecycleViewMode(mode);
     setSelectedWorkflowIds(new Set());
     setSelectedJobIds(new Set());
     setSelectedWorkflowSummaryName(null);
+    setSelectedJobSummaryName(null);
   };
 
   const toggleWorkflowSummarySort = (field: 'name' | 'p90' | 'p50' | 'successRate') => {
@@ -2085,14 +2417,28 @@ function DashboardContent({
     );
     return matchingRuns
       .sort((a, b) => a.created_at.localeCompare(b.created_at))
-      .map((run, idx) => ({
-        index: idx,
-        date: run.created_at,
-        label: format(new Date(run.created_at), 'MMM dd HH:mm'),
-        duration: run.durationInSeconds,
-        runId: run.id,
-        html_url: run.html_url,
-      }));
+      .map((run, idx) => {
+        // Compute duration from jobs' actual start/end times instead of (updated_at - created_at)
+        // which includes queue/wait time
+        let duration = run.durationInSeconds;
+        if (run.jobs && run.jobs.length > 0) {
+          const startedTimes = run.jobs.map((j) => new Date(j.started_at || j.created_at || 0).getTime());
+          const completedTimes = run.jobs.map((j) => new Date(j.completed_at || j.started_at || 0).getTime());
+          const earliestStart = Math.min(...startedTimes.filter((t) => t > 0));
+          const latestEnd = Math.max(...completedTimes.filter((t) => t > 0));
+          if (earliestStart > 0 && latestEnd > 0) {
+            duration = Math.max(0, (latestEnd - earliestStart) / 1000);
+          }
+        }
+        return {
+          index: idx,
+          date: run.created_at,
+          label: format(new Date(run.created_at), 'MMM dd HH:mm'),
+          duration,
+          runId: run.id,
+          html_url: run.html_url,
+        };
+      });
   }, [allWorkflows, selectedWorkflowSummaryName]);
 
   const buildWorkflowFileUrl = (workflowName: string): string => {
@@ -2107,6 +2453,15 @@ function DashboardContent({
     } else {
       setJobSortField(field);
       setJobSortOrder('desc');
+    }
+  };
+
+  const toggleJobSummarySort = (field: JobSummarySortField) => {
+    if (jobSummarySortField === field) {
+      setJobSummarySortOrder(jobSummarySortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setJobSummarySortField(field);
+      setJobSummarySortOrder(field === 'name' ? 'asc' : 'desc');
     }
   };
 
@@ -2891,74 +3246,7 @@ function DashboardContent({
                                   {isExpanded && (
                                     <tr>
                                       <td colSpan={5} className="p-0">
-                                        <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
-                                          {successRunLineData.length === 0 ? (
-                                            <div className="p-8 text-center text-sm text-amber-600 dark:text-amber-400">
-                                              No successful runs for this workflow. Conclusion distribution: {summary.debugInfo}
-                                            </div>
-                                          ) : (
-                                            <>
-                                              <div className="mb-3 flex items-center gap-2">
-                                                <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
-                                                  {summary.name} — Run Durations
-                                                </h4>
-                                                <span className="text-xs text-neutral-400 dark:text-neutral-500">
-                                                  ({summary.runCount} runs, {successRunLineData.length} successful | {summary.debugInfo})
-                                                </span>
-                                              </div>
-                                              <div className="h-72">
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                  <LineChart data={successRunLineData}>
-                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
-                                                    <XAxis
-                                                      dataKey="label"
-                                                      tick={{ fontSize: 10, fill: '#888' }}
-                                                      tickLine={false}
-                                                      axisLine={false}
-                                                      angle={-30}
-                                                      textAnchor="end"
-                                                      height={50}
-                                                      interval="preserveStartEnd"
-                                                    />
-                                                    <YAxis
-                                                      tick={{ fontSize: 12, fill: '#888' }}
-                                                      tickLine={false}
-                                                      axisLine={false}
-                                                      tickFormatter={(val) => `${Math.round(val / 60)}m`}
-                                                      domain={[0, successRunLineData.reduce((max, d) => Math.max(max, d.duration), 60) * 1.1]}
-                                                      label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
-                                                    />
-                                                    <Tooltip content={({ payload, label }) => {
-                                                      if (!payload || payload.length === 0) return null;
-                                                      const entry = payload[0];
-                                                      if (!entry || !entry.payload) return null;
-                                                      const { duration } = entry.payload;
-                                                      return (
-                                                        <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs shadow-md dark:border-neutral-700 dark:bg-neutral-800">
-                                                          <div className="mb-1 font-medium text-neutral-700 dark:text-neutral-200">{label}</div>
-                                                          <div className="flex items-center gap-2">
-                                                            <span className="h-2 w-2 rounded-full bg-green-500" />
-                                                            <span className="text-neutral-500 dark:text-neutral-400">Duration:</span>
-                                                            <span className="font-mono text-neutral-700 dark:text-neutral-200">{Math.round(duration / 60)}m</span>
-                                                          </div>
-                                                        </div>
-                                                      );
-                                                    }} />
-                                                    <Line
-                                                      type="monotone"
-                                                      dataKey="duration"
-                                                      name="Successful run duration"
-                                                      stroke="#22c55e"
-                                                      strokeWidth={2}
-                                                      dot={CustomWorkflowDot}
-                                                      activeDot={{ r: 7, fill: '#22c55e', stroke: '#fff', strokeWidth: 2 }}
-                                                    />
-                                                  </LineChart>
-                                                </ResponsiveContainer>
-                                              </div>
-                                            </>
-                                          )}
-                                        </div>
+                                        <WorkflowLineChartView summary={summary} lineData={successRunLineData} />
                                       </td>
                                     </tr>
                                   )}
@@ -2985,69 +3273,125 @@ function DashboardContent({
                     <div className="p-8 text-center text-sm text-red-500 dark:text-red-400">Failed to load jobs. Please try again later.</div>
                   ) : allWorkflowsLoading ? (
                     <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">Loading jobs...</div>
-                  ) : sortedAllJobTimingData.length === 0 ? (
+                  ) : sortedJobSummaries.length === 0 ? (
                     <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">No jobs found for the selected date range.</div>
                   ) : (
                     <>
+                      {/* Job Summary Table */}
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
                           <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
                             <tr>
-                              <th className="px-4 py-3">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedJobIds.size === sortedAllJobTimingData.length && sortedAllJobTimingData.length > 0}
-                                  onChange={toggleAllJobs}
-                                  aria-label="Select all jobs"
-                                />
+                              <th
+                                className="cursor-pointer px-6 py-3 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                onClick={() => toggleJobSummarySort('name')}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleJobSummarySort('name'); } }}
+                                tabIndex={0}
+                                role="button"
+                              >
+                                <span className="inline-flex items-center gap-1">Job Name {jobSummarySortField === 'name' ? (jobSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
                               </th>
-                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleJobSort('name')}>Job Name</th>
-                              <th className="px-6 py-3">Workflow</th>
-                              <th className="px-6 py-3">Status</th>
-                              <th className="px-6 py-3">Created</th>
-                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleJobSort('queue')}>Queue Time</th>
-                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleJobSort('duration')}>E2E Time</th>
-                              <th className="px-6 py-3 text-right">Link</th>
+                              <th className="px-6 py-3 text-center">Runs</th>
+                              <th
+                                className="cursor-pointer px-6 py-3 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                onClick={() => toggleJobSummarySort('p90Queue')}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleJobSummarySort('p90Queue'); } }}
+                                tabIndex={0}
+                                role="button"
+                              >
+                                <span className="inline-flex items-center gap-1">P90 Queue {jobSummarySortField === 'p90Queue' ? (jobSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
+                              </th>
+                              <th
+                                className="cursor-pointer px-6 py-3 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                onClick={() => toggleJobSummarySort('p90E2e')}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleJobSummarySort('p90E2e'); } }}
+                                tabIndex={0}
+                                role="button"
+                              >
+                                <span className="inline-flex items-center gap-1">P90 E2E {jobSummarySortField === 'p90E2e' ? (jobSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
+                              </th>
+                              <th
+                                className="cursor-pointer px-6 py-3 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                onClick={() => toggleJobSummarySort('p50E2e')}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleJobSummarySort('p50E2e'); } }}
+                                tabIndex={0}
+                                role="button"
+                              >
+                                <span className="inline-flex items-center gap-1">P50 E2E {jobSummarySortField === 'p50E2e' ? (jobSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
+                              </th>
+                              <th
+                                className="cursor-pointer px-6 py-3 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                onClick={() => toggleJobSummarySort('successRate')}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleJobSummarySort('successRate'); } }}
+                                tabIndex={0}
+                                role="button"
+                              >
+                                <span className="inline-flex items-center gap-1">Success Rate {jobSummarySortField === 'successRate' ? (jobSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
+                              </th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                            {sortedAllJobTimingData.map((job) => (
-                              <tr key={job.id} className={`hover:bg-neutral-50 dark:hover:bg-neutral-950/50 ${selectedJobIds.has(job.id) ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
-                                <td className="px-4 py-4">
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedJobIds.has(job.id)}
-                                    onChange={() => toggleJobSelection(job.id)}
-                                    aria-label={`Select ${job.name}`}
-                                  />
-                                </td>
-                                <td className="px-6 py-4 font-medium text-neutral-900 dark:text-neutral-100">
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedJobName(job.name)}
-                                    className="text-left text-blue-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-400"
-                                    title="View job detail"
+                            {sortedJobSummaries.map((summary) => {
+                              const isExpanded = selectedJobSummaryName === summary.name;
+
+                              return (
+                                <React.Fragment key={summary.name}>
+                                  <tr
+                                    onClick={() => setSelectedJobSummaryName(isExpanded ? null : summary.name)}
+                                    className={`cursor-pointer transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-950/50 ${
+                                      isExpanded ? 'bg-blue-50/60 dark:bg-blue-900/10' : ''
+                                    }`}
                                   >
-                                    {job.name}
-                                  </button>
-                                </td>
-                                <td className="px-6 py-4 text-xs text-neutral-500 dark:text-neutral-400">{job.workflowName}</td>
-                                <td className="px-6 py-4"><StatusBadge conclusion={job.conclusion} /></td>
-                                <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(job.created_at), 'MMM dd, HH:mm')}</td>
-                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(job.queueTimeSeconds)}</td>
-                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(job.e2eTimeSeconds)}</td>
-                                <td className="px-6 py-4 text-right">
-                                  <a href={job.html_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
-                                    <ExternalLink className="h-4 w-4" />
-                                  </a>
-                                </td>
-                              </tr>
-                            ))}
+                                    <td className="px-6 py-4">
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); setSelectedJobSummaryName(isExpanded ? null : summary.name); }}
+                                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setSelectedJobSummaryName(isExpanded ? null : summary.name); } }}
+                                          tabIndex={0}
+                                          aria-expanded={isExpanded}
+                                          aria-label={isExpanded ? 'Collapse job details' : 'Expand job details'}
+                                          className="flex w-4 shrink-0 cursor-pointer items-center justify-center rounded text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800"
+                                        >
+                                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                        </button>
+                                        <span className={`h-2 w-2 rounded-full ${isExpanded ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`} />
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); setSelectedJobName(summary.name); }}
+                                          className="font-medium text-blue-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-400"
+                                          title="View job detail"
+                                        >
+                                          {summary.name}
+                                        </button>
+                                      </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-center font-mono text-neutral-600 dark:text-neutral-400">{summary.runCount}</td>
+                                    <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatDurationMinutes(summary.p90Queue)}</td>
+                                    <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatDurationMinutes(summary.p90E2e)}</td>
+                                    <td className="px-6 py-4 font-mono text-neutral-700 dark:text-neutral-300">{formatDurationMinutes(summary.p50E2e)}</td>
+                                    <td className="px-6 py-4">
+                                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                                        summary.successRate >= 90 ? 'border border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                                        summary.successRate >= 70 ? 'border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400' :
+                                        'border border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                      }`}>
+                                        {summary.successRate}%
+                                      </span>
+                                    </td>
+                                  </tr>
+                                  {isExpanded && (
+                                    <tr>
+                                      <td colSpan={6} className="p-0">
+                                        <JobLineChartView summary={summary} lineData={jobSuccessRunLineData} />
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
                           </tbody>
                         </table>
-                      </div>
-                      <div className="border-t border-neutral-100 p-6 dark:border-neutral-800">
-                        <TimingChart data={selectedJobTimingData} label="Job" />
                       </div>
                     </>
                   )}
