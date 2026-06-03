@@ -23,7 +23,7 @@ import {
   TestTube,
   XCircle,
 } from 'lucide-react';
-import { Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, LineChart, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, LineChart, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from 'recharts';
 import type { LegendPayload } from 'recharts';
 import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 
@@ -2858,7 +2858,7 @@ function DashboardContent({
                             ) : (
                               <div className="h-72">
                                 <ResponsiveContainer width="100%" height="100%">
-                                  <ComposedChart data={successRuns}>
+                                  <ScatterChart>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
                                     <XAxis
                                       type="number"
@@ -2911,7 +2911,7 @@ function DashboardContent({
                                       strokeWidth={1.5}
                                       shape="circle"
                                     />
-                                  </ComposedChart>
+                                  </ScatterChart>
                                 </ResponsiveContainer>
                               </div>
                             )}
