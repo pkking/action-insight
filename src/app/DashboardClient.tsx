@@ -2025,7 +2025,7 @@ function DashboardContent({
       setWorkflowSummarySortOrder(workflowSummarySortOrder === 'asc' ? 'desc' : 'asc');
     } else {
       setWorkflowSummarySortField(field);
-      setWorkflowSummarySortOrder('desc');
+      setWorkflowSummarySortOrder(field === 'name' ? 'asc' : 'desc');
     }
   };
 
@@ -2796,17 +2796,41 @@ function DashboardContent({
                         <table className="w-full text-left text-sm">
                           <thead className="bg-neutral-50 font-medium text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
                             <tr>
-                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSummarySort('name')}>
+                              <th
+                                className="cursor-pointer px-6 py-3 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                onClick={() => toggleWorkflowSummarySort('name')}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleWorkflowSummarySort('name'); } }}
+                                tabIndex={0}
+                                role="button"
+                              >
                                 <span className="inline-flex items-center gap-1">Workflow {workflowSummarySortField === 'name' ? (workflowSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
                               </th>
                               <th className="px-6 py-3 text-center">Runs</th>
-                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSummarySort('p90')}>
+                              <th
+                                className="cursor-pointer px-6 py-3 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                onClick={() => toggleWorkflowSummarySort('p90')}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleWorkflowSummarySort('p90'); } }}
+                                tabIndex={0}
+                                role="button"
+                              >
                                 <span className="inline-flex items-center gap-1">P90 耗时 {workflowSummarySortField === 'p90' ? (workflowSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
                               </th>
-                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSummarySort('p50')}>
+                              <th
+                                className="cursor-pointer px-6 py-3 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                onClick={() => toggleWorkflowSummarySort('p50')}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleWorkflowSummarySort('p50'); } }}
+                                tabIndex={0}
+                                role="button"
+                              >
                                 <span className="inline-flex items-center gap-1">P50 耗时 {workflowSummarySortField === 'p50' ? (workflowSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
                               </th>
-                              <th className="cursor-pointer px-6 py-3" onClick={() => toggleWorkflowSummarySort('successRate')}>
+                              <th
+                                className="cursor-pointer px-6 py-3 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                onClick={() => toggleWorkflowSummarySort('successRate')}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleWorkflowSummarySort('successRate'); } }}
+                                tabIndex={0}
+                                role="button"
+                              >
                                 <span className="inline-flex items-center gap-1">成功率 {workflowSummarySortField === 'successRate' ? (workflowSummarySortOrder === 'asc' ? '↑' : '↓') : ''}</span>
                               </th>
                             </tr>
@@ -2954,7 +2978,7 @@ function DashboardContent({
                     <JobDetailView
                       jobName={selectedJobName}
                       allWorkflows={allWorkflows}
-                      dateRange={dateRange}
+                      dateRange={workflowDateRange}
                       onBack={() => setSelectedJobName(null)}
                     />
                   ) : allWorkflowsError ? (
