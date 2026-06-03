@@ -1634,8 +1634,8 @@ function DashboardContent({
         : 'PR metrics have not been generated for this repository yet.';
 
   const dateRangePrs = useMemo(() => {
-    return filterByDateRange(selectedRepoPrs, dateRange);
-  }, [dateRange, selectedRepoPrs]);
+    return filterByDateRange(selectedRepoPrs, workflowDateRange);
+  }, [workflowDateRange, selectedRepoPrs]);
 
   const filteredPrs = useMemo(() => {
     let result = dateRangePrs;
@@ -2484,32 +2484,71 @@ function DashboardContent({
                   <h2 className="text-lg font-bold">CI Pipeline & PR Details</h2>
                   <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Drill into PR, workflow, and job details for {selectedRepo.key}.</p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800">
-                    {([['pr', 'PR'], ['event', 'Event'], ['workflow', 'Workflow'], ['job', 'Job']] as [PrLifecycleViewMode, string][]).map(([mode, label]) => (
+                <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                  <div className="flex items-center gap-3">
+                    <div className="flex rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800">
+                      {([['pr', 'PR'], ['event', 'Event'], ['workflow', 'Workflow'], ['job', 'Job']] as [PrLifecycleViewMode, string][]).map(([mode, label]) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => handleViewModeChange(mode)}
+                          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                            prLifecycleViewMode === mode
+                              ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-900 dark:text-neutral-100'
+                              : 'text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950">
+                      <Filter className="h-4 w-4 text-neutral-400 dark:text-neutral-500" />
+                      <input
+                        type="text"
+                        placeholder={prLifecycleViewMode === 'pr' ? 'Filter by PR, title, branch...' : prLifecycleViewMode === 'event' ? 'Filter by event, workflow, branch...' : prLifecycleViewMode === 'workflow' ? 'Filter by workflow, branch...' : 'Filter by job, workflow...'}
+                        value={filterName}
+                        onChange={(event) => setFilterName(event.target.value)}
+                        className="w-48 bg-transparent outline-none"
+                      />
+                    </div>
+                  </div>
+                  {/* Time Range Selector — applies to all CI Pipeline tabs */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">时间范围:</span>
+                    {[7, 14, 30, 90].map((value) => (
                       <button
-                        key={mode}
                         type="button"
-                        onClick={() => handleViewModeChange(mode)}
-                        className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                          prLifecycleViewMode === mode
-                            ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-900 dark:text-neutral-100'
-                            : 'text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
+                        key={value}
+                        onClick={() => { setWorkflowUseCustomRange(false); setWorkflowDays(value); }}
+                        className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-all ${
+                          workflowDays === value && !workflowUseCustomRange
+                            ? 'border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/50 dark:text-blue-400'
+                            : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950'
                         }`}
                       >
-                        {label}
+                        {value}天
                       </button>
                     ))}
-                  </div>
-                  <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950">
-                    <Filter className="h-4 w-4 text-neutral-400 dark:text-neutral-500" />
-                    <input
-                      type="text"
-                      placeholder={prLifecycleViewMode === 'pr' ? 'Filter by PR, title, branch...' : prLifecycleViewMode === 'event' ? 'Filter by event, workflow, branch...' : prLifecycleViewMode === 'workflow' ? 'Filter by workflow, branch...' : 'Filter by job, workflow...'}
-                      value={filterName}
-                      onChange={(event) => setFilterName(event.target.value)}
-                      className="w-48 bg-transparent outline-none"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => setWorkflowUseCustomRange(true)}
+                      className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-all ${
+                        workflowUseCustomRange
+                          ? 'border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/50 dark:text-blue-400'
+                          : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950'
+                      }`}
+                    >
+                      <CalendarIcon className="h-3 w-3" />
+                      自定义
+                    </button>
+                    {workflowUseCustomRange && (
+                      <div className="flex items-center gap-1 rounded-md border border-neutral-200 bg-white p-0.5 dark:border-neutral-700 dark:bg-neutral-900">
+                        <input type="date" value={workflowStartDate} onChange={(e) => setWorkflowStartDate(e.target.value)} className="bg-transparent px-1 py-0.5 text-xs text-neutral-700 outline-none dark:text-neutral-300" />
+                        <span className="text-neutral-400">-</span>
+                        <input type="date" value={workflowEndDate} onChange={(e) => setWorkflowEndDate(e.target.value)} className="bg-transparent px-1 py-0.5 text-xs text-neutral-700 outline-none dark:text-neutral-300" />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2787,45 +2826,6 @@ function DashboardContent({
                     <div className="p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">No workflows found for the selected date range.</div>
                   ) : (
                     <>
-                      {/* Workflow Time Range Selector */}
-                      <div className="border-b border-neutral-100 px-6 py-3 dark:border-neutral-800">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">时间范围:</span>
-                          {[7, 14, 30, 90].map((value) => (
-                            <button
-                              type="button"
-                              key={value}
-                              onClick={() => { setWorkflowUseCustomRange(false); setWorkflowDays(value); }}
-                              className={`rounded-md border px-3 py-1 text-xs font-medium transition-all ${
-                                workflowDays === value && !workflowUseCustomRange
-                                  ? 'border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/50 dark:text-blue-400'
-                                  : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950'
-                              }`}
-                            >
-                              {value} 天
-                            </button>
-                          ))}
-                          <button
-                            type="button"
-                            onClick={() => setWorkflowUseCustomRange(true)}
-                            className={`flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all ${
-                              workflowUseCustomRange
-                                ? 'border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/50 dark:text-blue-400'
-                                : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-950'
-                            }`}
-                          >
-                            <CalendarIcon className="h-3 w-3" />
-                            自定义
-                          </button>
-                          {workflowUseCustomRange && (
-                            <div className="flex items-center gap-1.5 rounded-md border border-neutral-200 bg-white p-1 dark:border-neutral-700 dark:bg-neutral-900">
-                              <input type="date" value={workflowStartDate} onChange={(e) => setWorkflowStartDate(e.target.value)} className="bg-transparent px-1.5 py-0.5 text-xs text-neutral-700 outline-none dark:text-neutral-300" />
-                              <span className="text-neutral-400">-</span>
-                              <input type="date" value={workflowEndDate} onChange={(e) => setWorkflowEndDate(e.target.value)} className="bg-transparent px-1.5 py-0.5 text-xs text-neutral-700 outline-none dark:text-neutral-300" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
                       {/* Workflow Summary Table */}
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
