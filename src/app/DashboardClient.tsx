@@ -1768,7 +1768,7 @@ function DashboardContent({
       cancelled = true;
       controller.abort();
     };
-  }, [dateRange.end, dateRange.start, selectedRepo, shouldLoadWorkflowFallback]);
+  }, [workflowDateRange.end, workflowDateRange.start, selectedRepo, shouldLoadWorkflowFallback]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2511,9 +2511,9 @@ function DashboardContent({
                 </button>
                 {workflowUseCustomRange && (
                   <div className="flex items-center gap-1 rounded-md border border-neutral-200 bg-white p-0.5 dark:border-neutral-700 dark:bg-neutral-900">
-                    <input type="date" value={workflowStartDate} onChange={(e) => setWorkflowStartDate(e.target.value)} className="bg-transparent px-1 py-0.5 text-xs text-neutral-700 outline-none dark:text-neutral-300" />
+                    <input type="date" value={workflowStartDate} max={workflowEndDate || undefined} onChange={(e) => setWorkflowStartDate(e.target.value)} className="bg-transparent px-1 py-0.5 text-xs text-neutral-700 outline-none dark:text-neutral-300" />
                     <span className="text-neutral-400">-</span>
-                    <input type="date" value={workflowEndDate} onChange={(e) => setWorkflowEndDate(e.target.value)} className="bg-transparent px-1 py-0.5 text-xs text-neutral-700 outline-none dark:text-neutral-300" />
+                    <input type="date" value={workflowEndDate} min={workflowStartDate || undefined} onChange={(e) => setWorkflowEndDate(e.target.value)} className="bg-transparent px-1 py-0.5 text-xs text-neutral-700 outline-none dark:text-neutral-300" />
                   </div>
                 )}
               </div>
@@ -2908,7 +2908,7 @@ function DashboardContent({
                                                       if (!payload || payload.length === 0) return null;
                                                       const entry = payload[0];
                                                       if (!entry || !entry.payload) return null;
-                                                      const { date, duration } = entry.payload;
+                                                      const { duration } = entry.payload;
                                                       return (
                                                         <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs shadow-md dark:border-neutral-700 dark:bg-neutral-800">
                                                           <div className="mb-1 font-medium text-neutral-700 dark:text-neutral-200">{label}</div>
