@@ -3268,15 +3268,14 @@ function DashboardContent({
                                                             cx={cx}
                                                             cy={cy}
                                                             r={5}
-                                                            fill="#3b82f6"
-                                                            stroke="#fff"
-                                                            strokeWidth={2}
-                                                            style={{ cursor: 'pointer' }}
-                                                            onClick={() => window.open(payload.html_url, '_blank', 'noopener,noreferrer')}
-                                                          />
-                                                        );
-                                                      }}
-                                                      activeDot={{ r: 7, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }}
+                                                    <Line
+                                                      type="monotone"
+                                                      dataKey="e2eTime"
+                                                      name="E2E Time"
+                                                      stroke="#3b82f6"
+                                                      strokeWidth={2}
+                                                      dot={false}
+                                                      activeDot={{ r: 7 }}
                                                     />
                                                     <Line
                                                       type="monotone"
