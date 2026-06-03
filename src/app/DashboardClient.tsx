@@ -2865,7 +2865,7 @@ function DashboardContent({
                             ) : (
                               <div className="h-72">
                                 <ResponsiveContainer width="100%" height="100%">
-                                  <ScatterChart>
+                                  <ScatterChart data={successRuns}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
                                     <XAxis
                                       type="number"
@@ -2884,7 +2884,7 @@ function DashboardContent({
                                       height={50}
                                     />
                                     <YAxis
-                                      yAxisId="left"
+                                      type="number"
                                       dataKey="y"
                                       tick={{ fontSize: 12, fill: '#888' }}
                                       tickLine={false}
