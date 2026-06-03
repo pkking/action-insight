@@ -2095,6 +2095,16 @@ function DashboardContent({
     return byConclusion;
   }, [allWorkflows, selectedWorkflowSummaryName, dateRange.start]);
 
+  const workflowScatterMaxY = useMemo(() => {
+    let max = 0;
+    for (const points of selectedWorkflowScatterData.values()) {
+      for (const p of points) {
+        if (p.y > max) max = p.y;
+      }
+    }
+    return max;
+  }, [selectedWorkflowScatterData]);
+
   const buildWorkflowFileUrl = (workflowName: string): string => {
     if (!selectedRepo) return '#';
     // Link to GitHub Actions page filtered by workflow name
@@ -2864,6 +2874,7 @@ function DashboardContent({
                                   tickLine={false}
                                   axisLine={false}
                                   tickFormatter={(val) => `${Math.round(val / 60)}m`}
+                                  domain={[0, Math.max(workflowScatterMaxY, ...selectedWorkflowTrendData.map((d) => d.p90Duration)) * 1.1 || 'auto']}
                                   label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
                                 />
                                 <YAxis
@@ -2935,7 +2946,10 @@ function DashboardContent({
                                       key={conclusion}
                                       name={conclusion === 'success' ? '成功' : conclusion === 'failure' || conclusion === 'cancelled' ? '失败' : conclusion}
                                       data={points}
+                                      yAxisId="left"
                                       fill={conclusion === 'success' ? '#22c55e' : conclusion === 'skipped' ? '#9ca3af' : '#ef4444'}
+                                      stroke="#fff"
+                                      strokeWidth={1.5}
                                       shape="circle"
                                     />
                                   ))}
