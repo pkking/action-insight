@@ -1833,7 +1833,7 @@ function DashboardContent({
     }
 
     return result;
-  }, [dateRange, fallbackRuns, fallbackRunsScope, filterName]);
+  }, [workflowDateRange, fallbackRuns, fallbackRunsScope, filterName]);
 
   const filteredFallbackRuns = useMemo(() => {
     return sortWorkflows(unsortedFallbackRuns, workflowSortField, workflowSortOrder);
