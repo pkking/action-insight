@@ -327,7 +327,7 @@ function buildJobTimingData(runs: Run[]): JobTimingData[] {
         workflowName: run.name,
         workflowId: run.id,
         queueTimeSeconds: Math.max(0, (startedAtMs - runCreatedAtMs) / 1000),
-        e2eTimeSeconds: Math.max(0, (completedAtMs - runCreatedAtMs) / 1000),
+        e2eTimeSeconds: Math.max(0, (completedAtMs - startedAtMs) / 1000),
         conclusion: job.conclusion,
         created_at: run.created_at,
         html_url: job.html_url,
