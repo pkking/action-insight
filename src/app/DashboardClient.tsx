@@ -2885,6 +2885,7 @@ function DashboardContent({
                                     />
                                     <YAxis
                                       yAxisId="left"
+                                      dataKey="y"
                                       tick={{ fontSize: 12, fill: '#888' }}
                                       tickLine={false}
                                       axisLine={false}
