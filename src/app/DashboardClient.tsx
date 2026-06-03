@@ -2213,10 +2213,13 @@ function DashboardContent({
     return sorted;
   }, [jobSummaries, filterName, jobSummarySortField, jobSummarySortOrder]);
 
+  // Filter out jobs with abnormally long duration (runner timeout/disconnect)
+  const MAX_REASONABLE_DURATION = 2 * 60 * 60; // 2 hours in seconds
+
   const jobSuccessRunLineData = useMemo(() => {
     if (!selectedJobSummaryName) return [];
     const matchingJobs = allJobTimingData.filter(
-      (j) => j.name === selectedJobSummaryName && j.conclusion === 'success'
+      (j) => j.name === selectedJobSummaryName && j.conclusion === 'success' && j.e2eTimeSeconds <= MAX_REASONABLE_DURATION
     );
     return matchingJobs
       .sort((a, b) => a.created_at.localeCompare(b.created_at))
