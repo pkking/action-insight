@@ -1461,6 +1461,123 @@ function CustomJobDot(props: WorkflowDotProps) {
   );
 }
 
+type JobLineChartViewProps = {
+  summary: {
+    name: string;
+    runCount: number;
+    debugInfo: string;
+  };
+  lineData: Array<{
+    index: number;
+    date: string;
+    label: string;
+    queueTime: number;
+    e2eTime: number;
+    jobId: number;
+    workflowName: string;
+    html_url: string;
+  }>;
+};
+
+function JobLineChartView({ summary, lineData }: JobLineChartViewProps) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const hoveredPoint = hoverIndex !== null && lineData[hoverIndex] ? lineData[hoverIndex] : null;
+
+  if (lineData.length === 0) {
+    return (
+      <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
+        <div className="p-8 text-center text-sm text-amber-600 dark:text-amber-400">
+          No successful runs for this job. Conclusion distribution: {summary.debugInfo}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
+      <div className="mb-3 flex items-center gap-2">
+        <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
+          {summary.name} — Run Durations
+        </h4>
+        <span className="text-xs text-neutral-400 dark:text-neutral-500">
+          ({summary.runCount} runs, {lineData.length} successful | {summary.debugInfo})
+        </span>
+      </div>
+
+      {/* Hover Info Bar */}
+      {hoveredPoint && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-2 text-xs dark:border-neutral-700 dark:bg-neutral-800">
+          <span className="font-medium text-neutral-700 dark:text-neutral-200">{hoveredPoint.label}</span>
+          <span className="text-neutral-500 dark:text-neutral-400">E2E: <span className="font-mono font-semibold text-blue-600 dark:text-blue-400">{Math.round(hoveredPoint.e2eTime / 60)}m</span></span>
+          <span className="text-neutral-500 dark:text-neutral-400">Queue: <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">{Math.round(hoveredPoint.queueTime / 60)}m</span></span>
+          <span className="text-neutral-500 dark:text-neutral-400">Workflow: <span className="font-mono text-neutral-600 dark:text-neutral-400">{hoveredPoint.workflowName}</span></span>
+          <a href={hoveredPoint.html_url} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400">
+            View Logs <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6" /></svg>
+          </a>
+        </div>
+      )}
+
+      <div className="h-72">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart
+            data={lineData}
+            onMouseMove={(data) => {
+              const idx = data?.activeIndex;
+              setHoverIndex(typeof idx === 'number' ? idx : null);
+            }}
+            onMouseLeave={() => setHoverIndex(null)}
+            onClick={(data) => {
+              const idx = data?.activeIndex;
+              if (typeof idx === 'number' && lineData[idx]?.html_url) {
+                window.open(lineData[idx].html_url, '_blank', 'noopener,noreferrer');
+              }
+            }}
+          >
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 10, fill: '#888' }}
+              tickLine={false}
+              axisLine={false}
+              angle={-30}
+              textAnchor="end"
+              height={50}
+              interval="preserveStartEnd"
+            />
+            <YAxis
+              tick={{ fontSize: 12, fill: '#888' }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(val) => `${Math.round(val / 60)}m`}
+              label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
+            />
+            <Legend />
+            <Line
+              yAxisId="left"
+              type="monotone"
+              dataKey="e2eTime"
+              name="E2E Time"
+              stroke="#3b82f6"
+              strokeWidth={2}
+              dot={CustomJobDot}
+              activeDot={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="queueTime"
+              name="Queue Time"
+              stroke="#f59e0b"
+              strokeWidth={2}
+              dot={false}
+              activeDot={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 function DashboardContent({
   initialFailedRepoKeys,
   initialRepoIndexesByKey,
@@ -3210,76 +3327,7 @@ function DashboardContent({
                                   {isExpanded && (
                                     <tr>
                                       <td colSpan={6} className="p-0">
-                                        <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
-                                          {jobSuccessRunLineData.length === 0 ? (
-                                            <div className="p-8 text-center text-sm text-amber-600 dark:text-amber-400">
-                                              No successful runs for this job. Conclusion distribution: {summary.debugInfo}
-                                            </div>
-                                          ) : (
-                                            <>
-                                              <div className="mb-3 flex items-center gap-2">
-                                                <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
-                                                  {summary.name} — Run Durations
-                                                </h4>
-                                                <span className="text-xs text-neutral-400 dark:text-neutral-500">
-                                                  ({summary.runCount} runs, {jobSuccessRunLineData.length} successful | {summary.debugInfo})
-                                                </span>
-                                              </div>
-                                              <div className="h-72">
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                  <LineChart
-                                                    data={jobSuccessRunLineData}
-                                                    onClick={(data) => {
-                                                      const idx = data?.activeIndex;
-                                                      if (typeof idx === 'number' && jobSuccessRunLineData[idx]?.html_url) {
-                                                        window.open(jobSuccessRunLineData[idx].html_url, '_blank', 'noopener,noreferrer');
-                                                      }
-                                                    }}
-                                                  >
-                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
-                                                    <XAxis
-                                                      dataKey="label"
-                                                      tick={{ fontSize: 10, fill: '#888' }}
-                                                      tickLine={false}
-                                                      axisLine={false}
-                                                      angle={-30}
-                                                      textAnchor="end"
-                                                      height={50}
-                                                      interval="preserveStartEnd"
-                                                    />
-                                                    <YAxis
-                                                      tick={{ fontSize: 12, fill: '#888' }}
-                                                      tickLine={false}
-                                                      axisLine={false}
-                                                      tickFormatter={(val) => `${Math.round(val / 60)}m`}
-                                                      label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
-                                                    />
-                                                    <Legend />
-                                                    <Line
-                                                      yAxisId="left"
-                                                      type="monotone"
-                                                      dataKey="e2eTime"
-                                                      name="E2E Time"
-                                                      stroke="#3b82f6"
-                                                      strokeWidth={2}
-                                                      dot={CustomJobDot}
-                                                      activeDot={false}
-                                                    />
-                                                    <Line
-                                                      type="monotone"
-                                                      dataKey="queueTime"
-                                                      name="Queue Time"
-                                                      stroke="#f59e0b"
-                                                      strokeWidth={2}
-                                                      dot={false}
-                                                      activeDot={false}
-                                                    />
-                                                  </LineChart>
-                                                </ResponsiveContainer>
-                                              </div>
-                                            </>
-                                          )}
-                                        </div>
+                                        <JobLineChartView summary={summary} lineData={jobSuccessRunLineData} />
                                       </td>
                                     </tr>
                                   )}
