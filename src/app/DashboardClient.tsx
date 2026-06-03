@@ -3256,42 +3256,6 @@ function DashboardContent({
                                                       tickFormatter={(val) => `${Math.round(val / 60)}m`}
                                                       label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
                                                     />
-                                                    <Tooltip cursor={false} content={({ payload, label }) => {
-                                                      if (!payload || payload.length === 0) return null;
-                                                      const itemPayload = payload[0]?.payload;
-                                                      const jobUrl = itemPayload?.html_url;
-                                                      return (
-                                                        <div
-                                                          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs shadow-md dark:border-neutral-700 dark:bg-neutral-800"
-                                                          onClick={() => { if (jobUrl) window.open(jobUrl, '_blank', 'noopener,noreferrer'); }}
-                                                          style={{ cursor: jobUrl ? 'pointer' : 'default' }}
-                                                        >
-                                                          <div className="mb-1 font-medium text-neutral-700 dark:text-neutral-200">{label}</div>
-                                                          <div className="space-y-0.5">
-                                                            {payload.map((entry, i) => {
-                                                              const { dataKey, value, name } = entry;
-                                                              const displayValue = dataKey === 'queueTime' || dataKey === 'e2eTime'
-                                                                ? `${Math.round(Number(value) / 60)}m`
-                                                                : String(value);
-                                                              return (
-                                                                <div key={i} className="flex items-center gap-2">
-                                                                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                                                                  <span className="text-neutral-500 dark:text-neutral-400">{name}:</span>
-                                                                  <span className="font-mono text-neutral-700 dark:text-neutral-200">{displayValue}</span>
-                                                                </div>
-                                                              );
-                                                            })}
-                                                          </div>
-                                                          {jobUrl && (
-                                                            <div className="mt-1.5 border-t border-neutral-100 pt-1.5 dark:border-neutral-700">
-                                                              <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
-                                                                View Logs <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6" /></svg>
-                                                              </span>
-                                                            </div>
-                                                          )}
-                                                        </div>
-                                                      );
-                                                    }} />
                                                     <Legend />
                                                     <Line
                                                       yAxisId="left"
