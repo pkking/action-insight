@@ -2858,7 +2858,7 @@ function DashboardContent({
                             ) : (
                               <div className="h-72">
                                 <ResponsiveContainer width="100%" height="100%">
-                                  <ComposedChart>
+                                  <ComposedChart data={successRuns}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
                                     <XAxis
                                       type="number"
