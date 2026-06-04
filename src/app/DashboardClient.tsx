@@ -1190,7 +1190,7 @@ function JobDetailView({
         const startedAtMs = new Date(job.started_at || job.created_at).getTime();
         const completedAtMs = new Date(job.completed_at || job.started_at || job.created_at).getTime();
         const queueSeconds = Math.max(0, (startedAtMs - runCreatedAtMs) / 1000);
-        const e2eSeconds = Math.max(0, (completedAtMs - runCreatedAtMs) / 1000);
+        const e2eSeconds = Math.max(0, (completedAtMs - startedAtMs) / 1000);
         matchingJobs.push({ day: dayStr, dayIndex, queueSeconds, e2eSeconds, conclusion: job.conclusion, created_at: run.created_at });
       }
     }
