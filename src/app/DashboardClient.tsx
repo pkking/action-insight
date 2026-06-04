@@ -271,7 +271,7 @@ function sortWorkflows(workflows: Run[], field: WorkflowSortField, order: Workfl
     let comparison = 0;
 
     if (field === 'date') comparison = left.created_at.localeCompare(right.created_at);
-    else if (field === 'duration') comparison = left.durationInSeconds - right.durationInSeconds;
+    else if (field === 'duration') comparison = calculateWorkflowDuration(left) - calculateWorkflowDuration(right);
     else if (field === 'name') comparison = left.name.localeCompare(right.name);
 
     return order === 'asc' ? comparison : -comparison;
@@ -302,12 +302,31 @@ function calculateWorkflowQueueTime(run: Run): number | undefined {
   return Math.max(0, queueTimeMs / 1000);
 }
 
+/**
+ * Compute workflow duration from jobs' actual started_at/completed_at.
+ * Falls back to run.durationInSeconds (unreliable — can be inflated by
+ * delayed updated_at on runner-timeout runs).
+ */
+function calculateWorkflowDuration(run: Run): number {
+  if (!run.jobs || run.jobs.length === 0) {
+    return run.durationInSeconds;
+  }
+  const startedTimes = run.jobs.map((j) => new Date(j.started_at || j.created_at || 0).getTime());
+  const completedTimes = run.jobs.map((j) => new Date(j.completed_at || j.started_at || 0).getTime());
+  const earliestStart = Math.min(...startedTimes.filter((t) => t > 0));
+  const latestEnd = Math.max(...completedTimes.filter((t) => t > 0));
+  if (earliestStart > 0 && latestEnd > 0) {
+    return Math.max(0, (latestEnd - earliestStart) / 1000);
+  }
+  return run.durationInSeconds;
+}
+
 function buildWorkflowTimingData(runs: Run[]): WorkflowTimingData[] {
   return runs.map((run) => ({
     id: run.id,
     name: run.name,
     queueTimeSeconds: calculateWorkflowQueueTime(run),
-    e2eTimeSeconds: run.durationInSeconds,
+    e2eTimeSeconds: calculateWorkflowDuration(run),
     conclusion: run.conclusion,
     created_at: run.created_at,
   }));
@@ -511,7 +530,7 @@ function PrLifecycleTree({ data, showPrRoot = true }: { data: PrLifecycleTimelin
     if (data.merged_at) endMs = Math.max(endMs, new Date(data.merged_at).getTime());
 
     for (const wf of data.workflows) {
-      const wfEnd = new Date(wf.created_at).getTime() + wf.durationInSeconds * 1000;
+      const wfEnd = new Date(wf.created_at).getTime() + calculateWorkflowDuration(wf) * 1000;
       endMs = Math.max(endMs, wfEnd);
     }
 
@@ -596,7 +615,7 @@ function PrLifecycleTree({ data, showPrRoot = true }: { data: PrLifecycleTimelin
                   depth={showPrRoot ? 1 : 0}
                   icon={<span className="text-teal-500">⚡</span>}
                   label={wf.name}
-                  duration={formatDuration(wf.durationInSeconds)}
+                  duration={formatDuration(calculateWorkflowDuration(wf))}
                   conclusion={wf.conclusion}
                   expanded={isWfExpanded}
                   hasChildren={jobs.length > 0}
@@ -723,7 +742,7 @@ function groupWorkflowsByEvent(runs: Run[]): EventGroup[] {
       workflows,
       totalCount: workflows.length,
       successCount: workflows.filter((w) => w.conclusion === 'success').length,
-      totalDurationSeconds: workflows.reduce((sum, w) => sum + w.durationInSeconds, 0),
+      totalDurationSeconds: workflows.reduce((sum, w) => sum + calculateWorkflowDuration(w), 0),
     }))
     .sort((a, b) => b.totalCount - a.totalCount);
 }
@@ -872,7 +891,7 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
                           depth={1}
                           icon={<span className="text-teal-500">⚡</span>}
                           label={wf.name}
-                          duration={formatDuration(wf.durationInSeconds)}
+                          duration={formatDuration(calculateWorkflowDuration(wf))}
                           conclusion={wf.conclusion}
                           expanded={isWfExpanded}
                           hasChildren={jobs.length > 0}
@@ -2434,7 +2453,7 @@ function DashboardContent({
     }
 
     return Array.from(byName.entries()).map(([name, runs]) => {
-      const durations = runs.map((r) => r.durationInSeconds).sort((a, b) => a - b);
+      const durations = runs.map((r) => calculateWorkflowDuration(r)).sort((a, b) => a - b);
       let successCount = 0;
       const conclusionCounts = new Map<string, number>();
       for (const run of runs) {
@@ -2482,17 +2501,7 @@ function DashboardContent({
     return matchingRuns
       .sort((a, b) => a.created_at.localeCompare(b.created_at))
       .map((run, idx) => {
-        // Compute duration from jobs' actual start/end times instead of (updated_at - created_at)
-        let duration = run.durationInSeconds;
-        if (run.jobs && run.jobs.length > 0) {
-          const startedTimes = run.jobs.map((j) => new Date(j.started_at || j.created_at || 0).getTime());
-          const completedTimes = run.jobs.map((j) => new Date(j.completed_at || j.started_at || 0).getTime());
-          const earliestStart = Math.min(...startedTimes.filter((t) => t > 0));
-          const latestEnd = Math.max(...completedTimes.filter((t) => t > 0));
-          if (earliestStart > 0 && latestEnd > 0) {
-            duration = Math.max(0, (latestEnd - earliestStart) / 1000);
-          }
-        }
+        const duration = calculateWorkflowDuration(run);
         const isOutlier = duration > MAX_REASONABLE_DURATION;
         return {
           index: idx,
@@ -3028,7 +3037,7 @@ function DashboardContent({
                                 <td className="px-6 py-4 font-mono text-xs text-neutral-500 dark:text-neutral-400">{workflow.head_branch}</td>
                                 <td className="px-6 py-4"><StatusBadge conclusion={workflow.conclusion} /></td>
                                 <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(workflow.created_at), 'MMM dd, HH:mm')}</td>
-                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(workflow.durationInSeconds)}</td>
+                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(calculateWorkflowDuration(workflow))}</td>
                                 <td className="px-6 py-4 text-right">
                                   <button
                                     type="button"
