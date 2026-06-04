@@ -1475,13 +1475,17 @@ type JobLineChartViewProps = {
     label: string;
     queueTime: number;
     e2eTime: number;
+    realE2eTime: number;
+    realQueueTime: number;
+    isOutlier: boolean;
     jobId: number;
     workflowName: string;
     html_url: string;
   }>;
+  outlierCount: number;
 };
 
-function JobLineChartView({ summary, lineData }: JobLineChartViewProps) {
+function JobLineChartView({ summary, lineData, outlierCount }: JobLineChartViewProps) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const hoveredPoint = hoverIndex !== null && lineData[hoverIndex] ? lineData[hoverIndex] : null;
 
@@ -1497,21 +1501,27 @@ function JobLineChartView({ summary, lineData }: JobLineChartViewProps) {
 
   return (
     <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-1 flex items-center gap-2">
         <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
           {summary.name} — Run Durations
         </h4>
         <span className="text-xs text-neutral-400 dark:text-neutral-500">
           ({summary.runCount} runs, {lineData.length} successful | {summary.debugInfo})
         </span>
+        {outlierCount > 0 && (
+          <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:bg-red-900/30 dark:text-red-400">
+            ⚠️ {outlierCount} runner timeout{outlierCount > 1 ? 's' : ''} (shown at top)
+          </span>
+        )}
       </div>
 
       {/* Hover Info Bar */}
       {hoveredPoint && (
         <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-2 text-xs dark:border-neutral-700 dark:bg-neutral-800">
           <span className="font-medium text-neutral-700 dark:text-neutral-200">{hoveredPoint.label}</span>
-          <span className="text-neutral-500 dark:text-neutral-400">E2E: <span className="font-mono font-semibold text-blue-600 dark:text-blue-400">{Math.round(hoveredPoint.e2eTime / 60)}m</span></span>
-          <span className="text-neutral-500 dark:text-neutral-400">Queue: <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">{Math.round(hoveredPoint.queueTime / 60)}m</span></span>
+          <span className="text-neutral-500 dark:text-neutral-400">E2E: <span className={`font-mono font-semibold ${hoveredPoint.isOutlier ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`}>{Math.round(hoveredPoint.realE2eTime / 60)}m</span></span>
+          <span className="text-neutral-500 dark:text-neutral-400">Queue: <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">{Math.round(hoveredPoint.realQueueTime / 60)}m</span></span>
+          {hoveredPoint.isOutlier && <span className="text-[10px] text-red-500 dark:text-red-400">(runner timeout)</span>}
           <span className="text-neutral-500 dark:text-neutral-400">Workflow: <span className="font-mono text-neutral-600 dark:text-neutral-400">{hoveredPoint.workflowName}</span></span>
           <a href={hoveredPoint.html_url} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400">
             View Logs <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6" /></svg>
@@ -1547,6 +1557,7 @@ function JobLineChartView({ summary, lineData }: JobLineChartViewProps) {
               interval="preserveStartEnd"
             />
             <YAxis
+              domain={[0, CHART_MAX_DURATION]}
               tick={{ fontSize: 12, fill: '#888' }}
               tickLine={false}
               axisLine={false}
@@ -1561,7 +1572,23 @@ function JobLineChartView({ summary, lineData }: JobLineChartViewProps) {
               name="E2E Time"
               stroke="#3b82f6"
               strokeWidth={2}
-              dot={CustomJobDot}
+              dot={(props) => {
+                const { cx, cy, payload } = props;
+                if (cx === undefined || cy === undefined || !payload?.html_url) return null;
+                const isOutlier = payload.isOutlier;
+                return (
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={isOutlier ? 7 : 6}
+                    fill={isOutlier ? '#ef4444' : '#3b82f6'}
+                    stroke="#fff"
+                    strokeWidth={2}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => window.open(payload.html_url, '_blank', 'noopener,noreferrer')}
+                  />
+                );
+              }}
               activeDot={false}
             />
             <Line
@@ -1591,12 +1618,15 @@ type WorkflowLineChartViewProps = {
     date: string;
     label: string;
     duration: number;
+    realDuration: number;
+    isOutlier: boolean;
     runId: number;
     html_url: string;
   }>;
+  outlierCount: number;
 };
 
-function WorkflowLineChartView({ summary, lineData }: WorkflowLineChartViewProps) {
+function WorkflowLineChartView({ summary, lineData, outlierCount }: WorkflowLineChartViewProps) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const hoveredPoint = hoverIndex !== null && lineData[hoverIndex] ? lineData[hoverIndex] : null;
 
@@ -1612,20 +1642,26 @@ function WorkflowLineChartView({ summary, lineData }: WorkflowLineChartViewProps
 
   return (
     <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-1 flex items-center gap-2">
         <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
           {summary.name} — Run Durations
         </h4>
         <span className="text-xs text-neutral-400 dark:text-neutral-500">
           ({summary.runCount} runs, {lineData.length} successful | {summary.debugInfo})
         </span>
+        {outlierCount > 0 && (
+          <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:bg-red-900/30 dark:text-red-400">
+            ⚠️ {outlierCount} runner timeout{outlierCount > 1 ? 's' : ''} (shown at top)
+          </span>
+        )}
       </div>
 
       {/* Hover Info Bar */}
       {hoveredPoint && (
         <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-2 text-xs dark:border-neutral-700 dark:bg-neutral-800">
           <span className="font-medium text-neutral-700 dark:text-neutral-200">{hoveredPoint.label}</span>
-          <span className="text-neutral-500 dark:text-neutral-400">Duration: <span className="font-mono font-semibold text-green-600 dark:text-green-400">{Math.round(hoveredPoint.duration / 60)}m</span></span>
+          <span className="text-neutral-500 dark:text-neutral-400">Duration: <span className={`font-mono font-semibold ${hoveredPoint.isOutlier ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{Math.round(hoveredPoint.realDuration / 60)}m</span></span>
+          {hoveredPoint.isOutlier && <span className="text-[10px] text-red-500 dark:text-red-400">(runner timeout)</span>}
           <a href={hoveredPoint.html_url} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400">
             View Run <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6" /></svg>
           </a>
@@ -1660,11 +1696,11 @@ function WorkflowLineChartView({ summary, lineData }: WorkflowLineChartViewProps
               interval="preserveStartEnd"
             />
             <YAxis
+              domain={[0, CHART_MAX_DURATION]}
               tick={{ fontSize: 12, fill: '#888' }}
               tickLine={false}
               axisLine={false}
               tickFormatter={(val) => `${Math.round(val / 60)}m`}
-              domain={[0, lineData.reduce((max, d) => Math.max(max, d.duration), 60) * 1.1]}
               label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
             />
             <Legend />
@@ -1674,7 +1710,23 @@ function WorkflowLineChartView({ summary, lineData }: WorkflowLineChartViewProps
               name="Successful run duration"
               stroke="#22c55e"
               strokeWidth={2}
-              dot={CustomWorkflowDot}
+              dot={(props) => {
+                const { cx, cy, payload } = props;
+                if (cx === undefined || cy === undefined || !payload?.html_url) return null;
+                const isOutlier = payload.isOutlier;
+                return (
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={isOutlier ? 7 : 5}
+                    fill={isOutlier ? '#ef4444' : '#22c55e'}
+                    stroke="#fff"
+                    strokeWidth={2}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => window.open(payload.html_url, '_blank', 'noopener,noreferrer')}
+                  />
+                );
+              }}
               activeDot={false}
             />
           </LineChart>
@@ -1683,6 +1735,10 @@ function WorkflowLineChartView({ summary, lineData }: WorkflowLineChartViewProps
     </div>
   );
 }
+
+// Thresholds for outlier detection and chart display
+const MAX_REASONABLE_DURATION = 2 * 60 * 60; // 2 hours in seconds
+const CHART_MAX_DURATION = 3 * 60 * 60; // 3 hours display cap
 
 function DashboardContent({
   initialFailedRepoKeys,
@@ -2322,27 +2378,35 @@ function DashboardContent({
     return sorted;
   }, [jobSummaries, filterName, jobSummarySortField, jobSummarySortOrder]);
 
-  // Filter out jobs with abnormally long duration (runner timeout/disconnect)
-  const MAX_REASONABLE_DURATION = 2 * 60 * 60; // 2 hours in seconds
-
   const jobSuccessRunLineData = useMemo(() => {
     if (!selectedJobSummaryName) return [];
     const matchingJobs = allJobTimingData.filter(
-      (j) => j.name === selectedJobSummaryName && j.conclusion === 'success' && j.e2eTimeSeconds <= MAX_REASONABLE_DURATION
+      (j) => j.name === selectedJobSummaryName && j.conclusion === 'success'
     );
     return matchingJobs
       .sort((a, b) => a.created_at.localeCompare(b.created_at))
-      .map((job, idx) => ({
-        index: idx,
-        date: job.created_at,
-        label: format(new Date(job.created_at), 'MMM dd HH:mm'),
-        queueTime: job.queueTimeSeconds,
-        e2eTime: job.e2eTimeSeconds,
-        jobId: job.id,
-        workflowName: job.workflowName,
-        html_url: job.html_url,
-      }));
+      .map((job, idx) => {
+        const isOutlier = job.e2eTimeSeconds > MAX_REASONABLE_DURATION;
+        return {
+          index: idx,
+          date: job.created_at,
+          label: format(new Date(job.created_at), 'MMM dd HH:mm'),
+          queueTime: job.queueTimeSeconds,
+          e2eTime: isOutlier ? CHART_MAX_DURATION * 0.9 : job.e2eTimeSeconds,
+          realE2eTime: job.e2eTimeSeconds,
+          realQueueTime: job.queueTimeSeconds,
+          isOutlier,
+          jobId: job.id,
+          workflowName: job.workflowName,
+          html_url: job.html_url,
+        };
+      });
   }, [allJobTimingData, selectedJobSummaryName]);
+
+  const jobOutlierCount = useMemo(
+    () => jobSuccessRunLineData.filter((d) => d.isOutlier).length,
+    [jobSuccessRunLineData]
+  );
 
   const handleViewModeChange = (mode: PrLifecycleViewMode) => {
     setPrLifecycleViewMode(mode);
@@ -2419,7 +2483,6 @@ function DashboardContent({
       .sort((a, b) => a.created_at.localeCompare(b.created_at))
       .map((run, idx) => {
         // Compute duration from jobs' actual start/end times instead of (updated_at - created_at)
-        // which includes queue/wait time
         let duration = run.durationInSeconds;
         if (run.jobs && run.jobs.length > 0) {
           const startedTimes = run.jobs.map((j) => new Date(j.started_at || j.created_at || 0).getTime());
@@ -2430,16 +2493,24 @@ function DashboardContent({
             duration = Math.max(0, (latestEnd - earliestStart) / 1000);
           }
         }
+        const isOutlier = duration > MAX_REASONABLE_DURATION;
         return {
           index: idx,
           date: run.created_at,
           label: format(new Date(run.created_at), 'MMM dd HH:mm'),
-          duration,
+          duration: isOutlier ? CHART_MAX_DURATION * 0.9 : duration,
+          realDuration: duration,
+          isOutlier,
           runId: run.id,
           html_url: run.html_url,
         };
       });
   }, [allWorkflows, selectedWorkflowSummaryName]);
+
+  const workflowOutlierCount = useMemo(
+    () => successRunLineData.filter((d) => d.isOutlier).length,
+    [successRunLineData]
+  );
 
   const buildWorkflowFileUrl = (workflowName: string): string => {
     if (!selectedRepo) return '#';
@@ -3246,7 +3317,7 @@ function DashboardContent({
                                   {isExpanded && (
                                     <tr>
                                       <td colSpan={5} className="p-0">
-                                        <WorkflowLineChartView summary={summary} lineData={successRunLineData} />
+                                        <WorkflowLineChartView summary={summary} lineData={successRunLineData} outlierCount={workflowOutlierCount} />
                                       </td>
                                     </tr>
                                   )}
@@ -3383,7 +3454,7 @@ function DashboardContent({
                                   {isExpanded && (
                                     <tr>
                                       <td colSpan={6} className="p-0">
-                                        <JobLineChartView summary={summary} lineData={jobSuccessRunLineData} />
+                                        <JobLineChartView summary={summary} lineData={jobSuccessRunLineData} outlierCount={jobOutlierCount} />
                                       </td>
                                     </tr>
                                   )}
