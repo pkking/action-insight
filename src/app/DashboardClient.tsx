@@ -2026,6 +2026,10 @@ function DashboardContent({
         return;
       }
 
+      const startStr = format(workflowDateRange.start, 'yyyy-MM-dd');
+      const endStr = format(workflowDateRange.end, 'yyyy-MM-dd');
+      console.log(`[loadAllWorkflows] triggering: ${startStr} → ${endStr} (days=${workflowDays}, viewMode=${prLifecycleViewMode})`);
+
       setAllWorkflowsLoading(true);
       setAllWorkflowsError('');
 
