@@ -97,6 +97,11 @@ type DashboardClientProps = {
   initialSearchParams?: Record<string, string | string[] | undefined>;
 };
 
+/** Outlier detection threshold: jobs/workflows exceeding this are flagged. */
+const MAX_REASONABLE_DURATION = 2 * 60 * 60; // 2 hours in seconds
+/** Chart Y-axis cap: outlier values are folded to 90% of this. */
+const CHART_MAX_DURATION = 3 * 60 * 60; // 3 hours display cap
+
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debouncedValue, setDebouncedValue] = useState(value);
 
@@ -299,13 +304,11 @@ function computeWorkflowTiming(run: Run): WorkflowTiming {
   if (run.jobs && run.jobs.length > 0) {
     let earliestStart: number | null = null;
     let latestEnd: number | null = null;
-    let earliestJobStartedAt: number | null = null;
 
     for (const j of run.jobs) {
       const s = new Date(j.started_at || j.created_at || 0).getTime();
       if (s > 0) {
         if (earliestStart === null || s < earliestStart) earliestStart = s;
-        if (earliestJobStartedAt === null || s < earliestJobStartedAt) earliestJobStartedAt = s;
       }
       const c = new Date(j.completed_at || j.started_at || 0).getTime();
       if (c > 0) {
@@ -317,9 +320,11 @@ function computeWorkflowTiming(run: Run): WorkflowTiming {
       duration = Math.max(0, (latestEnd - earliestStart) / 1000);
     }
 
-    if (earliestJobStartedAt !== null) {
+    if (earliestStart !== null) {
       const createdAtMs = new Date(run.created_at).getTime();
-      queueTime = Math.max(0, (earliestJobStartedAt - createdAtMs) / 1000);
+      if (!isNaN(createdAtMs)) {
+        queueTime = Math.max(0, (earliestStart - createdAtMs) / 1000);
+      }
     }
   }
 
@@ -1162,6 +1167,7 @@ function JobDetailView({
         if (!job.started_at && !job.created_at) continue;
         const startedAtMs = new Date(job.started_at || job.created_at).getTime();
         const completedAtMs = new Date(job.completed_at || job.started_at || job.created_at).getTime();
+        if (isNaN(startedAtMs) || isNaN(completedAtMs) || isNaN(runCreatedAtMs)) continue;
         const queueSeconds = Math.max(0, (startedAtMs - runCreatedAtMs) / 1000);
         const e2eSeconds = Math.max(0, (completedAtMs - startedAtMs) / 1000);
         matchingJobs.push({ day: dayStr, dayIndex, queueSeconds, e2eSeconds, conclusion: job.conclusion, created_at: run.created_at });
@@ -1684,10 +1690,6 @@ function WorkflowLineChartView({ summary, lineData, outlierCount }: WorkflowLine
     </div>
   );
 }
-
-// Thresholds for outlier detection and chart display
-const MAX_REASONABLE_DURATION = 2 * 60 * 60; // 2 hours in seconds
-const CHART_MAX_DURATION = 3 * 60 * 60; // 3 hours display cap
 
 function DashboardContent({
   initialFailedRepoKeys,
