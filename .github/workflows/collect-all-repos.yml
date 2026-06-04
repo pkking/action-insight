@@ -75,10 +75,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.VLLM_PROJECT_VLLM_ASCEND }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          RETENTION_DAYS: 90
+          RETENTION_DAYS: 30
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
           WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - id: purge
+        continue-on-error: true
+        run: npx tsx etl/scripts/purge-supabase.ts --repo "vllm-project/vllm-ascend"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: 30
       - id: test-case-stats
         continue-on-error: true
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "vllm-project/vllm-ascend"
@@ -127,10 +134,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.VERL_PROJECT_VERL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          RETENTION_DAYS: 90
+          RETENTION_DAYS: 30
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
           WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - id: purge
+        continue-on-error: true
+        run: npx tsx etl/scripts/purge-supabase.ts --repo "verl-project/verl"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: 30
       - id: test-case-stats
         continue-on-error: true
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "verl-project/verl"
@@ -179,10 +193,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TRITON_LANG_TRITON_ASCEND }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          RETENTION_DAYS: 90
+          RETENTION_DAYS: 30
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
           WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - id: purge
+        continue-on-error: true
+        run: npx tsx etl/scripts/purge-supabase.ts --repo "triton-lang/triton-ascend"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: 30
       - id: test-case-stats
         continue-on-error: true
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "triton-lang/triton-ascend"
@@ -231,10 +252,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.HIYOUGA_LLAMAFACTORY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          RETENTION_DAYS: 90
+          RETENTION_DAYS: 30
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
           WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - id: purge
+        continue-on-error: true
+        run: npx tsx etl/scripts/purge-supabase.ts --repo "hiyouga/LlamaFactory"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: 30
       - id: test-case-stats
         continue-on-error: true
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "hiyouga/LlamaFactory"
@@ -283,10 +311,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.MODELSCOPE_MS_SWIFT }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          RETENTION_DAYS: 90
+          RETENTION_DAYS: 30
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
           WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - id: purge
+        continue-on-error: true
+        run: npx tsx etl/scripts/purge-supabase.ts --repo "modelscope/ms-swift"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: 30
       - id: test-case-stats
         continue-on-error: true
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "modelscope/ms-swift"
@@ -335,10 +370,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.SGL_PROJECT_SGLANG }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          RETENTION_DAYS: 90
+          RETENTION_DAYS: 30
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
           WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - id: purge
+        continue-on-error: true
+        run: npx tsx etl/scripts/purge-supabase.ts --repo "sgl-project/sglang"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: 30
       - id: test-case-stats
         continue-on-error: true
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "sgl-project/sglang"
@@ -387,10 +429,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TILE_AI_TILELANG_ASCEND }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          RETENTION_DAYS: 90
+          RETENTION_DAYS: 30
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
           WORKFLOW_REVERSE: ${{ inputs.reverse }}
+      - id: purge
+        continue-on-error: true
+        run: npx tsx etl/scripts/purge-supabase.ts --repo "tile-ai/tilelang-ascend"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: 30
       - id: test-case-stats
         continue-on-error: true
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "tile-ai/tilelang-ascend"
