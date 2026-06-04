@@ -306,19 +306,34 @@ function calculateWorkflowQueueTime(run: Run): number | undefined {
  * Compute workflow duration from jobs' actual started_at/completed_at.
  * Falls back to run.durationInSeconds (unreliable — can be inflated by
  * delayed updated_at on runner-timeout runs).
+ *
+ * Results are cached on the Run object via a WeakMap so repeated calls
+ * (e.g. during sort comparisons) are O(1).
  */
+const workflowDurationCache = new WeakMap<Run, number>();
+
 function calculateWorkflowDuration(run: Run): number {
-  if (!run.jobs || run.jobs.length === 0) {
-    return run.durationInSeconds;
+  const cached = workflowDurationCache.get(run);
+  if (cached !== undefined) return cached;
+
+  let duration = run.durationInSeconds;
+  if (run.jobs && run.jobs.length > 0) {
+    const startedTimes: number[] = [];
+    const completedTimes: number[] = [];
+    for (const j of run.jobs) {
+      const s = new Date(j.started_at || j.created_at || 0).getTime();
+      if (s > 0) startedTimes.push(s);
+      const c = new Date(j.completed_at || j.started_at || 0).getTime();
+      if (c > 0) completedTimes.push(c);
+    }
+    if (startedTimes.length > 0 && completedTimes.length > 0) {
+      const earliestStart = Math.min(...startedTimes);
+      const latestEnd = Math.max(...completedTimes);
+      duration = Math.max(0, (latestEnd - earliestStart) / 1000);
+    }
   }
-  const startedTimes = run.jobs.map((j) => new Date(j.started_at || j.created_at || 0).getTime());
-  const completedTimes = run.jobs.map((j) => new Date(j.completed_at || j.started_at || 0).getTime());
-  const earliestStart = Math.min(...startedTimes.filter((t) => t > 0));
-  const latestEnd = Math.max(...completedTimes.filter((t) => t > 0));
-  if (earliestStart > 0 && latestEnd > 0) {
-    return Math.max(0, (latestEnd - earliestStart) / 1000);
-  }
-  return run.durationInSeconds;
+  workflowDurationCache.set(run, duration);
+  return duration;
 }
 
 function buildWorkflowTimingData(runs: Run[]): WorkflowTimingData[] {
@@ -1444,23 +1459,27 @@ function JobDetailView({
 interface WorkflowDotProps {
   cx?: number;
   cy?: number;
-  payload?: { html_url?: string };
+  payload?: { html_url?: string; isOutlier?: boolean };
   index?: number;
 }
 
 function CustomWorkflowDot(props: WorkflowDotProps) {
   const { cx, cy, payload } = props;
   if (cx === undefined || cy === undefined || !payload?.html_url) return null;
+  const isOutlier = payload.isOutlier;
   return (
     <circle
       cx={cx}
       cy={cy}
-      r={5}
-      fill="#22c55e"
+      r={isOutlier ? 7 : 5}
+      fill={isOutlier ? '#ef4444' : '#22c55e'}
       stroke="#fff"
       strokeWidth={2}
       style={{ cursor: 'pointer' }}
-      onClick={() => window.open(payload.html_url, '_blank', 'noopener,noreferrer')}
+      onClick={(e) => {
+        e.stopPropagation();
+        window.open(payload.html_url, '_blank', 'noopener,noreferrer');
+      }}
     />
   );
 }
@@ -1468,16 +1487,20 @@ function CustomWorkflowDot(props: WorkflowDotProps) {
 function CustomJobDot(props: WorkflowDotProps) {
   const { cx, cy, payload } = props;
   if (cx === undefined || cy === undefined || !payload?.html_url) return null;
+  const isOutlier = payload.isOutlier;
   return (
     <circle
       cx={cx}
       cy={cy}
-      r={6}
-      fill="#3b82f6"
+      r={isOutlier ? 7 : 6}
+      fill={isOutlier ? '#ef4444' : '#3b82f6'}
       stroke="#fff"
       strokeWidth={2}
       style={{ cursor: 'pointer' }}
-      onClick={() => window.open(payload.html_url, '_blank', 'noopener,noreferrer')}
+      onClick={(e) => {
+        e.stopPropagation();
+        window.open(payload.html_url, '_blank', 'noopener,noreferrer');
+      }}
     />
   );
 }
@@ -1591,23 +1614,7 @@ function JobLineChartView({ summary, lineData, outlierCount }: JobLineChartViewP
               name="E2E Time"
               stroke="#3b82f6"
               strokeWidth={2}
-              dot={(props) => {
-                const { cx, cy, payload } = props;
-                if (cx === undefined || cy === undefined || !payload?.html_url) return null;
-                const isOutlier = payload.isOutlier;
-                return (
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={isOutlier ? 7 : 6}
-                    fill={isOutlier ? '#ef4444' : '#3b82f6'}
-                    stroke="#fff"
-                    strokeWidth={2}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => window.open(payload.html_url, '_blank', 'noopener,noreferrer')}
-                  />
-                );
-              }}
+              dot={CustomJobDot}
               activeDot={false}
             />
             <Line
@@ -1729,23 +1736,7 @@ function WorkflowLineChartView({ summary, lineData, outlierCount }: WorkflowLine
               name="Successful run duration"
               stroke="#22c55e"
               strokeWidth={2}
-              dot={(props) => {
-                const { cx, cy, payload } = props;
-                if (cx === undefined || cy === undefined || !payload?.html_url) return null;
-                const isOutlier = payload.isOutlier;
-                return (
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={isOutlier ? 7 : 5}
-                    fill={isOutlier ? '#ef4444' : '#22c55e'}
-                    stroke="#fff"
-                    strokeWidth={2}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => window.open(payload.html_url, '_blank', 'noopener,noreferrer')}
-                  />
-                );
-              }}
+              dot={CustomWorkflowDot}
               activeDot={false}
             />
           </LineChart>
