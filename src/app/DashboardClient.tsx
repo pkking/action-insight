@@ -23,7 +23,7 @@ import {
   TestTube,
   XCircle,
 } from 'lucide-react';
-import { Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, LineChart, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, CartesianGrid, ComposedChart, Legend, Line, LineChart, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
 import type { LegendPayload } from 'recharts';
 import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 
@@ -46,14 +46,6 @@ type JobSummarySortField = 'name' | 'p90E2e' | 'p50E2e' | 'successRate' | 'p90Qu
 type WorkflowSortField = 'date' | 'duration' | 'name' | 'p90' | 'p50' | 'successRate';
 type WorkflowSortOrder = 'asc' | 'desc' | 'none';
 type PrLifecycleViewMode = 'pr' | 'workflow' | 'job' | 'event';
-type WorkflowTimingData = {
-  id: number;
-  name: string;
-  queueTimeSeconds: number | undefined;
-  e2eTimeSeconds: number;
-  conclusion: string;
-  created_at: string;
-};
 type WorkflowSummary = {
   name: string;
   runCount: number;
@@ -280,71 +272,64 @@ function sortWorkflows(workflows: Run[], field: WorkflowSortField, order: Workfl
   return result;
 }
 
-function calculateWorkflowQueueTime(run: Run): number | undefined {
-  if (!run.jobs || run.jobs.length === 0) {
-    return undefined;
-  }
-
-  let earliestStartedAt = Infinity;
-  for (const job of run.jobs) {
-    const startedMs = new Date(job.started_at || job.created_at || 0).getTime();
-    if (startedMs < earliestStartedAt) {
-      earliestStartedAt = startedMs;
-    }
-  }
-
-  if (earliestStartedAt === Infinity) {
-    return undefined;
-  }
-
-  const createdAtMs = new Date(run.created_at).getTime();
-  const queueTimeMs = earliestStartedAt - createdAtMs;
-  return Math.max(0, queueTimeMs / 1000);
-}
-
 /**
- * Compute workflow duration from jobs' actual started_at/completed_at.
- * Falls back to run.durationInSeconds (unreliable — can be inflated by
- * delayed updated_at on runner-timeout runs).
+ * Compute workflow timing (duration + queue time) from jobs' actual
+ * started_at/completed_at in a single pass. Results are cached on the
+ * Run object via a WeakMap so repeated calls (e.g. during sort
+ * comparisons) are O(1).
  *
- * Results are cached on the Run object via a WeakMap so repeated calls
- * (e.g. during sort comparisons) are O(1).
+ * Falls back to run.durationInSeconds for duration when jobs data is
+ * missing — that value is unreliable (can be inflated by delayed
+ * updated_at on runner-timeout runs) but is the best we have.
  */
-const workflowDurationCache = new WeakMap<Run, number>();
+type WorkflowTiming = {
+  durationSeconds: number;
+  queueTimeSeconds: number | undefined;
+};
 
-function calculateWorkflowDuration(run: Run): number {
-  const cached = workflowDurationCache.get(run);
+const workflowTimingCache = new WeakMap<Run, WorkflowTiming>();
+
+function computeWorkflowTiming(run: Run): WorkflowTiming {
+  const cached = workflowTimingCache.get(run);
   if (cached !== undefined) return cached;
 
   let duration = run.durationInSeconds;
+  let queueTime: number | undefined;
+
   if (run.jobs && run.jobs.length > 0) {
-    const startedTimes: number[] = [];
-    const completedTimes: number[] = [];
+    let earliestStart: number | null = null;
+    let latestEnd: number | null = null;
+    let earliestJobStartedAt: number | null = null;
+
     for (const j of run.jobs) {
       const s = new Date(j.started_at || j.created_at || 0).getTime();
-      if (s > 0) startedTimes.push(s);
+      if (s > 0) {
+        if (earliestStart === null || s < earliestStart) earliestStart = s;
+        if (earliestJobStartedAt === null || s < earliestJobStartedAt) earliestJobStartedAt = s;
+      }
       const c = new Date(j.completed_at || j.started_at || 0).getTime();
-      if (c > 0) completedTimes.push(c);
+      if (c > 0) {
+        if (latestEnd === null || c > latestEnd) latestEnd = c;
+      }
     }
-    if (startedTimes.length > 0 && completedTimes.length > 0) {
-      const earliestStart = Math.min(...startedTimes);
-      const latestEnd = Math.max(...completedTimes);
+
+    if (earliestStart !== null && latestEnd !== null) {
       duration = Math.max(0, (latestEnd - earliestStart) / 1000);
     }
+
+    if (earliestJobStartedAt !== null) {
+      const createdAtMs = new Date(run.created_at).getTime();
+      queueTime = Math.max(0, (earliestJobStartedAt - createdAtMs) / 1000);
+    }
   }
-  workflowDurationCache.set(run, duration);
-  return duration;
+
+  const result: WorkflowTiming = { durationSeconds: duration, queueTimeSeconds: queueTime };
+  workflowTimingCache.set(run, result);
+  return result;
 }
 
-function buildWorkflowTimingData(runs: Run[]): WorkflowTimingData[] {
-  return runs.map((run) => ({
-    id: run.id,
-    name: run.name,
-    queueTimeSeconds: calculateWorkflowQueueTime(run),
-    e2eTimeSeconds: calculateWorkflowDuration(run),
-    conclusion: run.conclusion,
-    created_at: run.created_at,
-  }));
+function calculateWorkflowDuration(run: Run): number {
+  return computeWorkflowTiming(run).durationSeconds;
 }
 
 function buildJobTimingData(runs: Run[]): JobTimingData[] {
@@ -1141,52 +1126,6 @@ function JobDetailsView({ run }: { run: Run }) {
   );
 }
 
-function TimingChart<T extends { id: number; name: string; queueTimeSeconds: number | undefined; e2eTimeSeconds: number }>({
-  data,
-  label,
-}: {
-  data: T[];
-  label: string;
-}) {
-  if (data.length === 0) {
-    return (
-      <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-neutral-200 text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
-        No {label.toLowerCase()} selected. Use checkboxes to select items.
-      </div>
-    );
-  }
-
-  const chartData = data.map((item) => ({
-    name: item.name.length > 24 ? `${item.name.slice(0, 22)}…` : item.name,
-    queueTime: item.queueTimeSeconds !== undefined ? Math.round(item.queueTimeSeconds / 60) : 0,
-    e2eTime: Math.round(item.e2eTimeSeconds / 60),
-    hasQueueTime: item.queueTimeSeconds !== undefined,
-  }));
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
-          {label} Timing Metrics ({data.length} selected)
-        </h4>
-      </div>
-      <div className="h-64">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
-            <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} interval={0} angle={-30} textAnchor="end" height={60} />
-            <YAxis tick={{ fontSize: 12, fill: '#888' }} tickLine={false} axisLine={false} label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }} />
-            <Tooltip formatter={(value: unknown) => (typeof value === 'number' ? `${value}m` : String(value))} />
-            <Legend />
-            <Bar dataKey="queueTime" name="Queue Time" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="e2eTime" name="E2E Time" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
-
 function JobDetailView({
   jobName,
   allWorkflows,
@@ -1794,8 +1733,6 @@ function DashboardContent({
   const [workflowSortField, setWorkflowSortField] = useState<WorkflowSortField>('date');
   const [workflowSortOrder, setWorkflowSortOrder] = useState<WorkflowSortOrder>('desc');
   const [prLifecycleViewMode, setPrLifecycleViewMode] = useState<PrLifecycleViewMode>('pr');
-  const [selectedWorkflowIds, setSelectedWorkflowIds] = useState<Set<number>>(new Set());
-  const [selectedJobIds, setSelectedJobIds] = useState<Set<number>>(new Set());
   const [selectedWorkflowSummaryName, setSelectedWorkflowSummaryName] = useState<string | null>(null);
   const [workflowSummarySortField, setWorkflowSummarySortField] = useState<'name' | 'p90' | 'p50' | 'successRate'>('p90');
   const [workflowSummarySortOrder, setWorkflowSummarySortOrder] = useState<'asc' | 'desc'>('desc');
@@ -1806,8 +1743,6 @@ function DashboardContent({
   const [allWorkflows, setAllWorkflows] = useState<Run[]>([]);
   const [allWorkflowsLoading, setAllWorkflowsLoading] = useState(false);
   const [allWorkflowsError, setAllWorkflowsError] = useState('');
-  const [jobSortField, setJobSortField] = useState<JobSortField>('duration');
-  const [jobSortOrder, setJobSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedJobName, setSelectedJobName] = useState<string | null>(() => initialQuery.jobName || null);
   const [selectedJobSummaryName, setSelectedJobSummaryName] = useState<string | null>(null);
   const [jobSummarySortField, setJobSummarySortField] = useState<JobSummarySortField>('p90E2e');
@@ -1886,8 +1821,6 @@ function DashboardContent({
     setExpandedWorkflowId(null);
     setError('');
     setPrLifecycleViewMode('pr');
-    setSelectedWorkflowIds(new Set());
-    setSelectedJobIds(new Set());
     setSelectedWorkflowSummaryName(null);
     setAllWorkflows([]);
     setAllWorkflowsError('');
@@ -2259,81 +2192,7 @@ function DashboardContent({
     });
   };
 
-  const toggleWorkflowSelection = (id: number) => {
-    setSelectedWorkflowIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const toggleJobSelection = (id: number) => {
-    setSelectedJobIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const toggleAllWorkflows = () => {
-    if (selectedWorkflowIds.size === sortedAllWorkflows.length && sortedAllWorkflows.length > 0) {
-      setSelectedWorkflowIds(new Set());
-    } else {
-      setSelectedWorkflowIds(new Set(sortedAllWorkflows.map((w) => w.id)));
-    }
-  };
-
-  const toggleAllJobs = () => {
-    if (selectedJobIds.size === sortedAllJobTimingData.length && sortedAllJobTimingData.length > 0) {
-      setSelectedJobIds(new Set());
-    } else {
-      setSelectedJobIds(new Set(sortedAllJobTimingData.map((j) => j.id)));
-    }
-  };
-
-  const sortedAllWorkflows = useMemo(() => {
-    let result = allWorkflows;
-    if (filterName) {
-      const query = filterName.toLowerCase();
-      result = result.filter((run) => `${run.name} ${run.head_branch}`.toLowerCase().includes(query));
-    }
-    return sortWorkflows(result, workflowSortField, workflowSortOrder);
-  }, [allWorkflows, filterName, workflowSortField, workflowSortOrder]);
-
-  const allWorkflowTimingData = useMemo(() => buildWorkflowTimingData(allWorkflows), [allWorkflows]);
-  const selectedWorkflowTimingData = useMemo(
-    () => allWorkflowTimingData.filter((w) => selectedWorkflowIds.has(w.id)),
-    [allWorkflowTimingData, selectedWorkflowIds]
-  );
-
   const allJobTimingData = useMemo(() => buildJobTimingData(allWorkflows), [allWorkflows]);
-  const sortedAllJobTimingData = useMemo(() => {
-    let result = [...allJobTimingData];
-    if (filterName) {
-      const query = filterName.toLowerCase();
-      result = result.filter((job) => `${job.name} ${job.workflowName}`.toLowerCase().includes(query));
-    }
-    result.sort((a, b) => {
-      let comparison = 0;
-      if (jobSortField === 'name') comparison = a.name.localeCompare(b.name);
-      else if (jobSortField === 'queue') comparison = a.queueTimeSeconds - b.queueTimeSeconds;
-      else if (jobSortField === 'duration') comparison = a.e2eTimeSeconds - b.e2eTimeSeconds;
-      return jobSortOrder === 'asc' ? comparison : -comparison;
-    });
-    return result;
-  }, [allJobTimingData, filterName, jobSortField, jobSortOrder]);
-  const selectedJobTimingData = useMemo(
-    () => sortedAllJobTimingData.filter((j) => selectedJobIds.has(j.id)),
-    [sortedAllJobTimingData, selectedJobIds]
-  );
 
   const jobSummaries = useMemo<JobSummary[]>(() => {
     const byName = new Map<string, JobTimingData[]>();
@@ -2420,8 +2279,6 @@ function DashboardContent({
 
   const handleViewModeChange = (mode: PrLifecycleViewMode) => {
     setPrLifecycleViewMode(mode);
-    setSelectedWorkflowIds(new Set());
-    setSelectedJobIds(new Set());
     setSelectedWorkflowSummaryName(null);
     setSelectedJobSummaryName(null);
   };
@@ -2516,15 +2373,6 @@ function DashboardContent({
     if (!selectedRepo) return '#';
     // Link to GitHub Actions page filtered by workflow name
     return `https://github.com/${selectedRepo.owner}/${selectedRepo.repo}/actions?query=workflow%3A%22${encodeURIComponent(workflowName)}%22`;
-  };
-
-  const toggleJobSort = (field: JobSortField) => {
-    if (jobSortField === field) {
-      setJobSortOrder(jobSortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setJobSortField(field);
-      setJobSortOrder('desc');
-    }
   };
 
   const toggleJobSummarySort = (field: JobSummarySortField) => {
