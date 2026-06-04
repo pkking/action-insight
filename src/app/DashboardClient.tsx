@@ -23,7 +23,7 @@ import {
   TestTube,
   XCircle,
 } from 'lucide-react';
-import { Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, LineChart, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, CartesianGrid, ComposedChart, Legend, Line, LineChart, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
 import type { LegendPayload } from 'recharts';
 import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 
@@ -46,14 +46,6 @@ type JobSummarySortField = 'name' | 'p90E2e' | 'p50E2e' | 'successRate' | 'p90Qu
 type WorkflowSortField = 'date' | 'duration' | 'name' | 'p90' | 'p50' | 'successRate';
 type WorkflowSortOrder = 'asc' | 'desc' | 'none';
 type PrLifecycleViewMode = 'pr' | 'workflow' | 'job' | 'event';
-type WorkflowTimingData = {
-  id: number;
-  name: string;
-  queueTimeSeconds: number | undefined;
-  e2eTimeSeconds: number;
-  conclusion: string;
-  created_at: string;
-};
 type WorkflowSummary = {
   name: string;
   runCount: number;
@@ -104,6 +96,11 @@ type DashboardClientProps = {
   initialTestCaseStatsByKey: Record<string, TestCaseStats | null>;
   initialSearchParams?: Record<string, string | string[] | undefined>;
 };
+
+/** Outlier detection threshold: jobs/workflows exceeding this are flagged. */
+const MAX_REASONABLE_DURATION = 2 * 60 * 60; // 2 hours in seconds
+/** Chart Y-axis cap: outlier values are folded to 90% of this. */
+const CHART_MAX_DURATION = 3 * 60 * 60; // 3 hours display cap
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -271,7 +268,7 @@ function sortWorkflows(workflows: Run[], field: WorkflowSortField, order: Workfl
     let comparison = 0;
 
     if (field === 'date') comparison = left.created_at.localeCompare(right.created_at);
-    else if (field === 'duration') comparison = left.durationInSeconds - right.durationInSeconds;
+    else if (field === 'duration') comparison = calculateWorkflowDuration(left) - calculateWorkflowDuration(right);
     else if (field === 'name') comparison = left.name.localeCompare(right.name);
 
     return order === 'asc' ? comparison : -comparison;
@@ -280,37 +277,64 @@ function sortWorkflows(workflows: Run[], field: WorkflowSortField, order: Workfl
   return result;
 }
 
-function calculateWorkflowQueueTime(run: Run): number | undefined {
-  if (!run.jobs || run.jobs.length === 0) {
-    return undefined;
-  }
+/**
+ * Compute workflow timing (duration + queue time) from jobs' actual
+ * started_at/completed_at in a single pass. Results are cached on the
+ * Run object via a WeakMap so repeated calls (e.g. during sort
+ * comparisons) are O(1).
+ *
+ * Falls back to run.durationInSeconds for duration when jobs data is
+ * missing — that value is unreliable (can be inflated by delayed
+ * updated_at on runner-timeout runs) but is the best we have.
+ */
+type WorkflowTiming = {
+  durationSeconds: number;
+  queueTimeSeconds: number | undefined;
+};
 
-  let earliestStartedAt = Infinity;
-  for (const job of run.jobs) {
-    const startedMs = new Date(job.started_at || job.created_at || 0).getTime();
-    if (startedMs < earliestStartedAt) {
-      earliestStartedAt = startedMs;
+const workflowTimingCache = new WeakMap<Run, WorkflowTiming>();
+
+function computeWorkflowTiming(run: Run): WorkflowTiming {
+  const cached = workflowTimingCache.get(run);
+  if (cached !== undefined) return cached;
+
+  let duration = run.durationInSeconds;
+  let queueTime: number | undefined;
+
+  if (run.jobs && run.jobs.length > 0) {
+    let earliestStart: number | null = null;
+    let latestEnd: number | null = null;
+
+    for (const j of run.jobs) {
+      const s = new Date(j.started_at || j.created_at || 0).getTime();
+      if (s > 0) {
+        if (earliestStart === null || s < earliestStart) earliestStart = s;
+      }
+      const c = new Date(j.completed_at || j.started_at || 0).getTime();
+      if (c > 0) {
+        if (latestEnd === null || c > latestEnd) latestEnd = c;
+      }
+    }
+
+    if (earliestStart !== null && latestEnd !== null) {
+      duration = Math.max(0, (latestEnd - earliestStart) / 1000);
+    }
+
+    if (earliestStart !== null) {
+      const createdAtMs = new Date(run.created_at).getTime();
+      if (!isNaN(createdAtMs)) {
+        queueTime = Math.max(0, (earliestStart - createdAtMs) / 1000);
+      }
     }
   }
 
-  if (earliestStartedAt === Infinity) {
-    return undefined;
-  }
-
-  const createdAtMs = new Date(run.created_at).getTime();
-  const queueTimeMs = earliestStartedAt - createdAtMs;
-  return Math.max(0, queueTimeMs / 1000);
+  const result: WorkflowTiming = { durationSeconds: duration, queueTimeSeconds: queueTime };
+  workflowTimingCache.set(run, result);
+  return result;
 }
 
-function buildWorkflowTimingData(runs: Run[]): WorkflowTimingData[] {
-  return runs.map((run) => ({
-    id: run.id,
-    name: run.name,
-    queueTimeSeconds: calculateWorkflowQueueTime(run),
-    e2eTimeSeconds: run.durationInSeconds,
-    conclusion: run.conclusion,
-    created_at: run.created_at,
-  }));
+function calculateWorkflowDuration(run: Run): number {
+  return computeWorkflowTiming(run).durationSeconds;
 }
 
 function buildJobTimingData(runs: Run[]): JobTimingData[] {
@@ -511,7 +535,7 @@ function PrLifecycleTree({ data, showPrRoot = true }: { data: PrLifecycleTimelin
     if (data.merged_at) endMs = Math.max(endMs, new Date(data.merged_at).getTime());
 
     for (const wf of data.workflows) {
-      const wfEnd = new Date(wf.created_at).getTime() + wf.durationInSeconds * 1000;
+      const wfEnd = new Date(wf.created_at).getTime() + calculateWorkflowDuration(wf) * 1000;
       endMs = Math.max(endMs, wfEnd);
     }
 
@@ -596,7 +620,7 @@ function PrLifecycleTree({ data, showPrRoot = true }: { data: PrLifecycleTimelin
                   depth={showPrRoot ? 1 : 0}
                   icon={<span className="text-teal-500">⚡</span>}
                   label={wf.name}
-                  duration={formatDuration(wf.durationInSeconds)}
+                  duration={formatDuration(calculateWorkflowDuration(wf))}
                   conclusion={wf.conclusion}
                   expanded={isWfExpanded}
                   hasChildren={jobs.length > 0}
@@ -723,7 +747,7 @@ function groupWorkflowsByEvent(runs: Run[]): EventGroup[] {
       workflows,
       totalCount: workflows.length,
       successCount: workflows.filter((w) => w.conclusion === 'success').length,
-      totalDurationSeconds: workflows.reduce((sum, w) => sum + w.durationInSeconds, 0),
+      totalDurationSeconds: workflows.reduce((sum, w) => sum + calculateWorkflowDuration(w), 0),
     }))
     .sort((a, b) => b.totalCount - a.totalCount);
 }
@@ -872,7 +896,7 @@ function EventsTreeView({ allWorkflows, filterName }: { allWorkflows: Run[]; fil
                           depth={1}
                           icon={<span className="text-teal-500">⚡</span>}
                           label={wf.name}
-                          duration={formatDuration(wf.durationInSeconds)}
+                          duration={formatDuration(calculateWorkflowDuration(wf))}
                           conclusion={wf.conclusion}
                           expanded={isWfExpanded}
                           hasChildren={jobs.length > 0}
@@ -1107,52 +1131,6 @@ function JobDetailsView({ run }: { run: Run }) {
   );
 }
 
-function TimingChart<T extends { id: number; name: string; queueTimeSeconds: number | undefined; e2eTimeSeconds: number }>({
-  data,
-  label,
-}: {
-  data: T[];
-  label: string;
-}) {
-  if (data.length === 0) {
-    return (
-      <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-neutral-200 text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
-        No {label.toLowerCase()} selected. Use checkboxes to select items.
-      </div>
-    );
-  }
-
-  const chartData = data.map((item) => ({
-    name: item.name.length > 24 ? `${item.name.slice(0, 22)}…` : item.name,
-    queueTime: item.queueTimeSeconds !== undefined ? Math.round(item.queueTimeSeconds / 60) : 0,
-    e2eTime: Math.round(item.e2eTimeSeconds / 60),
-    hasQueueTime: item.queueTimeSeconds !== undefined,
-  }));
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
-          {label} Timing Metrics ({data.length} selected)
-        </h4>
-      </div>
-      <div className="h-64">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" className="dark:opacity-20" />
-            <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} interval={0} angle={-30} textAnchor="end" height={60} />
-            <YAxis tick={{ fontSize: 12, fill: '#888' }} tickLine={false} axisLine={false} label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }} />
-            <Tooltip formatter={(value: unknown) => (typeof value === 'number' ? `${value}m` : String(value))} />
-            <Legend />
-            <Bar dataKey="queueTime" name="Queue Time" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="e2eTime" name="E2E Time" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
-
 function JobDetailView({
   jobName,
   allWorkflows,
@@ -1189,8 +1167,9 @@ function JobDetailView({
         if (!job.started_at && !job.created_at) continue;
         const startedAtMs = new Date(job.started_at || job.created_at).getTime();
         const completedAtMs = new Date(job.completed_at || job.started_at || job.created_at).getTime();
+        if (isNaN(startedAtMs) || isNaN(completedAtMs) || isNaN(runCreatedAtMs)) continue;
         const queueSeconds = Math.max(0, (startedAtMs - runCreatedAtMs) / 1000);
-        const e2eSeconds = Math.max(0, (completedAtMs - runCreatedAtMs) / 1000);
+        const e2eSeconds = Math.max(0, (completedAtMs - startedAtMs) / 1000);
         matchingJobs.push({ day: dayStr, dayIndex, queueSeconds, e2eSeconds, conclusion: job.conclusion, created_at: run.created_at });
       }
     }
@@ -1425,23 +1404,27 @@ function JobDetailView({
 interface WorkflowDotProps {
   cx?: number;
   cy?: number;
-  payload?: { html_url?: string };
+  payload?: { html_url?: string; isOutlier?: boolean };
   index?: number;
 }
 
 function CustomWorkflowDot(props: WorkflowDotProps) {
   const { cx, cy, payload } = props;
   if (cx === undefined || cy === undefined || !payload?.html_url) return null;
+  const isOutlier = payload.isOutlier;
   return (
     <circle
       cx={cx}
       cy={cy}
-      r={5}
-      fill="#22c55e"
+      r={isOutlier ? 7 : 5}
+      fill={isOutlier ? '#ef4444' : '#22c55e'}
       stroke="#fff"
       strokeWidth={2}
       style={{ cursor: 'pointer' }}
-      onClick={() => window.open(payload.html_url, '_blank', 'noopener,noreferrer')}
+      onClick={(e) => {
+        e.stopPropagation();
+        window.open(payload.html_url, '_blank', 'noopener,noreferrer');
+      }}
     />
   );
 }
@@ -1449,16 +1432,20 @@ function CustomWorkflowDot(props: WorkflowDotProps) {
 function CustomJobDot(props: WorkflowDotProps) {
   const { cx, cy, payload } = props;
   if (cx === undefined || cy === undefined || !payload?.html_url) return null;
+  const isOutlier = payload.isOutlier;
   return (
     <circle
       cx={cx}
       cy={cy}
-      r={6}
-      fill="#3b82f6"
+      r={isOutlier ? 7 : 6}
+      fill={isOutlier ? '#ef4444' : '#3b82f6'}
       stroke="#fff"
       strokeWidth={2}
       style={{ cursor: 'pointer' }}
-      onClick={() => window.open(payload.html_url, '_blank', 'noopener,noreferrer')}
+      onClick={(e) => {
+        e.stopPropagation();
+        window.open(payload.html_url, '_blank', 'noopener,noreferrer');
+      }}
     />
   );
 }
@@ -1475,13 +1462,17 @@ type JobLineChartViewProps = {
     label: string;
     queueTime: number;
     e2eTime: number;
+    realE2eTime: number;
+    realQueueTime: number;
+    isOutlier: boolean;
     jobId: number;
     workflowName: string;
     html_url: string;
   }>;
+  outlierCount: number;
 };
 
-function JobLineChartView({ summary, lineData }: JobLineChartViewProps) {
+function JobLineChartView({ summary, lineData, outlierCount }: JobLineChartViewProps) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const hoveredPoint = hoverIndex !== null && lineData[hoverIndex] ? lineData[hoverIndex] : null;
 
@@ -1497,21 +1488,27 @@ function JobLineChartView({ summary, lineData }: JobLineChartViewProps) {
 
   return (
     <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-1 flex items-center gap-2">
         <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
           {summary.name} — Run Durations
         </h4>
         <span className="text-xs text-neutral-400 dark:text-neutral-500">
           ({summary.runCount} runs, {lineData.length} successful | {summary.debugInfo})
         </span>
+        {outlierCount > 0 && (
+          <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:bg-red-900/30 dark:text-red-400">
+            ⚠️ {outlierCount} runner timeout{outlierCount > 1 ? 's' : ''} (shown at top)
+          </span>
+        )}
       </div>
 
       {/* Hover Info Bar */}
       {hoveredPoint && (
         <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-2 text-xs dark:border-neutral-700 dark:bg-neutral-800">
           <span className="font-medium text-neutral-700 dark:text-neutral-200">{hoveredPoint.label}</span>
-          <span className="text-neutral-500 dark:text-neutral-400">E2E: <span className="font-mono font-semibold text-blue-600 dark:text-blue-400">{Math.round(hoveredPoint.e2eTime / 60)}m</span></span>
-          <span className="text-neutral-500 dark:text-neutral-400">Queue: <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">{Math.round(hoveredPoint.queueTime / 60)}m</span></span>
+          <span className="text-neutral-500 dark:text-neutral-400">E2E: <span className={`font-mono font-semibold ${hoveredPoint.isOutlier ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`}>{Math.round(hoveredPoint.realE2eTime / 60)}m</span></span>
+          <span className="text-neutral-500 dark:text-neutral-400">Queue: <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">{Math.round(hoveredPoint.realQueueTime / 60)}m</span></span>
+          {hoveredPoint.isOutlier && <span className="text-[10px] text-red-500 dark:text-red-400">(runner timeout)</span>}
           <span className="text-neutral-500 dark:text-neutral-400">Workflow: <span className="font-mono text-neutral-600 dark:text-neutral-400">{hoveredPoint.workflowName}</span></span>
           <a href={hoveredPoint.html_url} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400">
             View Logs <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6" /></svg>
@@ -1547,6 +1544,7 @@ function JobLineChartView({ summary, lineData }: JobLineChartViewProps) {
               interval="preserveStartEnd"
             />
             <YAxis
+              domain={[0, CHART_MAX_DURATION]}
               tick={{ fontSize: 12, fill: '#888' }}
               tickLine={false}
               axisLine={false}
@@ -1591,12 +1589,15 @@ type WorkflowLineChartViewProps = {
     date: string;
     label: string;
     duration: number;
+    realDuration: number;
+    isOutlier: boolean;
     runId: number;
     html_url: string;
   }>;
+  outlierCount: number;
 };
 
-function WorkflowLineChartView({ summary, lineData }: WorkflowLineChartViewProps) {
+function WorkflowLineChartView({ summary, lineData, outlierCount }: WorkflowLineChartViewProps) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const hoveredPoint = hoverIndex !== null && lineData[hoverIndex] ? lineData[hoverIndex] : null;
 
@@ -1612,20 +1613,26 @@ function WorkflowLineChartView({ summary, lineData }: WorkflowLineChartViewProps
 
   return (
     <div className="border-l-4 border-blue-500 bg-white px-6 py-4 dark:border-blue-400 dark:bg-neutral-900">
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-1 flex items-center gap-2">
         <h4 className="text-sm font-bold text-neutral-700 dark:text-neutral-300">
           {summary.name} — Run Durations
         </h4>
         <span className="text-xs text-neutral-400 dark:text-neutral-500">
           ({summary.runCount} runs, {lineData.length} successful | {summary.debugInfo})
         </span>
+        {outlierCount > 0 && (
+          <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:bg-red-900/30 dark:text-red-400">
+            ⚠️ {outlierCount} runner timeout{outlierCount > 1 ? 's' : ''} (shown at top)
+          </span>
+        )}
       </div>
 
       {/* Hover Info Bar */}
       {hoveredPoint && (
         <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-2 text-xs dark:border-neutral-700 dark:bg-neutral-800">
           <span className="font-medium text-neutral-700 dark:text-neutral-200">{hoveredPoint.label}</span>
-          <span className="text-neutral-500 dark:text-neutral-400">Duration: <span className="font-mono font-semibold text-green-600 dark:text-green-400">{Math.round(hoveredPoint.duration / 60)}m</span></span>
+          <span className="text-neutral-500 dark:text-neutral-400">Duration: <span className={`font-mono font-semibold ${hoveredPoint.isOutlier ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{Math.round(hoveredPoint.realDuration / 60)}m</span></span>
+          {hoveredPoint.isOutlier && <span className="text-[10px] text-red-500 dark:text-red-400">(runner timeout)</span>}
           <a href={hoveredPoint.html_url} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400">
             View Run <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6" /></svg>
           </a>
@@ -1660,11 +1667,11 @@ function WorkflowLineChartView({ summary, lineData }: WorkflowLineChartViewProps
               interval="preserveStartEnd"
             />
             <YAxis
+              domain={[0, CHART_MAX_DURATION]}
               tick={{ fontSize: 12, fill: '#888' }}
               tickLine={false}
               axisLine={false}
               tickFormatter={(val) => `${Math.round(val / 60)}m`}
-              domain={[0, lineData.reduce((max, d) => Math.max(max, d.duration), 60) * 1.1]}
               label={{ value: 'Minutes', angle: -90, position: 'insideLeft', fontSize: 12, fill: '#888' }}
             />
             <Legend />
@@ -1728,8 +1735,6 @@ function DashboardContent({
   const [workflowSortField, setWorkflowSortField] = useState<WorkflowSortField>('date');
   const [workflowSortOrder, setWorkflowSortOrder] = useState<WorkflowSortOrder>('desc');
   const [prLifecycleViewMode, setPrLifecycleViewMode] = useState<PrLifecycleViewMode>('pr');
-  const [selectedWorkflowIds, setSelectedWorkflowIds] = useState<Set<number>>(new Set());
-  const [selectedJobIds, setSelectedJobIds] = useState<Set<number>>(new Set());
   const [selectedWorkflowSummaryName, setSelectedWorkflowSummaryName] = useState<string | null>(null);
   const [workflowSummarySortField, setWorkflowSummarySortField] = useState<'name' | 'p90' | 'p50' | 'successRate'>('p90');
   const [workflowSummarySortOrder, setWorkflowSummarySortOrder] = useState<'asc' | 'desc'>('desc');
@@ -1740,8 +1745,6 @@ function DashboardContent({
   const [allWorkflows, setAllWorkflows] = useState<Run[]>([]);
   const [allWorkflowsLoading, setAllWorkflowsLoading] = useState(false);
   const [allWorkflowsError, setAllWorkflowsError] = useState('');
-  const [jobSortField, setJobSortField] = useState<JobSortField>('duration');
-  const [jobSortOrder, setJobSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedJobName, setSelectedJobName] = useState<string | null>(() => initialQuery.jobName || null);
   const [selectedJobSummaryName, setSelectedJobSummaryName] = useState<string | null>(null);
   const [jobSummarySortField, setJobSummarySortField] = useState<JobSummarySortField>('p90E2e');
@@ -1820,8 +1823,6 @@ function DashboardContent({
     setExpandedWorkflowId(null);
     setError('');
     setPrLifecycleViewMode('pr');
-    setSelectedWorkflowIds(new Set());
-    setSelectedJobIds(new Set());
     setSelectedWorkflowSummaryName(null);
     setAllWorkflows([]);
     setAllWorkflowsError('');
@@ -2193,81 +2194,7 @@ function DashboardContent({
     });
   };
 
-  const toggleWorkflowSelection = (id: number) => {
-    setSelectedWorkflowIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const toggleJobSelection = (id: number) => {
-    setSelectedJobIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const toggleAllWorkflows = () => {
-    if (selectedWorkflowIds.size === sortedAllWorkflows.length && sortedAllWorkflows.length > 0) {
-      setSelectedWorkflowIds(new Set());
-    } else {
-      setSelectedWorkflowIds(new Set(sortedAllWorkflows.map((w) => w.id)));
-    }
-  };
-
-  const toggleAllJobs = () => {
-    if (selectedJobIds.size === sortedAllJobTimingData.length && sortedAllJobTimingData.length > 0) {
-      setSelectedJobIds(new Set());
-    } else {
-      setSelectedJobIds(new Set(sortedAllJobTimingData.map((j) => j.id)));
-    }
-  };
-
-  const sortedAllWorkflows = useMemo(() => {
-    let result = allWorkflows;
-    if (filterName) {
-      const query = filterName.toLowerCase();
-      result = result.filter((run) => `${run.name} ${run.head_branch}`.toLowerCase().includes(query));
-    }
-    return sortWorkflows(result, workflowSortField, workflowSortOrder);
-  }, [allWorkflows, filterName, workflowSortField, workflowSortOrder]);
-
-  const allWorkflowTimingData = useMemo(() => buildWorkflowTimingData(allWorkflows), [allWorkflows]);
-  const selectedWorkflowTimingData = useMemo(
-    () => allWorkflowTimingData.filter((w) => selectedWorkflowIds.has(w.id)),
-    [allWorkflowTimingData, selectedWorkflowIds]
-  );
-
   const allJobTimingData = useMemo(() => buildJobTimingData(allWorkflows), [allWorkflows]);
-  const sortedAllJobTimingData = useMemo(() => {
-    let result = [...allJobTimingData];
-    if (filterName) {
-      const query = filterName.toLowerCase();
-      result = result.filter((job) => `${job.name} ${job.workflowName}`.toLowerCase().includes(query));
-    }
-    result.sort((a, b) => {
-      let comparison = 0;
-      if (jobSortField === 'name') comparison = a.name.localeCompare(b.name);
-      else if (jobSortField === 'queue') comparison = a.queueTimeSeconds - b.queueTimeSeconds;
-      else if (jobSortField === 'duration') comparison = a.e2eTimeSeconds - b.e2eTimeSeconds;
-      return jobSortOrder === 'asc' ? comparison : -comparison;
-    });
-    return result;
-  }, [allJobTimingData, filterName, jobSortField, jobSortOrder]);
-  const selectedJobTimingData = useMemo(
-    () => sortedAllJobTimingData.filter((j) => selectedJobIds.has(j.id)),
-    [sortedAllJobTimingData, selectedJobIds]
-  );
 
   const jobSummaries = useMemo<JobSummary[]>(() => {
     const byName = new Map<string, JobTimingData[]>();
@@ -2322,32 +2249,38 @@ function DashboardContent({
     return sorted;
   }, [jobSummaries, filterName, jobSummarySortField, jobSummarySortOrder]);
 
-  // Filter out jobs with abnormally long duration (runner timeout/disconnect)
-  const MAX_REASONABLE_DURATION = 2 * 60 * 60; // 2 hours in seconds
-
   const jobSuccessRunLineData = useMemo(() => {
     if (!selectedJobSummaryName) return [];
     const matchingJobs = allJobTimingData.filter(
-      (j) => j.name === selectedJobSummaryName && j.conclusion === 'success' && j.e2eTimeSeconds <= MAX_REASONABLE_DURATION
+      (j) => j.name === selectedJobSummaryName && j.conclusion === 'success'
     );
     return matchingJobs
       .sort((a, b) => a.created_at.localeCompare(b.created_at))
-      .map((job, idx) => ({
-        index: idx,
-        date: job.created_at,
-        label: format(new Date(job.created_at), 'MMM dd HH:mm'),
-        queueTime: job.queueTimeSeconds,
-        e2eTime: job.e2eTimeSeconds,
-        jobId: job.id,
-        workflowName: job.workflowName,
-        html_url: job.html_url,
-      }));
+      .map((job, idx) => {
+        const isOutlier = job.e2eTimeSeconds > MAX_REASONABLE_DURATION;
+        return {
+          index: idx,
+          date: job.created_at,
+          label: format(new Date(job.created_at), 'MMM dd HH:mm'),
+          queueTime: job.queueTimeSeconds,
+          e2eTime: isOutlier ? CHART_MAX_DURATION * 0.9 : job.e2eTimeSeconds,
+          realE2eTime: job.e2eTimeSeconds,
+          realQueueTime: job.queueTimeSeconds,
+          isOutlier,
+          jobId: job.id,
+          workflowName: job.workflowName,
+          html_url: job.html_url,
+        };
+      });
   }, [allJobTimingData, selectedJobSummaryName]);
+
+  const jobOutlierCount = useMemo(
+    () => jobSuccessRunLineData.filter((d) => d.isOutlier).length,
+    [jobSuccessRunLineData]
+  );
 
   const handleViewModeChange = (mode: PrLifecycleViewMode) => {
     setPrLifecycleViewMode(mode);
-    setSelectedWorkflowIds(new Set());
-    setSelectedJobIds(new Set());
     setSelectedWorkflowSummaryName(null);
     setSelectedJobSummaryName(null);
   };
@@ -2370,7 +2303,7 @@ function DashboardContent({
     }
 
     return Array.from(byName.entries()).map(([name, runs]) => {
-      const durations = runs.map((r) => r.durationInSeconds).sort((a, b) => a - b);
+      const durations = runs.map((r) => calculateWorkflowDuration(r)).sort((a, b) => a - b);
       let successCount = 0;
       const conclusionCounts = new Map<string, number>();
       for (const run of runs) {
@@ -2418,42 +2351,30 @@ function DashboardContent({
     return matchingRuns
       .sort((a, b) => a.created_at.localeCompare(b.created_at))
       .map((run, idx) => {
-        // Compute duration from jobs' actual start/end times instead of (updated_at - created_at)
-        // which includes queue/wait time
-        let duration = run.durationInSeconds;
-        if (run.jobs && run.jobs.length > 0) {
-          const startedTimes = run.jobs.map((j) => new Date(j.started_at || j.created_at || 0).getTime());
-          const completedTimes = run.jobs.map((j) => new Date(j.completed_at || j.started_at || 0).getTime());
-          const earliestStart = Math.min(...startedTimes.filter((t) => t > 0));
-          const latestEnd = Math.max(...completedTimes.filter((t) => t > 0));
-          if (earliestStart > 0 && latestEnd > 0) {
-            duration = Math.max(0, (latestEnd - earliestStart) / 1000);
-          }
-        }
+        const duration = calculateWorkflowDuration(run);
+        const isOutlier = duration > MAX_REASONABLE_DURATION;
         return {
           index: idx,
           date: run.created_at,
           label: format(new Date(run.created_at), 'MMM dd HH:mm'),
-          duration,
+          duration: isOutlier ? CHART_MAX_DURATION * 0.9 : duration,
+          realDuration: duration,
+          isOutlier,
           runId: run.id,
           html_url: run.html_url,
         };
       });
   }, [allWorkflows, selectedWorkflowSummaryName]);
 
+  const workflowOutlierCount = useMemo(
+    () => successRunLineData.filter((d) => d.isOutlier).length,
+    [successRunLineData]
+  );
+
   const buildWorkflowFileUrl = (workflowName: string): string => {
     if (!selectedRepo) return '#';
     // Link to GitHub Actions page filtered by workflow name
     return `https://github.com/${selectedRepo.owner}/${selectedRepo.repo}/actions?query=workflow%3A%22${encodeURIComponent(workflowName)}%22`;
-  };
-
-  const toggleJobSort = (field: JobSortField) => {
-    if (jobSortField === field) {
-      setJobSortOrder(jobSortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setJobSortField(field);
-      setJobSortOrder('desc');
-    }
   };
 
   const toggleJobSummarySort = (field: JobSummarySortField) => {
@@ -2957,7 +2878,7 @@ function DashboardContent({
                                 <td className="px-6 py-4 font-mono text-xs text-neutral-500 dark:text-neutral-400">{workflow.head_branch}</td>
                                 <td className="px-6 py-4"><StatusBadge conclusion={workflow.conclusion} /></td>
                                 <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400">{format(new Date(workflow.created_at), 'MMM dd, HH:mm')}</td>
-                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(workflow.durationInSeconds)}</td>
+                                <td className="px-6 py-4 font-mono text-neutral-600 dark:text-neutral-400">{formatDurationMinutes(calculateWorkflowDuration(workflow))}</td>
                                 <td className="px-6 py-4 text-right">
                                   <button
                                     type="button"
@@ -3246,7 +3167,7 @@ function DashboardContent({
                                   {isExpanded && (
                                     <tr>
                                       <td colSpan={5} className="p-0">
-                                        <WorkflowLineChartView summary={summary} lineData={successRunLineData} />
+                                        <WorkflowLineChartView summary={summary} lineData={successRunLineData} outlierCount={workflowOutlierCount} />
                                       </td>
                                     </tr>
                                   )}
@@ -3383,7 +3304,7 @@ function DashboardContent({
                                   {isExpanded && (
                                     <tr>
                                       <td colSpan={6} className="p-0">
-                                        <JobLineChartView summary={summary} lineData={jobSuccessRunLineData} />
+                                        <JobLineChartView summary={summary} lineData={jobSuccessRunLineData} outlierCount={jobOutlierCount} />
                                       </td>
                                     </tr>
                                   )}
