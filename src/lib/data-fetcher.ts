@@ -193,6 +193,9 @@ async function fetchRunsFromDb(repoId: number, dateFilter: { startDate?: string;
 
   if (dateFilter.startDate && dateFilter.endDate) {
     query = query.gte('date', dateFilter.startDate).lte('date', dateFilter.endDate);
+    console.log(`[fetchRunsFromDb] repoId=${repoId} filtering date >= ${dateFilter.startDate} AND date <= ${dateFilter.endDate}`);
+  } else {
+    console.log(`[fetchRunsFromDb] repoId=${repoId} NO date filter applied (startDate=${dateFilter.startDate}, endDate=${dateFilter.endDate})`);
   }
 
   if (dateFilter.limit) {
@@ -256,6 +259,7 @@ export async function fetchRuns(owner: string, repo: string, options: FetchRunsO
   const repoId = await getRepoId(owner, repo);
 
   if (options.startDate && options.endDate) {
+    console.log(`[fetchRuns] using explicit date range: ${options.startDate} → ${options.endDate}`);
     return fetchRunsFromDb(repoId, { startDate: options.startDate, endDate: options.endDate, includeSteps: options.includeSteps });
   }
 

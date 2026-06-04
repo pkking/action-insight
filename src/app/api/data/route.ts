@@ -86,11 +86,13 @@ export async function POST(request: Request) {
         if (!DATE_REGEX.test(body.startDate) || !DATE_REGEX.test(body.endDate)) {
           return NextResponse.json({ error: 'Invalid date format: use YYYY-MM-DD' }, { status: 400 });
         }
+        console.log(`[fetchRuns] ${body.owner}/${body.repo} dateRange: ${body.startDate} → ${body.endDate}`);
         const runs = await fetchRuns(body.owner, body.repo, {
           startDate: body.startDate,
           endDate: body.endDate,
           includeSteps: body.includeSteps,
         });
+        console.log(`[fetchRuns] returned ${runs.length} runs`);
         return NextResponse.json({ data: runs });
       }
 
