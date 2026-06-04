@@ -245,19 +245,6 @@ function searchParamsToUrlSearchParams(input?: Record<string, string | string[] 
   return params;
 }
 
-function getLatestPrDate(repoIndexesByKey: Record<string, PullRequestIndexFile>): Date | undefined {
-  let latestCreatedAt = '';
-
-  for (const index of Object.values(repoIndexesByKey)) {
-    const latestInRepo = index.prs[0]?.created_at;
-    if (latestInRepo && latestInRepo > latestCreatedAt) {
-      latestCreatedAt = latestInRepo;
-    }
-  }
-
-  return latestCreatedAt ? new Date(latestCreatedAt) : undefined;
-}
-
 function sortWorkflows(workflows: Run[], field: WorkflowSortField, order: WorkflowSortOrder): Run[] {
   const result = [...workflows];
   if (order === 'none') {
@@ -1722,7 +1709,6 @@ function DashboardContent({
   const repoIndexesByKey = initialRepoIndexesByKey;
   const failedRepoKeys = initialFailedRepoKeys;
   const testCaseStatsByKey = initialTestCaseStatsByKey;
-  const latestPrDate = useMemo(() => getLatestPrDate(repoIndexesByKey), [repoIndexesByKey]);
   const [detailsByNumber, setDetailsByNumber] = useState<Record<number, PullRequestDetailFile['pr']>>({});
   const [loadingDetailNumber, setLoadingDetailNumber] = useState<number | null>(null);
   const [expandedPrNumber, setExpandedPrNumber] = useState<number | null>(null);
@@ -1771,10 +1757,10 @@ function DashboardContent({
         days: workflowDays,
         startDate: workflowUseCustomRange && isValidDate(workflowStartDate) ? workflowStartDate : undefined,
         endDate: workflowUseCustomRange && isValidDate(workflowEndDate) ? workflowEndDate : undefined,
-        now: latestPrDate,
+        now: new Date(),
       });
     },
-    [workflowDays, workflowEndDate, latestPrDate, workflowStartDate, workflowUseCustomRange]
+    [workflowDays, workflowEndDate, workflowStartDate, workflowUseCustomRange]
   );
 
   const dateRange = useMemo(
