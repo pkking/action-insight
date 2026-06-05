@@ -1,20 +1,5 @@
-import { getSupabaseClient } from './supabase';
+import { getTursoClient, getRepoId } from './turso';
 import type { PullRequestDetailFile, PullRequestIndexFile, PullRequestMetricsSummary, Run } from './types';
-
-async function getRepoId(owner: string, repo: string): Promise<number> {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from('repos')
-    .select('id')
-    .eq('owner', owner)
-    .eq('repo', repo)
-    .single();
-
-  if (error || !data) {
-    throw new Error(`Repository ${owner}/${repo} not found in database`);
-  }
-  return data.id;
-}
 
 function mapPrSummary(row: Record<string, unknown>): PullRequestMetricsSummary {
   return {
@@ -59,20 +44,14 @@ function mapRunRow(row: Record<string, unknown>): Run {
 
 export async function fetchPullRequestIndex(owner: string, repo: string): Promise<PullRequestIndexFile> {
   const repoId = await getRepoId(owner, repo);
-  const supabase = getSupabaseClient();
+  const client = getTursoClient();
 
-  const { data: prs, error } = await supabase
-    .from('pr_metrics')
-    .select('*')
-    .eq('repo_id', repoId)
-    .order('created_at', { ascending: false });
+  const { rows } = await client.execute({
+    sql: `SELECT * FROM pr_metrics WHERE repo_id = ? ORDER BY created_at DESC`,
+    args: [repoId],
+  });
 
-  if (error) {
-    if (typeof window === 'undefined') console.error('Supabase error fetching PR index:', error);
-    throw new Error(`Failed to fetch PR index for ${owner}/${repo}: database query failed`);
-  }
-
-  if (!prs || prs.length === 0) {
+  if (rows.length === 0) {
     return {
       repo: `${owner}/${repo}`,
       generated_at: new Date().toISOString(),
@@ -84,59 +63,77 @@ export async function fetchPullRequestIndex(owner: string, repo: string): Promis
   return {
     repo: `${owner}/${repo}`,
     generated_at: new Date().toISOString(),
-    prs: prs.map(mapPrSummary),
+    prs: rows.map((r) => mapPrSummary(r as Record<string, unknown>)),
   };
 }
 
 export async function fetchPullRequestDetail(owner: string, repo: string, number: number): Promise<PullRequestDetailFile> {
   const repoId = await getRepoId(owner, repo);
-  const supabase = getSupabaseClient();
+  const client = getTursoClient();
 
-  const { data: prData, error } = await supabase
-    .from('pr_metrics')
-    .select('*')
-    .eq('repo_id', repoId)
-    .eq('pr_number', number)
-    .single();
+  // Fetch PR metrics
+  const { rows: prRows } = await client.execute({
+    sql: `SELECT * FROM pr_metrics WHERE repo_id = ? AND pr_number = ?`,
+    args: [repoId, number],
+  });
 
-  if (error || !prData) {
+  if (prRows.length === 0) {
     throw new Error(`PR #${number} not found for ${owner}/${repo}`);
   }
 
-  const { data: prWorkflows } = await supabase
-    .from('pr_workflows')
-    .select('run_id')
-    .eq('pr_metric_id', prData.id);
+  const prData = prRows[0] as Record<string, unknown>;
+
+  // Fetch PR workflows
+  const { rows: workflowRows } = await client.execute({
+    sql: `SELECT run_id FROM pr_workflows WHERE pr_metric_id = ?`,
+    args: [prData.id as number],
+  });
 
   let workflows: Run[] = [];
 
-  if (prWorkflows && prWorkflows.length > 0) {
-    const runIds = prWorkflows.map((pw) => pw.run_id);
-    const { data: runs } = await supabase
-      .from('runs')
-      .select('*, jobs(*)')
-      .in('id', runIds);
+  if (workflowRows.length > 0) {
+    const runIds = workflowRows.map((w) => w.run_id as number);
+    const placeholders = runIds.map(() => '?').join(',');
 
-    if (runs) {
-      workflows = runs.map((row) => {
-        const run = mapRunRow(row);
-        if (row.jobs && Array.isArray(row.jobs)) {
-          run.jobs = row.jobs.map((j: Record<string, unknown>) => ({
-            id: Number(j.id),
-            name: j.name as string,
-            status: j.status as string,
-            conclusion: (j.conclusion as string) || '',
-            created_at: j.created_at as string,
-            started_at: j.started_at as string,
-            completed_at: j.completed_at as string,
-            html_url: j.html_url as string,
-            queueDurationInSeconds: Number(j.queue_duration_seconds),
-            durationInSeconds: Number(j.duration_seconds),
-          }));
-        }
-        return run;
-      });
+    // Fetch runs with jobs via JOIN
+    const { rows: runRows } = await client.execute({
+      sql: `SELECT r.*, j.id AS job_id, j.name AS job_name, j.status AS job_status,
+                   j.conclusion AS job_conclusion, j.created_at AS job_created_at,
+                   j.started_at AS job_started_at, j.completed_at AS job_completed_at,
+                   j.html_url AS job_html_url,
+                   j.queue_duration_seconds, j.duration_seconds AS job_duration_seconds
+            FROM runs r
+            LEFT JOIN jobs j ON j.run_id = r.id
+            WHERE r.id IN (${placeholders})
+            ORDER BY r.created_at DESC`,
+      args: runIds,
+    });
+
+    // Group by run
+    const runMap = new Map<number, Run>();
+    for (const row of runRows) {
+      const runId = Number(row.id);
+      if (!runMap.has(runId)) {
+        runMap.set(runId, mapRunRow(row as Record<string, unknown>));
+      }
+      if (row.job_id != null) {
+        const run = runMap.get(runId)!;
+        run.jobs.push({
+          id: Number(row.job_id),
+          name: row.job_name as string,
+          status: row.job_status as string,
+          conclusion: (row.job_conclusion as string) || '',
+          created_at: row.job_created_at as string,
+          started_at: row.job_started_at as string,
+          completed_at: row.job_completed_at as string,
+          html_url: row.job_html_url as string,
+          queueDurationInSeconds: Number(row.queue_duration_seconds),
+          durationInSeconds: Number(row.job_duration_seconds),
+        });
+      }
     }
+
+    workflows = Array.from(runMap.values());
   }
 
   const summary = mapPrSummary(prData);

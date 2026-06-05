@@ -2,12 +2,12 @@ import * as prMetricsModule from '../../src/lib/pr-metrics';
 import type { PullRequestRef, PullRequestSnapshot, Run } from '../../src/lib/types';
 import { isGitHubRateLimitError, checkRateLimitBudget } from './github';
 import {
-  readPullRequestResolutionCacheFromSupabase,
+  readPullRequestResolutionCacheFromTurso,
   type PullRequestResolutionCacheEntry,
-  writePrMetricsToSupabase,
-  writePrWorkflowsToSupabase,
-  writePullRequestResolutionCacheToSupabase,
-} from './supabase-storage';
+  writePrMetricsToTurso,
+  writePrWorkflowsToTurso,
+  writePullRequestResolutionCacheToTurso,
+} from './turso-storage';
 
 const prMetricsInterop =
   ('buildPullRequestIndex' in prMetricsModule && typeof prMetricsModule.buildPullRequestIndex === 'function')
@@ -287,7 +287,7 @@ export async function rebuildPullRequestArtifacts({
     }
   }
 
-  const persistedCache = await readPullRequestResolutionCacheFromSupabase(repoKey, [...uniqueShas]);
+  const persistedCache = await readPullRequestResolutionCacheFromTurso(repoKey, [...uniqueShas]);
   let resolvedCacheHitCount = 0;
   let notFoundCacheHitCount = 0;
   let retryableCacheHitCount = 0;
@@ -366,7 +366,7 @@ export async function rebuildPullRequestArtifacts({
 
     cacheEntriesToWrite.push(entry);
   }
-  await writePullRequestResolutionCacheToSupabase(repoKey, cacheEntriesToWrite);
+  await writePullRequestResolutionCacheToTurso(repoKey, cacheEntriesToWrite);
   log(
     `PR resolution API calls for ${repoKey}: ${resolutionResult.coreApiCalls} core, ${resolutionResult.searchApiCalls} search; resolved ${newlyResolvedShaCount}, not_found ${newlyNotFoundShaCount}, failed ${newlyFailedShaCount}, rate_limited ${newlyRateLimitedShaCount}, skipped ${skippedPrShaCount}`
   );
@@ -400,7 +400,7 @@ export async function rebuildPullRequestArtifacts({
   const partialPrResolution = unresolvedRelevantShaCount > 0;
 
   if (prNumbers.length === 0) {
-    await writePrMetricsToSupabase(repoKey, []);
+    await writePrMetricsToTurso(repoKey, []);
     log(`PR metrics written for ${repoKey}: 0 rows; latest created_at: none`);
     return;
   }
@@ -421,13 +421,13 @@ export async function rebuildPullRequestArtifacts({
   result.index.unresolvedPrShaCount = unresolvedRelevantShaCount;
   result.index.skippedPrShaCount = skippedPrShaCount;
 
-  await writePrMetricsToSupabase(repoKey, result.index.prs);
+  await writePrMetricsToTurso(repoKey, result.index.prs);
   log(`PR metrics written for ${repoKey}: ${result.index.prs.length} rows; latest created_at: ${result.index.prs[0]?.created_at ?? 'none'}`);
 
   const prWorkflowsMap = new Map<number, number[]>();
   for (const [prNumber, detail] of result.details.entries()) {
     prWorkflowsMap.set(prNumber, detail.pr.workflows.map((w) => w.id));
   }
-  await writePrWorkflowsToSupabase(repoKey, prWorkflowsMap);
+  await writePrWorkflowsToTurso(repoKey, prWorkflowsMap);
   log(`PR workflows written for ${repoKey}: ${prWorkflowsMap.size} PRs`);
 }

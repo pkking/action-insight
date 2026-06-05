@@ -1,0 +1,42 @@
+name: Purge Turso Old Data
+on:
+  schedule:
+    # Run daily at 03:00 UTC (before hourly collect at :48)
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'Purge a specific repo (owner/repo). Leave empty for all.'
+        required: false
+        type: string
+      retention_days:
+        description: 'Retention days (default: 30)'
+        required: false
+        default: '30'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm config set registry https://registry.npmjs.org
+      - run: npm install tsx @libsql/client
+      - name: Purge old data from Turso
+        run: |
+          args=()
+          if [ -n "${PURGE_REPO}" ]; then
+            args+=(--repo "${PURGE_REPO}")
+          fi
+          npx tsx etl/scripts/purge-turso.ts "${args[@]}"
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          RETENTION_DAYS: ${{ inputs.retention_days || '30' }}
+          PURGE_REPO: ${{ inputs.repo || '' }}

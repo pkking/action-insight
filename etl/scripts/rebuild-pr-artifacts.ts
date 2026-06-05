@@ -3,12 +3,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Octokit } from '@octokit/core';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type Client } from '@libsql/client';
 import { addDays, format, parseISO } from 'date-fns';
 import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
-import { getCollectedDatesFromSupabase, checkEtlFreshness, formatFreshnessReport } from './supabase-storage.ts';
+import { getCollectedDatesFromTurso, checkEtlFreshness, formatFreshnessReport } from './turso-storage.ts';
 import type { Run } from '../../src/lib/types.ts';
 
 interface ReposConfig {
@@ -37,7 +37,7 @@ function resolveGitHubToken(repoKey: string): string | undefined {
 
 const CLI_HELP = `Usage: npx tsx etl/scripts/rebuild-pr-artifacts.ts [options]
 
-Rebuild PR metrics and PR workflow links from raw runs already stored in Supabase.
+Rebuild PR metrics and PR workflow links from raw runs already stored in Turso.
 
 Options:
   --repo, -r <owner/repo>     Rebuild one repo. Can be repeated.
@@ -159,82 +159,99 @@ function selectDates(collectedDates: string[], options: RebuildCliOptions): stri
   });
 }
 
-async function fetchRunsFromSupabase(repo: string, dates: string[]): Promise<Run[]> {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+async function fetchRunsFromTurso(repo: string, dates: string[]): Promise<Run[]> {
+  const url = process.env.TURSO_DATABASE_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN;
 
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
+  if (!url || !authToken) {
+    throw new Error('TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are required');
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const client = createClient({ url, authToken });
   const [owner, repoName] = repo.split('/');
 
-  const { data: repoData, error: repoError } = await supabase
-    .from('repos')
-    .select('id')
-    .eq('owner', owner)
-    .eq('repo', repoName)
-    .single();
+  const { rows: repoRows } = await client.execute({
+    sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
+    args: [owner, repoName],
+  });
 
-  if (repoError || !repoData) {
-    console.warn(`Repo ${repo} not found in Supabase`);
+  if (repoRows.length === 0) {
+    console.warn(`Repo ${repo} not found in Turso`);
     return [];
   }
 
+  const repoId = Number(repoRows[0].id);
   const allRuns: Run[] = [];
+  const runMap = new Map<number, Run>();
+
   for (const date of dates) {
     let dateRunCount = 0;
+    let offset = 0;
 
-    for (let from = 0; ; from += RUN_SELECT_PAGE_SIZE) {
-      const to = from + RUN_SELECT_PAGE_SIZE - 1;
-      const { data: runs, error } = await supabase
-        .from('runs')
-        .select('*, jobs(*)')
-        .eq('repo_id', repoData.id)
-        .eq('date', date)
-        .order('created_at', { ascending: false })
-        .order('id', { ascending: false })
-        .range(from, to);
+    while (true) {
+      const { rows } = await client.execute({
+        sql: `SELECT r.id, r.name, r.head_branch, r.head_sha, r.status, r.conclusion,
+                     r.event, r.created_at, r.updated_at, r.html_url, r.duration_seconds, r.date,
+                     j.id AS job_id, j.name AS job_name, j.status AS job_status,
+                     j.conclusion AS job_conclusion, j.created_at AS job_created_at,
+                     j.started_at AS job_started_at, j.completed_at AS job_completed_at,
+                     j.html_url AS job_html_url,
+                     j.queue_duration_seconds, j.duration_seconds AS job_duration_seconds
+              FROM runs r
+              LEFT JOIN jobs j ON j.run_id = r.id
+              WHERE r.repo_id = ? AND r.date = ?
+              ORDER BY r.created_at DESC, r.id DESC, j.started_at ASC
+              LIMIT ? OFFSET ?`,
+        args: [repoId, date, RUN_SELECT_PAGE_SIZE, offset],
+      });
 
-      if (error) {
-        console.warn(`Error fetching runs for ${repo} on ${date}: ${error.message}`);
+      if (rows.length === 0 && offset === 0) {
         break;
       }
 
-      for (const row of runs || []) {
-        const run: Run = {
-          id: Number(row.id),
-          name: row.name as string,
-          head_branch: row.head_branch as string,
-          head_sha: row.head_sha as string | undefined,
-          status: row.status as string,
-          conclusion: (row.conclusion as string) || '',
-          event: row.event as string | undefined,
-          created_at: row.created_at as string,
-          updated_at: row.updated_at as string,
-          html_url: row.html_url as string,
-          durationInSeconds: Number(row.duration_seconds),
-          jobs: (row.jobs || []).map((job: Record<string, unknown>) => ({
-            id: Number(job.id),
-            name: job.name as string,
-            status: job.status as string,
-            conclusion: (job.conclusion as string) || '',
-            created_at: job.created_at as string,
-            started_at: job.started_at as string,
-            completed_at: job.completed_at as string,
-            html_url: job.html_url as string,
-            queueDurationInSeconds: Number(job.queue_duration_seconds),
-            durationInSeconds: Number(job.duration_seconds),
-          })),
-        };
-        allRuns.push(run);
-        dateRunCount += 1;
+      for (const row of rows) {
+        const runId = Number(row.id);
+        if (!runMap.has(runId)) {
+          const run: Run = {
+            id: runId,
+            name: row.name as string,
+            head_branch: row.head_branch as string,
+            head_sha: row.head_sha as string | undefined,
+            status: row.status as string,
+            conclusion: (row.conclusion as string) || '',
+            event: row.event as string | undefined,
+            created_at: row.created_at as string,
+            updated_at: row.updated_at as string,
+            html_url: row.html_url as string,
+            durationInSeconds: Number(row.duration_seconds),
+            jobs: [],
+          };
+          runMap.set(runId, run);
+          allRuns.push(run);
+          dateRunCount += 1;
+        }
+        if (row.job_id != null) {
+          const run = runMap.get(runId)!;
+          run.jobs.push({
+            id: Number(row.job_id),
+            name: row.job_name as string,
+            status: row.job_status as string,
+            conclusion: (row.job_conclusion as string) || '',
+            created_at: row.job_created_at as string,
+            started_at: row.job_started_at as string,
+            completed_at: row.job_completed_at as string,
+            html_url: row.job_html_url as string,
+            queueDurationInSeconds: Number(row.queue_duration_seconds),
+            durationInSeconds: Number(row.job_duration_seconds),
+          });
+        }
       }
 
-      if (!runs || runs.length < RUN_SELECT_PAGE_SIZE) {
+      if (rows.length < RUN_SELECT_PAGE_SIZE) {
         break;
       }
+
+      offset += RUN_SELECT_PAGE_SIZE;
     }
 
     console.log(`Fetched ${dateRunCount} runs for ${repo} on ${date}`);
@@ -266,7 +283,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     }
 
     try {
-      const collectedDates = await getCollectedDatesFromSupabase(repoKey);
+      const collectedDates = await getCollectedDatesFromTurso(repoKey);
       const dates = selectDates(collectedDates, options);
       if (dates.length === 0) {
         console.warn(`Skipping ${repoKey}: no collected dates matched the selected range`);
@@ -274,7 +291,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       }
 
       console.log(`Rebuilding PR artifacts for ${repoKey} from ${dates[0]} to ${dates[dates.length - 1]} (${dates.length} date(s))`);
-      const runs = await fetchRunsFromSupabase(repoKey, dates);
+      const runs = await fetchRunsFromTurso(repoKey, dates);
       const token = resolveGitHubToken(repoKey);
       const octokit = token ? new Octokit({ auth: token }) : undefined;
       if (!octokit) {

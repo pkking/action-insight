@@ -49,17 +49,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
-      - name: Apply Supabase migrations
-        run: npm run migrate:supabase
-        env:
-          AUTO_MIGRATE_SUPABASE: 1
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
-          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
-          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-          SUPABASE_DB_SSL: no-verify
+      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
       - id: collect
         continue-on-error: true
         run: |
@@ -73,8 +63,8 @@ jobs:
           npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.VLLM_PROJECT_VLLM_ASCEND }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           RETENTION_DAYS: 90
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
@@ -84,12 +74,12 @@ jobs:
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "vllm-project/vllm-ascend"
         env:
           GITHUB_TOKEN: ${{ secrets.VLLM_PROJECT_VLLM_ASCEND }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           VERBOSE: 1
       - if: always() && steps.collect.outcome == 'failure'
         run: |
-          echo "Collection completed with partial failures. Data was written to Supabase."
+          echo "Collection completed with partial failures. Data was written to Turso."
           exit 1
 
   collect-verl:
@@ -101,17 +91,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
-      - name: Apply Supabase migrations
-        run: npm run migrate:supabase
-        env:
-          AUTO_MIGRATE_SUPABASE: 1
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
-          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
-          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-          SUPABASE_DB_SSL: no-verify
+      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
       - id: collect
         continue-on-error: true
         run: |
@@ -125,8 +105,8 @@ jobs:
           npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.VERL_PROJECT_VERL }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           RETENTION_DAYS: 90
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
@@ -136,12 +116,12 @@ jobs:
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "verl-project/verl"
         env:
           GITHUB_TOKEN: ${{ secrets.VERL_PROJECT_VERL }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           VERBOSE: 1
       - if: always() && steps.collect.outcome == 'failure'
         run: |
-          echo "Collection completed with partial failures. Data was written to Supabase."
+          echo "Collection completed with partial failures. Data was written to Turso."
           exit 1
 
   collect-triton-ascend:
@@ -153,17 +133,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
-      - name: Apply Supabase migrations
-        run: npm run migrate:supabase
-        env:
-          AUTO_MIGRATE_SUPABASE: 1
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
-          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
-          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-          SUPABASE_DB_SSL: no-verify
+      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
       - id: collect
         continue-on-error: true
         run: |
@@ -177,8 +147,8 @@ jobs:
           npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.TRITON_LANG_TRITON_ASCEND }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           RETENTION_DAYS: 90
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
@@ -188,12 +158,12 @@ jobs:
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "triton-lang/triton-ascend"
         env:
           GITHUB_TOKEN: ${{ secrets.TRITON_LANG_TRITON_ASCEND }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           VERBOSE: 1
       - if: always() && steps.collect.outcome == 'failure'
         run: |
-          echo "Collection completed with partial failures. Data was written to Supabase."
+          echo "Collection completed with partial failures. Data was written to Turso."
           exit 1
 
   collect-llamafactory:
@@ -205,17 +175,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
-      - name: Apply Supabase migrations
-        run: npm run migrate:supabase
-        env:
-          AUTO_MIGRATE_SUPABASE: 1
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
-          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
-          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-          SUPABASE_DB_SSL: no-verify
+      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
       - id: collect
         continue-on-error: true
         run: |
@@ -229,8 +189,8 @@ jobs:
           npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.HIYOUGA_LLAMAFACTORY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           RETENTION_DAYS: 90
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
@@ -240,12 +200,12 @@ jobs:
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "hiyouga/LlamaFactory"
         env:
           GITHUB_TOKEN: ${{ secrets.HIYOUGA_LLAMAFACTORY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           VERBOSE: 1
       - if: always() && steps.collect.outcome == 'failure'
         run: |
-          echo "Collection completed with partial failures. Data was written to Supabase."
+          echo "Collection completed with partial failures. Data was written to Turso."
           exit 1
 
   collect-ms-swift:
@@ -257,17 +217,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
-      - name: Apply Supabase migrations
-        run: npm run migrate:supabase
-        env:
-          AUTO_MIGRATE_SUPABASE: 1
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
-          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
-          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-          SUPABASE_DB_SSL: no-verify
+      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
       - id: collect
         continue-on-error: true
         run: |
@@ -281,8 +231,8 @@ jobs:
           npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.MODELSCOPE_MS_SWIFT }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           RETENTION_DAYS: 90
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
@@ -292,12 +242,12 @@ jobs:
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "modelscope/ms-swift"
         env:
           GITHUB_TOKEN: ${{ secrets.MODELSCOPE_MS_SWIFT }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           VERBOSE: 1
       - if: always() && steps.collect.outcome == 'failure'
         run: |
-          echo "Collection completed with partial failures. Data was written to Supabase."
+          echo "Collection completed with partial failures. Data was written to Turso."
           exit 1
 
   collect-sglang:
@@ -309,17 +259,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
-      - name: Apply Supabase migrations
-        run: npm run migrate:supabase
-        env:
-          AUTO_MIGRATE_SUPABASE: 1
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
-          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
-          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-          SUPABASE_DB_SSL: no-verify
+      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
       - id: collect
         continue-on-error: true
         run: |
@@ -333,8 +273,8 @@ jobs:
           npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.SGL_PROJECT_SGLANG }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           RETENTION_DAYS: 90
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
@@ -344,12 +284,12 @@ jobs:
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "sgl-project/sglang"
         env:
           GITHUB_TOKEN: ${{ secrets.SGL_PROJECT_SGLANG }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           VERBOSE: 1
       - if: always() && steps.collect.outcome == 'failure'
         run: |
-          echo "Collection completed with partial failures. Data was written to Supabase."
+          echo "Collection completed with partial failures. Data was written to Turso."
           exit 1
 
   collect-tilelang-ascend:
@@ -361,17 +301,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
-      - name: Apply Supabase migrations
-        run: npm run migrate:supabase
-        env:
-          AUTO_MIGRATE_SUPABASE: 1
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
-          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
-          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-          SUPABASE_DB_SSL: no-verify
+      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
       - id: collect
         continue-on-error: true
         run: |
@@ -385,8 +315,8 @@ jobs:
           npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.TILE_AI_TILELANG_ASCEND }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           RETENTION_DAYS: 90
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
@@ -396,12 +326,12 @@ jobs:
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "tile-ai/tilelang-ascend"
         env:
           GITHUB_TOKEN: ${{ secrets.TILE_AI_TILELANG_ASCEND }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           VERBOSE: 1
       - if: always() && steps.collect.outcome == 'failure'
         run: |
-          echo "Collection completed with partial failures. Data was written to Supabase."
+          echo "Collection completed with partial failures. Data was written to Turso."
           exit 1
 
   rebuild:
@@ -421,17 +351,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
-      - name: Apply Supabase migrations
-        run: npm run migrate:supabase
-        env:
-          AUTO_MIGRATE_SUPABASE: 1
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
-          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
-          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-          SUPABASE_DB_SSL: no-verify
+      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
       - name: Set default date range for scheduled runs
         if: github.event_name == 'schedule'
         run: |
@@ -454,8 +374,8 @@ jobs:
           REBUILD_REPO: ${{ inputs.repo || '' }}
           REBUILD_START_DATE: ${{ inputs.start_date || env.SCHEDULED_START_DATE || '' }}
           REBUILD_END_DATE: ${{ inputs.end_date || env.SCHEDULED_END_DATE || '' }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT: 20
           PR_ARTIFACT_SHA_RESOLUTION_LIMIT: 1000
           GITHUB_TOKEN_PER_REPO_HIYOUGA_LLAMAFACTORY: ${{ secrets.HIYOUGA_LLAMAFACTORY }}

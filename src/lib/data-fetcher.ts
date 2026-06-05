@@ -1,23 +1,5 @@
-import { getSupabaseClient } from './supabase';
+import { getTursoClient } from './turso';
 import type { Index, DayData, Run, Job, Step } from './types';
-
-const RUN_WITH_JOBS_SELECT =
-  'id,repo_id,name,head_branch,head_sha,status,conclusion,event,created_at,updated_at,html_url,duration_seconds,date,jobs(id,run_id,name,status,conclusion,created_at,started_at,completed_at,html_url,queue_duration_seconds,duration_seconds)' as const;
-
-async function getRepoId(owner: string, repo: string): Promise<number> {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from('repos')
-    .select('id')
-    .eq('owner', owner)
-    .eq('repo', repo)
-    .single();
-
-  if (error || !data) {
-    throw new Error(`Repository ${owner}/${repo} not found in database`);
-  }
-  return data.id;
-}
 
 function mapRunRow(row: Record<string, unknown>): Run {
   return {
@@ -67,26 +49,21 @@ function mapStepRow(row: Record<string, unknown>): Step {
 async function fetchStepsForJobs(jobIds: number[]): Promise<Map<number, Step[]>> {
   const uniqueJobIds = Array.from(new Set(jobIds));
   if (uniqueJobIds.length === 0) return new Map();
-  const supabase = getSupabaseClient();
+  const client = getTursoClient();
 
-  // Supabase IN clause has a limit; chunk if needed
   const stepsByJob = new Map<number, Step[]>();
   const CHUNK = 500;
   for (let i = 0; i < uniqueJobIds.length; i += CHUNK) {
     const chunk = uniqueJobIds.slice(i, i + CHUNK);
-    const { data, error } = await supabase
-      .from('steps')
-      .select('job_id,number,name,status,conclusion,started_at,completed_at,duration_seconds')
-      .in('job_id', chunk)
-      .order('job_id', { ascending: true })
-      .order('number', { ascending: true });
+    const placeholders = chunk.map(() => '?').join(',');
+    const { rows } = await client.execute({
+      sql: `SELECT job_id, number, name, status, conclusion, started_at, completed_at, duration_seconds
+            FROM steps WHERE job_id IN (${placeholders})
+            ORDER BY job_id, number`,
+      args: chunk,
+    });
 
-    if (error) {
-      if (typeof window === 'undefined') console.error('Supabase error fetching steps:', error);
-      continue;
-    }
-
-    for (const row of data || []) {
+    for (const row of rows) {
       const jobId = Number(row.job_id);
       if (!stepsByJob.has(jobId)) stepsByJob.set(jobId, []);
       stepsByJob.get(jobId)!.push(mapStepRow(row));
@@ -109,6 +86,12 @@ function attachStepsToRuns(runs: Run[], stepsByJob: Map<number, Step[]>): void {
   }
 }
 
+async function fetchStepsAndAttach(runs: Run[]): Promise<void> {
+  const allJobIds = runs.flatMap((r) => r.jobs?.map((j) => j.id) ?? []);
+  const stepsByJob = await fetchStepsForJobs(allJobIds);
+  attachStepsToRuns(runs, stepsByJob);
+}
+
 export interface FetchRunsOptions {
   days?: number;
   startDate?: string;
@@ -118,21 +101,22 @@ export interface FetchRunsOptions {
 }
 
 export async function fetchIndex(owner: string, repo: string): Promise<Index> {
-  const repoId = await getRepoId(owner, repo);
-  const supabase = getSupabaseClient();
-
-  const { data: dates, error } = await supabase
-    .from('runs')
-    .select('date')
-    .eq('repo_id', repoId)
-    .order('date', { ascending: false });
-
-  if (error) {
-    console.error('Supabase error fetching index:', error);
-    throw new Error(`Failed to fetch index for ${owner}/${repo}: database query failed`);
+  const client = getTursoClient();
+  const { rows } = await client.execute({
+    sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
+    args: [owner, repo],
+  });
+  if (rows.length === 0) {
+    throw new Error(`Repository ${owner}/${repo} not found in database`);
   }
+  const repoId = Number(rows[0].id);
 
-  const uniqueDates = [...new Set(dates.map((d) => `${d.date}`))];
+  const { rows: dateRows } = await client.execute({
+    sql: `SELECT date FROM runs WHERE repo_id = ? ORDER BY date DESC`,
+    args: [repoId],
+  });
+
+  const uniqueDates = [...new Set(dateRows.map((d) => d.date as string))];
   const files = uniqueDates.map((d) => `${d}.json`);
   const latest = files[0]?.replace('.json', '') || '';
 
@@ -148,73 +132,156 @@ export async function fetchIndex(owner: string, repo: string): Promise<Index> {
 
 export async function fetchDay(owner: string, repo: string, fileName: string): Promise<DayData> {
   const date = fileName.replace('.json', '');
-  const repoId = await getRepoId(owner, repo);
-  const supabase = getSupabaseClient();
+  const client = getTursoClient();
 
-  const { data: runs, error } = await supabase
-    .from('runs')
-    .select(RUN_WITH_JOBS_SELECT)
-    .eq('repo_id', repoId)
-    .eq('date', date);
-
-  if (error) {
-    if (typeof window === 'undefined') console.error('Supabase error fetching day data:', error);
-    throw new Error(`Failed to fetch data for ${fileName}: database query failed`);
+  const { rows: repoRows } = await client.execute({
+    sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
+    args: [owner, repo],
+  });
+  if (repoRows.length === 0) {
+    throw new Error(`Repository ${owner}/${repo} not found in database`);
   }
+  const repoId = Number(repoRows[0].id);
 
-  const mappedRuns: Run[] = (runs || []).map((row) => {
-    const run = mapRunRow(row);
-    if (row.jobs && Array.isArray(row.jobs)) {
-      run.jobs = row.jobs.map((j: Record<string, unknown>) => mapJobRow(j));
-    }
-    return run;
+  // Fetch runs with jobs via LEFT JOIN
+  const { rows } = await client.execute({
+    sql: `SELECT r.id, r.name, r.head_branch, r.head_sha, r.status, r.conclusion,
+                 r.event, r.created_at, r.updated_at, r.html_url, r.duration_seconds, r.date,
+                 j.id AS job_id, j.name AS job_name, j.status AS job_status,
+                 j.conclusion AS job_conclusion, j.created_at AS job_created_at,
+                 j.started_at AS job_started_at, j.completed_at AS job_completed_at,
+                 j.html_url AS job_html_url,
+                 j.queue_duration_seconds, j.duration_seconds AS job_duration_seconds
+          FROM runs r
+          LEFT JOIN jobs j ON j.run_id = r.id
+          WHERE r.repo_id = ? AND r.date = ?
+          ORDER BY r.created_at DESC, j.started_at ASC`,
+    args: [repoId, date],
   });
 
-  // fetchDay always loads steps (legacy single-day retrieval API)
+  // Group by run
+  const runMap = new Map<number, Run>();
+  for (const row of rows) {
+    const runId = Number(row.id);
+    if (!runMap.has(runId)) {
+      runMap.set(runId, {
+        id: runId,
+        name: row.name as string,
+        head_branch: row.head_branch as string,
+        head_sha: row.head_sha as string | undefined,
+        status: row.status as string,
+        conclusion: (row.conclusion as string) || '',
+        event: row.event as string | undefined,
+        created_at: row.created_at as string,
+        updated_at: row.updated_at as string,
+        html_url: row.html_url as string,
+        durationInSeconds: Number(row.duration_seconds),
+        pull_requests: [],
+        jobs: [],
+      });
+    }
+    if (row.job_id != null) {
+      const run = runMap.get(runId)!;
+      run.jobs.push({
+        id: Number(row.job_id),
+        name: row.job_name as string,
+        status: row.job_status as string,
+        conclusion: (row.job_conclusion as string) || '',
+        created_at: row.job_created_at as string,
+        started_at: row.job_started_at as string,
+        completed_at: row.job_completed_at as string,
+        html_url: row.job_html_url as string,
+        queueDurationInSeconds: Number(row.queue_duration_seconds),
+        durationInSeconds: Number(row.job_duration_seconds),
+      });
+    }
+  }
+
+  const mappedRuns = Array.from(runMap.values());
+
+  // fetchDay always loads steps
   await fetchStepsAndAttach(mappedRuns);
 
   return { date, repo: `${owner}/${repo}`, runs: mappedRuns };
 }
 
-async function fetchStepsAndAttach(runs: Run[]): Promise<void> {
-  const allJobIds = runs.flatMap((r) => r.jobs?.map((j) => j.id) ?? []);
-  const stepsByJob = await fetchStepsForJobs(allJobIds);
-  attachStepsToRuns(runs, stepsByJob);
-}
+async function fetchRunsFromDb(repoId: number, dateFilter: {
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+  includeSteps?: boolean;
+}): Promise<Run[]> {
+  const client = getTursoClient();
 
-async function fetchRunsFromDb(repoId: number, dateFilter: { startDate?: string; endDate?: string; limit?: number; includeSteps?: boolean }): Promise<Run[]> {
-  const supabase = getSupabaseClient();
-
-  let query = supabase
-    .from('runs')
-    .select(RUN_WITH_JOBS_SELECT)
-    .eq('repo_id', repoId)
-    .order('date', { ascending: false });
+  let sql = `SELECT r.id, r.name, r.head_branch, r.head_sha, r.status, r.conclusion,
+                    r.event, r.created_at, r.updated_at, r.html_url, r.duration_seconds, r.date,
+                    j.id AS job_id, j.name AS job_name, j.status AS job_status,
+                    j.conclusion AS job_conclusion, j.created_at AS job_created_at,
+                    j.started_at AS job_started_at, j.completed_at AS job_completed_at,
+                    j.html_url AS job_html_url,
+                    j.queue_duration_seconds, j.duration_seconds AS job_duration_seconds
+             FROM runs r
+             LEFT JOIN jobs j ON j.run_id = r.id
+             WHERE r.repo_id = ?`;
+  const args: (string | number)[] = [repoId];
 
   if (dateFilter.startDate && dateFilter.endDate) {
-    query = query.gte('date', dateFilter.startDate).lte('date', dateFilter.endDate);
+    sql += ` AND r.date >= ? AND r.date <= ?`;
+    args.push(dateFilter.startDate, dateFilter.endDate);
+  } else if (dateFilter.startDate) {
+    sql += ` AND r.date >= ?`;
+    args.push(dateFilter.startDate);
   }
+
+  sql += ` ORDER BY r.created_at DESC, j.started_at ASC`;
 
   if (dateFilter.limit) {
-    query = query.limit(dateFilter.limit);
+    sql += ` LIMIT ?`;
+    args.push(dateFilter.limit);
   }
 
-  const { data: runs, error } = await query;
+  const { rows } = await client.execute({ sql, args });
 
-  if (error) {
-    if (typeof window === 'undefined') console.error('Supabase error fetching runs:', error);
-    throw new Error(`Failed to fetch runs: database query failed`);
-  }
-
-  const mappedRuns: Run[] = (runs || []).map((row) => {
-    const run = mapRunRow(row);
-    if (row.jobs && Array.isArray(row.jobs)) {
-      run.jobs = row.jobs.map((j: Record<string, unknown>) => mapJobRow(j));
+  // Group by run
+  const runMap = new Map<number, Run>();
+  for (const row of rows) {
+    const runId = Number(row.id);
+    if (!runMap.has(runId)) {
+      runMap.set(runId, {
+        id: runId,
+        name: row.name as string,
+        head_branch: row.head_branch as string,
+        head_sha: row.head_sha as string | undefined,
+        status: row.status as string,
+        conclusion: (row.conclusion as string) || '',
+        event: row.event as string | undefined,
+        created_at: row.created_at as string,
+        updated_at: row.updated_at as string,
+        html_url: row.html_url as string,
+        durationInSeconds: Number(row.duration_seconds),
+        pull_requests: [],
+        jobs: [],
+      });
     }
-    return run;
-  });
+    if (row.job_id != null) {
+      const run = runMap.get(runId)!;
+      run.jobs.push({
+        id: Number(row.job_id),
+        name: row.job_name as string,
+        status: row.job_status as string,
+        conclusion: (row.job_conclusion as string) || '',
+        created_at: row.job_created_at as string,
+        started_at: row.job_started_at as string,
+        completed_at: row.job_completed_at as string,
+        html_url: row.job_html_url as string,
+        queueDurationInSeconds: Number(row.queue_duration_seconds),
+        durationInSeconds: Number(row.job_duration_seconds),
+      });
+    }
+  }
 
-  // Fetch and attach steps only if requested
+  const mappedRuns = Array.from(runMap.values());
+
   if (dateFilter.includeSteps) {
     await fetchStepsAndAttach(mappedRuns);
   }
@@ -240,9 +307,17 @@ function selectFiles(files: string[], options: FetchRunsOptions): string[] {
 }
 
 async function fetchRunsFromFiles(owner: string, repo: string, files: string[]): Promise<Run[]> {
-  const repoId = await getRepoId(owner, repo);
-  const allRuns: Run[] = [];
+  const client = getTursoClient();
+  const { rows: repoRows } = await client.execute({
+    sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
+    args: [owner, repo],
+  });
+  if (repoRows.length === 0) {
+    throw new Error(`Repository ${owner}/${repo} not found in database`);
+  }
+  const repoId = Number(repoRows[0].id);
 
+  const allRuns: Run[] = [];
   for (const file of files) {
     const date = file.replace('.json', '');
     const runs = await fetchRunsFromDb(repoId, { startDate: date, endDate: date });
@@ -253,7 +328,15 @@ async function fetchRunsFromFiles(owner: string, repo: string, files: string[]):
 }
 
 export async function fetchRuns(owner: string, repo: string, options: FetchRunsOptions = {}): Promise<Run[]> {
-  const repoId = await getRepoId(owner, repo);
+  const client = getTursoClient();
+  const { rows: repoRows } = await client.execute({
+    sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
+    args: [owner, repo],
+  });
+  if (repoRows.length === 0) {
+    throw new Error(`Repository ${owner}/${repo} not found in database`);
+  }
+  const repoId = Number(repoRows[0].id);
 
   if (options.startDate && options.endDate) {
     return fetchRunsFromDb(repoId, { startDate: options.startDate, endDate: options.endDate, includeSteps: options.includeSteps });
@@ -273,7 +356,15 @@ export async function fetchRunsFromIndex(
   repoIndex: Index,
   options: FetchRunsOptions = {}
 ): Promise<Run[]> {
-  const repoId = await getRepoId(owner, repo);
+  const client = getTursoClient();
+  const { rows: repoRows } = await client.execute({
+    sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
+    args: [owner, repo],
+  });
+  if (repoRows.length === 0) {
+    throw new Error(`Repository ${owner}/${repo} not found in database`);
+  }
+  const repoId = Number(repoRows[0].id);
 
   if (options.startDate && options.endDate) {
     return fetchRunsFromDb(repoId, { startDate: options.startDate, endDate: options.endDate, includeSteps: options.includeSteps });
@@ -289,7 +380,16 @@ export async function fetchRunsFromIndex(
 }
 
 export async function fetchLatestRuns(owner: string, repo: string, maxFiles = 7): Promise<Run[]> {
-  const repoId = await getRepoId(owner, repo);
+  const client = getTursoClient();
+  const { rows: repoRows } = await client.execute({
+    sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
+    args: [owner, repo],
+  });
+  if (repoRows.length === 0) {
+    throw new Error(`Repository ${owner}/${repo} not found in database`);
+  }
+  const repoId = Number(repoRows[0].id);
+
   return fetchRunsFromDb(repoId, { limit: maxFiles * 20 });
 }
 
