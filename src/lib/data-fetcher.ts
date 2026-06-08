@@ -213,74 +213,77 @@ async function fetchRunsFromDb(repoId: number, dateFilter: {
 }): Promise<Run[]> {
   const client = getTursoClient();
 
-  let sql = `SELECT r.id, r.name, r.head_branch, r.head_sha, r.status, r.conclusion,
-                    r.event, r.created_at, r.updated_at, r.html_url, r.duration_seconds, r.date,
-                    j.id AS job_id, j.name AS job_name, j.status AS job_status,
-                    j.conclusion AS job_conclusion, j.created_at AS job_created_at,
-                    j.started_at AS job_started_at, j.completed_at AS job_completed_at,
-                    j.html_url AS job_html_url,
-                    j.queue_duration_seconds, j.duration_seconds AS job_duration_seconds
-             FROM runs r
-             LEFT JOIN jobs j ON j.run_id = r.id
-             WHERE r.repo_id = ?`;
-  const args: (string | number)[] = [repoId];
+  // Step 1: Query runs only (avoids LEFT JOIN + LIMIT truncation bug)
+  let runsSql = `SELECT id, name, head_branch, head_sha, status, conclusion,
+                        event, created_at, updated_at, html_url, duration_seconds, date
+                 FROM runs WHERE repo_id = ?`;
+  const runsArgs: (string | number)[] = [repoId];
 
   if (dateFilter.startDate && dateFilter.endDate) {
-    sql += ` AND r.date >= ? AND r.date <= ?`;
-    args.push(dateFilter.startDate, dateFilter.endDate);
+    runsSql += ` AND date >= ? AND date <= ?`;
+    runsArgs.push(dateFilter.startDate, dateFilter.endDate);
   } else if (dateFilter.startDate) {
-    sql += ` AND r.date >= ?`;
-    args.push(dateFilter.startDate);
+    runsSql += ` AND date >= ?`;
+    runsArgs.push(dateFilter.startDate);
   }
 
-  sql += ` ORDER BY r.created_at DESC, j.started_at ASC`;
+  runsSql += ` ORDER BY created_at DESC`;
 
   if (dateFilter.limit) {
-    sql += ` LIMIT ?`;
-    args.push(dateFilter.limit);
+    runsSql += ` LIMIT ?`;
+    runsArgs.push(dateFilter.limit);
   }
 
-  const { rows } = await client.execute({ sql, args });
+  const { rows: runRows } = await client.execute({ sql: runsSql, args: runsArgs });
+  if (runRows.length === 0) return [];
 
-  // Group by run
-  const runMap = new Map<number, Run>();
-  for (const row of rows) {
+  // Step 2: Batch-fetch jobs for these runs
+  const runIds = runRows.map((r) => r.id as number);
+  const placeholders = runIds.map(() => '?').join(',');
+  const { rows: jobRows } = await client.execute({
+    sql: `SELECT id, run_id, name, status, conclusion, created_at, started_at,
+                 completed_at, html_url, queue_duration_seconds, duration_seconds
+          FROM jobs WHERE run_id IN (${placeholders}) ORDER BY started_at ASC`,
+    args: runIds,
+  });
+
+  const jobsByRun = new Map<number, Array<Record<string, unknown>>>();
+  for (const row of jobRows) {
+    const rid = Number(row.run_id);
+    if (!jobsByRun.has(rid)) jobsByRun.set(rid, []);
+    jobsByRun.get(rid)!.push(row);
+  }
+
+  const mappedRuns: Run[] = runRows.map((row) => {
     const runId = Number(row.id);
-    if (!runMap.has(runId)) {
-      runMap.set(runId, {
-        id: runId,
-        name: row.name as string,
-        head_branch: row.head_branch as string,
-        head_sha: row.head_sha as string | undefined,
-        status: row.status as string,
-        conclusion: (row.conclusion as string) || '',
-        event: row.event as string | undefined,
-        created_at: row.created_at as string,
-        updated_at: row.updated_at as string,
-        html_url: row.html_url as string,
-        durationInSeconds: Number(row.duration_seconds),
-        pull_requests: [],
-        jobs: [],
-      });
-    }
-    if (row.job_id != null) {
-      const run = runMap.get(runId)!;
-      run.jobs!.push({
-        id: Number(row.job_id),
-        name: row.job_name as string,
-        status: row.job_status as string,
-        conclusion: (row.job_conclusion as string) || '',
-        created_at: row.job_created_at as string,
-        started_at: row.job_started_at as string,
-        completed_at: row.job_completed_at as string,
-        html_url: row.job_html_url as string,
-        queueDurationInSeconds: Number(row.queue_duration_seconds),
-        durationInSeconds: Number(row.job_duration_seconds),
-      });
-    }
-  }
-
-  const mappedRuns = Array.from(runMap.values());
+    const run: Run = {
+      id: runId,
+      name: row.name as string,
+      head_branch: row.head_branch as string,
+      head_sha: row.head_sha as string | undefined,
+      status: row.status as string,
+      conclusion: (row.conclusion as string) || '',
+      event: row.event as string | undefined,
+      created_at: row.created_at as string,
+      updated_at: row.updated_at as string,
+      html_url: row.html_url as string,
+      durationInSeconds: Number(row.duration_seconds),
+      pull_requests: [],
+      jobs: (jobsByRun.get(runId) || []).map((j) => ({
+        id: Number(j.id),
+        name: j.name as string,
+        status: j.status as string,
+        conclusion: (j.conclusion as string) || '',
+        created_at: j.created_at as string,
+        started_at: j.started_at as string,
+        completed_at: j.completed_at as string,
+        html_url: j.html_url as string,
+        queueDurationInSeconds: Number(j.queue_duration_seconds),
+        durationInSeconds: Number(j.duration_seconds),
+      })),
+    };
+    return run;
+  });
 
   if (dateFilter.includeSteps) {
     await fetchStepsAndAttach(mappedRuns);

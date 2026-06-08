@@ -171,6 +171,7 @@ async function main() {
   console.log('(jobs/steps/pr_workflows deleted via CASCADE)');
 
   await printTableSizes();
+  client.close();
 }
 
 main().catch(console.error);

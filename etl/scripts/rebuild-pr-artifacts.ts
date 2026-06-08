@@ -182,36 +182,49 @@ async function fetchRunsFromTurso(repo: string, dates: string[]): Promise<Run[]>
 
   const repoId = Number(repoRows[0].id);
   const allRuns: Run[] = [];
-  const runMap = new Map<number, Run>();
 
   for (const date of dates) {
     let dateRunCount = 0;
     let offset = 0;
 
     while (true) {
-      const { rows } = await client.execute({
-        sql: `SELECT r.id, r.name, r.head_branch, r.head_sha, r.status, r.conclusion,
-                     r.event, r.created_at, r.updated_at, r.html_url, r.duration_seconds, r.date,
-                     j.id AS job_id, j.name AS job_name, j.status AS job_status,
-                     j.conclusion AS job_conclusion, j.created_at AS job_created_at,
-                     j.started_at AS job_started_at, j.completed_at AS job_completed_at,
-                     j.html_url AS job_html_url,
-                     j.queue_duration_seconds, j.duration_seconds AS job_duration_seconds
-              FROM runs r
-              LEFT JOIN jobs j ON j.run_id = r.id
-              WHERE r.repo_id = ? AND r.date = ?
-              ORDER BY r.created_at DESC, r.id DESC, j.started_at ASC
+      // Step 1: Paginate runs only
+      const { rows: runRows } = await client.execute({
+        sql: `SELECT id, name, head_branch, head_sha, status, conclusion,
+                     event, created_at, updated_at, html_url, duration_seconds, date
+              FROM runs
+              WHERE repo_id = ? AND date = ?
+              ORDER BY created_at DESC, id DESC
               LIMIT ? OFFSET ?`,
         args: [repoId, date, RUN_SELECT_PAGE_SIZE, offset],
       });
 
-      if (rows.length === 0 && offset === 0) {
+      if (runRows.length === 0 && offset === 0) {
         break;
       }
 
-      for (const row of rows) {
-        const runId = Number(row.id);
-        if (!runMap.has(runId)) {
+      const runIds = runRows.map((r) => r.id as number);
+
+      // Step 2: Batch-fetch jobs for these runs
+      if (runIds.length > 0) {
+        const placeholders = runIds.map(() => '?').join(',');
+        const { rows: jobRows } = await client.execute({
+          sql: `SELECT id, run_id, name, status, conclusion, created_at, started_at,
+                       completed_at, html_url, queue_duration_seconds, duration_seconds
+                FROM jobs WHERE run_id IN (${placeholders})
+                ORDER BY run_id, started_at ASC`,
+          args: runIds,
+        });
+
+        const jobsByRun = new Map<number, Array<Record<string, unknown>>>();
+        for (const j of jobRows) {
+          const rid = Number(j.run_id);
+          if (!jobsByRun.has(rid)) jobsByRun.set(rid, []);
+          jobsByRun.get(rid)!.push(j);
+        }
+
+        for (const row of runRows) {
+          const runId = Number(row.id);
           const run: Run = {
             id: runId,
             name: row.name as string,
@@ -224,30 +237,25 @@ async function fetchRunsFromTurso(repo: string, dates: string[]): Promise<Run[]>
             updated_at: row.updated_at as string,
             html_url: row.html_url as string,
             durationInSeconds: Number(row.duration_seconds),
-            jobs: [],
+            jobs: (jobsByRun.get(runId) || []).map((j) => ({
+              id: Number(j.id),
+              name: j.name as string,
+              status: j.status as string,
+              conclusion: (j.conclusion as string) || '',
+              created_at: j.created_at as string,
+              started_at: j.started_at as string,
+              completed_at: j.completed_at as string,
+              html_url: j.html_url as string,
+              queueDurationInSeconds: Number(j.queue_duration_seconds),
+              durationInSeconds: Number(j.duration_seconds),
+            })),
           };
-          runMap.set(runId, run);
           allRuns.push(run);
           dateRunCount += 1;
         }
-        if (row.job_id != null) {
-          const run = runMap.get(runId)!;
-          run.jobs.push({
-            id: Number(row.job_id),
-            name: row.job_name as string,
-            status: row.job_status as string,
-            conclusion: (row.job_conclusion as string) || '',
-            created_at: row.job_created_at as string,
-            started_at: row.job_started_at as string,
-            completed_at: row.job_completed_at as string,
-            html_url: row.job_html_url as string,
-            queueDurationInSeconds: Number(row.queue_duration_seconds),
-            durationInSeconds: Number(row.job_duration_seconds),
-          });
-        }
       }
 
-      if (rows.length < RUN_SELECT_PAGE_SIZE) {
+      if (runRows.length < RUN_SELECT_PAGE_SIZE) {
         break;
       }
 

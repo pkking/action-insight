@@ -357,8 +357,7 @@ export async function getExistingRunIdsWithJobsFromTurso(repo: string): Promise<
 
   while (true) {
     const { rows } = await client.execute({
-      sql: `SELECT r.id FROM runs r INNER JOIN jobs j ON j.run_id = r.id
-            WHERE r.repo_id = ? GROUP BY r.id ORDER BY r.id LIMIT ? OFFSET ?`,
+      sql: 'SELECT r.id FROM runs r WHERE r.repo_id = ? AND EXISTS (SELECT 1 FROM jobs j WHERE j.run_id = r.id) ORDER BY r.id LIMIT ? OFFSET ?',
       args: [repoId, TURSO_PAGE_SIZE, offset],
     });
 

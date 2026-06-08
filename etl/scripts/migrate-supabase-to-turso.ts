@@ -395,7 +395,7 @@ async function main(): Promise<void> {
 
     let migratedCount = 0;
     let batchNum = 0;
-    let lastCursorValue: string | number | null = null;
+    let lastCursorValue: { job_id?: number; number?: number } | string | number | null = null;
 
     // Paginated fetch + write loop using keyset pagination (WHERE id > cursor)
     // This avoids PostgreSQL OFFSET slowness on large tables
@@ -403,12 +403,23 @@ async function main(): Promise<void> {
       let sql: string;
       let params: (string | number)[];
 
-      if (batchNum === 0 || lastCursorValue === null) {
-        sql = `SELECT ${colList} FROM "${tableName}" ORDER BY ${idCol} LIMIT $1`;
-        params = [BATCH_SIZE];
+      // Special case: steps table has composite PK (job_id, number), not a single id column
+      if (tableName === 'steps') {
+        if (batchNum === 0 || lastCursorValue === null || typeof lastCursorValue === 'string' || typeof lastCursorValue === 'number') {
+          sql = `SELECT ${colList} FROM "${tableName}" ORDER BY job_id, number LIMIT $1`;
+          params = [BATCH_SIZE];
+        } else {
+          sql = `SELECT ${colList} FROM "${tableName}" WHERE (job_id, number) > ($1, $2) ORDER BY job_id, number LIMIT $3`;
+          params = [lastCursorValue.job_id!, lastCursorValue.number!, BATCH_SIZE];
+        }
       } else {
-        sql = `SELECT ${colList} FROM "${tableName}" WHERE "${idCol}" > $1 ORDER BY ${idCol} LIMIT $2`;
-        params = [lastCursorValue, BATCH_SIZE];
+        if (batchNum === 0 || lastCursorValue === null || typeof lastCursorValue === 'object') {
+          sql = `SELECT ${colList} FROM "${tableName}" ORDER BY ${idCol} LIMIT $1`;
+          params = [BATCH_SIZE];
+        } else {
+          sql = `SELECT ${colList} FROM "${tableName}" WHERE "${idCol}" > $1 ORDER BY ${idCol} LIMIT $2`;
+          params = [lastCursorValue, BATCH_SIZE];
+        }
       }
 
       const { rows: pgRows } = await pgClient.query(sql, params);
@@ -416,7 +427,12 @@ async function main(): Promise<void> {
       if (pgRows.length === 0) break;
 
       // Update cursor
-      lastCursorValue = pgRows[pgRows.length - 1][idCol] as string | number;
+      if (tableName === 'steps') {
+        const lastRow = pgRows[pgRows.length - 1];
+        lastCursorValue = { job_id: lastRow.job_id as number, number: lastRow.number as number };
+      } else {
+        lastCursorValue = pgRows[pgRows.length - 1][idCol] as string | number;
+      }
 
       const stmts = pgRows.map((row) => ({
         sql: insertSql,

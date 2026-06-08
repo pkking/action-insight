@@ -150,6 +150,7 @@ async function testTurso(): Promise<void> {
     const { rows } = await turso.execute('SELECT count(*) as c FROM ' + name);
     console.log('   ' + name.padEnd(30) + String(rows[0].c as number).padStart(8) + ' rows');
   }
+  turso.close();
 }
 
 async function main(): Promise<void> {

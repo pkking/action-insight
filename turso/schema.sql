@@ -95,7 +95,7 @@ CREATE INDEX IF NOT EXISTS idx_pr_metrics_created ON pr_metrics(created_at DESC)
 CREATE TABLE IF NOT EXISTS pr_workflows (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   pr_metric_id INTEGER NOT NULL REFERENCES pr_metrics(id) ON DELETE CASCADE,
-  run_id INTEGER NOT NULL REFERENCES runs(id),
+  run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
   UNIQUE(pr_metric_id, run_id)
 );
 
