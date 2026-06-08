@@ -20,17 +20,23 @@ const PROXY_HOST = process.env.TUNNEL_PROXY_HOST || '127.0.0.1';
 const PROXY_PORT = parseInt(process.env.TUNNEL_PROXY_PORT || '10808', 10);
 
 const server = net.createServer((localSocket) => {
+  let remoteSocket: net.Socket | null = null;
+
+  localSocket.on('error', (e) => {
+    if (remoteSocket) {
+      remoteSocket.destroy();
+    }
+  });
+
   SocksClient.createConnection({
     proxy: { host: PROXY_HOST, port: PROXY_PORT, type: 5 },
     command: 'connect',
     destination: { host: REMOTE_HOST, port: REMOTE_PORT },
-  }).then(({ socket: remoteSocket }) => {
+  }).then(({ socket }) => {
+    remoteSocket = socket;
     localSocket.pipe(remoteSocket);
     remoteSocket.pipe(localSocket);
 
-    localSocket.on('error', (e) => {
-      remoteSocket.destroy();
-    });
     remoteSocket.on('error', (e) => {
       localSocket.destroy();
     });

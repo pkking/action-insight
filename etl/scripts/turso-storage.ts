@@ -237,7 +237,7 @@ export async function writeRunsToTurso(repo: string, runs: RunRow[], date: strin
           date, run.updated_at,
         ] as InValue[],
       }));
-      await tx.batch(stmts, 'write');
+      await tx.batch(stmts);
     }
 
     // Write jobs
@@ -277,7 +277,7 @@ export async function writeRunsToTurso(repo: string, runs: RunRow[], date: strin
           job.queue_duration_seconds, job.duration_seconds,
         ] as InValue[],
       }));
-      await tx.batch(stmts, 'write');
+      await tx.batch(stmts);
     }
 
     // Write steps
@@ -318,7 +318,7 @@ export async function writeRunsToTurso(repo: string, runs: RunRow[], date: strin
           step.started_at, step.completed_at, step.duration_seconds,
         ] as InValue[],
       }));
-      await tx.batch(stmts, 'write');
+      await tx.batch(stmts);
     }
 
     await tx.commit();
@@ -533,7 +533,7 @@ export async function writePullRequestResolutionCacheToTurso(
           r.error_message, r.attempted_at, r.resolved_at,
         ] as InValue[],
       }));
-      await tx.batch(stmts, 'write');
+      await tx.batch(stmts);
     }
     await tx.commit();
   } catch (e) {
@@ -586,7 +586,7 @@ export async function writePrWorkflowsToTurso(repo: string, prWorkflows: Map<num
               ON CONFLICT(pr_metric_id, run_id) DO NOTHING`,
         args: [r.pr_metric_id, r.run_id] as InValue[],
       }));
-      await tx.batch(stmts, 'write');
+      await tx.batch(stmts);
     }
     await tx.commit();
   } catch (e) {
@@ -651,7 +651,7 @@ export async function writePrMetricsToTurso(repo: string, prs: PrMetricsSummary[
           r.workflow_count, r.successful_workflow_count, r.conclusion,
         ] as InValue[],
       }));
-      await tx.batch(stmts, 'write');
+      await tx.batch(stmts);
     }
     await tx.commit();
   } catch (e) {

@@ -8,7 +8,6 @@ import pg from 'pg';
 import { createClient } from '@libsql/client';
 import { SocksClient } from 'socks';
 import { Duplex, PassThrough } from 'stream';
-import * as tls from 'tls';
 
 function normalizeConnectionString(connectionString: string): string {
   if (process.env.SUPABASE_DB_SSL !== 'no-verify') {

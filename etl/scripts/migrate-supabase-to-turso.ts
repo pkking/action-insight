@@ -28,7 +28,6 @@ import pg from 'pg';
 import { spawn, type ChildProcess } from 'child_process';
 import * as net from 'net';
 import * as path from 'path';
-import * as fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -98,12 +97,6 @@ const TABLE_COLUMNS: Record<string, string[]> = {
 /*  Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
-function* chunkArray<T>(items: T[], size: number): Generator<T[]> {
-  for (let i = 0; i < items.length; i += size) {
-    yield items.slice(i, i + size);
-  }
-}
-
 function formatDuration(ms: number): string {
   const s = Math.floor(ms / 1000);
   const m = Math.floor(s / 60);
@@ -145,7 +138,9 @@ async function startSocksTunnel(
   // Use the socks-tunnel.ts script as a subprocess
   const tunnelScript = path.join(__dirname, 'socks-tunnel.ts');
 
-  const child = spawn('npx', ['tsx', tunnelScript], {
+  // Use npx.cmd on Windows for cross-platform compatibility
+  const cmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  const child = spawn(cmd, ['tsx', tunnelScript], {
     env: {
       ...process.env,
       TUNNEL_LOCAL_PORT: String(localPort),
@@ -207,14 +202,6 @@ function pgRowToTursoValues(
     'history_complete',
   ]);
 
-  const dateColumns = new Set([
-    'created_at', 'updated_at', 'started_at', 'completed_at',
-    'date', 'steps_checked_at', 'ci_started_at', 'ci_completed_at',
-    'merged_at', 'attempted_at', 'resolved_at', 'last_updated',
-    'backfill_cursor', 'latest_date', 'window_start', 'window_end',
-    'generated_at',
-  ]);
-
   for (const col of columns) {
     const raw = row[col];
 
@@ -222,7 +209,7 @@ function pgRowToTursoValues(
       values.push(null);
     } else if (booleanColumns.has(col)) {
       values.push(raw === true ? 1 : 0);
-    } else if (dateColumns.has(col) && raw instanceof Date) {
+    } else if (raw instanceof Date) {
       values.push(raw.toISOString());
     } else if (typeof raw === 'bigint') {
       // Turso supports 64-bit signed integers, but we convert to number
@@ -450,7 +437,7 @@ async function main(): Promise<void> {
 
         const tx = await tursoClient.transaction('write');
         try {
-          await tx.batch(stmts, 'write');
+          await tx.batch(stmts);
           await tx.commit();
           migratedCount += pgRows.length;
           lastError = null;
