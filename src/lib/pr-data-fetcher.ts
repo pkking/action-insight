@@ -118,7 +118,7 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
       }
       if (row.job_id != null) {
         const run = runMap.get(runId)!;
-        run.jobs.push({
+        run.jobs!.push({
           id: Number(row.job_id),
           name: row.job_name as string,
           status: row.job_status as string,

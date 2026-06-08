@@ -182,7 +182,7 @@ export async function fetchDay(owner: string, repo: string, fileName: string): P
     }
     if (row.job_id != null) {
       const run = runMap.get(runId)!;
-      run.jobs.push({
+      run.jobs!.push({
         id: Number(row.job_id),
         name: row.job_name as string,
         status: row.job_status as string,
@@ -265,7 +265,7 @@ async function fetchRunsFromDb(repoId: number, dateFilter: {
     }
     if (row.job_id != null) {
       const run = runMap.get(runId)!;
-      run.jobs.push({
+      run.jobs!.push({
         id: Number(row.job_id),
         name: row.job_name as string,
         status: row.job_status as string,
