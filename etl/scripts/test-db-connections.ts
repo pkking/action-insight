@@ -96,6 +96,7 @@ async function testSupabase(): Promise<void> {
     connectionString: url,
     ssl: process.env.SUPABASE_DB_SSL === 'disable' ? false : {
       rejectUnauthorized: process.env.SUPABASE_DB_SSL !== 'no-verify',
+      ...(useProxy ? { servername: dbHost } : {}),
     },
     ...(useProxy ? {
       stream: () => createProxyStream(dbHost, dbPort, proxyHost, proxyPort),
@@ -114,7 +115,7 @@ async function testSupabase(): Promise<void> {
   for (const t of tables) {
     const { rows } = await client.query('SELECT count(*) FROM ' + t.tablename);
     const size = await client.query(
-      "SELECT pg_size_pretty(pg_total_relation_size('public.'" + t.tablename + "'))"
+      "SELECT pg_size_pretty(pg_total_relation_size('public." + t.tablename + "'))"
     );
     console.log(
       '   ' + t.tablename.padEnd(30) +

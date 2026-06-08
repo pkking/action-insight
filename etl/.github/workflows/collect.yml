@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-      - run: npm install tsx @octokit/core date-fns js-yaml @turso/turso-js
+      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
       - run: npx tsx etl/scripts/collect.ts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -41,6 +41,10 @@ const server = net.createServer((localSocket) => {
   });
 });
 
+server.on('error', (err) => {
+  console.error('SOCKS tunnel server error:', err);
+});
+
 server.listen(LOCAL_PORT, '127.0.0.1', () => {
   console.log(`SOCKS tunnel: 127.0.0.1:${LOCAL_PORT} → ${REMOTE_HOST}:${REMOTE_PORT} (via socks://${PROXY_HOST}:${PROXY_PORT})`);
 });

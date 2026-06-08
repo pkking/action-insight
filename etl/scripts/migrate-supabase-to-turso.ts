@@ -117,27 +117,16 @@ function formatDuration(ms: number): string {
 async function waitForPort(host: string, port: number, timeoutMs: number = 15000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    await new Promise<void>((resolve) => {
+    const connected = await new Promise<boolean>((resolve) => {
       const socket = net.connect({ host, port });
-      socket.setTimeout(2000);
+      socket.setTimeout(1000);
       const cleanup = () => { socket.destroy(); socket.removeAllListeners(); };
-      socket.on('connect', () => { cleanup(); resolve(); });
-      socket.on('error', () => { cleanup(); setTimeout(resolve, 500); });
-      socket.on('timeout', () => { cleanup(); setTimeout(resolve, 500); });
+      socket.on('connect', () => { cleanup(); resolve(true); });
+      socket.on('error', () => { cleanup(); resolve(false); });
+      socket.on('timeout', () => { cleanup(); resolve(false); });
     });
-    // If we get here via error/timeout retry, check if port is now ready
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const socket = net.connect({ host, port });
-        socket.setTimeout(1000);
-        socket.on('connect', () => { socket.destroy(); resolve(); });
-        socket.on('error', () => { socket.destroy(); reject(new Error('not ready')); });
-        socket.on('timeout', () => { socket.destroy(); reject(new Error('not ready')); });
-      });
-      return; // Port is ready
-    } catch {
-      // Not ready yet, continue loop
-    }
+    if (connected) return;
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new Error(`Timed out waiting for ${host}:${port}`);
 }
@@ -234,7 +223,7 @@ function pgRowToTursoValues(
     } else if (booleanColumns.has(col)) {
       values.push(raw === true ? 1 : 0);
     } else if (dateColumns.has(col) && raw instanceof Date) {
-      values.push(raw.toISOString().replace('Z', '+00:00'));
+      values.push(raw.toISOString());
     } else if (typeof raw === 'bigint') {
       // Turso supports 64-bit signed integers, but we convert to number
       // for safety (GitHub IDs fit in 53-bit).
@@ -350,6 +339,7 @@ async function main(): Promise<void> {
     connectionString: effectiveUrl,
     ssl: process.env.SUPABASE_DB_SSL === 'disable' ? false : {
       rejectUnauthorized: process.env.SUPABASE_DB_SSL !== 'no-verify',
+      ...(useProxy && supabaseHost ? { servername: supabaseHost } : {}),
     },
   });
 
@@ -450,7 +440,9 @@ async function main(): Promise<void> {
           lastError = null;
           break; // Success
         } catch (e: unknown) {
-          await tx.rollback();
+          try {
+            await tx.rollback();
+          } catch { /* ignore rollback error to preserve original error */ }
           lastError = e as Error;
 
           // Don't retry constraint violations or data errors
@@ -459,6 +451,8 @@ async function main(): Promise<void> {
             console.error(`❌ Non-retryable error at ${tableName} batch #${batchNum}:`, e);
             throw e;
           }
+        } finally {
+          tx.close();
         }
       }
 
@@ -504,7 +498,7 @@ async function main(): Promise<void> {
       `SELECT MAX(${idCol}) as max_id FROM ${tableName}`,
     );
 
-    const maxId = (rows[0]?.max_id as number | null) ?? 0;
+    const maxId = rows[0]?.max_id != null ? Number(rows[0].max_id) : 0;
 
     if (maxId > 0) {
       // Use INSERT OR REPLACE for sqlite_sequence (more compatible than ON CONFLICT)
