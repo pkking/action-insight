@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { cache } from 'react';
 
-import { getSupabaseClient } from './supabase';
+import { getTursoClient, getRepoId as _getRepoId } from './turso';
 import { parseTrackedReposYaml } from './tracked-repos.js';
 import type { PullRequestIndexFile, PullRequestMetricsSummary, TestCaseStats } from './types';
 
@@ -31,38 +31,23 @@ export const getTrackedRepoOptions = cache(async (): Promise<RepoOption[]> => {
     .sort((left, right) => left.key.localeCompare(right.key));
 });
 
-async function getRepoId(owner: string, repo: string): Promise<number | null> {
-  const supabase = getSupabaseClient();
-  const { data } = await supabase
-    .from('repos')
-    .select('id')
-    .eq('owner', owner)
-    .eq('repo', repo)
-    .single();
-
-  return data?.id || null;
-}
-
 const getTestCaseStats = cache(async (owner: string, repo: string): Promise<TestCaseStats | null> => {
-  const repoId = await getRepoId(owner, repo);
-  if (!repoId) return null;
-
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from('test_case_stats')
-    .select('*')
-    .eq('repo_id', repoId)
-    .order('generated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    console.error(`Error fetching test case stats for ${owner}/${repo}:`, error);
+  let repoId: number;
+  try {
+    repoId = await _getRepoId(owner, repo);
+  } catch {
     return null;
   }
 
-  if (!data) return null;
+  const client = getTursoClient();
+  const { rows } = await client.execute({
+    sql: `SELECT * FROM test_case_stats WHERE repo_id = ? ORDER BY generated_at DESC LIMIT 1`,
+    args: [repoId],
+  });
 
+  if (rows.length === 0) return null;
+
+  const data = rows[0];
   return {
     total_test_cases: data.total_test_cases as number,
     ascend_test_cases: data.ascend_test_cases as number,
@@ -97,9 +82,10 @@ function mapPrSummary(row: Record<string, unknown>): PullRequestMetricsSummary {
 }
 
 const getPullRequestIndex = cache(async (owner: string, repo: string): Promise<PullRequestIndexFile> => {
-  const repoId = await getRepoId(owner, repo);
-
-  if (!repoId) {
+  let repoId: number;
+  try {
+    repoId = await _getRepoId(owner, repo);
+  } catch {
     return {
       repo: `${owner}/${repo}`,
       generated_at: new Date().toISOString(),
@@ -108,19 +94,13 @@ const getPullRequestIndex = cache(async (owner: string, repo: string): Promise<P
     };
   }
 
-  const supabase = getSupabaseClient();
-  const { data: prs, error } = await supabase
-    .from('pr_metrics')
-    .select('*')
-    .eq('repo_id', repoId)
-    .order('created_at', { ascending: false });
+  const client = getTursoClient();
+  const { rows } = await client.execute({
+    sql: `SELECT * FROM pr_metrics WHERE repo_id = ? ORDER BY created_at DESC`,
+    args: [repoId],
+  });
 
-  if (error) {
-    console.error('Supabase error fetching PR index:', error);
-    throw new Error(`Failed to fetch PR index for ${owner}/${repo}: database query failed`);
-  }
-
-  if (!prs || prs.length === 0) {
+  if (rows.length === 0) {
     return {
       repo: `${owner}/${repo}`,
       generated_at: new Date().toISOString(),
@@ -132,7 +112,7 @@ const getPullRequestIndex = cache(async (owner: string, repo: string): Promise<P
   return {
     repo: `${owner}/${repo}`,
     generated_at: new Date().toISOString(),
-    prs: prs.map(mapPrSummary),
+    prs: rows.map((r) => mapPrSummary(r as Record<string, unknown>)),
   };
 });
 

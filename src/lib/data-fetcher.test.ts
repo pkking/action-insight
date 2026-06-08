@@ -1,35 +1,29 @@
 import { describe, expect, it, vi } from 'vitest';
 
 describe('fetchRuns', () => {
-  it('throws when Supabase env vars are missing', async () => {
-    const originalUrl = process.env.SUPABASE_URL;
-    const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    delete process.env.SUPABASE_URL;
-    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  it('throws when Turso env vars are missing', async () => {
+    const originalUrl = process.env.TURSO_DATABASE_URL;
+    delete process.env.TURSO_DATABASE_URL;
 
     vi.resetModules();
     const { fetchRuns } = await import('./data-fetcher');
 
     await expect(fetchRuns('foo', 'bar')).rejects.toThrow('Database connection not configured');
 
-    process.env.SUPABASE_URL = originalUrl;
-    process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
+    process.env.TURSO_DATABASE_URL = originalUrl;
   });
 });
 
 describe('fetchLatestRuns', () => {
-  it('throws when Supabase env vars are missing', async () => {
-    const originalUrl = process.env.SUPABASE_URL;
-    const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    delete process.env.SUPABASE_URL;
-    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  it('throws when Turso env vars are missing', async () => {
+    const originalUrl = process.env.TURSO_DATABASE_URL;
+    delete process.env.TURSO_DATABASE_URL;
 
     vi.resetModules();
     const { fetchLatestRuns } = await import('./data-fetcher');
 
     await expect(fetchLatestRuns('foo', 'bar')).rejects.toThrow('Database connection not configured');
 
-    process.env.SUPABASE_URL = originalUrl;
-    process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
+    process.env.TURSO_DATABASE_URL = originalUrl;
   });
 });

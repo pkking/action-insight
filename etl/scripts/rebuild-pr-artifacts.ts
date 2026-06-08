@@ -3,12 +3,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Octokit } from '@octokit/core';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type Client } from '@libsql/client';
 import { addDays, format, parseISO } from 'date-fns';
 import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
-import { getCollectedDatesFromSupabase, checkEtlFreshness, formatFreshnessReport } from './supabase-storage.ts';
+import { getCollectedDatesFromTurso, checkEtlFreshness, formatFreshnessReport } from './turso-storage.ts';
 import type { Run } from '../../src/lib/types.ts';
 
 interface ReposConfig {
@@ -37,7 +37,7 @@ function resolveGitHubToken(repoKey: string): string | undefined {
 
 const CLI_HELP = `Usage: npx tsx etl/scripts/rebuild-pr-artifacts.ts [options]
 
-Rebuild PR metrics and PR workflow links from raw runs already stored in Supabase.
+Rebuild PR metrics and PR workflow links from raw runs already stored in Turso.
 
 Options:
   --repo, -r <owner/repo>     Rebuild one repo. Can be repeated.
@@ -159,82 +159,107 @@ function selectDates(collectedDates: string[], options: RebuildCliOptions): stri
   });
 }
 
-async function fetchRunsFromSupabase(repo: string, dates: string[]): Promise<Run[]> {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+async function fetchRunsFromTurso(repo: string, dates: string[]): Promise<Run[]> {
+  const url = process.env.TURSO_DATABASE_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN;
 
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
+  if (!url) {
+    throw new Error('TURSO_DATABASE_URL is required');
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const client = createClient({ url, authToken });
   const [owner, repoName] = repo.split('/');
 
-  const { data: repoData, error: repoError } = await supabase
-    .from('repos')
-    .select('id')
-    .eq('owner', owner)
-    .eq('repo', repoName)
-    .single();
+  const { rows: repoRows } = await client.execute({
+    sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
+    args: [owner, repoName],
+  });
 
-  if (repoError || !repoData) {
-    console.warn(`Repo ${repo} not found in Supabase`);
+  if (repoRows.length === 0) {
+    console.warn(`Repo ${repo} not found in Turso`);
     return [];
   }
 
+  const repoId = Number(repoRows[0].id);
   const allRuns: Run[] = [];
+
   for (const date of dates) {
     let dateRunCount = 0;
+    let offset = 0;
 
-    for (let from = 0; ; from += RUN_SELECT_PAGE_SIZE) {
-      const to = from + RUN_SELECT_PAGE_SIZE - 1;
-      const { data: runs, error } = await supabase
-        .from('runs')
-        .select('*, jobs(*)')
-        .eq('repo_id', repoData.id)
-        .eq('date', date)
-        .order('created_at', { ascending: false })
-        .order('id', { ascending: false })
-        .range(from, to);
+    while (true) {
+      // Step 1: Paginate runs only
+      const { rows: runRows } = await client.execute({
+        sql: `SELECT id, name, head_branch, head_sha, status, conclusion,
+                     event, created_at, updated_at, html_url, duration_seconds, date
+              FROM runs
+              WHERE repo_id = ? AND date = ?
+              ORDER BY created_at DESC, id DESC
+              LIMIT ? OFFSET ?`,
+        args: [repoId, date, RUN_SELECT_PAGE_SIZE, offset],
+      });
 
-      if (error) {
-        console.warn(`Error fetching runs for ${repo} on ${date}: ${error.message}`);
+      if (runRows.length === 0 && offset === 0) {
         break;
       }
 
-      for (const row of runs || []) {
-        const run: Run = {
-          id: Number(row.id),
-          name: row.name as string,
-          head_branch: row.head_branch as string,
-          head_sha: row.head_sha as string | undefined,
-          status: row.status as string,
-          conclusion: (row.conclusion as string) || '',
-          event: row.event as string | undefined,
-          created_at: row.created_at as string,
-          updated_at: row.updated_at as string,
-          html_url: row.html_url as string,
-          durationInSeconds: Number(row.duration_seconds),
-          jobs: (row.jobs || []).map((job: Record<string, unknown>) => ({
-            id: Number(job.id),
-            name: job.name as string,
-            status: job.status as string,
-            conclusion: (job.conclusion as string) || '',
-            created_at: job.created_at as string,
-            started_at: job.started_at as string,
-            completed_at: job.completed_at as string,
-            html_url: job.html_url as string,
-            queueDurationInSeconds: Number(job.queue_duration_seconds),
-            durationInSeconds: Number(job.duration_seconds),
-          })),
-        };
-        allRuns.push(run);
-        dateRunCount += 1;
+      const runIds = runRows.map((r) => r.id as number);
+
+      // Step 2: Batch-fetch jobs for these runs
+      if (runIds.length > 0) {
+        const placeholders = runIds.map(() => '?').join(',');
+        const { rows: jobRows } = await client.execute({
+          sql: `SELECT id, run_id, name, status, conclusion, created_at, started_at,
+                       completed_at, html_url, queue_duration_seconds, duration_seconds
+                FROM jobs WHERE run_id IN (${placeholders})
+                ORDER BY run_id, started_at ASC`,
+          args: runIds,
+        });
+
+        const jobsByRun = new Map<number, Array<Record<string, unknown>>>();
+        for (const j of jobRows) {
+          const rid = Number(j.run_id);
+          if (!jobsByRun.has(rid)) jobsByRun.set(rid, []);
+          jobsByRun.get(rid)!.push(j);
+        }
+
+        for (const row of runRows) {
+          const runId = Number(row.id);
+          const run: Run = {
+            id: runId,
+            name: row.name as string,
+            head_branch: row.head_branch as string,
+            head_sha: row.head_sha as string | undefined,
+            status: row.status as string,
+            conclusion: (row.conclusion as string) || '',
+            event: row.event as string | undefined,
+            created_at: row.created_at as string,
+            updated_at: row.updated_at as string,
+            html_url: row.html_url as string,
+            durationInSeconds: Number(row.duration_seconds),
+            jobs: (jobsByRun.get(runId) || []).map((j) => ({
+              id: Number(j.id),
+              name: j.name as string,
+              status: j.status as string,
+              conclusion: (j.conclusion as string) || '',
+              created_at: j.created_at as string,
+              started_at: j.started_at as string,
+              completed_at: j.completed_at as string,
+              html_url: j.html_url as string,
+              queueDurationInSeconds: Number(j.queue_duration_seconds),
+              durationInSeconds: Number(j.duration_seconds),
+            })),
+          };
+          allRuns.push(run);
+          dateRunCount += 1;
+        }
       }
 
-      if (!runs || runs.length < RUN_SELECT_PAGE_SIZE) {
+      if (runRows.length < RUN_SELECT_PAGE_SIZE) {
         break;
       }
+
+      offset += RUN_SELECT_PAGE_SIZE;
     }
 
     console.log(`Fetched ${dateRunCount} runs for ${repo} on ${date}`);
@@ -266,7 +291,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     }
 
     try {
-      const collectedDates = await getCollectedDatesFromSupabase(repoKey);
+      const collectedDates = await getCollectedDatesFromTurso(repoKey);
       const dates = selectDates(collectedDates, options);
       if (dates.length === 0) {
         console.warn(`Skipping ${repoKey}: no collected dates matched the selected range`);
@@ -274,7 +299,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       }
 
       console.log(`Rebuilding PR artifacts for ${repoKey} from ${dates[0]} to ${dates[dates.length - 1]} (${dates.length} date(s))`);
-      const runs = await fetchRunsFromSupabase(repoKey, dates);
+      const runs = await fetchRunsFromTurso(repoKey, dates);
       const token = resolveGitHubToken(repoKey);
       const octokit = token ? new Octokit({ auth: token }) : undefined;
       if (!octokit) {

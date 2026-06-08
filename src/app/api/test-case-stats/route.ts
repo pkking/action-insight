@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/supabase';
+import { getTursoClient } from '@/lib/turso';
 import { getTrackedRepoOptions } from '@/lib/server-homepage-data';
 
 function isSameOrigin(request: Request): boolean {
@@ -49,41 +49,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Repository not found' }, { status: 404 });
     }
 
-    const supabase = getSupabaseClient();
+    const client = getTursoClient();
 
-    const { data: repoData, error: repoError } = await supabase
-      .from('repos')
-      .select('id')
-      .eq('owner', body.owner)
-      .eq('repo', body.repo)
-      .maybeSingle();
+    const { rows: repoRows } = await client.execute({
+      sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
+      args: [body.owner, body.repo],
+    });
 
-    if (repoError) {
-      console.error('Error fetching repo:', repoError);
-      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-    }
-
-    if (!repoData?.id) {
+    if (repoRows.length === 0) {
       return NextResponse.json({ data: null });
     }
 
-    const { data: statsData, error: statsError } = await supabase
-      .from('test_case_stats')
-      .select('*')
-      .eq('repo_id', repoData.id)
-      .order('generated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const repoId = repoRows[0].id;
 
-    if (statsError) {
-      console.error('Error fetching test case stats:', statsError);
-      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-    }
+    const { rows: statsRows } = await client.execute({
+      sql: `SELECT * FROM test_case_stats WHERE repo_id = ? ORDER BY generated_at DESC LIMIT 1`,
+      args: [repoId],
+    });
 
-    if (!statsData) {
+    if (statsRows.length === 0) {
       return NextResponse.json({ data: null });
     }
 
+    const statsData = statsRows[0];
     return NextResponse.json({
       data: {
         total_test_cases: statsData.total_test_cases as number,

@@ -15,11 +15,11 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js
+      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
       - run: npx tsx etl/scripts/collect.ts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           TARGET_REPOS: "vllm-project/vllm-ascend"
           RETENTION_DAYS: 90

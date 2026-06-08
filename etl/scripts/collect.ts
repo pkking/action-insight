@@ -1,4 +1,4 @@
-// ETL script: fetches GitHub Actions runs/jobs and writes to Supabase
+// ETL script: fetches GitHub Actions runs/jobs and writes to Turso
 import { Octokit } from '@octokit/core';
 import { addDays, format, subDays, parseISO, isBefore, startOfDay } from 'date-fns';
 import * as fs from 'fs';
@@ -15,15 +15,15 @@ import {
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
 import { isGitHubRateLimitError, getRateLimitDetails, type RateLimitDetails } from './github.ts';
 import {
-  writeRunsToSupabase,
-  getExistingRunIdsWithStepsFromSupabase,
+  writeRunsToTurso,
+  getExistingRunIdsWithStepsFromTurso,
   readCollectionState,
   writeCollectionState,
-  getCollectedDatesFromSupabase,
+  getCollectedDatesFromTurso,
   checkEtlFreshness,
   formatFreshnessReport,
   type CollectionState,
-} from './supabase-storage.ts';
+} from './turso-storage.ts';
 import { readPullRequestsFromPayload } from './github-utils.ts';
 import type { GitHubApiPayload, PullRequestRef, Step } from '../../src/lib/types.ts';
 
@@ -188,7 +188,7 @@ function computeBackfillCursor(
 
 async function loadRepoState(repo: string, retentionDays: number, now: Date): Promise<RepoCollectionState> {
   const dbState = await readCollectionState(repo);
-  const collectedDates = await getCollectedDatesFromSupabase(repo);
+  const collectedDates = await getCollectedDatesFromTurso(repo);
 
   const retentionStart = format(subDays(now, retentionDays), 'yyyy-MM-dd');
   const retainedDates = collectedDates.filter(d => d >= retentionStart);
@@ -272,8 +272,8 @@ async function persistCollectedRuns(
   const allDates = Array.from(new Set([...state.collectedDates, ...dates, ...emptyDates])).sort().reverse();
 
   for (const date of dates) {
-    console.log(`  Writing ${date} to Supabase (${runsByDate[date].length} runs)`);
-    await writeRunsToSupabase(repo, runsByDate[date], date);
+    console.log(`  Writing ${date} to Turso (${runsByDate[date].length} runs)`);
+    await writeRunsToTurso(repo, runsByDate[date], date);
   }
 
   const cutoffDate = startOfDay(subDays(now, retentionDays));
@@ -314,8 +314,8 @@ export async function collectRepo(
   const state = await loadRepoState(repo, retentionDays, now);
   log(`State: latest=${state.latest}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
 
-  const existingRunIdsWithSteps = await getExistingRunIdsWithStepsFromSupabase(repo);
-  log(`Existing runs with cached steps from Supabase: ${existingRunIdsWithSteps.size}`);
+  const existingRunIdsWithSteps = await getExistingRunIdsWithStepsFromTurso(repo);
+  log(`Existing runs with cached steps from Turso: ${existingRunIdsWithSteps.size}`);
 
   function toCreatedParam(window: CollectionWindow): string {
     return toCreatedRange(window);
@@ -670,7 +670,7 @@ export async function main() {
   log(`Target repos: ${targetRepos.join(', ') || '(none)'}`);
   log(`Node version: ${process.version}`);
   log(`ETL_DIR: ${ETL_DIR}`);
-  log(`State storage: Supabase collection_state table`);
+  log(`State storage: Turso collection_state table`);
 
   await runCollection({
     token,

@@ -4,16 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "migrate:supabase": "node etl/scripts/migrate-supabase.mjs",
+    "migrate:turso": "echo 'Apply Turso schema: turso db shell <db-name> < turso/schema.sql'",
+    "migrate:supabase-to-turso": "tsx etl/scripts/migrate-supabase-to-turso.ts",
     "rebuild:pr-artifacts": "tsx etl/scripts/rebuild-pr-artifacts.ts",
-    "prebuild": "npm run migrate:supabase",
+    "prebuild": "npm run migrate:turso",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.107.0",
+    "@libsql/client": "^0.15.10",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "js-yaml": "^4.2.0",
@@ -25,6 +26,8 @@
     "react-dom": "19.2.7",
     "recharts": "^3.8.1",
     "server-only": "^0.0.1",
+    "socks": "^2.8.9",
+    "socks-proxy-agent": "^10.0.0",
     "tailwind-merge": "^3.6.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.22.4"
@@ -36,6 +39,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.9.2",
+    "@types/pg": "^8.11.11",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

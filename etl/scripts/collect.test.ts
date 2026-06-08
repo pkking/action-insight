@@ -7,27 +7,27 @@ import {
 } from './collect';
 import { isGitHubRateLimitError } from './github';
 
-vi.mock('./supabase-storage.ts', async () => {
-  const actual = await vi.importActual<typeof import('./supabase-storage')>('./supabase-storage');
+vi.mock('./turso-storage.ts', async () => {
+  const actual = await vi.importActual<typeof import('./turso-storage')>('./turso-storage');
   return {
     ...actual,
     readCollectionState: vi.fn().mockResolvedValue(null),
     writeCollectionState: vi.fn().mockResolvedValue(undefined),
-    getCollectedDatesFromSupabase: vi.fn().mockResolvedValue([]),
-    getExistingRunIdsFromSupabase: vi.fn().mockResolvedValue(new Set()),
-    getExistingRunIdsWithStepsFromSupabase: vi.fn().mockResolvedValue(new Map()),
-    writeRunsToSupabase: vi.fn().mockResolvedValue(undefined),
+    getCollectedDatesFromTurso: vi.fn().mockResolvedValue([]),
+    getExistingRunIdsFromTurso: vi.fn().mockResolvedValue(new Set()),
+    getExistingRunIdsWithStepsFromTurso: vi.fn().mockResolvedValue(new Map()),
+    writeRunsToTurso: vi.fn().mockResolvedValue(undefined),
   };
 });
 
 import {
   readCollectionState,
   writeCollectionState,
-  getCollectedDatesFromSupabase,
-  getExistingRunIdsFromSupabase,
-  getExistingRunIdsWithStepsFromSupabase,
-  writeRunsToSupabase,
-} from './supabase-storage';
+  getCollectedDatesFromTurso,
+  getExistingRunIdsFromTurso,
+  getExistingRunIdsWithStepsFromTurso,
+  writeRunsToTurso,
+} from './turso-storage';
 
 function mockRepoState(options: {
   latest?: string;
@@ -43,17 +43,17 @@ function mockRepoState(options: {
     retentionDays: options.retentionDays ?? 90,
     lastUpdated: null,
   });
-  vi.mocked(getCollectedDatesFromSupabase).mockResolvedValue(options.dates ?? []);
+  vi.mocked(getCollectedDatesFromTurso).mockResolvedValue(options.dates ?? []);
 }
 
 describe('collect rate limit handling', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.mocked(readCollectionState).mockResolvedValue(null);
-    vi.mocked(getCollectedDatesFromSupabase).mockResolvedValue([]);
-    vi.mocked(getExistingRunIdsFromSupabase).mockResolvedValue(new Set());
-    vi.mocked(getExistingRunIdsWithStepsFromSupabase).mockResolvedValue(new Map());
-    vi.mocked(writeRunsToSupabase).mockResolvedValue(undefined);
+    vi.mocked(getCollectedDatesFromTurso).mockResolvedValue([]);
+    vi.mocked(getExistingRunIdsFromTurso).mockResolvedValue(new Set());
+    vi.mocked(getExistingRunIdsWithStepsFromTurso).mockResolvedValue(new Map());
+    vi.mocked(writeRunsToTurso).mockResolvedValue(undefined);
     vi.mocked(writeCollectionState).mockResolvedValue(undefined);
   });
 
@@ -492,7 +492,7 @@ describe('collect rate limit handling', () => {
     expect(vi.mocked(writeCollectionState)).toHaveBeenCalled();
   });
 
-  it('does not delete expired day files since Supabase is source of truth', async () => {
+  it('does not delete expired day files since Turso is source of truth', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-16T00:00:00Z'));
 
@@ -558,8 +558,8 @@ describe('collect rate limit handling', () => {
 
     const repo = 'acme/widgets';
     mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
-    vi.mocked(getExistingRunIdsFromSupabase).mockResolvedValue(new Set([101]));
-    vi.mocked(getExistingRunIdsWithStepsFromSupabase).mockResolvedValue(new Map());
+    vi.mocked(getExistingRunIdsFromTurso).mockResolvedValue(new Set([101]));
+    vi.mocked(getExistingRunIdsWithStepsFromTurso).mockResolvedValue(new Map());
 
     const request = vi.fn().mockImplementation((route: string, params: Record<string, unknown>) => {
       if (route === 'GET /repos/{owner}/{repo}/actions/runs') {
@@ -621,7 +621,7 @@ describe('collect rate limit handling', () => {
 
     const repo = 'acme/widgets';
     mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
-    vi.mocked(getExistingRunIdsWithStepsFromSupabase).mockResolvedValue(
+    vi.mocked(getExistingRunIdsWithStepsFromTurso).mockResolvedValue(
       new Map([[101, '2026-04-18T10:05:00Z']])
     );
 

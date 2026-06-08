@@ -1,26 +1,19 @@
 name: Rebuild PR Artifacts
-
 on:
-  schedule:
-    - cron: '0 7 * * *'  # Daily at UTC 07:00, rebuild all repos from repos.yaml
   workflow_dispatch:
     inputs:
       repo:
-        description: 'Repository to rebuild, in owner/repo form. Leave empty to rebuild all repos from repos.yaml.'
+        description: 'Rebuild specific repo (owner/repo). Leave empty for all.'
         required: false
         type: string
       start_date:
-        description: 'Optional start date, yyyy-mm-dd'
+        description: 'Start date (yyyy-mm-dd)'
         required: false
         type: string
       end_date:
-        description: 'Optional end date, yyyy-mm-dd'
+        description: 'End date (yyyy-mm-dd)'
         required: false
         type: string
-
-concurrency:
-  group: rebuild-pr-artifacts-${{ inputs.repo || 'all' }}
-  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -34,47 +27,23 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @supabase/supabase-js pg
-      - name: Apply Supabase migrations
-        run: npm run migrate:supabase
-        env:
-          AUTO_MIGRATE_SUPABASE: 1
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
-          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
-          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-          SUPABASE_DB_SSL: no-verify
-      - name: Set default date range for scheduled runs
-        if: github.event_name == 'schedule'
-        run: |
-          echo "SCHEDULED_START_DATE=$(date -u -d '2 days ago' +%Y-%m-%d)" >> "$GITHUB_ENV"
-          echo "SCHEDULED_END_DATE=$(date -u -d '1 day ago' +%Y-%m-%d)" >> "$GITHUB_ENV"
+      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
       - name: Rebuild PR artifacts
         run: |
           args=()
           if [ -n "${REBUILD_REPO}" ]; then
             args+=(--repo "${REBUILD_REPO}")
           fi
-          if [ -n "${REBUILD_START_DATE}" ]; then
-            args+=(--start-date "${REBUILD_START_DATE}")
+          if [ -n "${START_DATE}" ]; then
+            args+=(--start-date "${START_DATE}")
           fi
-          if [ -n "${REBUILD_END_DATE}" ]; then
-            args+=(--end-date "${REBUILD_END_DATE}")
+          if [ -n "${END_DATE}" ]; then
+            args+=(--end-date "${END_DATE}")
           fi
           npx tsx etl/scripts/rebuild-pr-artifacts.ts "${args[@]}"
         env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           REBUILD_REPO: ${{ inputs.repo || '' }}
-          REBUILD_START_DATE: ${{ inputs.start_date || env.SCHEDULED_START_DATE || '' }}
-          REBUILD_END_DATE: ${{ inputs.end_date || env.SCHEDULED_END_DATE || '' }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT: 20
-          PR_ARTIFACT_SHA_RESOLUTION_LIMIT: 1000
-          GITHUB_TOKEN_PER_REPO_HIYOUGA_LLAMAFACTORY: ${{ secrets.HIYOUGA_LLAMAFACTORY }}
-          GITHUB_TOKEN_PER_REPO_MODELSCOPE_MS_SWIFT: ${{ secrets.MODELSCOPE_MS_SWIFT }}
-          GITHUB_TOKEN_PER_REPO_SGL_PROJECT_SGLANG: ${{ secrets.SGL_PROJECT_SGLANG }}
-          GITHUB_TOKEN_PER_REPO_TILE_AI_TILELANG_ASCEND: ${{ secrets.TILE_AI_TILELANG_ASCEND }}
-          GITHUB_TOKEN_PER_REPO_TRITON_LANG_TRITON_ASCEND: ${{ secrets.TRITON_LANG_TRITON_ASCEND }}
-          GITHUB_TOKEN_PER_REPO_VERL_PROJECT_VERL: ${{ secrets.VERL_PROJECT_VERL }}
-          GITHUB_TOKEN_PER_REPO_VLLM_PROJECT_VLLM_ASCEND: ${{ secrets.VLLM_PROJECT_VLLM_ASCEND }}
+          START_DATE: ${{ inputs.start_date || '' }}
+          END_DATE: ${{ inputs.end_date || '' }}

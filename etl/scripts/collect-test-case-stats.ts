@@ -9,8 +9,8 @@
  *   npx tsx etl/scripts/collect-test-case-stats.ts --repo owner/repo
  *
  * Environment:
- *   SUPABASE_URL                  Supabase project URL (required)
- *   SUPABASE_SERVICE_ROLE_KEY     Supabase service role key (required)
+ *   TURSO_DATABASE_URL            Turso database URL (required)
+ *   TURSO_AUTH_TOKEN              Turso auth token (required)
  *   GITHUB_TOKEN                  GitHub token for authenticated clone (optional)
  *   TEST_CASE_STATS_CACHE_DIR     Cache directory for cloned repos (default: /tmp/action-insight-repos)
  *   VERBOSE                       Enable verbose logging (true or 1)
@@ -20,7 +20,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync, spawnSync } from 'child_process';
 import * as yaml from 'js-yaml';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type Client } from '@libsql/client';
 import { format, subDays } from 'date-fns';
 import { fileURLToPath } from 'url';
 
@@ -81,34 +81,38 @@ function error(...args: unknown[]) {
   console.error(`[${new Date().toISOString()}] ERROR:`, ...args);
 }
 
-function getSupabaseClient() {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+function getTursoClient() {
+  const url = process.env.TURSO_DATABASE_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN;
 
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
+  if (!url) {
+    throw new Error('TURSO_DATABASE_URL is required');
   }
 
-  return createClient(supabaseUrl, supabaseKey);
+  return createClient({ url, authToken });
 }
 
-async function ensureRepo(supabase: ReturnType<typeof createClient>, owner: string, repo: string): Promise<number> {
-  // Try upsert without ignoreDuplicates so existing rows are still returned
-  const { data, error } = await supabase
-    .from('repos')
-    .upsert({ owner, repo }, { onConflict: 'owner,repo' })
-    .select('id')
-    .single();
+async function ensureRepoId(client: Client, owner: string, repo: string): Promise<number> {
+  // Upsert using INSERT OR REPLACE
+  await client.execute({
+    sql: `INSERT INTO repos (owner, repo) VALUES (?, ?) ON CONFLICT(owner, repo) DO NOTHING`,
+    args: [owner, repo],
+  });
 
-  if (error || !data) {
-    throw new Error(`Failed to ensure repository ${owner}/${repo} in Supabase: ${error?.message}`);
+  const { rows } = await client.execute({
+    sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
+    args: [owner, repo],
+  });
+
+  if (rows.length === 0) {
+    throw new Error(`Failed to ensure repository ${owner}/${repo} in Turso`);
   }
 
-  return data.id;
+  return Number(rows[0].id);
 }
 
 async function upsertTestCaseStats(
-  supabase: ReturnType<typeof createClient>,
+  client: Client,
   repoId: number,
   stats: {
     window_start: string;
@@ -118,24 +122,20 @@ async function upsertTestCaseStats(
     nvidia_test_cases: number;
   },
 ): Promise<void> {
-  const { error } = await supabase
-    .from('test_case_stats')
-    .upsert(
-      {
-        repo_id: repoId,
-        window_start: stats.window_start,
-        window_end: stats.window_end,
-        total_test_cases: stats.total_test_cases,
-        ascend_test_cases: stats.ascend_test_cases,
-        nvidia_test_cases: stats.nvidia_test_cases,
-        generated_at: new Date().toISOString(),
-      },
-      { onConflict: 'repo_id,window_start,window_end' },
-    );
-
-  if (error) {
-    throw new Error(`Failed to upsert test_case_stats: ${error.message}`);
-  }
+  await client.execute({
+    sql: `INSERT INTO test_case_stats (repo_id, window_start, window_end, total_test_cases, ascend_test_cases, nvidia_test_cases, generated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(repo_id, window_start, window_end) DO UPDATE SET
+            total_test_cases=excluded.total_test_cases,
+            ascend_test_cases=excluded.ascend_test_cases,
+            nvidia_test_cases=excluded.nvidia_test_cases,
+            generated_at=excluded.generated_at`,
+    args: [
+      repoId, stats.window_start, stats.window_end,
+      stats.total_test_cases, stats.ascend_test_cases, stats.nvidia_test_cases,
+      new Date().toISOString(),
+    ],
+  });
 }
 
 function getRepoDir(owner: string, repo: string): string {
@@ -476,8 +476,8 @@ async function main() {
     console.error('Usage: npx tsx etl/scripts/collect-test-case-stats.ts --repo owner/repo');
     console.error('');
     console.error('Environment Variables:');
-    console.error('  SUPABASE_URL                  Supabase project URL (required)');
-    console.error('  SUPABASE_SERVICE_ROLE_KEY     Supabase service role key (required)');
+    console.error('  TURSO_DATABASE_URL            Turso database URL (required)');
+    console.error('  TURSO_AUTH_TOKEN              Turso auth token (required)');
     console.error('  GITHUB_TOKEN                  GitHub token for authenticated clone (optional)');
     console.error('  TEST_CASE_STATS_CACHE_DIR     Cache directory (default: /tmp/action-insight-repos)');
     console.error('  VERBOSE                       Enable verbose logging (true or 1)');
@@ -531,23 +531,22 @@ async function main() {
     console.log('');
   }
 
-  const supabase = getSupabaseClient();
+  const client = getTursoClient();
 
   let repoId: number;
   try {
-    repoId = await ensureRepo(supabase, owner, repoName);
+    repoId = await ensureRepoId(client, owner, repoName);
   } catch (err) {
-    error(`Failed to ensure repo in Supabase: ${err instanceof Error ? err.message : String(err)}`);
+    error(`Failed to ensure repo in Turso: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   }
 
   const today = new Date();
-  // Use UTC date to avoid timezone inconsistencies
   const windowEnd = today.toISOString().split('T')[0];
   const windowStart = subDays(today, 90).toISOString().split('T')[0];
 
   try {
-    await upsertTestCaseStats(supabase, repoId, {
+    await upsertTestCaseStats(client, repoId, {
       window_start: windowStart,
       window_end: windowEnd,
       total_test_cases: stats.totalTestCases,
@@ -556,7 +555,7 @@ async function main() {
     });
     info(`Upserted test_case_stats for ${owner}/${repoName} (window: ${windowStart} to ${windowEnd})`);
   } catch (err) {
-    error(`Failed to write to Supabase: ${err instanceof Error ? err.message : String(err)}`);
+    error(`Failed to write to Turso: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   }
 
