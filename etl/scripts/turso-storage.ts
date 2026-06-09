@@ -678,9 +678,9 @@ export async function readCollectionState(repo: string): Promise<CollectionState
 
   const data = rows[0];
   return {
-    backfillCursor: (data.backfill_cursor as string) || null,
+    backfillCursor: ((data.backfill_cursor as string) || '').slice(0, 10) || null,
     historyComplete: Boolean(data.history_complete),
-    latestDate: (data.latest_date as string) || null,
+    latestDate: ((data.latest_date as string) || '').slice(0, 10) || null,
     retentionDays: Number(data.retention_days ?? 90),
     lastUpdated: (data.last_updated as string) || null,
   };
