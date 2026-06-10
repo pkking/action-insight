@@ -572,7 +572,7 @@ export async function writePrWorkflowsToTurso(repo: string, prWorkflows: Map<num
     const prMetricId = prNumberToId.get(prNumber);
     if (!prMetricId) continue;
     for (const runId of runIds) {
-      workflowRows.push({ pr_metric_id: prMetricId, run_id });
+      workflowRows.push({ pr_metric_id: prMetricId, run_id: runId });
     }
   }
 
