@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Prevents committing directly on main branch.
+# Install: git config core.hooksPath .githooks
+BRANCH=$(git branch --show-current)
+if [ "$BRANCH" = "main" ]; then
+  echo ""
+  echo "============================================="
+  echo "  BLOCKED: Cannot commit on 'main' branch"
+  echo "============================================="
+  echo ""
+  echo "  PR Workflow: feature branch → PR → merge"
+  echo "  Create a feature branch first:"
+  echo "    git checkout -b fix/your-description"
+  echo ""
+  exit 1
+fi
