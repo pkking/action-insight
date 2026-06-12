@@ -11,7 +11,6 @@
  */
 
 import { createClient, type Client, type InValue } from '@libsql/client';
-import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -147,31 +146,12 @@ function repoToDbPath(repo: string): string {
   return path.join(dataDir, safe);
 }
 
-/** Auto-decompress `.db.xz` → `.db` if compressed copy exists. */
-function autoDecompress(dbPath: string): void {
-  if (fs.existsSync(dbPath)) return;
-  const xzPath = `${dbPath}.xz`;
-  if (!fs.existsSync(xzPath)) return;
-
-  console.log(`Decompressing ${path.basename(xzPath)} → ${path.basename(dbPath)}...`);
-  try {
-    execSync(`xz -dk --force '${xzPath}'`, { stdio: 'inherit' });
-    if (fs.existsSync(dbPath)) {
-      console.log(`  Decompressed: ${(fs.statSync(dbPath).size / 1024 / 1024).toFixed(1)} MB`);
-    }
-  } catch {
-    console.warn(`  Failed to decompress ${xzPath}; a new empty database will be created.`);
-  }
-}
-
 /** Get (or create) a per-repo SQLite client. */
 function getRepoClient(repo: string): Client {
   const cached = clientCache.get(repo);
   if (cached) return cached;
 
   const dbPath = repoToDbPath(repo);
-  autoDecompress(dbPath);
-
   const client = createClient({ url: `file:${dbPath}` });
   clientCache.set(repo, client);
   return client;
