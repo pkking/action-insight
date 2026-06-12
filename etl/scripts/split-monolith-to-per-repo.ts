@@ -414,9 +414,9 @@ async function main(): Promise<void> {
       console.error(`  ❌ Failed to export ${owner}/${repo}:`, e);
     } finally {
       // Compress the output
-      const { execSync } = await import('child_process');
+      const { execFileSync } = await import('child_process');
       try {
-        execSync(`xz -f --force '${dbPath}'`, { stdio: 'pipe' });
+        execFileSync('xz', ['-f', '--force', dbPath], { stdio: 'pipe' });
         console.log(`  📦 Compressed to ${dbPath}.xz`);
       } catch {
         // Compression is optional
