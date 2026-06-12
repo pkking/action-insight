@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "collect": "tsx etl/scripts/collect.ts",
     "migrate:turso": "echo 'Apply Turso schema: turso db shell <db-name> < turso/schema.sql'",
     "migrate:supabase-to-turso": "tsx etl/scripts/migrate-supabase-to-turso.ts",
+    "migrate:turso-to-sqlite": "tsx etl/scripts/migrate-turso-to-sqlite.ts",
     "rebuild:pr-artifacts": "tsx etl/scripts/rebuild-pr-artifacts.ts",
     "prebuild": "npm run migrate:turso",
     "build": "next build",

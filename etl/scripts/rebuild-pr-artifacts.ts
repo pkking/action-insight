@@ -9,6 +9,8 @@ import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
 import { getCollectedDatesFromTurso, checkEtlFreshness, formatFreshnessReport } from './turso-storage.ts';
+import { getCollectedDatesFromSqlite } from './sqlite-storage.ts';
+import { createClient as createSqliteClient } from '@libsql/client';
 import type { Run } from '../../src/lib/types.ts';
 
 interface ReposConfig {
@@ -159,14 +161,20 @@ function selectDates(collectedDates: string[], options: RebuildCliOptions): stri
   });
 }
 
-async function fetchRunsFromTurso(repo: string, dates: string[]): Promise<Run[]> {
-  const url = process.env.TURSO_DATABASE_URL;
-  const authToken = process.env.TURSO_AUTH_TOKEN;
-
-  if (!url) {
-    throw new Error('TURSO_DATABASE_URL is required');
+async function fetchRunsFromDatabase(repo: string, dates: string[]): Promise<Run[]> {
+  // Try Turso first, fall back to SQLite
+  const tursoUrl = process.env.TURSO_DATABASE_URL;
+  if (tursoUrl && process.env.TURSO_AUTH_TOKEN) {
+    try {
+      return await doFetchRunsFromTurso(tursoUrl, process.env.TURSO_AUTH_TOKEN, repo, dates);
+    } catch (err) {
+      console.warn(`Turso fetch failed for ${repo}, falling back to SQLite:`, err);
+    }
   }
+  return doFetchRunsFromSqlite(repo, dates);
+}
 
+async function doFetchRunsFromTurso(url: string, authToken: string | undefined, repo: string, dates: string[]): Promise<Run[]> {
   const client = createClient({ url, authToken });
   const [owner, repoName] = repo.split('/');
 
@@ -268,6 +276,20 @@ async function fetchRunsFromTurso(repo: string, dates: string[]): Promise<Run[]>
   return allRuns;
 }
 
+function resolveSqliteUrl(): string {
+  if (process.env.SQLITE_DATABASE_URL) return process.env.SQLITE_DATABASE_URL;
+  if (process.env.SQLITE_DATABASE_FILE) return `file:${process.env.SQLITE_DATABASE_FILE}`;
+  const scriptsDir = __dirname;
+  const etlDir = path.dirname(scriptsDir);
+  const dataDir = path.join(etlDir, 'data');
+  const projectName = process.env.SQLITE_PROJECT_NAME ?? 'action-insight';
+  return `file:${path.join(dataDir, `${projectName}.db`)}`;
+}
+
+async function doFetchRunsFromSqlite(repo: string, dates: string[]): Promise<Run[]> {
+  const sqliteUrl = resolveSqliteUrl();
+  const client = createSqliteClient({ url: sqliteUrl });
+
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const options = parseCliOptions(argv);
 
@@ -291,7 +313,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     }
 
     try {
-      const collectedDates = await getCollectedDatesFromTurso(repoKey);
+      const collectedDates = await getCollectedDatesFromTurso(repoKey).catch(async () => {
+        console.warn(`Turso unavailable for ${repoKey}, reading dates from SQLite`);
+        return getCollectedDatesFromSqlite(repoKey);
+      });
       const dates = selectDates(collectedDates, options);
       if (dates.length === 0) {
         console.warn(`Skipping ${repoKey}: no collected dates matched the selected range`);
@@ -299,7 +324,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       }
 
       console.log(`Rebuilding PR artifacts for ${repoKey} from ${dates[0]} to ${dates[dates.length - 1]} (${dates.length} date(s))`);
-      const runs = await fetchRunsFromTurso(repoKey, dates);
+      const runs = await fetchRunsFromDatabase(repoKey, dates);
       const token = resolveGitHubToken(repoKey);
       const octokit = token ? new Octokit({ auth: token }) : undefined;
       if (!octokit) {

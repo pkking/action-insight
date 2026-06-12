@@ -20,6 +20,15 @@ vi.mock('./turso-storage.ts', async () => {
   };
 });
 
+vi.mock('./sqlite-storage.ts', () => ({
+  readCollectionStateFromSqlite: vi.fn().mockResolvedValue(null),
+  writeCollectionStateToSqlite: vi.fn().mockResolvedValue(undefined),
+  getCollectedDatesFromSqlite: vi.fn().mockResolvedValue([]),
+  getExistingRunIdsWithStepsFromSqlite: vi.fn().mockResolvedValue(new Map()),
+  writeRunsToSqlite: vi.fn().mockResolvedValue(undefined),
+  initSqlite: vi.fn().mockResolvedValue('file::memory:'),
+}));
+
 import {
   readCollectionState,
   writeCollectionState,
