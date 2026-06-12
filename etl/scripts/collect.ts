@@ -24,6 +24,14 @@ import {
   formatFreshnessReport,
   type CollectionState,
 } from './turso-storage.ts';
+import {
+  writeRunsToSqlite,
+  getExistingRunIdsWithStepsFromSqlite,
+  readCollectionStateFromSqlite,
+  writeCollectionStateToSqlite,
+  getCollectedDatesFromSqlite,
+  initSqlite,
+} from './sqlite-storage.ts';
 import { readPullRequestsFromPayload } from './github-utils.ts';
 import type { GitHubApiPayload, PullRequestRef, Step } from '../../src/lib/types.ts';
 
@@ -146,6 +154,55 @@ interface RunCollectionOptions {
 const ETL_DIR = path.join(__dirname, '..');
 const REPOS_CONFIG_PATH = path.join(ETL_DIR, 'repos.yaml');
 
+/** SQLite initialised? */
+let sqliteReady = false;
+
+async function ensureSqlite(): Promise<void> {
+  if (sqliteReady) return;
+  try {
+    const url = await initSqlite();
+    sqliteReady = true;
+    console.log(`SQLite storage ready: ${url}`);
+  } catch (err) {
+    console.error('Failed to initialise SQLite:', err);
+    // SQLite init failure is non-fatal — ETL can still write to Turso
+  }
+}
+
+/** Helper: run an async function with a fallback if it throws. */
+async function withFallback<T>(primary: () => Promise<T>, fallback: () => Promise<T>, label: string): Promise<T> {
+  try {
+    return await primary();
+  } catch (err) {
+    warn(`${label} primary failed, using fallback:`, err);
+    return fallback();
+  }
+}
+
+/** Helper: try primary, then fallback; log both failures. */
+async function tryBoth<T>(primary: () => Promise<T>, fallback: () => Promise<T>, label: string): Promise<T | null> {
+  try {
+    return await primary();
+  } catch (err) {
+    warn(`${label} primary failed:`, err);
+  }
+  try {
+    return await fallback();
+  } catch (err) {
+    error(`${label} fallback also failed:`, err);
+  }
+  return null;
+}
+
+/** Non-fatal Turso write — logs error but doesn't throw. */
+async function safeTursoWrite(fn: () => Promise<void>, label: string): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    warn(`Turso write skipped for ${label}:`, err);
+  }
+}
+
 function readReposConfig(): string[] {
   try {
     log(`Reading repos config from: ${REPOS_CONFIG_PATH}`);
@@ -187,12 +244,24 @@ function computeBackfillCursor(
 }
 
 async function loadRepoState(repo: string, retentionDays: number, now: Date): Promise<RepoCollectionState> {
-  const dbState = await readCollectionState(repo);
-  const collectedDates = await getCollectedDatesFromTurso(repo);
-
   const retentionStart = format(subDays(now, retentionDays), 'yyyy-MM-dd');
-  const retainedDates = collectedDates.filter(d => d >= retentionStart);
   const today = format(now, 'yyyy-MM-dd');
+
+  // Read state — prefer Turso, fall back to SQLite
+  const dbState = await withFallback(
+    () => readCollectionState(repo),
+    () => readCollectionStateFromSqlite(repo),
+    'readCollectionState',
+  );
+
+  // Read collected dates — prefer Turso, fall back to SQLite
+  const collectedDates = await withFallback(
+    () => getCollectedDatesFromTurso(repo),
+    () => getCollectedDatesFromSqlite(repo),
+    'getCollectedDates',
+  );
+
+  const retainedDates = collectedDates.filter(d => d >= retentionStart);
 
   let backfillCursor: string | undefined;
   let historyComplete = dbState?.historyComplete ?? false;
@@ -213,13 +282,19 @@ async function loadRepoState(repo: string, retentionDays: number, now: Date): Pr
 }
 
 async function saveRepoState(repo: string, state: RepoCollectionState): Promise<void> {
-  await writeCollectionState(repo, {
+  const statePayload = {
     backfillCursor: state.backfillCursor ?? null,
     historyComplete: state.historyComplete,
     latestDate: state.latest || null,
     retentionDays: state.retentionDays,
     lastUpdated: new Date().toISOString(),
-  });
+  };
+
+  // Always write to SQLite (local persistence)
+  await writeCollectionStateToSqlite(repo, statePayload);
+
+  // Best-effort Turso write
+  await safeTursoWrite(() => writeCollectionState(repo, statePayload), 'writeCollectionState');
 }
 
 
@@ -272,8 +347,14 @@ async function persistCollectedRuns(
   const allDates = Array.from(new Set([...state.collectedDates, ...dates, ...emptyDates])).sort().reverse();
 
   for (const date of dates) {
-    console.log(`  Writing ${date} to Turso (${runsByDate[date].length} runs)`);
-    await writeRunsToTurso(repo, runsByDate[date], date);
+    const runCount = runsByDate[date].length;
+    console.log(`  Writing ${date} to SQLite + Turso (${runCount} runs)`);
+
+    // Always write to SQLite first (guaranteed local persistence)
+    await writeRunsToSqlite(repo, runsByDate[date], date);
+
+    // Best-effort Turso write (non-fatal if quota exhausted)
+    await safeTursoWrite(() => writeRunsToTurso(repo, runsByDate[date], date), `writeRuns ${date}`);
   }
 
   const cutoffDate = startOfDay(subDays(now, retentionDays));
@@ -314,8 +395,12 @@ export async function collectRepo(
   const state = await loadRepoState(repo, retentionDays, now);
   log(`State: latest=${state.latest}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
 
-  const existingRunIdsWithSteps = await getExistingRunIdsWithStepsFromTurso(repo);
-  log(`Existing runs with cached steps from Turso: ${existingRunIdsWithSteps.size}`);
+  const existingRunIdsWithSteps = await withFallback(
+    () => getExistingRunIdsWithStepsFromTurso(repo),
+    () => getExistingRunIdsWithStepsFromSqlite(repo),
+    'getExistingRunIdsWithSteps',
+  );
+  log(`Existing runs with cached steps: ${existingRunIdsWithSteps.size}`);
 
   function toCreatedParam(window: CollectionWindow): string {
     return toCreatedRange(window);
@@ -670,7 +755,10 @@ export async function main() {
   log(`Target repos: ${targetRepos.join(', ') || '(none)'}`);
   log(`Node version: ${process.version}`);
   log(`ETL_DIR: ${ETL_DIR}`);
-  log(`State storage: Turso collection_state table`);
+  log(`State storage: SQLite (primary) + Turso (best-effort)`);
+
+  // Initialise SQLite schema (auto-creates etl/data/action-insight.db)
+  await ensureSqlite();
 
   await runCollection({
     token,
