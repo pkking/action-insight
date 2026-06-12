@@ -10,6 +10,7 @@
  */
 
 import { createClient, type Client, type InValue } from '@libsql/client';
+import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -132,6 +133,23 @@ let cachedClient: Client | null = null;
  * 2. `SQLITE_DATABASE_FILE` env var (just a path; prefixed with `file:`)
  * 3. Auto-derived from the project directory: `etl/data/action-insight.db`
  */
+/** Auto-decompress .db.xz if .db doesn't exist but .db.xz does. */
+function autoDecompress(dbPath: string): void {
+  if (fs.existsSync(dbPath)) return;
+  const xzPath = `${dbPath}.xz`;
+  if (!fs.existsSync(xzPath)) return;
+
+  console.log(`Decompressing ${xzPath} → ${dbPath}...`);
+  try {
+    execSync(`xz -dk --force '${xzPath}'`, { stdio: 'inherit' });
+    if (fs.existsSync(dbPath)) {
+      console.log(`  Decompressed: ${(fs.statSync(dbPath).size / 1024 / 1024).toFixed(1)} MB`);
+    }
+  } catch {
+    console.warn(`  Failed to decompress ${xzPath}; a new empty database will be created.`);
+  }
+}
+
 function resolveSqliteUrl(): string {
   if (process.env.SQLITE_DATABASE_URL) return process.env.SQLITE_DATABASE_URL;
   if (process.env.SQLITE_DATABASE_FILE) return `file:${process.env.SQLITE_DATABASE_FILE}`;
@@ -144,7 +162,12 @@ function resolveSqliteUrl(): string {
   fs.mkdirSync(dataDir, { recursive: true });
 
   const projectName = process.env.SQLITE_PROJECT_NAME ?? 'action-insight';
-  return `file:${path.join(dataDir, `${projectName}.db`)}`;
+  const dbPath = path.join(dataDir, `${projectName}.db`);
+
+  // Auto-decompress from .xz if available
+  autoDecompress(dbPath);
+
+  return `file:${dbPath}`;
 }
 
 function getSqliteClient(): Client {
