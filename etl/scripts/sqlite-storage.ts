@@ -1,12 +1,13 @@
 /**
  * SQLite (local) storage adapter for ETL pipeline.
  *
+ * Each repository gets its own database file under `etl/data/<owner>-<repo>.db`.
  * Mirrors the Turso storage API so that ETL can write to both backends
  * simultaneously.  When Turso write quota is exhausted, data is still
  * persisted locally.
  *
- * Database file is auto-created under `etl/data/<project>.db` (default
- * project name `action-insight`).
+ * Database files are auto-created on first write.  If a compressed
+ * `<owner>-<repo>.db.xz` exists in the repo, it is auto-decompressed.
  */
 
 import { createClient, type Client, type InValue } from '@libsql/client';
@@ -122,24 +123,37 @@ function readPositiveIntEnv(name: string, defaultValue: number): number {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Client singleton                                                   */
+/*  Per-repo DB path resolution & client cache                         */
 /* ------------------------------------------------------------------ */
 
-let cachedClient: Client | null = null;
+const clientCache = new Map<string, Client>();
 
-/** Resolve the SQLite database URL from env or defaults.
- *
- * 1. `SQLITE_DATABASE_URL` env var (full URL like `file:/abs/path.db`)
- * 2. `SQLITE_DATABASE_FILE` env var (just a path; prefixed with `file:`)
- * 3. Auto-derived from the project directory: `etl/data/action-insight.db`
- */
-/** Auto-decompress .db.xz if .db doesn't exist but .db.xz does. */
+/** Resolve the data directory. */
+function getDataDir(): string {
+  const __filename = fileURLToPath(import.meta.url);
+  const scriptsDir = path.dirname(__filename);
+  const etlDir = path.dirname(scriptsDir);
+  const dataDir = path.join(etlDir, 'data');
+  fs.mkdirSync(dataDir, { recursive: true });
+  return dataDir;
+}
+
+/** Convert `owner/repo` → `<owner>-<repo>.db` path. */
+function repoToDbPath(repo: string): string {
+  const [owner, repoName] = repo.split('/');
+  const safe = `${owner}-${repoName}.db`;
+  const overrideDir = process.env.SQLITE_DATA_DIR;
+  const dataDir = overrideDir ?? getDataDir();
+  return path.join(dataDir, safe);
+}
+
+/** Auto-decompress `.db.xz` → `.db` if compressed copy exists. */
 function autoDecompress(dbPath: string): void {
   if (fs.existsSync(dbPath)) return;
   const xzPath = `${dbPath}.xz`;
   if (!fs.existsSync(xzPath)) return;
 
-  console.log(`Decompressing ${xzPath} → ${dbPath}...`);
+  console.log(`Decompressing ${path.basename(xzPath)} → ${path.basename(dbPath)}...`);
   try {
     execSync(`xz -dk --force '${xzPath}'`, { stdio: 'inherit' });
     if (fs.existsSync(dbPath)) {
@@ -150,32 +164,17 @@ function autoDecompress(dbPath: string): void {
   }
 }
 
-function resolveSqliteUrl(): string {
-  if (process.env.SQLITE_DATABASE_URL) return process.env.SQLITE_DATABASE_URL;
-  if (process.env.SQLITE_DATABASE_FILE) return `file:${process.env.SQLITE_DATABASE_FILE}`;
+/** Get (or create) a per-repo SQLite client. */
+function getRepoClient(repo: string): Client {
+  const cached = clientCache.get(repo);
+  if (cached) return cached;
 
-  // Default: etl/data/<project-name>.db  relative to repository root
-  const __filename = fileURLToPath(import.meta.url);
-  const scriptsDir = path.dirname(__filename);
-  const etlDir = path.dirname(scriptsDir);
-  const dataDir = path.join(etlDir, 'data');
-  fs.mkdirSync(dataDir, { recursive: true });
-
-  const projectName = process.env.SQLITE_PROJECT_NAME ?? 'action-insight';
-  const dbPath = path.join(dataDir, `${projectName}.db`);
-
-  // Auto-decompress from .xz if available
+  const dbPath = repoToDbPath(repo);
   autoDecompress(dbPath);
 
-  return `file:${dbPath}`;
-}
-
-function getSqliteClient(): Client {
-  if (cachedClient) return cachedClient;
-
-  const url = resolveSqliteUrl();
-  cachedClient = createClient({ url });
-  return cachedClient;
+  const client = createClient({ url: `file:${dbPath}` });
+  clientCache.set(repo, client);
+  return client;
 }
 
 /* ------------------------------------------------------------------ */
@@ -184,7 +183,7 @@ function getSqliteClient(): Client {
 
 const SQLITE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS repos (
-  id   INTEGER PRIMARY KEY AUTOINCREMENT,
+  id   INTEGER PRIMARY KEY,
   owner TEXT NOT NULL,
   repo  TEXT NOT NULL,
   UNIQUE(owner, repo)
@@ -192,7 +191,7 @@ CREATE TABLE IF NOT EXISTS repos (
 
 CREATE TABLE IF NOT EXISTS runs (
   id                 INTEGER PRIMARY KEY,
-  repo_id            INTEGER NOT NULL REFERENCES repos(id),
+  repo_id            INTEGER NOT NULL,
   name               TEXT,
   head_branch        TEXT,
   head_sha           TEXT,
@@ -234,8 +233,8 @@ CREATE TABLE IF NOT EXISTS steps (
 );
 
 CREATE TABLE IF NOT EXISTS pr_metrics (
-  id                          INTEGER PRIMARY KEY AUTOINCREMENT,
-  repo_id                     INTEGER NOT NULL REFERENCES repos(id),
+  id                          INTEGER PRIMARY KEY,
+  repo_id                     INTEGER NOT NULL,
   pr_number                   INTEGER NOT NULL,
   title                       TEXT,
   branch                      TEXT,
@@ -264,8 +263,8 @@ CREATE TABLE IF NOT EXISTS pr_workflows (
 );
 
 CREATE TABLE IF NOT EXISTS pr_resolution_cache (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  repo_id       INTEGER NOT NULL REFERENCES repos(id),
+  id            INTEGER PRIMARY KEY,
+  repo_id       INTEGER NOT NULL,
   head_sha      TEXT NOT NULL,
   pr_number     INTEGER,
   source        TEXT,
@@ -277,7 +276,7 @@ CREATE TABLE IF NOT EXISTS pr_resolution_cache (
 );
 
 CREATE TABLE IF NOT EXISTS collection_state (
-  repo_id           INTEGER PRIMARY KEY REFERENCES repos(id),
+  repo_id           INTEGER PRIMARY KEY,
   backfill_cursor   TEXT,
   history_complete  INTEGER DEFAULT 0,
   latest_date       TEXT,
@@ -295,18 +294,18 @@ CREATE INDEX IF NOT EXISTS idx_pr_metrics_repo_ci ON pr_metrics(repo_id, ci_comp
 CREATE INDEX IF NOT EXISTS idx_pr_resolution_cache_repo_sha ON pr_resolution_cache(repo_id, head_sha);
 `;
 
-async function ensureSchema(client: Client): Promise<void> {
+async function ensureRepoSchema(client: Client): Promise<void> {
   const statements = SQLITE_SCHEMA.split(';').map((s) => s.trim()).filter(Boolean);
   for (const sql of statements) {
     await client.execute({ sql, args: [] });
   }
 }
 
-/** Public helper — guarantees the schema is initialized. */
-export async function initSqlite(): Promise<string> {
-  const client = getSqliteClient();
-  await ensureSchema(client);
-  return resolveSqliteUrl();
+/** Public helper — guarantees the schema is initialized for a given repo. */
+export async function initSqlite(repo: string): Promise<string> {
+  const client = getRepoClient(repo);
+  await ensureRepoSchema(client);
+  return repoToDbPath(repo);
 }
 
 /* ------------------------------------------------------------------ */
@@ -319,6 +318,7 @@ function* chunkArray<T>(items: T[], size: number): Generator<T[]> {
   }
 }
 
+/** Upsert a single row into `repos` and return its id. */
 async function ensureRepo(client: Client, owner: string, repo: string): Promise<number> {
   await client.execute({
     sql: `INSERT INTO repos (owner, repo) VALUES (?, ?) ON CONFLICT(owner, repo) DO NOTHING`,
@@ -377,7 +377,8 @@ function shouldWritePrResolutionCacheEntry(
 export async function writeRunsToSqlite(repo: string, runs: RunRow[], date: string): Promise<void> {
   if (runs.length === 0) return;
 
-  const client = getSqliteClient();
+  const client = getRepoClient(repo);
+  await ensureRepoSchema(client);
   const repoId = await ensureRepo(client, repo.split('/')[0], repo.split('/')[1]);
 
   const tx = await client.transaction('write');
@@ -492,7 +493,8 @@ export async function writeRunsToSqlite(repo: string, runs: RunRow[], date: stri
 }
 
 export async function getExistingRunIdsWithStepsFromSqlite(repo: string): Promise<Map<number, string>> {
-  const client = getSqliteClient();
+  const client = getRepoClient(repo);
+  await ensureRepoSchema(client);
   const [owner, repoName] = repo.split('/');
   const repoId = await ensureRepo(client, owner, repoName);
 
@@ -520,7 +522,8 @@ export async function getExistingRunIdsWithStepsFromSqlite(repo: string): Promis
 }
 
 export async function readCollectionStateFromSqlite(repo: string): Promise<CollectionState | null> {
-  const client = getSqliteClient();
+  const client = getRepoClient(repo);
+  await ensureRepoSchema(client);
   const [owner, repoName] = repo.split('/');
   const repoId = await ensureRepo(client, owner, repoName);
 
@@ -542,7 +545,8 @@ export async function readCollectionStateFromSqlite(repo: string): Promise<Colle
 }
 
 export async function writeCollectionStateToSqlite(repo: string, state: CollectionState): Promise<void> {
-  const client = getSqliteClient();
+  const client = getRepoClient(repo);
+  await ensureRepoSchema(client);
   const repoId = await ensureRepo(client, repo.split('/')[0], repo.split('/')[1]);
 
   await client.execute({
@@ -566,7 +570,8 @@ export async function writeCollectionStateToSqlite(repo: string, state: Collecti
 }
 
 export async function getCollectedDatesFromSqlite(repo: string): Promise<string[]> {
-  const client = getSqliteClient();
+  const client = getRepoClient(repo);
+  await ensureRepoSchema(client);
   const [owner, repoName] = repo.split('/');
   const repoId = await ensureRepo(client, owner, repoName);
 
@@ -582,7 +587,8 @@ export async function readPullRequestResolutionCacheFromSqlite(
   repo: string,
   shas: string[],
 ): Promise<Map<string, PullRequestResolutionCacheRecord>> {
-  const client = getSqliteClient();
+  const client = getRepoClient(repo);
+  await ensureRepoSchema(client);
   if (shas.length === 0) return new Map();
 
   const [owner, repoName] = repo.split('/');
@@ -626,7 +632,8 @@ export async function writePullRequestResolutionCacheToSqlite(
 ): Promise<void> {
   if (entries.length === 0) return;
 
-  const client = getSqliteClient();
+  const client = getRepoClient(repo);
+  await ensureRepoSchema(client);
   const repoId = await ensureRepo(client, repo.split('/')[0], repo.split('/')[1]);
 
   const entriesBySha = new Map<string, PullRequestResolutionCacheEntry>();
@@ -720,7 +727,8 @@ export async function writePullRequestResolutionCacheToSqlite(
 export async function writePrWorkflowsToSqlite(repo: string, prWorkflows: Map<number, number[]>): Promise<void> {
   if (prWorkflows.size === 0) return;
 
-  const client = getSqliteClient();
+  const client = getRepoClient(repo);
+  await ensureRepoSchema(client);
   const repoId = await ensureRepo(client, repo.split('/')[0], repo.split('/')[1]);
 
   const prNumberToId = new Map<number, number>();
@@ -771,7 +779,8 @@ export async function writePrWorkflowsToSqlite(repo: string, prWorkflows: Map<nu
 export async function writePrMetricsToSqlite(repo: string, prs: PrMetricsSummary[]): Promise<void> {
   if (prs.length === 0) return;
 
-  const client = getSqliteClient();
+  const client = getRepoClient(repo);
+  await ensureRepoSchema(client);
   const repoId = await ensureRepo(client, repo.split('/')[0], repo.split('/')[1]);
 
   const prRows = prs.map((pr) => ({

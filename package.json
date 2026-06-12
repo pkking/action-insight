@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "decompress:sqlite": "xz -dk --force etl/data/action-insight.db.xz",
+    "decompress:sqlite": "for f in etl/data/*.db.xz; do xz -dk --force \"$f\"; done",
     "collect": "tsx etl/scripts/collect.ts",
     "migrate:turso": "echo 'Apply Turso schema: turso db shell <db-name> < turso/schema.sql'",
     "migrate:supabase-to-turso": "tsx etl/scripts/migrate-supabase-to-turso.ts",
     "migrate:turso-to-sqlite": "tsx etl/scripts/migrate-turso-to-sqlite.ts",
+    "split:sqlite": "tsx etl/scripts/split-monolith-to-per-repo.ts",
     "rebuild:pr-artifacts": "tsx etl/scripts/rebuild-pr-artifacts.ts",
     "prebuild": "npm run migrate:turso",
     "build": "next build",
