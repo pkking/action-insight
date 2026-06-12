@@ -8,7 +8,7 @@ import { addDays, format, parseISO } from 'date-fns';
 import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
-import { getCollectedDatesFromTurso, checkEtlFreshness, formatFreshnessReport } from './turso-storage.ts';
+import { getCollectedDatesFromTurso, checkEtlFreshness, formatFreshnessReport, ensureTursoWritable, isTursoWriteBlockedError, TursoWriteBlockedError } from './turso-storage.ts';
 import type { Run } from '../../src/lib/types.ts';
 
 interface ReposConfig {
@@ -281,6 +281,18 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
+  // Check Turso write access upfront to avoid wasted work when DB is blocked
+  try {
+    await ensureTursoWritable();
+  } catch (err) {
+    if (isTursoWriteBlockedError(err)) {
+      console.error('Turso database write operations are blocked. PR artifact rebuild skipped.');
+      console.error('Check your Turso plan or database status.');
+      process.exit(0);
+    }
+    throw err;
+  }
+
   const failures: string[] = [];
 
   for (const repoKey of options.repos) {
@@ -346,6 +358,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
   void main().catch((error) => {
+    if (isTursoWriteBlockedError(error) || error instanceof TursoWriteBlockedError) {
+      console.error('Turso database write operations are blocked. PR artifact rebuild skipped.');
+      console.error('Check your Turso plan or database status.');
+      process.exit(0);
+    }
     console.error(error);
     process.exit(1);
   });

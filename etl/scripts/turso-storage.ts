@@ -10,6 +10,56 @@ import { createClient, type Client, type InValue } from '@libsql/client';
 import type { Step } from '../../src/lib/types.ts';
 
 /* ------------------------------------------------------------------ */
+/*  Turso write-blocked detection                                      */
+/* ------------------------------------------------------------------ */
+
+const TURSO_BLOCKED_RE = /writes? (?:are )?blocked|write operations? (?:are )?forbidden|upgrade your plan/i;
+
+export function isTursoWriteBlockedError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const e = err as Record<string, unknown>;
+  if (e.code === 'BLOCKED') return true;
+  const msg = String(e.message ?? '');
+  if (TURSO_BLOCKED_RE.test(msg)) return true;
+  // Walk the cause chain
+  const cause = e.cause as Record<string, unknown> | undefined;
+  if (cause) {
+    if (cause.code === 'BLOCKED') return true;
+    if (TURSO_BLOCKED_RE.test(String(cause.message ?? ''))) return true;
+  }
+  return false;
+}
+
+/** Try a minimal write to detect if Turso is blocking writes. Returns silently if OK, throws the original error if blocked. */
+export async function ensureTursoWritable(): Promise<void> {
+  const client = getTursoClient();
+  if (!client) return; // No Turso configured — let downstream code handle it
+  try {
+    // Quick probe: a SELECT 1 won't detect write-block, so try a no-op upsert on repos.
+    // This is safe because it's idempotent and uses dummy values that won't match real data.
+    await client.execute({
+      sql: `INSERT INTO repos (owner, repo) VALUES ('__health_check__', '__health_check__') ON CONFLICT(owner, repo) DO NOTHING`,
+      args: [],
+    });
+  } catch (err) {
+    if (isTursoWriteBlockedError(err)) {
+      throw new TursoWriteBlockedError(err);
+    }
+    // Other errors (schema missing, etc.) — let caller decide
+    throw err;
+  }
+}
+
+export class TursoWriteBlockedError extends Error {
+  constructor(cause: unknown) {
+    const msg = cause instanceof Error ? cause.message : String(cause);
+    super(`Turso writes blocked: ${msg}`);
+    this.name = 'TursoWriteBlockedError';
+    this.cause = cause;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 

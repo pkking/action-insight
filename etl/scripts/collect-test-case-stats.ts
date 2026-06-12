@@ -23,6 +23,7 @@ import * as yaml from 'js-yaml';
 import { createClient, type Client } from '@libsql/client';
 import { format, subDays } from 'date-fns';
 import { fileURLToPath } from 'url';
+import { isTursoWriteBlockedError, ensureTursoWritable, TursoWriteBlockedError } from './turso-storage.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -492,6 +493,18 @@ async function main() {
 
   info(`Collecting test case stats for ${owner}/${repoName}...`);
 
+  // Check Turso write access upfront to avoid wasted work when DB is blocked
+  try {
+    await ensureTursoWritable();
+  } catch (err) {
+    if (isTursoWriteBlockedError(err)) {
+      error('Turso database write operations are blocked. Test case stats not written.');
+      error('Check your Turso plan or database status.');
+      process.exit(0);
+    }
+    throw err;
+  }
+
   let repoDir: string;
   try {
     repoDir = cloneOrUpdateRepo(owner, repoName);
@@ -564,6 +577,11 @@ async function main() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
   main().catch(err => {
+    if (isTursoWriteBlockedError(err) || err instanceof TursoWriteBlockedError) {
+      error('Turso database write operations are blocked. Test case stats not written.');
+      error('Check your Turso plan or database status.');
+      process.exit(0);
+    }
     error(err);
     process.exit(1);
   });

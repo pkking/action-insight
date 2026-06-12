@@ -22,6 +22,9 @@ import {
   getCollectedDatesFromTurso,
   checkEtlFreshness,
   formatFreshnessReport,
+  ensureTursoWritable,
+  isTursoWriteBlockedError,
+  TursoWriteBlockedError,
   type CollectionState,
 } from './turso-storage.ts';
 import { readPullRequestsFromPayload } from './github-utils.ts';
@@ -587,6 +590,16 @@ export async function runCollection({
     return;
   }
 
+  // Check Turso write access upfront to avoid wasting GitHub API quota when DB is blocked
+  try {
+    await ensureTursoWritable();
+  } catch (err) {
+    if (isTursoWriteBlockedError(err)) {
+      throw new TursoWriteBlockedError(err);
+    }
+    throw err;
+  }
+
   const client = octokit ?? new Octokit({ auth: token });
   const failures: string[] = [];
   let stoppedEarly: RateLimitAbortError | null = null;
@@ -682,6 +695,11 @@ export async function main() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
   main().catch(err => {
+    if (isTursoWriteBlockedError(err) || err instanceof TursoWriteBlockedError) {
+      error('Turso database write operations are blocked. Collection skipped until database is available.');
+      error('Check your Turso plan or database status. GitHub API quota was not consumed.');
+      process.exit(0);
+    }
     error(err);
     process.exit(1);
   });
