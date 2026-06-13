@@ -93,7 +93,8 @@ function getTursoClient() {
 }
 
 function isTursoWriteBlocked(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err);
+  if (typeof err !== 'object' || err === null) return false;
+  const message = (err as Error).message || '';
   return message.includes('writes are blocked') || message.includes('SQL write operations are forbidden');
 }
 
