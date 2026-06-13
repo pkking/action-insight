@@ -156,13 +156,28 @@ function* chunkArray<T>(items: T[], size: number): Generator<T[]> {
   }
 }
 
+/** Check if a libsql error indicates Turso write operations are blocked. */
+function isTursoWriteBlocked(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const message = (err as Error).message || '';
+  return message.includes('writes are blocked') || message.includes('SQL write operations are forbidden');
+}
+
 async function ensureRepo(client: Client, owner: string, repo: string): Promise<number> {
-  // Upsert using INSERT OR REPLACE
-  await client.execute({
-    sql: `INSERT INTO repos (owner, repo) VALUES (?, ?)
-          ON CONFLICT(owner, repo) DO NOTHING`,
-    args: [owner, repo],
-  });
+  // Try upsert first (required for repos not yet in Turso)
+  try {
+    await client.execute({
+      sql: `INSERT INTO repos (owner, repo) VALUES (?, ?)
+            ON CONFLICT(owner, repo) DO NOTHING`,
+      args: [owner, repo],
+    });
+  } catch (err) {
+    if (isTursoWriteBlocked(err)) {
+      // Turso is read-only; fall through to SELECT-only lookup
+    } else {
+      throw err;
+    }
+  }
 
   const { rows } = await client.execute({
     sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,

@@ -92,12 +92,22 @@ function getTursoClient() {
   return createClient({ url, authToken });
 }
 
+async function isTursoWriteBlocked(err: unknown): Promise<boolean> {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.includes('writes are blocked') || message.includes('SQL write operations are forbidden');
+}
+
 async function ensureRepoId(client: Client, owner: string, repo: string): Promise<number> {
-  // Upsert using INSERT OR REPLACE
-  await client.execute({
-    sql: `INSERT INTO repos (owner, repo) VALUES (?, ?) ON CONFLICT(owner, repo) DO NOTHING`,
-    args: [owner, repo],
-  });
+  // Try upsert first (required for repos not yet in Turso)
+  try {
+    await client.execute({
+      sql: `INSERT INTO repos (owner, repo) VALUES (?, ?) ON CONFLICT(owner, repo) DO NOTHING`,
+      args: [owner, repo],
+    });
+  } catch (err) {
+    if (!(await isTursoWriteBlocked(err))) throw err;
+    // Turso is read-only; fall through to SELECT-only lookup
+  }
 
   const { rows } = await client.execute({
     sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
@@ -555,8 +565,13 @@ async function main() {
     });
     info(`Upserted test_case_stats for ${owner}/${repoName} (window: ${windowStart} to ${windowEnd})`);
   } catch (err) {
-    error(`Failed to write to Turso: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
+    if (await isTursoWriteBlocked(err)) {
+      warn(`Turso writes are blocked; test_case_stats not updated for ${owner}/${repoName}`);
+    } else {
+      error(`Failed to write to Turso: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  }
   }
 
   info('Done!');
