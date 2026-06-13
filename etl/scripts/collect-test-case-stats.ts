@@ -92,7 +92,7 @@ function getTursoClient() {
   return createClient({ url, authToken });
 }
 
-async function isTursoWriteBlocked(err: unknown): Promise<boolean> {
+function isTursoWriteBlocked(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
   return message.includes('writes are blocked') || message.includes('SQL write operations are forbidden');
 }
@@ -105,7 +105,7 @@ async function ensureRepoId(client: Client, owner: string, repo: string): Promis
       args: [owner, repo],
     });
   } catch (err) {
-    if (!(await isTursoWriteBlocked(err))) throw err;
+    if (!isTursoWriteBlocked(err)) throw err;
     // Turso is read-only; fall through to SELECT-only lookup
   }
 
@@ -565,13 +565,12 @@ async function main() {
     });
     info(`Upserted test_case_stats for ${owner}/${repoName} (window: ${windowStart} to ${windowEnd})`);
   } catch (err) {
-    if (await isTursoWriteBlocked(err)) {
+    if (isTursoWriteBlocked(err)) {
       warn(`Turso writes are blocked; test_case_stats not updated for ${owner}/${repoName}`);
     } else {
       error(`Failed to write to Turso: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
     }
-  }
   }
 
   info('Done!');
