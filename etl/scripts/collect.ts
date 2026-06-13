@@ -30,7 +30,6 @@ import {
   readCollectionStateFromSqlite,
   writeCollectionStateToSqlite,
   getCollectedDatesFromSqlite,
-  initSqlite,
 } from './sqlite-storage.ts';
 import { readPullRequestsFromPayload } from './github-utils.ts';
 import type { GitHubApiPayload, PullRequestRef, Step } from '../../src/lib/types.ts';
@@ -160,9 +159,8 @@ let sqliteReady = false;
 async function ensureSqlite(): Promise<void> {
   if (sqliteReady) return;
   try {
-    const url = await initSqlite();
+    // SQLite databases are per-repo; defer schema creation to the first per-repo access.
     sqliteReady = true;
-    console.log(`SQLite storage ready: ${url}`);
   } catch (err) {
     console.error('Failed to initialise SQLite:', err);
     // SQLite init failure is non-fatal — ETL can still write to Turso
