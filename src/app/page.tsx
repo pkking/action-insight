@@ -1,7 +1,7 @@
 import DashboardClient from './DashboardClient';
 import { getHomepageData } from '@/lib/server-homepage-data';
 
-export const dynamic = 'force-dynamic'; // searchParams requires dynamic; data cached via unstable_cache
+export const dynamic = 'force-dynamic';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 

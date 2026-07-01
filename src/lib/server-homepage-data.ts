@@ -3,7 +3,6 @@ import 'server-only';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { cache } from 'react';
-import { unstable_cache } from 'next/cache';
 
 import { getTursoClient, getRepoId as _getRepoId } from './turso';
 import { parseTrackedReposYaml } from './tracked-repos.js';
@@ -117,7 +116,7 @@ const getPullRequestIndex = cache(async (owner: string, repo: string): Promise<P
   };
 });
 
-async function computeHomepageData() {
+export async function getHomepageData() {
   const repos = await getTrackedRepoOptions();
   const results = await Promise.allSettled(
     repos.map(async (repo) => ({
@@ -148,11 +147,3 @@ async function computeHomepageData() {
     failedRepoKeys,
   };
 }
-
-// ponytail: 5-min ISR cache — homepage data only changes daily via ETL rebuild.
-// Without this, every page load fires 14+ Turso queries (force-dynamic).
-export const getHomepageData = unstable_cache(
-  computeHomepageData,
-  ['homepage-data'],
-  { revalidate: 300 },
-);
