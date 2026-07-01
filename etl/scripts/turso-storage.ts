@@ -368,12 +368,13 @@ export async function getExistingRunIdsWithJobsFromTurso(repo: string): Promise<
   const repoId = await ensureRepo(client, owner, repoName);
 
   const runIds = new Set<number>();
-  let offset = 0;
+  let lastId = 0;
 
   while (true) {
+    // ponytail: keyset pagination (id > lastId) avoids OFFSET's O(n²) scan
     const { rows } = await client.execute({
-      sql: 'SELECT r.id FROM runs r WHERE r.repo_id = ? AND EXISTS (SELECT 1 FROM jobs j WHERE j.run_id = r.id) ORDER BY r.id LIMIT ? OFFSET ?',
-      args: [repoId, TURSO_PAGE_SIZE, offset],
+      sql: 'SELECT r.id FROM runs r WHERE r.repo_id = ? AND r.id > ? AND EXISTS (SELECT 1 FROM jobs j WHERE j.run_id = r.id) ORDER BY r.id LIMIT ?',
+      args: [repoId, lastId, TURSO_PAGE_SIZE],
     });
 
     for (const row of rows) {
@@ -381,7 +382,7 @@ export async function getExistingRunIdsWithJobsFromTurso(repo: string): Promise<
     }
 
     if (rows.length < TURSO_PAGE_SIZE) break;
-    offset += TURSO_PAGE_SIZE;
+    lastId = Number(rows[rows.length - 1].id as number);
   }
 
   return runIds;
@@ -395,15 +396,16 @@ export async function getExistingRunIdsWithStepsFromTurso(repo: string): Promise
   const repoId = await ensureRepo(client, owner, repoName);
 
   const runIds = new Map<number, string>();
-  let offset = 0;
+  let lastId = 0;
 
   while (true) {
+    // ponytail: keyset pagination (id > lastId) avoids OFFSET's O(n²) scan
     const { rows } = await client.execute({
       sql: `SELECT r.id, r.updated_at FROM runs r
-            WHERE r.repo_id = ? AND r.steps_checked_at IS NOT NULL
+            WHERE r.repo_id = ? AND r.id > ? AND r.steps_checked_at IS NOT NULL
               AND r.steps_checked_at >= r.updated_at
-            ORDER BY r.id LIMIT ? OFFSET ?`,
-      args: [repoId, TURSO_PAGE_SIZE, offset],
+            ORDER BY r.id LIMIT ?`,
+      args: [repoId, lastId, TURSO_PAGE_SIZE],
     });
 
     for (const row of rows) {
@@ -411,7 +413,7 @@ export async function getExistingRunIdsWithStepsFromTurso(repo: string): Promise
     }
 
     if (rows.length < TURSO_PAGE_SIZE) break;
-    offset += TURSO_PAGE_SIZE;
+    lastId = Number(rows[rows.length - 1].id as number);
   }
 
   return runIds;

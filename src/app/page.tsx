@@ -1,7 +1,7 @@
 import DashboardClient from './DashboardClient';
 import { getHomepageData } from '@/lib/server-homepage-data';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300; // 5-min ISR — data changes at most daily via ETL
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
