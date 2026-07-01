@@ -360,20 +360,40 @@ jobs:
     if: always() && inputs.skip_rebuild != true
     runs-on: ubuntu-latest
     steps:
+      - id: gate
+        name: Rebuild schedule gate
+        run: |
+          # Manual dispatch always rebuilds.
+          # Hourly scheduled runs skip rebuild to save Turso write quota;
+          # rebuild only runs once daily (03:xx UTC) with a 3-day window.
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ]; then
+            HOUR=$(date -u +%H)
+            if [ "$HOUR" != "03" ]; then
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              echo "Skipping rebuild (hour=$HOUR). Daily rebuild at 03:48 UTC."
+              exit 0
+            fi
+          fi
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v6
+        if: steps.gate.outputs.should_run == 'true'
         with:
           lfs: true
       - uses: actions/setup-node@v6
+        if: steps.gate.outputs.should_run == 'true'
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
+        if: steps.gate.outputs.should_run == 'true'
       - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
+        if: steps.gate.outputs.should_run == 'true'
       - name: Set default date range for scheduled runs
-        if: github.event_name == 'schedule'
+        if: steps.gate.outputs.should_run == 'true' && github.event_name == 'schedule'
         run: |
-          echo "SCHEDULED_START_DATE=$(date -u -d '2 days ago' +%Y-%m-%d)" >> "$GITHUB_ENV"
+          echo "SCHEDULED_START_DATE=$(date -u -d '3 days ago' +%Y-%m-%d)" >> "$GITHUB_ENV"
           echo "SCHEDULED_END_DATE=$(date -u -d '1 day ago' +%Y-%m-%d)" >> "$GITHUB_ENV"
       - name: Rebuild PR artifacts
+        if: steps.gate.outputs.should_run == 'true'
         run: |
           args=()
           if [ -n "${REBUILD_REPO}" ]; then
