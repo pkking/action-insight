@@ -44,7 +44,7 @@ jobs:
     if: inputs.repo == '' || inputs.repo == 'vllm-project/vllm-ascend'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - uses: actions/setup-node@v6
@@ -88,7 +88,7 @@ jobs:
     if: inputs.repo == '' || inputs.repo == 'verl-project/verl'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - uses: actions/setup-node@v6
@@ -132,7 +132,7 @@ jobs:
     if: inputs.repo == '' || inputs.repo == 'triton-lang/triton-ascend'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - uses: actions/setup-node@v6
@@ -176,7 +176,7 @@ jobs:
     if: inputs.repo == '' || inputs.repo == 'hiyouga/LlamaFactory'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - uses: actions/setup-node@v6
@@ -220,7 +220,7 @@ jobs:
     if: inputs.repo == '' || inputs.repo == 'modelscope/ms-swift'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - uses: actions/setup-node@v6
@@ -264,7 +264,7 @@ jobs:
     if: inputs.repo == '' || inputs.repo == 'sgl-project/sglang'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - uses: actions/setup-node@v6
@@ -308,7 +308,7 @@ jobs:
     if: inputs.repo == '' || inputs.repo == 'tile-ai/tilelang-ascend'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - uses: actions/setup-node@v6
@@ -375,7 +375,7 @@ jobs:
             fi
           fi
           echo "should_run=true" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         if: steps.gate.outputs.should_run == 'true'
         with:
           lfs: true
