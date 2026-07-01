@@ -1,7 +1,7 @@
 import DashboardClient from './DashboardClient';
 import { getHomepageData } from '@/lib/server-homepage-data';
 
-export const revalidate = 300; // 5-min ISR — data changes at most daily via ETL
+export const dynamic = 'force-dynamic'; // searchParams requires dynamic; data cached via unstable_cache
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
