@@ -58,9 +58,9 @@ export function computePullRequestAttemptMetrics(runs: Run[]) {
 
   const latestTerminalByWorkflow = new Map<string, Run>();
   const sortedForLatest = [...runs].sort((left, right) => {
-    const leftTime = Date.parse(left.updated_at || left.created_at);
-    const rightTime = Date.parse(right.updated_at || right.created_at);
-    if (leftTime !== rightTime) return rightTime - leftTime;
+    const leftTime = left.updated_at || left.created_at;
+    const rightTime = right.updated_at || right.created_at;
+    if (leftTime !== rightTime) return rightTime.localeCompare(leftTime);
     if (left.id !== right.id) return right.id - left.id;
     return (right.runAttempt ?? 1) - (left.runAttempt ?? 1);
   });
