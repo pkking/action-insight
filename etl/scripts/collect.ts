@@ -3,7 +3,6 @@ import { Octokit } from '@octokit/core';
 import { addDays, format, subDays, parseISO, isBefore, startOfDay } from 'date-fns';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
 import { fileURLToPath } from 'url';
 
 import {
@@ -16,6 +15,7 @@ import collectionWindows, { type CollectionWindow } from '../../src/lib/collecti
 import { isGitHubRateLimitError, getRateLimitDetails, type RateLimitDetails } from './github.ts';
 import {
   writeRunsToTurso,
+  writeWorkflowAttemptsToTurso,
   getExistingRunIdsWithStepsFromTurso,
   readCollectionState,
   writeCollectionState,
@@ -26,6 +26,7 @@ import {
 } from './turso-storage.ts';
 import {
   writeRunsToSqlite,
+  writeWorkflowAttemptsToSqlite,
   getExistingRunIdsWithStepsFromSqlite,
   readCollectionStateFromSqlite,
   writeCollectionStateToSqlite,
@@ -33,6 +34,8 @@ import {
 } from './sqlite-storage.ts';
 import { readPullRequestsFromPayload, isSqliteFallbackEnabled, writeWithOptionalSqliteFallback } from './github-utils.ts';
 import type { GitHubApiPayload, PullRequestRef, Step } from '../../src/lib/types.ts';
+import { getRepoNames, parseReposConfig, type RepoConfigEntry, type ReposConfig } from './repos-config.ts';
+import { buildWorkflowAttempts, enrichRunWithWorkflowMetadata } from './workflow-attempts.ts';
 
 const { buildCollectionWindows, splitCollectionWindow, toCreatedRange } = collectionWindows;
 
@@ -128,10 +131,6 @@ interface GitHubJobPayload extends GitHubApiPayload {
   html_url: string;
 }
 
-interface ReposConfig {
-  repos: string[];
-}
-
 interface RepoCollectionState {
   latest: string;
   collectedDates: string[];
@@ -145,6 +144,7 @@ interface RunCollectionOptions {
   retentionDays: number;
   cliOptions: CollectCliOptions;
   targetRepos: string[];
+  reposConfig?: ReposConfig;
   octokit?: Octokit;
   collectRepoImpl?: typeof collectRepo;
 }
@@ -164,19 +164,23 @@ async function withOptionalSqliteFallback<T>(primary: () => Promise<T>, fallback
   }
 }
 
-function readReposConfig(): string[] {
+function readReposConfig(): ReposConfig {
   try {
     log(`Reading repos config from: ${REPOS_CONFIG_PATH}`);
     const content = fs.readFileSync(REPOS_CONFIG_PATH, 'utf-8');
-    const config = yaml.load(content) as ReposConfig;
-    log(`Found repos in repos.yaml: ${config.repos?.join(', ')}`);
-    return config.repos || [];
+    const config = parseReposConfig(content);
+    log(`Found repos in repos.yaml: ${getRepoNames(config).join(', ')}`);
+    return config;
   } catch {
     warn('Failed to read repos.yaml, falling back to environment variable');
     const envRepos = (process.env.TARGET_REPOS || '').split(',').map(s => s.trim()).filter(Boolean);
     log(`TARGET_REPOS env var: ${process.env.TARGET_REPOS || '(empty)'}`);
-    return envRepos;
+    return { repos: envRepos.map((repo) => ({ repo, workflows: [] })) };
   }
+}
+
+function findRepoConfig(config: ReposConfig, repo: string): RepoConfigEntry {
+  return config.repos.find((entry) => entry.repo === repo) ?? { repo, workflows: [] };
 }
 
 function computeBackfillCursor(
@@ -275,6 +279,8 @@ async function persistCollectedRuns(
   state: RepoCollectionState,
   runs: Run[],
   retentionDays: number,
+  reposConfig: ReposConfig,
+  repoConfig: RepoConfigEntry,
   queriedWindows: CollectionWindow[] = [],
   now: Date = new Date(),
 ): Promise<RepoCollectionState> {
@@ -316,6 +322,14 @@ async function persistCollectedRuns(
       `writeRuns ${date}`,
       warn,
     );
+
+    const attempts = buildWorkflowAttempts(runsByDate[date], reposConfig, repoConfig);
+    await writeWithOptionalSqliteFallback(
+      () => writeWorkflowAttemptsToTurso(repo, attempts),
+      () => writeWorkflowAttemptsToSqlite(repo, attempts),
+      `writeWorkflowAttempts ${date}`,
+      warn,
+    );
   }
 
   const cutoffDate = startOfDay(subDays(now, retentionDays));
@@ -343,6 +357,7 @@ export async function collectRepo(
   repo: string,
   retentionDays: number,
   options: CollectCliOptions,
+  reposConfig: ReposConfig = { repos: [{ repo, workflows: [] }] },
 ) {
   console.log(`Processing ${repo}...`);
   const [owner, repoName] = repo.split('/');
@@ -351,6 +366,7 @@ export async function collectRepo(
   }
 
   log(`Owner: ${owner}, Repo: ${repoName}`);
+  const repoConfig = findRepoConfig(reposConfig, repo);
 
   const now = new Date();
   const state = await loadRepoState(repo, retentionDays, now);
@@ -421,12 +437,33 @@ export async function collectRepo(
 
         const runId = run.id;
         let jobs: Job[] = [];
+        const baseRun: Run = enrichRunWithWorkflowMetadata({
+          id: run.id,
+          name: run.name ?? 'unknown',
+          head_branch: run.head_branch ?? 'unknown',
+          head_sha: typeof run.head_sha === 'string' ? run.head_sha : undefined,
+          status: run.status ?? 'completed',
+          conclusion: run.conclusion ?? 'unknown',
+          event: run.event ?? 'unknown',
+          created_at: run.created_at,
+          run_started_at: typeof run.run_started_at === 'string' ? run.run_started_at : undefined,
+          updated_at: run.updated_at,
+          html_url: run.html_url,
+          durationInSeconds: (new Date(run.updated_at).getTime() - new Date(run.created_at).getTime()) / 1000,
+          pull_requests: readPullRequestsFromPayload(run as GitHubApiPayload),
+          jobs: [],
+          githubPayload: run as GitHubApiPayload,
+        }, reposConfig, repoConfig);
 
         const cachedUpdatedAt = existingRunIdsWithSteps.get(runId);
         const isCachedRunFresh =
           !!cachedUpdatedAt && Date.parse(cachedUpdatedAt) >= Date.parse(run.updated_at);
+        const hasWorkflowRules = repoConfig.workflows.length > 0;
 
-        if (isCachedRunFresh) {
+        if (hasWorkflowRules && !baseRun.tracked) {
+          skippedJobsCount++;
+          log(`Skipping jobs for run #${runId} - workflow is not tracked (${baseRun.workflowParseStatus ?? 'unknown'})`);
+        } else if (isCachedRunFresh) {
           skippedJobsCount++;
           log(`Skipping jobs for run #${runId} - already cached with steps`);
         } else {
@@ -500,6 +537,8 @@ export async function collectRepo(
               html_url: j.html_url,
               queueDurationInSeconds: Math.max(0, (startedMs - createdMs) / 1000),
               durationInSeconds: Math.max(0, (completedMs - startedMs) / 1000),
+              runtimeInSeconds: Math.max(0, (completedMs - startedMs) / 1000),
+              totalDurationInSeconds: Math.max(0, (completedMs - createdMs) / 1000),
               githubPayload: j,
               steps: steps.length > 0 ? steps : undefined,
             };
@@ -507,20 +546,8 @@ export async function collectRepo(
         }
 
         allRuns.push({
-          id: run.id,
-          name: run.name ?? 'unknown',
-          head_branch: run.head_branch ?? 'unknown',
-          head_sha: typeof run.head_sha === 'string' ? run.head_sha : undefined,
-          status: run.status ?? 'completed',
-          conclusion: run.conclusion ?? 'unknown',
-          event: run.event ?? 'unknown',
-          created_at: run.created_at,
-          updated_at: run.updated_at,
-          html_url: run.html_url,
-          durationInSeconds: (new Date(run.updated_at).getTime() - new Date(run.created_at).getTime()) / 1000,
-          pull_requests: readPullRequestsFromPayload(run as GitHubApiPayload),
+          ...baseRun,
           jobs,
-          githubPayload: run as GitHubApiPayload,
         });
       }
 
@@ -607,7 +634,16 @@ export async function collectRepo(
         for (const run of err.partialRuns) {
           allRunsMap.set(run.id, run);
         }
-        const persistedState = await persistCollectedRuns(repo, state, Array.from(allRunsMap.values()), retentionDays, completedWindows, now);
+        const persistedState = await persistCollectedRuns(
+          repo,
+          state,
+          Array.from(allRunsMap.values()),
+          retentionDays,
+          reposConfig,
+          repoConfig,
+          completedWindows,
+          now,
+        );
         log(`Persisted partial raw collection state for ${repo}: ${persistedState.collectedDates.length} retained date(s).`);
       }
       throw err;
@@ -616,7 +652,7 @@ export async function collectRepo(
 
   const allRuns = Array.from(allRunsMap.values());
   log(`Total completed runs collected: ${allRuns.length}`);
-  await persistCollectedRuns(repo, state, allRuns, retentionDays, completedWindows, now);
+  await persistCollectedRuns(repo, state, allRuns, retentionDays, reposConfig, repoConfig, completedWindows, now);
 }
 
 export async function runCollection({
@@ -624,6 +660,7 @@ export async function runCollection({
   retentionDays,
   cliOptions,
   targetRepos,
+  reposConfig = { repos: targetRepos.map((repo) => ({ repo, workflows: [] })) },
   octokit,
   collectRepoImpl = collectRepo,
 }: RunCollectionOptions) {
@@ -651,7 +688,7 @@ export async function runCollection({
 
   for (const repo of targetRepos) {
     try {
-      await collectRepoImpl(client, repo, retentionDays, cliOptions);
+      await collectRepoImpl(client, repo, retentionDays, cliOptions, reposConfig);
     } catch (err) {
       if (err instanceof RateLimitAbortError) {
         stoppedEarly = err;
@@ -704,8 +741,8 @@ export async function main() {
   }
 
   const token = process.env.GITHUB_TOKEN;
-  const configuredRepos = readReposConfig();
-  const targetRepos = resolveTargetRepos(configuredRepos, cliOptions.repoName);
+  const reposConfig = readReposConfig();
+  const targetRepos = resolveTargetRepos(getRepoNames(reposConfig), cliOptions.repoName);
   const retentionDays = parseInt(process.env.RETENTION_DAYS || '90');
 
   log(`VERBOSE mode: ${VERBOSE}`);
@@ -723,6 +760,7 @@ export async function main() {
     retentionDays,
     cliOptions,
     targetRepos,
+    reposConfig,
   });
 }
 

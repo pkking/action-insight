@@ -15,6 +15,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Step } from '../../src/lib/types.ts';
+import type { WorkflowAttemptRow } from './workflow-attempts.ts';
 
 /* ------------------------------------------------------------------ */
 /*  Types (mirrored from turso-storage.ts)                              */
@@ -46,6 +47,14 @@ interface RunRow {
   updated_at: string;
   html_url: string;
   durationInSeconds: number;
+  runAttempt?: number;
+  run_started_at?: string;
+  queueDurationInSeconds?: number;
+  runtimeInSeconds?: number;
+  workflowFile?: string;
+  workflowRef?: string;
+  workflowPath?: string;
+  workflowParseStatus?: string;
   jobs?: JobRow[];
 }
 
@@ -115,6 +124,9 @@ const STEP_UPSERT_BATCH_SIZE = readPositiveIntEnv('STEP_UPSERT_BATCH_SIZE', 500)
 const CACHE_UPSERT_BATCH_SIZE = readPositiveIntEnv('CACHE_UPSERT_BATCH_SIZE', 100);
 const PR_METRIC_UPSERT_BATCH_SIZE = readPositiveIntEnv('PR_METRIC_UPSERT_BATCH_SIZE', 100);
 const PR_WORKFLOW_UPSERT_BATCH_SIZE = readPositiveIntEnv('PR_WORKFLOW_UPSERT_BATCH_SIZE', 500);
+const WORKFLOW_ATTEMPT_UPSERT_BATCH_SIZE = readPositiveIntEnv('WORKFLOW_ATTEMPT_UPSERT_BATCH_SIZE', 200);
+const WORKFLOW_JOB_UPSERT_BATCH_SIZE = readPositiveIntEnv('WORKFLOW_JOB_UPSERT_BATCH_SIZE', 500);
+const WORKFLOW_STEP_UPSERT_BATCH_SIZE = readPositiveIntEnv('WORKFLOW_STEP_UPSERT_BATCH_SIZE', 500);
 
 function readPositiveIntEnv(name: string, defaultValue: number): number {
   const value = Number(process.env[name]);
@@ -162,6 +174,8 @@ export function getRepoClient(repo: string): Client {
 /* ------------------------------------------------------------------ */
 
 export const SQLITE_SCHEMA = `
+PRAGMA foreign_keys = ON;
+
 CREATE TABLE IF NOT EXISTS repos (
   id   INTEGER PRIMARY KEY,
   owner TEXT NOT NULL,
@@ -277,8 +291,6 @@ CREATE INDEX IF NOT EXISTS idx_jobs_run_id ON jobs(run_id);
 CREATE INDEX IF NOT EXISTS idx_pr_metrics_repo ON pr_metrics(repo_id);
 CREATE INDEX IF NOT EXISTS idx_pr_metrics_repo_ci ON pr_metrics(repo_id, ci_completed_at);
 CREATE INDEX IF NOT EXISTS idx_pr_resolution_cache_repo_sha ON pr_resolution_cache(repo_id, head_sha);
-CREATE INDEX IF NOT EXISTS idx_runs_workflow_file ON runs(repo_id, workflow_file);
-
 -- =====================================================================
 -- ADR-005: Workflow file and attempt scoped collection (additive)
 -- =====================================================================
@@ -303,7 +315,8 @@ CREATE TABLE IF NOT EXISTS workflow_attempts (
   steps_eligibility_checked_at TEXT,
   steps_collected_at         TEXT,
   step_policy_hash           TEXT,
-  PRIMARY KEY (run_id, run_attempt)
+  PRIMARY KEY (run_id, run_attempt),
+  FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_workflow_attempts_run ON workflow_attempts(run_id);
@@ -322,8 +335,11 @@ CREATE TABLE IF NOT EXISTS workflow_jobs (
   completed_at            TEXT,
   html_url                TEXT,
   queue_duration_seconds  REAL,
+  runtime_seconds         REAL,
+  total_duration_seconds  REAL,
   duration_seconds        REAL,
-  PRIMARY KEY (run_id, run_attempt, job_id)
+  PRIMARY KEY (run_id, run_attempt, job_id),
+  FOREIGN KEY (run_id, run_attempt) REFERENCES workflow_attempts(run_id, run_attempt) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_workflow_jobs_attempt ON workflow_jobs(run_id, run_attempt);
@@ -339,7 +355,8 @@ CREATE TABLE IF NOT EXISTS workflow_steps (
   started_at        TEXT,
   completed_at      TEXT,
   duration_seconds  REAL,
-  PRIMARY KEY (run_id, run_attempt, job_id, step_number)
+  PRIMARY KEY (run_id, run_attempt, job_id, step_number),
+  FOREIGN KEY (run_id, run_attempt, job_id) REFERENCES workflow_jobs(run_id, run_attempt, job_id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_workflow_steps_job ON workflow_steps(run_id, run_attempt, job_id);
@@ -348,7 +365,8 @@ CREATE TABLE IF NOT EXISTS pr_workflow_attempts (
   pr_metric_id  INTEGER NOT NULL,
   run_id        INTEGER NOT NULL,
   run_attempt   INTEGER NOT NULL DEFAULT 1,
-  PRIMARY KEY (pr_metric_id, run_id, run_attempt)
+  PRIMARY KEY (pr_metric_id, run_id, run_attempt),
+  FOREIGN KEY (run_id, run_attempt) REFERENCES workflow_attempts(run_id, run_attempt) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_pr_workflow_attempts_pr ON pr_workflow_attempts(pr_metric_id);
@@ -358,6 +376,27 @@ async function ensureRepoSchema(client: Client): Promise<void> {
   const statements = SQLITE_SCHEMA.split(';').map((s) => s.trim()).filter(Boolean);
   for (const sql of statements) {
     await client.execute({ sql, args: [] });
+  }
+  await ensureColumns(client, 'runs', [
+    ['workflow_file', 'TEXT'],
+    ['workflow_ref', 'TEXT'],
+    ['workflow_path', 'TEXT'],
+    ['workflow_parse_status', 'TEXT'],
+  ]);
+  await ensureColumns(client, 'workflow_jobs', [
+    ['runtime_seconds', 'REAL'],
+    ['total_duration_seconds', 'REAL'],
+  ]);
+  await client.execute({ sql: 'CREATE INDEX IF NOT EXISTS idx_runs_workflow_file ON runs(repo_id, workflow_file)', args: [] });
+}
+
+async function ensureColumns(client: Client, table: string, columns: Array<[string, string]>): Promise<void> {
+  const { rows } = await client.execute({ sql: `SELECT name FROM pragma_table_info('${table}')`, args: [] });
+  const existing = new Set(rows.map((row) => String(row.name)));
+  for (const [name, definition] of columns) {
+    if (!existing.has(name)) {
+      await client.execute({ sql: `ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`, args: [] });
+    }
   }
 }
 
@@ -446,17 +485,21 @@ export async function writeRunsToSqlite(repo: string, runs: RunRow[], date: stri
     // Write runs
     for (const batch of chunkArray(runs, RUN_UPSERT_BATCH_SIZE)) {
       const stmts = batch.map((run) => ({
-        sql: `INSERT INTO runs (id, repo_id, name, head_branch, head_sha, status, conclusion, event, created_at, updated_at, html_url, duration_seconds, date, steps_checked_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        sql: `INSERT INTO runs (id, repo_id, name, head_branch, head_sha, status, conclusion, event, created_at, updated_at, html_url, duration_seconds, date, steps_checked_at, workflow_file, workflow_ref, workflow_path, workflow_parse_status)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT(id) DO UPDATE SET
                 status=excluded.status, conclusion=excluded.conclusion, event=excluded.event,
                 updated_at=excluded.updated_at, html_url=excluded.html_url,
-                duration_seconds=excluded.duration_seconds, steps_checked_at=excluded.steps_checked_at`,
+                duration_seconds=excluded.duration_seconds, steps_checked_at=excluded.steps_checked_at,
+                workflow_file=excluded.workflow_file, workflow_ref=excluded.workflow_ref,
+                workflow_path=excluded.workflow_path, workflow_parse_status=excluded.workflow_parse_status`,
         args: [
           run.id, repoId, run.name, run.head_branch, run.head_sha ?? null,
           run.status, run.conclusion ?? null, run.event ?? null,
           run.created_at, run.updated_at, run.html_url, run.durationInSeconds,
           date, run.updated_at,
+          run.workflowFile ?? null, run.workflowRef ?? null, run.workflowPath ?? null,
+          run.workflowParseStatus ?? null,
         ] as InValue[],
       }));
       await tx.batch(stmts);
@@ -541,6 +584,104 @@ export async function writeRunsToSqlite(repo: string, runs: RunRow[], date: stri
         ] as InValue[],
       }));
       await tx.batch(stmts);
+    }
+
+    await tx.commit();
+  } catch (e) {
+    await tx.rollback();
+    throw e;
+  } finally {
+    tx.close();
+  }
+}
+
+export async function writeWorkflowAttemptsToSqlite(repo: string, attempts: WorkflowAttemptRow[]): Promise<void> {
+  if (attempts.length === 0) return;
+
+  const client = getRepoClient(repo);
+  await ensureRepoSchema(client);
+
+  const tx = await client.transaction('write');
+  try {
+    for (const batch of chunkArray(attempts, WORKFLOW_ATTEMPT_UPSERT_BATCH_SIZE)) {
+      await tx.batch(batch.map((attempt) => ({
+        sql: `INSERT INTO workflow_attempts (
+                run_id, run_attempt, status, conclusion, created_at, run_started_at,
+                completed_at, updated_at, queue_duration_seconds, runtime_seconds,
+                total_duration_seconds, tracked, workflow_file, workflow_ref, match_kind,
+                jobs_fetched_at, steps_eligibility_checked_at, steps_collected_at, step_policy_hash
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(run_id, run_attempt) DO UPDATE SET
+                status=excluded.status, conclusion=excluded.conclusion, created_at=excluded.created_at,
+                run_started_at=excluded.run_started_at, completed_at=excluded.completed_at,
+                updated_at=excluded.updated_at, queue_duration_seconds=excluded.queue_duration_seconds,
+                runtime_seconds=excluded.runtime_seconds, total_duration_seconds=excluded.total_duration_seconds,
+                tracked=excluded.tracked, workflow_file=excluded.workflow_file,
+                workflow_ref=excluded.workflow_ref, match_kind=excluded.match_kind,
+                jobs_fetched_at=COALESCE(excluded.jobs_fetched_at, workflow_attempts.jobs_fetched_at),
+                steps_eligibility_checked_at=COALESCE(excluded.steps_eligibility_checked_at, workflow_attempts.steps_eligibility_checked_at),
+                steps_collected_at=COALESCE(excluded.steps_collected_at, workflow_attempts.steps_collected_at),
+                step_policy_hash=excluded.step_policy_hash`,
+        args: [
+          attempt.run_id, attempt.run_attempt, attempt.status, attempt.conclusion,
+          attempt.created_at, attempt.run_started_at, attempt.completed_at, attempt.updated_at,
+          attempt.queue_duration_seconds, attempt.runtime_seconds, attempt.total_duration_seconds,
+          attempt.tracked ? 1 : 0, attempt.workflow_file, attempt.workflow_ref, attempt.match_kind,
+          attempt.jobs_fetched_at, attempt.steps_eligibility_checked_at, attempt.steps_collected_at,
+          attempt.step_policy_hash,
+        ] as InValue[],
+      })));
+    }
+
+    const jobRows = attempts.flatMap((attempt) => attempt.jobs);
+    for (const batch of chunkArray(jobRows, WORKFLOW_JOB_UPSERT_BATCH_SIZE)) {
+      await tx.batch(batch.map((job) => ({
+        sql: `INSERT INTO workflow_jobs (
+                run_id, run_attempt, job_id, name, status, conclusion, created_at,
+                started_at, completed_at, html_url, queue_duration_seconds,
+                runtime_seconds, total_duration_seconds, duration_seconds
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(run_id, run_attempt, job_id) DO UPDATE SET
+                name=excluded.name, status=excluded.status, conclusion=excluded.conclusion,
+                created_at=excluded.created_at, started_at=excluded.started_at,
+                completed_at=excluded.completed_at, html_url=excluded.html_url,
+                queue_duration_seconds=excluded.queue_duration_seconds,
+                runtime_seconds=excluded.runtime_seconds,
+                total_duration_seconds=excluded.total_duration_seconds,
+                duration_seconds=excluded.duration_seconds`,
+        args: [
+          job.run_id, job.run_attempt, job.job_id, job.name, job.status, job.conclusion,
+          job.created_at, job.started_at, job.completed_at, job.html_url,
+          job.queue_duration_seconds, job.runtime_seconds, job.total_duration_seconds,
+          job.runtime_seconds,
+        ] as InValue[],
+      })));
+    }
+
+    const stepRows = jobRows.flatMap((job) =>
+      (job.steps ?? []).map((step) => ({
+        run_id: job.run_id,
+        run_attempt: job.run_attempt,
+        job_id: job.job_id,
+        step,
+      }))
+    );
+    for (const batch of chunkArray(stepRows, WORKFLOW_STEP_UPSERT_BATCH_SIZE)) {
+      await tx.batch(batch.map(({ run_id, run_attempt, job_id, step }) => ({
+        sql: `INSERT INTO workflow_steps (
+                run_id, run_attempt, job_id, step_number, name, status, conclusion,
+                started_at, completed_at, duration_seconds
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(run_id, run_attempt, job_id, step_number) DO UPDATE SET
+                name=excluded.name, status=excluded.status, conclusion=excluded.conclusion,
+                started_at=excluded.started_at, completed_at=excluded.completed_at,
+                duration_seconds=excluded.duration_seconds`,
+        args: [
+          run_id, run_attempt, job_id, step.number, step.name, step.status,
+          step.conclusion || null, step.started_at ?? null, step.completed_at ?? null,
+          step.duration_seconds ?? null,
+        ] as InValue[],
+      })));
     }
 
     await tx.commit();
@@ -826,6 +967,58 @@ export async function writePrWorkflowsToSqlite(repo: string, prWorkflows: Map<nu
         args: [r.pr_metric_id, r.run_id] as InValue[],
       }));
       await tx.batch(stmts);
+    }
+    await tx.commit();
+  } catch (e) {
+    await tx.rollback();
+    throw e;
+  } finally {
+    tx.close();
+  }
+}
+
+export async function writePrWorkflowAttemptsToSqlite(
+  repo: string,
+  prWorkflowAttempts: Map<number, Array<{ runId: number; runAttempt: number }>>,
+): Promise<void> {
+  if (prWorkflowAttempts.size === 0) return;
+
+  const client = getRepoClient(repo);
+  await ensureRepoSchema(client);
+  const repoId = await ensureRepo(client, repo.split('/')[0], repo.split('/')[1]);
+
+  const prNumberToId = new Map<number, number>();
+  const prNumbers = Array.from(prWorkflowAttempts.keys());
+  for (const batch of chunkArray(prNumbers, PR_METRIC_UPSERT_BATCH_SIZE)) {
+    const placeholders = batch.map(() => '?').join(',');
+    const { rows } = await client.execute({
+      sql: `SELECT id, pr_number FROM pr_metrics WHERE repo_id = ? AND pr_number IN (${placeholders})`,
+      args: [repoId, ...batch],
+    });
+    for (const row of rows) {
+      prNumberToId.set(row.pr_number as number, Number(row.id as number));
+    }
+  }
+
+  const rows: { pr_metric_id: number; run_id: number; run_attempt: number }[] = [];
+  for (const [prNumber, attempts] of prWorkflowAttempts.entries()) {
+    const prMetricId = prNumberToId.get(prNumber);
+    if (!prMetricId) continue;
+    for (const attempt of attempts) {
+      rows.push({ pr_metric_id: prMetricId, run_id: attempt.runId, run_attempt: attempt.runAttempt });
+    }
+  }
+  if (rows.length === 0) return;
+
+  const tx = await client.transaction('write');
+  try {
+    for (const batch of chunkArray(rows, PR_WORKFLOW_UPSERT_BATCH_SIZE)) {
+      await tx.batch(batch.map((row) => ({
+        sql: `INSERT INTO pr_workflow_attempts (pr_metric_id, run_id, run_attempt)
+              VALUES (?, ?, ?)
+              ON CONFLICT(pr_metric_id, run_id, run_attempt) DO NOTHING`,
+        args: [row.pr_metric_id, row.run_id, row.run_attempt] as InValue[],
+      })));
     }
     await tx.commit();
   } catch (e) {

@@ -191,6 +191,12 @@ async function fetchRunsFromClient(client: Client, repo: string, dates: string[]
   }
 
   const repoId = Number(repoRows[0].id);
+  const attemptRuns = await fetchWorkflowAttemptRunsFromClient(client, repoId, dates);
+  if (attemptRuns.length > 0) {
+    console.log(`Fetched ${attemptRuns.length} tracked workflow attempts for ${repo} from ${label}`);
+    return attemptRuns;
+  }
+
   const allRuns: Run[] = [];
 
   for (const date of dates) {
@@ -199,10 +205,11 @@ async function fetchRunsFromClient(client: Client, repo: string, dates: string[]
 
     while (true) {
       // Step 1: Paginate runs only
-      const { rows: runRows } = await client.execute({
-        sql: `SELECT id, name, head_branch, head_sha, status, conclusion,
-                     event, created_at, updated_at, html_url, duration_seconds, date
-              FROM runs
+	      const { rows: runRows } = await client.execute({
+	        sql: `SELECT id, name, head_branch, head_sha, status, conclusion,
+	                     event, created_at, updated_at, html_url, duration_seconds, date,
+	                     workflow_file, workflow_ref, workflow_path, workflow_parse_status
+	              FROM runs
               WHERE repo_id = ? AND date = ?
               ORDER BY created_at DESC, id DESC
               LIMIT ? OFFSET ?`,
@@ -246,8 +253,12 @@ async function fetchRunsFromClient(client: Client, repo: string, dates: string[]
             created_at: row.created_at as string,
             updated_at: row.updated_at as string,
             html_url: row.html_url as string,
-            durationInSeconds: Number(row.duration_seconds),
-            jobs: (jobsByRun.get(runId) || []).map((j) => ({
+	            durationInSeconds: Number(row.duration_seconds),
+	            workflowFile: row.workflow_file as string | undefined,
+	            workflowRef: row.workflow_ref as string | undefined,
+	            workflowPath: row.workflow_path as string | undefined,
+	            workflowParseStatus: row.workflow_parse_status as Run['workflowParseStatus'],
+	            jobs: (jobsByRun.get(runId) || []).map((j) => ({
               id: Number(j.id),
               name: j.name as string,
               status: j.status as string,
@@ -275,6 +286,102 @@ async function fetchRunsFromClient(client: Client, repo: string, dates: string[]
     console.log(`Fetched ${dateRunCount} runs for ${repo} on ${date} from ${label}`);
   }
 
+  return allRuns;
+}
+
+async function fetchWorkflowAttemptRunsFromClient(client: Client, repoId: number, dates: string[]): Promise<Run[]> {
+  const allRuns: Run[] = [];
+  for (const date of dates) {
+    const { rows } = await client.execute({
+      sql: `SELECT r.id, r.name, r.head_branch, r.head_sha, r.event, r.html_url,
+                   r.workflow_path, r.workflow_parse_status,
+                   wa.run_attempt, wa.status, wa.conclusion, wa.created_at, wa.run_started_at,
+                   wa.completed_at, wa.updated_at, wa.queue_duration_seconds,
+                   wa.runtime_seconds, wa.total_duration_seconds, wa.workflow_file,
+                   wa.workflow_ref, wa.match_kind, wa.step_policy_hash
+            FROM workflow_attempts wa
+            JOIN runs r ON r.id = wa.run_id
+            WHERE r.repo_id = ? AND r.date = ? AND wa.tracked = 1
+            ORDER BY wa.created_at DESC, wa.run_id DESC, wa.run_attempt DESC`,
+      args: [repoId, date],
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('no such table: workflow_attempts')) {
+        return { rows: [] };
+      }
+      throw error;
+    });
+
+    if (rows.length === 0) continue;
+
+    const attemptKeys = rows.map((row) => ({
+      runId: Number(row.id),
+      runAttempt: Number(row.run_attempt),
+    }));
+    const clauses = attemptKeys.map(() => '(run_id = ? AND run_attempt = ?)').join(' OR ');
+    const jobRows = clauses
+      ? await client.execute({
+          sql: `SELECT run_id, run_attempt, job_id, name, status, conclusion, created_at,
+                       started_at, completed_at, html_url, queue_duration_seconds,
+                       runtime_seconds, total_duration_seconds, duration_seconds
+                FROM workflow_jobs
+                WHERE ${clauses}
+                ORDER BY run_id, run_attempt, started_at ASC`,
+          args: attemptKeys.flatMap((key) => [key.runId, key.runAttempt]),
+        }).then((result) => result.rows).catch(() => [])
+      : [];
+
+    const jobsByAttempt = new Map<string, Array<Record<string, unknown>>>();
+    for (const job of jobRows) {
+      const key = `${Number(job.run_id)}:${Number(job.run_attempt)}`;
+      if (!jobsByAttempt.has(key)) jobsByAttempt.set(key, []);
+      jobsByAttempt.get(key)!.push(job as Record<string, unknown>);
+    }
+
+    for (const row of rows) {
+      const runId = Number(row.id);
+      const runAttempt = Number(row.run_attempt);
+      allRuns.push({
+        id: runId,
+        runAttempt,
+        name: row.name as string,
+        head_branch: row.head_branch as string,
+        head_sha: row.head_sha as string | undefined,
+        status: row.status as string,
+        conclusion: (row.conclusion as string) || '',
+        event: row.event as string | undefined,
+        created_at: row.created_at as string,
+        run_started_at: row.run_started_at as string | undefined,
+        updated_at: (row.completed_at as string) || (row.updated_at as string),
+        html_url: row.html_url as string,
+        durationInSeconds: Number(row.total_duration_seconds ?? row.runtime_seconds ?? 0),
+        queueDurationInSeconds: row.queue_duration_seconds == null ? undefined : Number(row.queue_duration_seconds),
+        runtimeInSeconds: row.runtime_seconds == null ? undefined : Number(row.runtime_seconds),
+        workflowFile: row.workflow_file as string | undefined,
+        workflowRef: row.workflow_ref as string | undefined,
+        workflowPath: row.workflow_path as string | undefined,
+        workflowParseStatus: row.workflow_parse_status as Run['workflowParseStatus'],
+        workflowMatchKind: row.match_kind as Run['workflowMatchKind'],
+        stepPolicyHash: row.step_policy_hash as string | undefined,
+        tracked: true,
+        jobs: (jobsByAttempt.get(`${runId}:${runAttempt}`) ?? []).map((job) => ({
+          id: Number(job.job_id),
+          runAttempt,
+          name: job.name as string,
+          status: job.status as string,
+          conclusion: (job.conclusion as string) || '',
+          created_at: job.created_at as string,
+          started_at: job.started_at as string,
+          completed_at: job.completed_at as string,
+          html_url: job.html_url as string,
+          queueDurationInSeconds: Number(job.queue_duration_seconds ?? 0),
+          durationInSeconds: Number(job.runtime_seconds ?? job.duration_seconds ?? 0),
+          runtimeInSeconds: job.runtime_seconds == null ? undefined : Number(job.runtime_seconds),
+          totalDurationInSeconds: job.total_duration_seconds == null ? undefined : Number(job.total_duration_seconds),
+        })),
+      });
+    }
+  }
   return allRuns;
 }
 
