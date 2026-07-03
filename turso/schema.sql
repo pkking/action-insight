@@ -26,12 +26,19 @@ CREATE TABLE IF NOT EXISTS runs (
   html_url TEXT NOT NULL,
   duration_seconds INTEGER NOT NULL DEFAULT 0,
   date TEXT NOT NULL,
-  steps_checked_at TEXT
+  steps_checked_at TEXT,
+  -- ADR-005: workflow file/ref metadata parsed from the run path. Additive;
+  -- NULL until workflow file backfill populates them.
+  workflow_file TEXT,
+  workflow_ref TEXT,
+  workflow_path TEXT,
+  workflow_parse_status TEXT  -- 'ok' | 'ref_unavailable' | 'file_unavailable'
 );
 
 CREATE INDEX IF NOT EXISTS idx_runs_repo_date ON runs(repo_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_runs_repo_id_id ON runs(repo_id, id);
 CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_runs_workflow_file ON runs(repo_id, workflow_file);
 
 -- 3. Jobs table
 CREATE TABLE IF NOT EXISTS jobs (
@@ -148,3 +155,90 @@ CREATE TABLE IF NOT EXISTS test_case_stats (
 
 CREATE INDEX IF NOT EXISTS idx_test_case_stats_repo ON test_case_stats(repo_id);
 CREATE INDEX IF NOT EXISTS idx_test_case_stats_window ON test_case_stats(window_start, window_end);
+
+-- =====================================================================
+-- ADR-005: Workflow file and attempt scoped collection
+-- Attempt-scoped execution records. Additive: existing run/job/step reads are
+-- unchanged. These tables are populated by later ETL units; the schema is
+-- committed first so migrations are safe and idempotent.
+-- =====================================================================
+
+-- 9. Workflow attempts: one execution of a tracked workflow, keyed by
+-- GitHub run_id + run_attempt (reruns are separate rows).
+CREATE TABLE IF NOT EXISTS workflow_attempts (
+  run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  run_attempt INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL,           -- GitHub run status
+  conclusion TEXT,
+  created_at TEXT,                -- workflow run created_at
+  run_started_at TEXT,            -- run_started_at (start of Workflow Runtime)
+  completed_at TEXT,              -- Workflow Completion Time
+  updated_at TEXT,
+  queue_duration_seconds REAL,    -- Workflow Queue Duration
+  runtime_seconds REAL,           -- Workflow Runtime
+  total_duration_seconds REAL,    -- Workflow Total Duration
+  tracked INTEGER NOT NULL DEFAULT 0,
+  workflow_file TEXT,
+  workflow_ref TEXT,
+  match_kind TEXT,                -- 'exact_ref' | 'glob_ref' | 'file_only'
+  jobs_fetched_at TEXT,
+  steps_eligibility_checked_at TEXT,
+  steps_collected_at TEXT,
+  step_policy_hash TEXT,
+  PRIMARY KEY (run_id, run_attempt)
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_attempts_run ON workflow_attempts(run_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_attempts_tracked ON workflow_attempts(tracked, run_started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_workflow_attempts_file ON workflow_attempts(workflow_file, workflow_ref);
+
+-- 10. Attempt-scoped jobs (Job Attempt Identity: run_id + run_attempt + job_id)
+CREATE TABLE IF NOT EXISTS workflow_jobs (
+  run_id INTEGER NOT NULL,
+  run_attempt INTEGER NOT NULL DEFAULT 1,
+  job_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  conclusion TEXT,
+  created_at TEXT,
+  started_at TEXT,
+  completed_at TEXT,
+  html_url TEXT,
+  queue_duration_seconds REAL,    -- Job Queue Duration
+  duration_seconds REAL,          -- Job Total Duration
+  PRIMARY KEY (run_id, run_attempt, job_id),
+  FOREIGN KEY (run_id, run_attempt) REFERENCES workflow_attempts(run_id, run_attempt) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_jobs_attempt ON workflow_jobs(run_id, run_attempt);
+
+-- 11. Attempt-scoped steps (Step Attempt Identity: run_id + run_attempt + job_id + step_number)
+-- Steps are persisted only for Slow Successful Workflows (ADR-005).
+CREATE TABLE IF NOT EXISTS workflow_steps (
+  run_id INTEGER NOT NULL,
+  run_attempt INTEGER NOT NULL DEFAULT 1,
+  job_id INTEGER NOT NULL,
+  step_number INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  conclusion TEXT,
+  started_at TEXT,
+  completed_at TEXT,
+  duration_seconds REAL,          -- Step Runtime only (no queue/total)
+  PRIMARY KEY (run_id, run_attempt, job_id, step_number),
+  FOREIGN KEY (run_id, run_attempt, job_id) REFERENCES workflow_jobs(run_id, run_attempt, job_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_steps_job ON workflow_steps(run_id, run_attempt, job_id);
+
+-- 12. PR workflow attempt links (replaces run-level pr_workflows links for
+-- attempt-scoped metrics; pr_workflows retained for compatibility).
+CREATE TABLE IF NOT EXISTS pr_workflow_attempts (
+  pr_metric_id INTEGER NOT NULL REFERENCES pr_metrics(id) ON DELETE CASCADE,
+  run_id INTEGER NOT NULL,
+  run_attempt INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (pr_metric_id, run_id, run_attempt),
+  FOREIGN KEY (run_id, run_attempt) REFERENCES workflow_attempts(run_id, run_attempt) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_pr_workflow_attempts_pr ON pr_workflow_attempts(pr_metric_id);
