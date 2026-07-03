@@ -9,6 +9,8 @@
     "migrate:supabase-to-turso": "tsx etl/scripts/migrate-supabase-to-turso.ts",
     "migrate:turso-to-sqlite": "tsx etl/scripts/migrate-turso-to-sqlite.ts",
     "rebuild:pr-artifacts": "tsx etl/scripts/rebuild-pr-artifacts.ts",
+    "validate:repos": "node --import tsx etl/scripts/validate-repos.ts",
+    "validate:repos:online": "node --import tsx etl/scripts/validate-repos.ts --online",
     "prebuild": "npm run migrate:turso",
     "build": "next build",
     "start": "next start",

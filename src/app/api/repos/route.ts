@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import yaml from 'js-yaml';
+
+import { parseTrackedReposYaml } from '@/lib/tracked-repos';
 
 type RepoOption = {
   owner: string;
@@ -9,32 +10,12 @@ type RepoOption = {
   key: string;
 };
 
-type ReposConfig = {
-  repos?: unknown;
-};
-
-function toRepoOption(entry: string): RepoOption | null {
-  const [owner, repo] = entry.split('/');
-
-  if (!owner || !repo) {
-    return null;
-  }
-
-  return {
-    owner,
-    repo,
-    key: `${owner}/${repo}`,
-  };
-}
-
 function parseReposConfig(content: string): RepoOption[] {
-  const config = yaml.load(content) as ReposConfig | null;
-  const entries = Array.isArray(config?.repos) ? config.repos : [];
-
-  return entries
-    .filter((entry): entry is string => typeof entry === 'string')
-    .map((entry) => toRepoOption(entry.trim()))
-    .filter((repo): repo is RepoOption => repo !== null);
+  return parseTrackedReposYaml(content).map((entry) => ({
+    owner: entry.owner,
+    repo: entry.repo,
+    key: entry.slug,
+  }));
 }
 
 export async function GET() {

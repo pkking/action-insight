@@ -18,5 +18,5 @@
 
 ## Storage
 
-- [ ] Move raw `github_payload` storage out of Supabase and into a repository-tracked SQLite database to avoid Free Plan database size pressure.
-- [ ] Document the recovery path for rebuilding Supabase metrics from the repository-tracked SQLite raw payload store.
+- [x] Move raw `github_payload` storage out of Supabase and into a repository-tracked SQLite database to avoid Free Plan database size pressure. See [ADR-004](adr/004-sqlite-db-lfs-storage.md).
+- [x] Document the recovery path for rebuilding metrics from the repository-tracked SQLite/Turso raw store. See README local maintenance commands and [ETL Follow-up Plan](plans/2026-05-24-001-etl-followup-plan.md).

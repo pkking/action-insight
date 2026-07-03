@@ -1,3 +1,5 @@
+import yaml from 'js-yaml';
+
 /**
  * @typedef {Object} TrackedRepo
  * @property {string} owner
@@ -11,19 +13,20 @@
  * @returns {TrackedRepo[]}
  */
 export function parseTrackedReposYaml(content) {
-  return content
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith('- '))
-    .map((line) => line.slice(2).trim())
-    .filter(Boolean)
+  const parsed = yaml.load(content);
+  const entries = Array.isArray(parsed?.repos) ? parsed.repos : [];
+
+  return entries
     .map((entry) => {
-      const [owner, repo] = entry.split('/');
-      if (!owner || !repo) {
+      const slug = typeof entry === 'string' ? entry : entry?.repo;
+      if (typeof slug !== 'string') {
         return null;
       }
 
-      const slug = `${owner}/${repo}`;
+      const [owner, repo] = slug.split('/');
+      if (!owner || !repo) {
+        return null;
+      }
 
       return {
         owner,
