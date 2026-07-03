@@ -112,6 +112,8 @@ export interface PullRequestMetricsSummary {
   workflowCount: number;
   successfulWorkflowCount: number;
   conclusion: string;
+  currentCiConclusion?: string;
+  attemptSuccessRate?: number;
 }
 
 export interface PullRequestMetricsDetail {

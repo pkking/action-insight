@@ -393,6 +393,8 @@ type PrLifecycleTimelineData = {
   ci_started_at?: string;
   ci_completed_at?: string;
   merged_at?: string;
+  currentCiConclusion?: string;
+  attemptSuccessRate?: number;
   workflows: Run[];
 };
 
@@ -525,6 +527,7 @@ function TreeNodeCard({ depth, icon, label, duration, conclusion, expanded, hasC
 function PrLifecycleTree({ data, showPrRoot = true }: { data: PrLifecycleTimelineData; showPrRoot?: boolean }) {
   const [expandedWorkflowIds, setExpandedWorkflowIds] = useState<Set<number>>(new Set());
   const [expandedJobIds, setExpandedJobIds] = useState<Set<number>>(new Set());
+  const currentCiConclusion = data.currentCiConclusion ?? (data.ci_completed_at ? 'success' : 'pending');
 
   // Compute PR-level total time: from PR creation to the latest event (merge or last workflow end)
   const { prTotalMs, isForceMerged, forceMergeGap } = useMemo(() => {
@@ -595,12 +598,23 @@ function PrLifecycleTree({ data, showPrRoot = true }: { data: PrLifecycleTimelin
         icon={<span className="text-blue-500">📝</span>}
         label={`PR #${data.number ?? '?'}`}
         duration={formatDurationShort(prTotalMs)}
-        conclusion={data.merged_at ? 'success' : data.ci_completed_at ? 'success' : 'pending'}
+        conclusion={currentCiConclusion}
         expanded={data.workflows.length > 0}
         hasChildren={data.workflows.length > 0}
         typeLabel="PR"
       />
       )}
+
+      <div className={`${showPrRoot ? 'pl-6' : 'pl-2'} flex flex-wrap items-center gap-2 text-[11px] text-neutral-500 dark:text-neutral-400`}>
+        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 ${conclusionBadgeBg(currentCiConclusion)}`}>
+          Current CI {currentCiConclusion}
+        </span>
+        {typeof data.attemptSuccessRate === 'number' && (
+          <span className="inline-flex items-center rounded-full border border-neutral-200 bg-neutral-50 px-2 py-0.5 text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+            Attempt success {data.attemptSuccessRate}%
+          </span>
+        )}
+      </div>
 
       {/* Workflows */}
       {data.workflows.length === 0 ? (
@@ -619,7 +633,7 @@ function PrLifecycleTree({ data, showPrRoot = true }: { data: PrLifecycleTimelin
                 <TreeNodeCard
                   depth={showPrRoot ? 1 : 0}
                   icon={<span className="text-teal-500">⚡</span>}
-                  label={wf.name}
+                  label={wf.runAttempt && wf.runAttempt > 1 ? `${wf.name} (attempt ${wf.runAttempt})` : wf.name}
                   duration={formatDuration(calculateWorkflowDuration(wf))}
                   conclusion={wf.conclusion}
                   expanded={isWfExpanded}

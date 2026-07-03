@@ -38,6 +38,7 @@ import {
   getExistingRunIdsFromTurso,
   getExistingRunIdsWithStepsFromTurso,
   writeRunsToTurso,
+  writeWorkflowAttemptsToTurso,
 } from './turso-storage';
 
 function mockRepoState(options: {
@@ -746,5 +747,78 @@ describe('collect rate limit handling', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('preserves separate attempts for the same run id and keeps non-terminal attempts', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-18T12:00:00Z'));
+
+    const repo = 'acme/widgets';
+    mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
+
+    const request = vi.fn().mockImplementation((route: string) => {
+      if (route === 'GET /repos/{owner}/{repo}/actions/runs') {
+        return Promise.resolve({
+          data: {
+            workflow_runs: [
+              {
+                id: 101,
+                run_attempt: 1,
+                name: 'CI',
+                head_branch: 'main',
+                status: 'completed',
+                conclusion: 'failure',
+                created_at: '2026-04-18T09:00:00Z',
+                updated_at: '2026-04-18T09:10:00Z',
+                html_url: 'https://example.com/runs/101',
+                path: '.github/workflows/ci.yml@main',
+              },
+              {
+                id: 101,
+                run_attempt: 2,
+                name: 'CI',
+                head_branch: 'main',
+                status: 'in_progress',
+                conclusion: null,
+                created_at: '2026-04-18T09:20:00Z',
+                updated_at: '2026-04-18T09:25:00Z',
+                html_url: 'https://example.com/runs/101/attempts/2',
+                path: '.github/workflows/ci.yml@main',
+              },
+            ],
+          },
+        });
+      }
+
+      if (route === 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs') {
+        return Promise.resolve({ data: { jobs: [] } });
+      }
+
+      if (route === 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs') {
+        return Promise.resolve({ data: { jobs: [] } });
+      }
+
+      throw new Error(`Unexpected request: ${route}`);
+    });
+
+    try {
+      await collectRepo(
+        { request } as never,
+        repo,
+        90,
+        { forceFullBackfill: false, reverse: false },
+        { repos: [{ repo, workflows: [{ file: 'ci.yml' }] }] },
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(vi.mocked(writeWorkflowAttemptsToTurso)).toHaveBeenCalledWith(
+      repo,
+      expect.arrayContaining([
+        expect.objectContaining({ run_id: 101, run_attempt: 1, status: 'completed' }),
+        expect.objectContaining({ run_id: 101, run_attempt: 2, status: 'in_progress' }),
+      ]),
+    );
   });
 });

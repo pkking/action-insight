@@ -131,6 +131,10 @@ interface GitHubJobPayload extends GitHubApiPayload {
   html_url: string;
 }
 
+interface GitHubRunJobsResponse {
+  jobs: GitHubJobPayload[];
+}
+
 interface RepoCollectionState {
   latest: string;
   collectedDates: string[];
@@ -272,6 +276,42 @@ export class RateLimitAbortError extends Error {
     this.partialRuns = partialRuns;
     this.details = details;
   }
+}
+
+function runAttemptKey(runId: number, runAttempt: number | undefined): string {
+  return `${runId}:${runAttempt ?? 1}`;
+}
+
+async function fetchJobsForRunAttempt(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  runId: number,
+  runAttempt: number,
+): Promise<GitHubRunJobsResponse> {
+  if (runAttempt > 1) {
+    try {
+      const response = await withRetry(() => octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs', {
+        owner,
+        repo,
+        run_id: runId,
+        attempt_number: runAttempt,
+      }));
+      return response.data as GitHubRunJobsResponse;
+    } catch (err) {
+      const status = typeof err === 'object' && err !== null ? (err as { status?: number }).status : undefined;
+      if (status !== 404 && status !== 422) {
+        throw err;
+      }
+    }
+  }
+
+  const response = await withRetry(() => octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
+    owner,
+    repo,
+    run_id: runId,
+  }));
+  return response.data as GitHubRunJobsResponse;
 }
 
 async function persistCollectedRuns(
@@ -424,17 +464,10 @@ export async function collectRepo(
         break;
       }
 
-      let completedCount = 0;
+      let persistedCount = 0;
       let skippedCount = 0;
 
       for (const run of data.workflow_runs) {
-        if (run.status !== 'completed') {
-          skippedCount++;
-          log(`Skipping run #${run.id} (${run.name}) - status: ${run.status}`);
-          continue;
-        }
-        completedCount++;
-
         const runId = run.id;
         let jobs: Job[] = [];
         const baseRun: Run = enrichRunWithWorkflowMetadata({
@@ -454,29 +487,26 @@ export async function collectRepo(
           jobs: [],
           githubPayload: run as GitHubApiPayload,
         }, reposConfig, repoConfig);
+        persistedCount++;
 
         const cachedUpdatedAt = existingRunIdsWithSteps.get(runId);
         const isCachedRunFresh =
           !!cachedUpdatedAt && Date.parse(cachedUpdatedAt) >= Date.parse(run.updated_at);
         const hasWorkflowRules = repoConfig.workflows.length > 0;
+        const supportsStepsCache = baseRun.runAttempt === 1 && baseRun.status === 'completed';
 
         if (hasWorkflowRules && !baseRun.tracked) {
           skippedJobsCount++;
           log(`Skipping jobs for run #${runId} - workflow is not tracked (${baseRun.workflowParseStatus ?? 'unknown'})`);
-        } else if (isCachedRunFresh) {
+        } else if (supportsStepsCache && isCachedRunFresh) {
           skippedJobsCount++;
           log(`Skipping jobs for run #${runId} - already cached with steps`);
         } else {
-          log(`Fetching jobs for run #${runId} (${run.name})...`);
+          log(`Fetching jobs for run #${runId} attempt ${baseRun.runAttempt ?? 1} (${run.name})...`);
           const jobsStartTime = Date.now();
-          let jobsData;
+          let jobsData: GitHubRunJobsResponse;
           try {
-            const response = await withRetry(() => octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
-              owner,
-              repo: repoName,
-              run_id: runId,
-            }));
-            jobsData = response.data;
+            jobsData = await fetchJobsForRunAttempt(octokit, owner, repoName, runId, baseRun.runAttempt ?? 1);
           } catch (err) {
             if (isGitHubRateLimitError(err)) {
               const details = getRateLimitDetails(err);
@@ -552,7 +582,7 @@ export async function collectRepo(
       }
 
       totalFetched += data.workflow_runs.length;
-      log(`Page ${page} summary: ${completedCount} completed, ${skippedCount} skipped, ${skippedJobsCount} jobs cached (total fetched: ${totalFetched})`);
+      log(`Page ${page} summary: ${persistedCount} persisted, ${skippedCount} skipped, ${skippedJobsCount} jobs cached/skipped (total fetched: ${totalFetched})`);
 
       if (data.workflow_runs.length < PER_PAGE) {
         log('Last page reached (< per_page)');
@@ -585,18 +615,18 @@ export async function collectRepo(
     }
 
     log(`Splitting saturated window ${JSON.stringify(window)} into ${childWindows.length} sub-windows`);
-    const mergedRuns = new Map<number, Run>();
+    const mergedRuns = new Map<string, Run>();
 
     for (const childWindow of childWindows) {
       try {
         const childRuns = await collectRunsForWindow(childWindow);
         for (const run of childRuns) {
-          mergedRuns.set(run.id, run);
+          mergedRuns.set(runAttemptKey(run.id, run.runAttempt), run);
         }
       } catch (err) {
         if (err instanceof RateLimitAbortError) {
           for (const run of err.partialRuns) {
-            mergedRuns.set(run.id, run);
+            mergedRuns.set(runAttemptKey(run.id, run.runAttempt), run);
           }
 
           throw new RateLimitAbortError(err.message, Array.from(mergedRuns.values()), err.details);
@@ -620,19 +650,19 @@ export async function collectRepo(
   });
   log(`Collecting ${windows.length} window(s) for ${repo}`);
 
-  const allRunsMap = new Map<number, Run>();
+  const allRunsMap = new Map<string, Run>();
   const completedWindows: CollectionWindow[] = [];
   for (const window of windows) {
     try {
       const windowRuns = await collectRunsForWindow(window);
       for (const run of windowRuns) {
-        allRunsMap.set(run.id, run);
+        allRunsMap.set(runAttemptKey(run.id, run.runAttempt), run);
       }
       completedWindows.push(window);
     } catch (err) {
       if (err instanceof RateLimitAbortError) {
         for (const run of err.partialRuns) {
-          allRunsMap.set(run.id, run);
+          allRunsMap.set(runAttemptKey(run.id, run.runAttempt), run);
         }
         const persistedState = await persistCollectedRuns(
           repo,
@@ -651,7 +681,7 @@ export async function collectRepo(
   }
 
   const allRuns = Array.from(allRunsMap.values());
-  log(`Total completed runs collected: ${allRuns.length}`);
+  log(`Total workflow attempts collected: ${allRuns.length}`);
   await persistCollectedRuns(repo, state, allRuns, retentionDays, reposConfig, repoConfig, completedWindows, now);
 }
 
