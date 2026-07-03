@@ -43,7 +43,7 @@ export function parseWorkflowPath(rawPath: unknown): ParsedWorkflowPath {
     return { status: 'file_unavailable' };
   }
 
-  const atIdx = rawPath.lastIndexOf('@');
+  const atIdx = rawPath.indexOf('@');
   const filePath = atIdx === -1 ? rawPath : rawPath.slice(0, atIdx);
   const ref = atIdx === -1 ? undefined : rawPath.slice(atIdx + 1);
 
