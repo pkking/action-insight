@@ -83,10 +83,10 @@ export function computePullRequestAttemptMetrics(runs: Run[]) {
     .filter((run) => run.createdAt && run.updatedAt);
   const ciStartedAt = terminalCreatedTimes
     .map((run) => run.createdAt)
-    .sort((left, right) => new Date(left).getTime() - new Date(right).getTime())[0];
+    .sort((left, right) => left.localeCompare(right))[0];
   const ciCompletedAt = terminalCreatedTimes
     .map((run) => run.updatedAt)
-    .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0];
+    .sort((left, right) => right.localeCompare(left))[0];
 
   return {
     ciStartedAt,
