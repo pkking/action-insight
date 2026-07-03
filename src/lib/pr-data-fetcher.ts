@@ -46,11 +46,11 @@ function mapAttemptRunRow(row: Record<string, unknown>): Run {
   return {
     ...mapRunRow(row),
     runAttempt: Number(row.run_attempt),
-    status: row.attempt_status as string,
-    conclusion: (row.attempt_conclusion as string) || '',
-    created_at: row.attempt_created_at as string,
+    status: (row.attempt_status as string) || (row.status as string),
+    conclusion: (row.attempt_conclusion as string) || (row.conclusion as string) || '',
+    created_at: (row.attempt_created_at as string) || (row.created_at as string),
     run_started_at: row.run_started_at as string | undefined,
-    updated_at: ((row.completed_at as string) || (row.attempt_updated_at as string)),
+    updated_at: (row.completed_at as string) || (row.attempt_updated_at as string) || (row.updated_at as string),
     durationInSeconds: Number(row.total_duration_seconds ?? row.duration_seconds),
     queueDurationInSeconds: row.queue_duration_seconds == null ? undefined : Number(row.queue_duration_seconds),
     runtimeInSeconds: row.runtime_seconds == null ? undefined : Number(row.runtime_seconds),
@@ -113,34 +113,41 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
   let workflows: Run[] = [];
 
   if (attemptRows.length > 0) {
-    const clauses = attemptRows.map(() => '(wa.run_id = ? AND wa.run_attempt = ?)').join(' OR ');
-    const args = attemptRows.flatMap((w) => [w.run_id as number, w.run_attempt as number]);
-    const { rows: runRows } = await client.execute({
-      sql: `SELECT r.*, wa.run_attempt, wa.status AS attempt_status,
-                   wa.conclusion AS attempt_conclusion, wa.created_at AS attempt_created_at,
-                   wa.run_started_at, wa.completed_at, wa.updated_at AS attempt_updated_at,
-                   wa.queue_duration_seconds, wa.runtime_seconds, wa.total_duration_seconds,
-                   wa.tracked, wa.workflow_file, wa.workflow_ref, wa.match_kind, wa.step_policy_hash,
-                   wj.job_id, wj.name AS job_name, wj.status AS job_status,
-                   wj.conclusion AS job_conclusion, wj.created_at AS job_created_at,
-                   wj.started_at AS job_started_at, wj.completed_at AS job_completed_at,
-                   wj.html_url AS job_html_url,
-                   wj.queue_duration_seconds AS job_queue_duration_seconds,
-                   wj.runtime_seconds AS job_runtime_seconds,
-                   wj.total_duration_seconds AS job_total_duration_seconds
-            FROM workflow_attempts wa
-            JOIN runs r ON r.id = wa.run_id
-            LEFT JOIN workflow_jobs wj ON wj.run_id = wa.run_id AND wj.run_attempt = wa.run_attempt
-            WHERE ${clauses}
-            ORDER BY wa.created_at DESC, wa.run_id DESC, wa.run_attempt DESC`,
-      args,
-    });
+    // Chunk to stay below SQLite's 999-variable limit (100 attempts = 200 vars);
+    // merge and sort in TS since per-chunk ORDER BY isn't globally ordered.
+    const runRows: Record<string, unknown>[] = [];
+    const chunkSize = 100;
+    for (let i = 0; i < attemptRows.length; i += chunkSize) {
+      const chunk = attemptRows.slice(i, i + chunkSize);
+      const clauses = chunk.map(() => '(wa.run_id = ? AND wa.run_attempt = ?)').join(' OR ');
+      const args = chunk.flatMap((w) => [w.run_id as number, w.run_attempt as number]);
+      const { rows: chunkRows } = await client.execute({
+        sql: `SELECT r.*, wa.run_attempt, wa.status AS attempt_status,
+                     wa.conclusion AS attempt_conclusion, wa.created_at AS attempt_created_at,
+                     wa.run_started_at, wa.completed_at, wa.updated_at AS attempt_updated_at,
+                     wa.queue_duration_seconds, wa.runtime_seconds, wa.total_duration_seconds,
+                     wa.tracked, wa.workflow_file, wa.workflow_ref, wa.match_kind, wa.step_policy_hash,
+                     wj.job_id, wj.name AS job_name, wj.status AS job_status,
+                     wj.conclusion AS job_conclusion, wj.created_at AS job_created_at,
+                     wj.started_at AS job_started_at, wj.completed_at AS job_completed_at,
+                     wj.html_url AS job_html_url,
+                     wj.queue_duration_seconds AS job_queue_duration_seconds,
+                     wj.runtime_seconds AS job_runtime_seconds,
+                     wj.total_duration_seconds AS job_total_duration_seconds
+              FROM workflow_attempts wa
+              JOIN runs r ON r.id = wa.run_id
+              LEFT JOIN workflow_jobs wj ON wj.run_id = wa.run_id AND wj.run_attempt = wa.run_attempt
+              WHERE ${clauses}`,
+        args,
+      });
+      runRows.push(...chunkRows);
+    }
 
     const runMap = new Map<string, Run>();
     for (const row of runRows) {
       const key = `${Number(row.id)}:${Number(row.run_attempt)}`;
       if (!runMap.has(key)) {
-        runMap.set(key, mapAttemptRunRow(row as Record<string, unknown>));
+        runMap.set(key, mapAttemptRunRow(row));
       }
       if (row.job_id != null) {
         const run = runMap.get(key)!;
@@ -161,7 +168,13 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
         });
       }
     }
-    workflows = Array.from(runMap.values());
+    workflows = Array.from(runMap.values()).sort((a, b) => {
+      const timeA = Date.parse(a.created_at);
+      const timeB = Date.parse(b.created_at);
+      if (timeA !== timeB) return timeB - timeA;
+      if (a.id !== b.id) return b.id - a.id;
+      return (b.runAttempt ?? 1) - (a.runAttempt ?? 1);
+    });
   } else {
     const { rows: workflowRows } = await client.execute({
       sql: `SELECT run_id FROM pr_workflows WHERE pr_metric_id = ?`,

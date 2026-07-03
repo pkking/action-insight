@@ -137,12 +137,32 @@ export async function writePrWorkflowAttemptsToClient(
     }
   }
 
+  // pr_workflow_attempts FKs workflow_attempts(run_id, run_attempt); keep only
+  // attempts that exist so pre-ADR-005 / uncollected runs don't violate the
+  // constraint (FK enforcement is on for both Turso and SQLite).
+  const runIds = Array.from(new Set(
+    Array.from(prWorkflowAttempts.values()).flatMap((attempts) => attempts.map((a) => a.runId)),
+  ));
+  const existingAttempts = new Set<string>();
+  for (const batch of chunkArray(runIds, PR_METRIC_UPSERT_BATCH_SIZE)) {
+    const placeholders = batch.map(() => '?').join(',');
+    const { rows: attemptRows } = await client.execute({
+      sql: `SELECT run_id, run_attempt FROM workflow_attempts WHERE run_id IN (${placeholders})`,
+      args: batch,
+    });
+    for (const row of attemptRows) {
+      existingAttempts.add(`${Number(row.run_id)}:${Number(row.run_attempt)}`);
+    }
+  }
+
   const rows: { pr_metric_id: number; run_id: number; run_attempt: number }[] = [];
   for (const [prNumber, attempts] of prWorkflowAttempts.entries()) {
     const prMetricId = prNumberToId.get(prNumber);
     if (!prMetricId) continue;
     for (const attempt of attempts) {
-      rows.push({ pr_metric_id: prMetricId, run_id: attempt.runId, run_attempt: attempt.runAttempt });
+      if (existingAttempts.has(`${attempt.runId}:${attempt.runAttempt}`)) {
+        rows.push({ pr_metric_id: prMetricId, run_id: attempt.runId, run_attempt: attempt.runAttempt });
+      }
     }
   }
   if (rows.length === 0) return;

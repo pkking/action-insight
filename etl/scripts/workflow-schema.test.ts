@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { initSqlite, SQLITE_SCHEMA } from './sqlite-storage';
+import { writePrWorkflowAttemptsToClient } from './workflow-attempt-writes';
 
 /**
  * Apply the real SQLite schema to an in-memory database and return the client.
@@ -163,6 +164,46 @@ describe('ADR-005 attempt-scoped schema identity', () => {
       })
     ).rejects.toThrow();
     await client.close();
+  });
+
+  it('writePrWorkflowAttemptsToClient skips attempts absent from workflow_attempts', async () => {
+    // File-based DB (not :memory:) so the write transaction shares the connection.
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-insight-fk-'));
+    const dbPath = path.join(tempDir, 'fk.db');
+    const client = createClient({ url: `file:${dbPath}` });
+    for (const stmt of SQLITE_SCHEMA.split(';').map((s) => s.trim()).filter(Boolean)) {
+      await client.execute({ sql: stmt, args: [] });
+    }
+    try {
+      await seedRun(client, 800);
+      // Only (800, 1) exists in workflow_attempts; (801, 1) does not.
+      await client.execute({
+        sql: `INSERT INTO workflow_attempts (run_id, run_attempt, status, tracked, workflow_file) VALUES (?, ?, ?, ?, ?)`,
+        args: [800, 1, 'completed', 1, 'ci.yml'],
+      });
+      await client.execute({
+        sql: `INSERT INTO pr_metrics (id, repo_id, pr_number, title, state, html_url, created_at) VALUES (1, 1, 42, 't', 'open', 'https://example.com', '2026-07-03T00:00:00Z')`,
+        args: [],
+      });
+
+      const prWorkflowAttempts = new Map<number, Array<{ runId: number; runAttempt: number }>>([
+        [42, [
+          { runId: 800, runAttempt: 1 }, // exists -> linked
+          { runId: 801, runAttempt: 1 }, // absent -> skipped (no FK violation)
+        ]],
+      ]);
+      await writePrWorkflowAttemptsToClient(client, 1, prWorkflowAttempts);
+
+      const links = await client.execute({
+        sql: 'SELECT run_id, run_attempt FROM pr_workflow_attempts WHERE pr_metric_id = 1 ORDER BY run_id',
+        args: [],
+      });
+      expect(links.rows.map((r) => ({ run_id: Number(r.run_id), run_attempt: Number(r.run_attempt) })))
+        .toEqual([{ run_id: 800, run_attempt: 1 }]);
+    } finally {
+      await client.close();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('upgrades an existing runs table with workflow metadata columns', async () => {
