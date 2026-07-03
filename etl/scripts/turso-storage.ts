@@ -122,7 +122,7 @@ function readPositiveIntEnv(name: string, defaultValue: number): number {
   return Number.isInteger(value) && value > 0 ? value : defaultValue;
 }
 
-function getTursoClient(): Client | null {
+export function getTursoClient(): Client | null {
   if (cachedClient) return cachedClient;
 
   const url = process.env.TURSO_DATABASE_URL;

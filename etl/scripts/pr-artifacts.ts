@@ -294,7 +294,11 @@ export async function rebuildPullRequestArtifacts({
     }
   }
 
-  const persistedCache = await readPullRequestResolutionCacheFromTurso(repoKey, [...uniqueShas]);
+  const persistedCache = await readPullRequestResolutionCacheFromTurso(repoKey, [...uniqueShas]).catch((error) => {
+    if (!isSqliteFallbackEnabled()) throw error;
+    warn(`Turso cache read failed for ${repoKey}, falling back to SQLite:`, error);
+    return new Map();
+  });
   if (isSqliteFallbackEnabled()) {
     const persistedCacheSqlite = await readPullRequestResolutionCacheFromSqlite(repoKey, [...uniqueShas]).catch(() => new Map());
     for (const [sha, record] of persistedCacheSqlite.entries()) {

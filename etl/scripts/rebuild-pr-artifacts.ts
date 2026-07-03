@@ -3,13 +3,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Octokit } from '@octokit/core';
-import { createClient, type Client } from '@libsql/client';
+import { type Client } from '@libsql/client';
 import { addDays, format, parseISO } from 'date-fns';
 import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
-import { getCollectedDatesFromTurso, checkEtlFreshness, formatFreshnessReport } from './turso-storage.ts';
-import { getCollectedDatesFromSqlite } from './sqlite-storage.ts';
+import { getCollectedDatesFromTurso, checkEtlFreshness, formatFreshnessReport, getTursoClient } from './turso-storage.ts';
+import { getCollectedDatesFromSqlite, getRepoClient } from './sqlite-storage.ts';
 import { isSqliteFallbackEnabled } from './github-utils.ts';
 import type { Run } from '../../src/lib/types.ts';
 
@@ -162,10 +162,10 @@ function selectDates(collectedDates: string[], options: RebuildCliOptions): stri
 }
 
 async function fetchRunsFromDatabase(repo: string, dates: string[]): Promise<Run[]> {
-  const tursoUrl = process.env.TURSO_DATABASE_URL;
-  if (tursoUrl && process.env.TURSO_AUTH_TOKEN) {
+  const tursoClient = getTursoClient();
+  if (tursoClient) {
     try {
-      return await fetchRunsFromClient(createClient({ url: tursoUrl, authToken: process.env.TURSO_AUTH_TOKEN }), repo, dates, 'Turso');
+      return await fetchRunsFromClient(tursoClient, repo, dates, 'Turso');
     } catch (err) {
       if (!isSqliteFallbackEnabled()) throw err;
       console.warn(`Turso fetch failed for ${repo}, falling back to SQLite:`, err);
@@ -174,7 +174,7 @@ async function fetchRunsFromDatabase(repo: string, dates: string[]): Promise<Run
   if (!isSqliteFallbackEnabled()) {
     throw new Error('Turso is not configured for PR artifact rebuild (set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN)');
   }
-  return fetchRunsFromClient(createClient({ url: resolveSqliteUrl(repo) }), repo, dates, 'SQLite');
+  return fetchRunsFromClient(getRepoClient(repo), repo, dates, 'SQLite');
 }
 
 async function fetchRunsFromClient(client: Client, repo: string, dates: string[], label: string): Promise<Run[]> {
@@ -276,16 +276,6 @@ async function fetchRunsFromClient(client: Client, repo: string, dates: string[]
   }
 
   return allRuns;
-}
-
-function resolveSqliteUrl(repo: string): string {
-  if (process.env.SQLITE_DATABASE_URL) return process.env.SQLITE_DATABASE_URL;
-  if (process.env.SQLITE_DATABASE_FILE) return `file:${process.env.SQLITE_DATABASE_FILE}`;
-  const scriptsDir = __dirname;
-  const etlDir = path.dirname(scriptsDir);
-  const dataDir = path.join(etlDir, 'data');
-  const projectName = process.env.SQLITE_PROJECT_NAME ?? repo.replace('/', '-');
-  return `file:${path.join(dataDir, `${projectName}.db`)}`;
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
