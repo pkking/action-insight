@@ -1,27 +1,29 @@
 # ADR-004: SQLite Database Files Stored via Git LFS
 
-**Status**: Accepted  
+**Status**: Accepted, revised 2026-07-03
 **Date**: 2026-06-14  
 **Context**: PR #125 (CI collection failures), CI run #27470767070
 
 ## Decision
 
-Per-repo SQLite database files (`etl/data/*.db`) are tracked in the repository via **Git LFS**. They serve as the **local fallback storage** for GitHub Actions runs/jobs data when the primary Turso database is unavailable (e.g., write quota exhausted, network issues, or plan limits).
+Per-repo SQLite database files (`etl/data/*.db`) remain tracked in the repository via **Git LFS** for recovery and manual migration workflows. Runtime reads and scheduled ETL writes use **Turso** as the default source of truth.
+
+SQLite fallback/mirroring is disabled by default. It is enabled only when `ENABLE_SQLITE_FALLBACK=1` or `ENABLE_SQLITE_FALLBACK=true` is set for local recovery or an explicit Turso outage procedure.
 
 ## Rationale
 
-The ETL pipeline (`etl/scripts/collect.ts`) writes collected CI data to **two backends simultaneously**:
+The ETL pipeline (`etl/scripts/collect.ts`) originally wrote collected CI data to **two backends simultaneously**:
 
 | Backend | Role | Storage |
 |---------|------|---------|
 | **Turso** (libSQL) | Primary — shared, queryable, remote | Cloud database |
-| **SQLite** (libSQL local) | Fallback — guaranteed local persistence | `etl/data/<owner>-<repo>.db` |
+| **SQLite** (libSQL local) | Explicit fallback/mirror — recovery only | `etl/data/<owner>-<repo>.db` |
 
-When Turso is write-blocked (as happened in CI run #27448049473), the SQLite files become the only source of truth for collected data. Committing them to the repo ensures:
+This fallback was introduced after Turso write blocking in CI run #27448049473. After Turso write limits were lifted, default dual writes became a liability because they can create data drift, grow LFS objects, and make CI behavior depend on repository-tracked database snapshots. The revised behavior is:
 
-1. **CI runners always have a working local database** — no bootstrap or manual setup required.
-2. **Data survives Turso outages** — collection continues against SQLite, and data can be migrated back to Turso later.
-3. **History is versioned** — database schema changes and data growth are tracked alongside code.
+1. **Turso is authoritative by default** — collection, rebuild, and runtime reads fail if Turso is unavailable.
+2. **SQLite is opt-in** — recovery runs can explicitly enable `ENABLE_SQLITE_FALLBACK`.
+3. **LFS files remain available** — existing `.db` snapshots can still bootstrap recovery or manual migration without being updated on every ETL run.
 
 ### Why Git LFS
 
@@ -57,7 +59,7 @@ The `.db` files are **not** in `.gitignore` — they are tracked via LFS. Only t
 
 ### CI Workflow
 
-All checkout steps in `.github/workflows/collect-all-repos.yml` must include `lfs: true`:
+Workflows that intentionally use SQLite fallback must checkout LFS objects:
 
 ```yaml
 - uses: actions/checkout@v6
@@ -65,7 +67,7 @@ All checkout steps in `.github/workflows/collect-all-repos.yml` must include `lf
     lfs: true
 ```
 
-This ensures CI runners download the actual SQLite database binaries instead of LFS pointer text files.
+Routine Turso-backed collection does not commit updated `.db` files back to the repository. If a recovery workflow updates SQLite artifacts, it must commit them through the normal feature branch and PR process.
 
 ## Known Issues & Resolutions
 
@@ -86,24 +88,24 @@ This uses the `gh` auth token (HTTPS) instead of SSH keys for LFS transfers.
 
 ### Turso Write-Blocked
 
-When Turso free-tier write quota is exhausted, all Turso operations fail with `BLOCKED: SQL write operations are forbidden`. The SQLite fallback handles this gracefully (see PR #125) — `ensureRepo()` catches the BLOCKED error and falls back to SELECT-only lookups.
+When Turso writes are blocked or unavailable, default ETL now fails fast so operators see the outage. To run an explicit recovery collection against local SQLite, set `ENABLE_SQLITE_FALLBACK=1`. In that mode, ETL reads Turso first, falls back to SQLite on Turso failure, and mirrors successful Turso writes to SQLite.
 
 ## Consequences
 
 ### Positive
-- CI always has a working local database without external dependencies
-- Data collection continues even when Turso is unavailable
-- Database schema and data growth are versioned with code
+- Turso remains the single default source of truth.
+- Routine ETL no longer mutates repository-tracked `.db` files.
+- Existing SQLite/LFS snapshots remain useful for manual disaster recovery.
 
 ### Negative
-- Repository clone requires Git LFS (~530 MB download)
-- LFS bandwidth limits on GitHub Free (1 GB/month bandwidth, 1 GB storage)
-- Contributors must have Git LFS installed (`git lfs install`)
+- Explicit recovery runs require operators to opt in with `ENABLE_SQLITE_FALLBACK`.
+- Existing LFS objects still consume repository storage until intentionally removed.
+- Recovery workflows must account for possible drift between Turso and old SQLite snapshots.
 
 ### Alternatives Considered
-1. **Don't track .db files** — rejected: CI runners would have no local database on first run.
-2. **Generate .db files in CI** — rejected: would require full historical data re-collection on every fresh runner.
-3. **External object storage (S3, etc.)** — rejected: adds infrastructure complexity; Git LFS is sufficient for current scale.
+1. **Keep default dual writes** — rejected after Turso limits were lifted because it keeps growing LFS artifacts and risks silent divergence.
+2. **Delete SQLite/LFS immediately** — rejected for now because existing snapshots are useful recovery artifacts.
+3. **External object storage (S3, etc.)** — rejected: adds infrastructure complexity for a fallback path that is no longer routine.
 
 ## Related
 - PR #123: `feat(etl): add SQLite fallback storage for ETL pipeline`

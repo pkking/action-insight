@@ -147,7 +147,7 @@ function repoToDbPath(repo: string): string {
 }
 
 /** Get (or create) a per-repo SQLite client. */
-function getRepoClient(repo: string): Client {
+export function getRepoClient(repo: string): Client {
   const cached = clientCache.get(repo);
   if (cached) return cached;
 

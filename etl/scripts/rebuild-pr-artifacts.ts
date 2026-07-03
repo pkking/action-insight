@@ -3,14 +3,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Octokit } from '@octokit/core';
-import { createClient, type Client } from '@libsql/client';
+import { type Client } from '@libsql/client';
 import { addDays, format, parseISO } from 'date-fns';
 import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
-import { getCollectedDatesFromTurso, checkEtlFreshness, formatFreshnessReport } from './turso-storage.ts';
-import { getCollectedDatesFromSqlite } from './sqlite-storage.ts';
-import { createClient as createSqliteClient } from '@libsql/client';
+import { getCollectedDatesFromTurso, checkEtlFreshness, formatFreshnessReport, getTursoClient } from './turso-storage.ts';
+import { getCollectedDatesFromSqlite, getRepoClient } from './sqlite-storage.ts';
+import { isSqliteFallbackEnabled } from './github-utils.ts';
 import type { Run } from '../../src/lib/types.ts';
 
 interface ReposConfig {
@@ -162,20 +162,22 @@ function selectDates(collectedDates: string[], options: RebuildCliOptions): stri
 }
 
 async function fetchRunsFromDatabase(repo: string, dates: string[]): Promise<Run[]> {
-  // Try Turso first, fall back to SQLite
-  const tursoUrl = process.env.TURSO_DATABASE_URL;
-  if (tursoUrl && process.env.TURSO_AUTH_TOKEN) {
+  const tursoClient = getTursoClient();
+  if (tursoClient) {
     try {
-      return await doFetchRunsFromTurso(tursoUrl, process.env.TURSO_AUTH_TOKEN, repo, dates);
+      return await fetchRunsFromClient(tursoClient, repo, dates, 'Turso');
     } catch (err) {
+      if (!isSqliteFallbackEnabled()) throw err;
       console.warn(`Turso fetch failed for ${repo}, falling back to SQLite:`, err);
     }
   }
-  return doFetchRunsFromSqlite(repo, dates);
+  if (!isSqliteFallbackEnabled()) {
+    throw new Error('Turso is not configured for PR artifact rebuild (set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN)');
+  }
+  return fetchRunsFromClient(getRepoClient(repo), repo, dates, 'SQLite');
 }
 
-async function doFetchRunsFromTurso(url: string, authToken: string | undefined, repo: string, dates: string[]): Promise<Run[]> {
-  const client = createClient({ url, authToken });
+async function fetchRunsFromClient(client: Client, repo: string, dates: string[], label: string): Promise<Run[]> {
   const [owner, repoName] = repo.split('/');
 
   const { rows: repoRows } = await client.execute({
@@ -184,7 +186,7 @@ async function doFetchRunsFromTurso(url: string, authToken: string | undefined, 
   });
 
   if (repoRows.length === 0) {
-    console.warn(`Repo ${repo} not found in Turso`);
+    console.warn(`Repo ${repo} not found in ${label}`);
     return [];
   }
 
@@ -270,25 +272,11 @@ async function doFetchRunsFromTurso(url: string, authToken: string | undefined, 
       offset += RUN_SELECT_PAGE_SIZE;
     }
 
-    console.log(`Fetched ${dateRunCount} runs for ${repo} on ${date}`);
+    console.log(`Fetched ${dateRunCount} runs for ${repo} on ${date} from ${label}`);
   }
 
   return allRuns;
 }
-
-function resolveSqliteUrl(): string {
-  if (process.env.SQLITE_DATABASE_URL) return process.env.SQLITE_DATABASE_URL;
-  if (process.env.SQLITE_DATABASE_FILE) return `file:${process.env.SQLITE_DATABASE_FILE}`;
-  const scriptsDir = __dirname;
-  const etlDir = path.dirname(scriptsDir);
-  const dataDir = path.join(etlDir, 'data');
-  const projectName = process.env.SQLITE_PROJECT_NAME ?? 'action-insight';
-  return `file:${path.join(dataDir, `${projectName}.db`)}`;
-}
-
-async function doFetchRunsFromSqlite(repo: string, dates: string[]): Promise<Run[]> {
-  const sqliteUrl = resolveSqliteUrl();
-  const client = createSqliteClient({ url: sqliteUrl });
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const options = parseCliOptions(argv);
@@ -313,7 +301,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     }
 
     try {
-      const collectedDates = await getCollectedDatesFromTurso(repoKey).catch(async () => {
+      const collectedDates = await getCollectedDatesFromTurso(repoKey).catch(async (error) => {
+        if (!isSqliteFallbackEnabled()) throw error;
         console.warn(`Turso unavailable for ${repoKey}, reading dates from SQLite`);
         return getCollectedDatesFromSqlite(repoKey);
       });
