@@ -154,8 +154,8 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
           started_at: row.job_started_at as string,
           completed_at: row.job_completed_at as string,
           html_url: row.job_html_url as string,
-          queueDurationInSeconds: Number(row.job_queue_duration_seconds),
-          durationInSeconds: Number(row.job_runtime_seconds ?? row.job_total_duration_seconds),
+          queueDurationInSeconds: Number(row.job_queue_duration_seconds ?? 0),
+          durationInSeconds: Number(row.job_runtime_seconds ?? row.job_total_duration_seconds ?? 0),
           runtimeInSeconds: row.job_runtime_seconds == null ? undefined : Number(row.job_runtime_seconds),
           totalDurationInSeconds: row.job_total_duration_seconds == null ? undefined : Number(row.job_total_duration_seconds),
         });

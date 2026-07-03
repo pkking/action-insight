@@ -191,15 +191,16 @@ async function fetchRunsFromClient(client: Client, repo: string, dates: string[]
   }
 
   const repoId = Number(repoRows[0].id);
-  const attemptRuns = await fetchWorkflowAttemptRunsFromClient(client, repoId, dates);
-  if (attemptRuns.length > 0) {
-    console.log(`Fetched ${attemptRuns.length} tracked workflow attempts for ${repo} from ${label}`);
-    return attemptRuns;
-  }
-
   const allRuns: Run[] = [];
 
   for (const date of dates) {
+    const attemptRuns = await fetchWorkflowAttemptRunsFromClient(client, repoId, [date]);
+    if (attemptRuns.length > 0) {
+      console.log(`Fetched ${attemptRuns.length} tracked workflow attempts for ${repo} on ${date} from ${label}`);
+      allRuns.push(...attemptRuns);
+      continue;
+    }
+
     let dateRunCount = 0;
     let offset = 0;
 
@@ -318,18 +319,24 @@ async function fetchWorkflowAttemptRunsFromClient(client: Client, repoId: number
       runId: Number(row.id),
       runAttempt: Number(row.run_attempt),
     }));
-    const clauses = attemptKeys.map(() => '(run_id = ? AND run_attempt = ?)').join(' OR ');
-    const jobRows = clauses
-      ? await client.execute({
+
+    // ponytail: chunk to stay below SQLite's 999-variable limit (100 keys = 200 vars).
+    const jobRows: Record<string, unknown>[] = [];
+    const chunkSize = 100;
+    for (let i = 0; i < attemptKeys.length; i += chunkSize) {
+      const chunk = attemptKeys.slice(i, i + chunkSize);
+      const clauses = chunk.map(() => '(run_id = ? AND run_attempt = ?)').join(' OR ');
+      const chunkRows = await client.execute({
           sql: `SELECT run_id, run_attempt, job_id, name, status, conclusion, created_at,
                        started_at, completed_at, html_url, queue_duration_seconds,
                        runtime_seconds, total_duration_seconds, duration_seconds
                 FROM workflow_jobs
                 WHERE ${clauses}
                 ORDER BY run_id, run_attempt, started_at ASC`,
-          args: attemptKeys.flatMap((key) => [key.runId, key.runAttempt]),
-        }).then((result) => result.rows).catch(() => [])
-      : [];
+          args: chunk.flatMap((key) => [key.runId, key.runAttempt]),
+        }).then((result) => result.rows).catch(() => []);
+      jobRows.push(...chunkRows);
+    }
 
     const jobsByAttempt = new Map<string, Array<Record<string, unknown>>>();
     for (const job of jobRows) {

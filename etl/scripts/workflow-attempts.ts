@@ -120,9 +120,13 @@ export function buildWorkflowAttempts(
 ): WorkflowAttemptRow[] {
   return runs.map((inputRun) => {
     const run = enrichRunWithWorkflowMetadata(inputRun, config, repoConfig);
-    // enrich already parsed the path and resolved the match; re-derive only the
+    // enrich already parsed the path; reuse its result to re-derive only the
     // threshold (not stored on Run) for step eligibility.
-    const match = resolveWorkflowMatch(config, repoConfig, parseWorkflowPath(run.workflowPath));
+    const match = resolveWorkflowMatch(config, repoConfig, {
+      file: run.workflowFile,
+      ref: run.workflowRef,
+      status: run.workflowParseStatus ?? 'file_unavailable',
+    });
     const runStartedAt = run.run_started_at ?? null;
     const queueDuration = run.queueDurationInSeconds ?? null;
     const runtime = run.runtimeInSeconds ?? null;
@@ -145,7 +149,7 @@ export function buildWorkflowAttempts(
         html_url: job.html_url || null,
         queue_duration_seconds: job.queueDurationInSeconds ?? secondsBetween(job.created_at, job.started_at),
         runtime_seconds: jobRuntime,
-        total_duration_seconds: jobTotal ?? ((job.queueDurationInSeconds ?? 0) + (jobRuntime ?? 0)),
+        total_duration_seconds: jobTotal ?? (jobRuntime !== null ? (job.queueDurationInSeconds ?? 0) + jobRuntime : null),
         steps: shouldPersistSteps ? job.steps : undefined,
       };
     });
@@ -166,7 +170,7 @@ export function buildWorkflowAttempts(
       workflow_file: run.workflowFile ?? null,
       workflow_ref: run.workflowRef ?? null,
       workflow_path: run.workflowPath ?? null,
-      workflow_parse_status: run.workflowParseStatus ?? parseWorkflowPath(run.workflowPath).status,
+      workflow_parse_status: run.workflowParseStatus ?? 'file_unavailable',
       match_kind: run.workflowMatchKind ?? null,
       jobs_fetched_at: jobs.length > 0 ? nowIso : null,
       steps_eligibility_checked_at: match.tracked ? nowIso : null,
