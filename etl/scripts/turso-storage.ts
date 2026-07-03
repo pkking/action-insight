@@ -258,8 +258,8 @@ export async function writeRunsToTurso(repo: string, runs: RunRow[], date: strin
                 workflow_file=excluded.workflow_file, workflow_ref=excluded.workflow_ref,
                 workflow_path=excluded.workflow_path, workflow_parse_status=excluded.workflow_parse_status`,
         args: [
-          run.id, repoId, run.name, run.head_branch, run.head_sha || null,
-          run.status, run.conclusion || null, run.event || null,
+          run.id, repoId, run.name, run.head_branch, run.head_sha ?? null,
+          run.status, run.conclusion ?? null, run.event ?? null,
           run.created_at, run.updated_at, run.html_url, run.durationInSeconds,
           date, run.updated_at,
           run.workflowFile ?? null, run.workflowRef ?? null, run.workflowPath ?? null,
