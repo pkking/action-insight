@@ -153,51 +153,37 @@ interface RunCollectionOptions {
 const ETL_DIR = path.join(__dirname, '..');
 const REPOS_CONFIG_PATH = path.join(ETL_DIR, 'repos.yaml');
 
-/** SQLite initialised? */
-let sqliteReady = false;
-
-async function ensureSqlite(): Promise<void> {
-  if (sqliteReady) return;
-  try {
-    // SQLite databases are per-repo; defer schema creation to the first per-repo access.
-    sqliteReady = true;
-  } catch (err) {
-    console.error('Failed to initialise SQLite:', err);
-    // SQLite init failure is non-fatal — ETL can still write to Turso
-  }
+function isSqliteFallbackEnabled(): boolean {
+  return process.env.ENABLE_SQLITE_FALLBACK === '1' || process.env.ENABLE_SQLITE_FALLBACK === 'true';
 }
 
-/** Helper: run an async function with a fallback if it throws. */
-async function withFallback<T>(primary: () => Promise<T>, fallback: () => Promise<T>, label: string): Promise<T> {
+/** Helper: run Turso first and use SQLite only when explicitly enabled. */
+async function withOptionalSqliteFallback<T>(primary: () => Promise<T>, fallback: () => Promise<T>, label: string): Promise<T> {
   try {
     return await primary();
   } catch (err) {
+    if (!isSqliteFallbackEnabled()) throw err;
     warn(`${label} primary failed, using fallback:`, err);
     return fallback();
   }
 }
 
-/** Helper: try primary, then fallback; log both failures. */
-async function tryBoth<T>(primary: () => Promise<T>, fallback: () => Promise<T>, label: string): Promise<T | null> {
+async function writeWithOptionalSqliteFallback(
+  primary: () => Promise<void>,
+  fallback: () => Promise<void>,
+  label: string,
+): Promise<void> {
   try {
-    return await primary();
+    await primary();
   } catch (err) {
-    warn(`${label} primary failed:`, err);
+    if (!isSqliteFallbackEnabled()) throw err;
+    warn(`${label} Turso write failed, using SQLite fallback:`, err);
+    await fallback();
+    return;
   }
-  try {
-    return await fallback();
-  } catch (err) {
-    error(`${label} fallback also failed:`, err);
-  }
-  return null;
-}
 
-/** Non-fatal Turso write — logs error but doesn't throw. */
-async function safeTursoWrite(fn: () => Promise<void>, label: string): Promise<void> {
-  try {
-    await fn();
-  } catch (err) {
-    warn(`Turso write skipped for ${label}:`, err);
+  if (isSqliteFallbackEnabled()) {
+    await fallback();
   }
 }
 
@@ -245,15 +231,13 @@ async function loadRepoState(repo: string, retentionDays: number, now: Date): Pr
   const retentionStart = format(subDays(now, retentionDays), 'yyyy-MM-dd');
   const today = format(now, 'yyyy-MM-dd');
 
-  // Read state — prefer Turso, fall back to SQLite
-  const dbState = await withFallback(
+  const dbState = await withOptionalSqliteFallback(
     () => readCollectionState(repo),
     () => readCollectionStateFromSqlite(repo),
     'readCollectionState',
   );
 
-  // Read collected dates — prefer Turso, fall back to SQLite
-  const collectedDates = await withFallback(
+  const collectedDates = await withOptionalSqliteFallback(
     () => getCollectedDatesFromTurso(repo),
     () => getCollectedDatesFromSqlite(repo),
     'getCollectedDates',
@@ -288,11 +272,11 @@ async function saveRepoState(repo: string, state: RepoCollectionState): Promise<
     lastUpdated: new Date().toISOString(),
   };
 
-  // Always write to SQLite (local persistence)
-  await writeCollectionStateToSqlite(repo, statePayload);
-
-  // Best-effort Turso write
-  await safeTursoWrite(() => writeCollectionState(repo, statePayload), 'writeCollectionState');
+  await writeWithOptionalSqliteFallback(
+    () => writeCollectionState(repo, statePayload),
+    () => writeCollectionStateToSqlite(repo, statePayload),
+    'writeCollectionState',
+  );
 }
 
 
@@ -346,13 +330,13 @@ async function persistCollectedRuns(
 
   for (const date of dates) {
     const runCount = runsByDate[date].length;
-    console.log(`  Writing ${date} to SQLite + Turso (${runCount} runs)`);
+    console.log(`  Writing ${date} to Turso${isSqliteFallbackEnabled() ? ' + SQLite fallback' : ''} (${runCount} runs)`);
 
-    // Always write to SQLite first (guaranteed local persistence)
-    await writeRunsToSqlite(repo, runsByDate[date], date);
-
-    // Best-effort Turso write (non-fatal if quota exhausted)
-    await safeTursoWrite(() => writeRunsToTurso(repo, runsByDate[date], date), `writeRuns ${date}`);
+    await writeWithOptionalSqliteFallback(
+      () => writeRunsToTurso(repo, runsByDate[date], date),
+      () => writeRunsToSqlite(repo, runsByDate[date], date),
+      `writeRuns ${date}`,
+    );
   }
 
   const cutoffDate = startOfDay(subDays(now, retentionDays));
@@ -393,7 +377,7 @@ export async function collectRepo(
   const state = await loadRepoState(repo, retentionDays, now);
   log(`State: latest=${state.latest}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
 
-  const existingRunIdsWithSteps = await withFallback(
+  const existingRunIdsWithSteps = await withOptionalSqliteFallback(
     () => getExistingRunIdsWithStepsFromTurso(repo),
     () => getExistingRunIdsWithStepsFromSqlite(repo),
     'getExistingRunIdsWithSteps',
@@ -753,10 +737,7 @@ export async function main() {
   log(`Target repos: ${targetRepos.join(', ') || '(none)'}`);
   log(`Node version: ${process.version}`);
   log(`ETL_DIR: ${ETL_DIR}`);
-  log(`State storage: SQLite (primary) + Turso (best-effort)`);
-
-  // Initialise SQLite schema (auto-creates etl/data/action-insight.db)
-  await ensureSqlite();
+  log(`State storage: Turso${isSqliteFallbackEnabled() ? ' + SQLite fallback' : ''}`);
 
   await runCollection({
     token,

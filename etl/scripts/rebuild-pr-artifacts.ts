@@ -37,6 +37,10 @@ function resolveGitHubToken(repoKey: string): string | undefined {
   return process.env[perRepoKey] ?? process.env.GITHUB_TOKEN_PER_REPO_TRITON_LANG_TRITON_ASCEND;
 }
 
+function isSqliteFallbackEnabled(): boolean {
+  return process.env.ENABLE_SQLITE_FALLBACK === '1' || process.env.ENABLE_SQLITE_FALLBACK === 'true';
+}
+
 const CLI_HELP = `Usage: npx tsx etl/scripts/rebuild-pr-artifacts.ts [options]
 
 Rebuild PR metrics and PR workflow links from raw runs already stored in Turso.
@@ -162,14 +166,17 @@ function selectDates(collectedDates: string[], options: RebuildCliOptions): stri
 }
 
 async function fetchRunsFromDatabase(repo: string, dates: string[]): Promise<Run[]> {
-  // Try Turso first, fall back to SQLite
   const tursoUrl = process.env.TURSO_DATABASE_URL;
   if (tursoUrl && process.env.TURSO_AUTH_TOKEN) {
     try {
       return await doFetchRunsFromTurso(tursoUrl, process.env.TURSO_AUTH_TOKEN, repo, dates);
     } catch (err) {
+      if (!isSqliteFallbackEnabled()) throw err;
       console.warn(`Turso fetch failed for ${repo}, falling back to SQLite:`, err);
     }
+  }
+  if (!isSqliteFallbackEnabled()) {
+    throw new Error('Turso is not configured for PR artifact rebuild (set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN)');
   }
   return doFetchRunsFromSqlite(repo, dates);
 }
@@ -276,19 +283,115 @@ async function doFetchRunsFromTurso(url: string, authToken: string | undefined, 
   return allRuns;
 }
 
-function resolveSqliteUrl(): string {
+function resolveSqliteUrl(repo: string): string {
   if (process.env.SQLITE_DATABASE_URL) return process.env.SQLITE_DATABASE_URL;
   if (process.env.SQLITE_DATABASE_FILE) return `file:${process.env.SQLITE_DATABASE_FILE}`;
   const scriptsDir = __dirname;
   const etlDir = path.dirname(scriptsDir);
   const dataDir = path.join(etlDir, 'data');
-  const projectName = process.env.SQLITE_PROJECT_NAME ?? 'action-insight';
+  const projectName = process.env.SQLITE_PROJECT_NAME ?? repo.replace('/', '-');
   return `file:${path.join(dataDir, `${projectName}.db`)}`;
 }
 
 async function doFetchRunsFromSqlite(repo: string, dates: string[]): Promise<Run[]> {
-  const sqliteUrl = resolveSqliteUrl();
+  const sqliteUrl = resolveSqliteUrl(repo);
   const client = createSqliteClient({ url: sqliteUrl });
+  const [owner, repoName] = repo.split('/');
+
+  const { rows: repoRows } = await client.execute({
+    sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
+    args: [owner, repoName],
+  });
+
+  if (repoRows.length === 0) {
+    console.warn(`Repo ${repo} not found in SQLite`);
+    return [];
+  }
+
+  const repoId = Number(repoRows[0].id);
+  const allRuns: Run[] = [];
+
+  for (const date of dates) {
+    let dateRunCount = 0;
+    let offset = 0;
+
+    while (true) {
+      const { rows: runRows } = await client.execute({
+        sql: `SELECT id, name, head_branch, head_sha, status, conclusion,
+                     event, created_at, updated_at, html_url, duration_seconds, date
+              FROM runs
+              WHERE repo_id = ? AND date = ?
+              ORDER BY created_at DESC, id DESC
+              LIMIT ? OFFSET ?`,
+        args: [repoId, date, RUN_SELECT_PAGE_SIZE, offset],
+      });
+
+      if (runRows.length === 0 && offset === 0) {
+        break;
+      }
+
+      const runIds = runRows.map((r) => r.id as number);
+
+      if (runIds.length > 0) {
+        const placeholders = runIds.map(() => '?').join(',');
+        const { rows: jobRows } = await client.execute({
+          sql: `SELECT id, run_id, name, status, conclusion, created_at, started_at,
+                       completed_at, html_url, queue_duration_seconds, duration_seconds
+                FROM jobs WHERE run_id IN (${placeholders})
+                ORDER BY run_id, started_at ASC`,
+          args: runIds,
+        });
+
+        const jobsByRun = new Map<number, Array<Record<string, unknown>>>();
+        for (const job of jobRows) {
+          const runId = Number(job.run_id);
+          if (!jobsByRun.has(runId)) jobsByRun.set(runId, []);
+          jobsByRun.get(runId)!.push(job);
+        }
+
+        for (const row of runRows) {
+          const runId = Number(row.id);
+          allRuns.push({
+            id: runId,
+            name: row.name as string,
+            head_branch: row.head_branch as string,
+            head_sha: row.head_sha as string | undefined,
+            status: row.status as string,
+            conclusion: (row.conclusion as string) || '',
+            event: row.event as string | undefined,
+            created_at: row.created_at as string,
+            updated_at: row.updated_at as string,
+            html_url: row.html_url as string,
+            durationInSeconds: Number(row.duration_seconds),
+            jobs: (jobsByRun.get(runId) || []).map((job) => ({
+              id: Number(job.id),
+              name: job.name as string,
+              status: job.status as string,
+              conclusion: (job.conclusion as string) || '',
+              created_at: job.created_at as string,
+              started_at: job.started_at as string,
+              completed_at: job.completed_at as string,
+              html_url: job.html_url as string,
+              queueDurationInSeconds: Number(job.queue_duration_seconds),
+              durationInSeconds: Number(job.duration_seconds),
+            })),
+          });
+          dateRunCount += 1;
+        }
+      }
+
+      if (runRows.length < RUN_SELECT_PAGE_SIZE) {
+        break;
+      }
+
+      offset += RUN_SELECT_PAGE_SIZE;
+    }
+
+    console.log(`Fetched ${dateRunCount} runs for ${repo} on ${date} from SQLite`);
+  }
+
+  return allRuns;
+}
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const options = parseCliOptions(argv);
@@ -313,7 +416,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     }
 
     try {
-      const collectedDates = await getCollectedDatesFromTurso(repoKey).catch(async () => {
+      const collectedDates = await getCollectedDatesFromTurso(repoKey).catch(async (error) => {
+        if (!isSqliteFallbackEnabled()) throw error;
         console.warn(`Turso unavailable for ${repoKey}, reading dates from SQLite`);
         return getCollectedDatesFromSqlite(repoKey);
       });

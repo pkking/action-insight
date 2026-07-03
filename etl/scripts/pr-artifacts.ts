@@ -46,12 +46,27 @@ const DEFAULT_SEARCH_RESOLUTION_LIMIT = 20;
 const DEFAULT_RATE_LIMIT_RESERVE = 10;
 const RUN_PAYLOAD_PR_SOURCE = 'run_payload';
 
-/** Non-fatal Turso write — logs error but doesn't throw. */
-async function safeTursoWrite(fn: () => Promise<void>, label: string, warn: (...args: unknown[]) => void): Promise<void> {
+function isSqliteFallbackEnabled(): boolean {
+  return process.env.ENABLE_SQLITE_FALLBACK === '1' || process.env.ENABLE_SQLITE_FALLBACK === 'true';
+}
+
+async function writeWithOptionalSqliteFallback(
+  primary: () => Promise<void>,
+  fallback: () => Promise<void>,
+  label: string,
+  warn: (...args: unknown[]) => void
+): Promise<void> {
   try {
-    await fn();
+    await primary();
   } catch (err) {
-    warn(`Turso write skipped for ${label}:`, err);
+    if (!isSqliteFallbackEnabled()) throw err;
+    warn(`${label} Turso write failed, using SQLite fallback:`, err);
+    await fallback();
+    return;
+  }
+
+  if (isSqliteFallbackEnabled()) {
+    await fallback();
   }
 }
 
@@ -302,14 +317,15 @@ export async function rebuildPullRequestArtifacts({
     }
   }
 
-  const persistedCache = await readPullRequestResolutionCacheFromTurso(repoKey, [...uniqueShas]).catch(() => new Map());
-  // Merge with SQLite cache for resilience when Turso is down
-  const persistedCacheSqlite = await readPullRequestResolutionCacheFromSqlite(repoKey, [...uniqueShas]).catch(() => new Map());
-  for (const [sha, record] of persistedCacheSqlite.entries()) {
-    if (!persistedCache.has(sha)) {
-      persistedCache.set(sha, record);
+  const persistedCache = await readPullRequestResolutionCacheFromTurso(repoKey, [...uniqueShas]);
+  if (isSqliteFallbackEnabled()) {
+    const persistedCacheSqlite = await readPullRequestResolutionCacheFromSqlite(repoKey, [...uniqueShas]).catch(() => new Map());
+    for (const [sha, record] of persistedCacheSqlite.entries()) {
+      if (!persistedCache.has(sha)) {
+        persistedCache.set(sha, record);
+      }
     }
-  };
+  }
   let resolvedCacheHitCount = 0;
   let notFoundCacheHitCount = 0;
   let retryableCacheHitCount = 0;
@@ -388,8 +404,12 @@ export async function rebuildPullRequestArtifacts({
 
     cacheEntriesToWrite.push(entry);
   }
-  await writePullRequestResolutionCacheToSqlite(repoKey, cacheEntriesToWrite);
-  await safeTursoWrite(() => writePullRequestResolutionCacheToTurso(repoKey, cacheEntriesToWrite), 'writePullRequestResolutionCache', warn);
+  await writeWithOptionalSqliteFallback(
+    () => writePullRequestResolutionCacheToTurso(repoKey, cacheEntriesToWrite),
+    () => writePullRequestResolutionCacheToSqlite(repoKey, cacheEntriesToWrite),
+    'writePullRequestResolutionCache',
+    warn,
+  );
   log(
     `PR resolution API calls for ${repoKey}: ${resolutionResult.coreApiCalls} core, ${resolutionResult.searchApiCalls} search; resolved ${newlyResolvedShaCount}, not_found ${newlyNotFoundShaCount}, failed ${newlyFailedShaCount}, rate_limited ${newlyRateLimitedShaCount}, skipped ${skippedPrShaCount}`
   );
@@ -423,8 +443,12 @@ export async function rebuildPullRequestArtifacts({
   const partialPrResolution = unresolvedRelevantShaCount > 0;
 
   if (prNumbers.length === 0) {
-    await writePrMetricsToSqlite(repoKey, []);
-    await safeTursoWrite(() => writePrMetricsToTurso(repoKey, []), 'writePrMetrics-empty', warn);
+    await writeWithOptionalSqliteFallback(
+      () => writePrMetricsToTurso(repoKey, []),
+      () => writePrMetricsToSqlite(repoKey, []),
+      'writePrMetrics-empty',
+      warn,
+    );
     log(`PR metrics written for ${repoKey}: 0 rows; latest created_at: none`);
     return;
   }
@@ -445,15 +469,23 @@ export async function rebuildPullRequestArtifacts({
   result.index.unresolvedPrShaCount = unresolvedRelevantShaCount;
   result.index.skippedPrShaCount = skippedPrShaCount;
 
-  await writePrMetricsToSqlite(repoKey, result.index.prs);
-  await safeTursoWrite(() => writePrMetricsToTurso(repoKey, result.index.prs), 'writePrMetrics', warn);
+  await writeWithOptionalSqliteFallback(
+    () => writePrMetricsToTurso(repoKey, result.index.prs),
+    () => writePrMetricsToSqlite(repoKey, result.index.prs),
+    'writePrMetrics',
+    warn,
+  );
   log(`PR metrics written for ${repoKey}: ${result.index.prs.length} rows; latest created_at: ${result.index.prs[0]?.created_at ?? 'none'}`);
 
   const prWorkflowsMap = new Map<number, number[]>();
   for (const [prNumber, detail] of result.details.entries()) {
     prWorkflowsMap.set(prNumber, detail.pr.workflows.map((w) => w.id));
   }
-  await writePrWorkflowsToSqlite(repoKey, prWorkflowsMap);
-  await safeTursoWrite(() => writePrWorkflowsToTurso(repoKey, prWorkflowsMap), 'writePrWorkflows', warn);
+  await writeWithOptionalSqliteFallback(
+    () => writePrWorkflowsToTurso(repoKey, prWorkflowsMap),
+    () => writePrWorkflowsToSqlite(repoKey, prWorkflowsMap),
+    'writePrWorkflows',
+    warn,
+  );
   log(`PR workflows written for ${repoKey}: ${prWorkflowsMap.size} PRs`);
 }
