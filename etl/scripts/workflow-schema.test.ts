@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createClient } from '@libsql/client';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-import { SQLITE_SCHEMA } from './sqlite-storage';
+import { initSqlite, SQLITE_SCHEMA } from './sqlite-storage';
+import { writePrWorkflowAttemptsToClient } from './workflow-attempt-writes';
 
 /**
  * Apply the real SQLite schema to an in-memory database and return the client.
@@ -13,6 +17,19 @@ async function schemaClient() {
     await client.execute({ sql: stmt, args: [] });
   }
   return client;
+}
+
+async function seedRun(client: Awaited<ReturnType<typeof schemaClient>>, runId: number) {
+  await client.execute({
+    sql: `INSERT INTO repos (id, owner, repo) VALUES (1, 'acme', 'widgets') ON CONFLICT DO NOTHING`,
+    args: [],
+  });
+  await client.execute({
+    sql: `INSERT INTO runs (id, repo_id, name, head_branch, status, conclusion, created_at, updated_at, html_url, duration_seconds, date)
+          VALUES (?, 1, 'CI', 'main', 'completed', 'success', '2026-07-03T00:00:00Z', '2026-07-03T00:10:00Z', 'https://example.com', 600, '2026-07-03')
+          ON CONFLICT DO NOTHING`,
+    args: [runId],
+  });
 }
 
 describe('ADR-005 attempt-scoped schema identity', () => {
@@ -36,6 +53,7 @@ describe('ADR-005 attempt-scoped schema identity', () => {
 
   it('keeps multiple attempts for the same run as separate rows', async () => {
     const client = await schemaClient();
+    await seedRun(client, 100);
     await client.execute({
       sql: `INSERT INTO workflow_attempts (run_id, run_attempt, status, tracked, workflow_file) VALUES (?, ?, ?, ?, ?)`,
       args: [100, 1, 'completed', 1, 'ci.yml'],
@@ -52,6 +70,7 @@ describe('ADR-005 attempt-scoped schema identity', () => {
 
   it('rejects a duplicate attempt for the same run_id + run_attempt', async () => {
     const client = await schemaClient();
+    await seedRun(client, 200);
     await client.execute({
       sql: `INSERT INTO workflow_attempts (run_id, run_attempt, status) VALUES (?, ?, ?)`,
       args: [200, 1, 'completed'],
@@ -67,10 +86,15 @@ describe('ADR-005 attempt-scoped schema identity', () => {
 
   it('keys attempt-scoped jobs and steps by run_id + run_attempt + job_id(+step)', async () => {
     const client = await schemaClient();
+    await seedRun(client, 300);
     // Seed a tracked attempt.
     await client.execute({
       sql: `INSERT INTO workflow_attempts (run_id, run_attempt, status, tracked) VALUES (?, ?, ?, ?)`,
       args: [300, 1, 'completed', 1],
+    });
+    await client.execute({
+      sql: `INSERT INTO workflow_attempts (run_id, run_attempt, status, tracked) VALUES (?, ?, ?, ?)`,
+      args: [300, 2, 'completed', 1],
     });
     // Same job_id across two attempts stays distinct.
     await client.execute({
@@ -103,7 +127,7 @@ describe('ADR-005 attempt-scoped schema identity', () => {
 
   it('links PR metrics to workflow attempts without collapsing reruns', async () => {
     const client = await schemaClient();
-    await client.execute({ sql: `INSERT INTO repos (id, owner, repo) VALUES (1, 'acme', 'widgets')`, args: [] });
+    await seedRun(client, 500);
     await client.execute({
       sql: `INSERT INTO pr_metrics (id, repo_id, pr_number, title, branch, state, html_url, created_at) VALUES (1, 1, 5, 't', 'main', 'open', 'https://example.com', '2026-07-03')`,
       args: [],
@@ -122,5 +146,102 @@ describe('ADR-005 attempt-scoped schema identity', () => {
     const links = await client.execute({ sql: 'SELECT run_attempt FROM pr_workflow_attempts WHERE pr_metric_id=1 ORDER BY run_attempt', args: [] });
     expect(links.rows.map((r) => r.run_attempt)).toEqual([1, 2]);
     await client.close();
+  });
+
+  it('enforces attempt-scoped foreign keys for jobs and PR links', async () => {
+    const client = await schemaClient();
+    await seedRun(client, 700);
+    await expect(
+      client.execute({
+        sql: `INSERT INTO workflow_jobs (run_id, run_attempt, job_id, name, status) VALUES (?, ?, ?, ?, ?)`,
+        args: [700, 2, 1, 'build', 'completed'],
+      })
+    ).rejects.toThrow();
+    await expect(
+      client.execute({
+        sql: `INSERT INTO pr_workflow_attempts (pr_metric_id, run_id, run_attempt) VALUES (?, ?, ?)`,
+        args: [1, 700, 2],
+      })
+    ).rejects.toThrow();
+    await client.close();
+  });
+
+  it('writePrWorkflowAttemptsToClient skips attempts absent from workflow_attempts', async () => {
+    // File-based DB (not :memory:) so the write transaction shares the connection.
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-insight-fk-'));
+    const dbPath = path.join(tempDir, 'fk.db');
+    const client = createClient({ url: `file:${dbPath}` });
+    for (const stmt of SQLITE_SCHEMA.split(';').map((s) => s.trim()).filter(Boolean)) {
+      await client.execute({ sql: stmt, args: [] });
+    }
+    try {
+      await seedRun(client, 800);
+      // Only (800, 1) exists in workflow_attempts; (801, 1) does not.
+      await client.execute({
+        sql: `INSERT INTO workflow_attempts (run_id, run_attempt, status, tracked, workflow_file) VALUES (?, ?, ?, ?, ?)`,
+        args: [800, 1, 'completed', 1, 'ci.yml'],
+      });
+      await client.execute({
+        sql: `INSERT INTO pr_metrics (id, repo_id, pr_number, title, state, html_url, created_at) VALUES (1, 1, 42, 't', 'open', 'https://example.com', '2026-07-03T00:00:00Z')`,
+        args: [],
+      });
+
+      const prWorkflowAttempts = new Map<number, Array<{ runId: number; runAttempt: number }>>([
+        [42, [
+          { runId: 800, runAttempt: 1 }, // exists -> linked
+          { runId: 801, runAttempt: 1 }, // absent -> skipped (no FK violation)
+        ]],
+      ]);
+      await writePrWorkflowAttemptsToClient(client, 1, prWorkflowAttempts);
+
+      const links = await client.execute({
+        sql: 'SELECT run_id, run_attempt FROM pr_workflow_attempts WHERE pr_metric_id = 1 ORDER BY run_id',
+        args: [],
+      });
+      expect(links.rows.map((r) => ({ run_id: Number(r.run_id), run_attempt: Number(r.run_attempt) })))
+        .toEqual([{ run_id: 800, run_attempt: 1 }]);
+    } finally {
+      await client.close();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('upgrades an existing runs table with workflow metadata columns', async () => {
+    const previousDir = process.env.SQLITE_DATA_DIR;
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-insight-schema-'));
+    process.env.SQLITE_DATA_DIR = tempDir;
+    const dbPath = path.join(tempDir, 'acme-widgets.db');
+    const client = createClient({ url: `file:${dbPath}` });
+    await client.execute({
+      sql: `CREATE TABLE runs (
+        id INTEGER PRIMARY KEY, repo_id INTEGER NOT NULL, name TEXT, head_branch TEXT,
+        head_sha TEXT, status TEXT, conclusion TEXT, event TEXT, created_at TEXT,
+        updated_at TEXT, html_url TEXT, duration_seconds REAL, date TEXT,
+        steps_checked_at TEXT
+      )`,
+      args: [],
+    });
+    await client.close();
+
+    try {
+      await initSqlite('acme/widgets');
+      const upgraded = createClient({ url: `file:${dbPath}` });
+      const cols = await upgraded.execute({ sql: "SELECT name FROM pragma_table_info('runs')", args: [] });
+      expect(cols.rows.map((row) => row.name)).toEqual(expect.arrayContaining([
+        'workflow_file',
+        'workflow_ref',
+        'workflow_path',
+        'workflow_parse_status',
+      ]));
+      await upgraded.execute({
+        sql: `SELECT * FROM runs INDEXED BY idx_runs_workflow_file WHERE repo_id = 1 AND workflow_file IS NULL`,
+        args: [],
+      });
+      await upgraded.close();
+    } finally {
+      if (previousDir === undefined) delete process.env.SQLITE_DATA_DIR;
+      else process.env.SQLITE_DATA_DIR = previousDir;
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });

@@ -8,6 +8,8 @@
 
 import { createClient, type Client, type InValue } from '@libsql/client';
 import type { Step } from '../../src/lib/types.ts';
+import type { WorkflowAttemptRow } from './workflow-attempts.ts';
+import { writeWorkflowAttemptsToClient, writePrWorkflowAttemptsToClient } from './workflow-attempt-writes.ts';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -39,6 +41,14 @@ interface RunRow {
   updated_at: string;
   html_url: string;
   durationInSeconds: number;
+  runAttempt?: number;
+  run_started_at?: string;
+  queueDurationInSeconds?: number;
+  runtimeInSeconds?: number;
+  workflowFile?: string;
+  workflowRef?: string;
+  workflowPath?: string;
+  workflowParseStatus?: string;
   jobs?: JobRow[];
 }
 
@@ -239,17 +249,21 @@ export async function writeRunsToTurso(repo: string, runs: RunRow[], date: strin
     // Write runs
     for (const batch of chunkArray(runs, RUN_UPSERT_BATCH_SIZE)) {
       const stmts = batch.map((run) => ({
-        sql: `INSERT INTO runs (id, repo_id, name, head_branch, head_sha, status, conclusion, event, created_at, updated_at, html_url, duration_seconds, date, steps_checked_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        sql: `INSERT INTO runs (id, repo_id, name, head_branch, head_sha, status, conclusion, event, created_at, updated_at, html_url, duration_seconds, date, steps_checked_at, workflow_file, workflow_ref, workflow_path, workflow_parse_status)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT(id) DO UPDATE SET
                 status=excluded.status, conclusion=excluded.conclusion, event=excluded.event,
                 updated_at=excluded.updated_at, html_url=excluded.html_url,
-                duration_seconds=excluded.duration_seconds, steps_checked_at=excluded.steps_checked_at`,
+                duration_seconds=excluded.duration_seconds, steps_checked_at=excluded.steps_checked_at,
+                workflow_file=excluded.workflow_file, workflow_ref=excluded.workflow_ref,
+                workflow_path=excluded.workflow_path, workflow_parse_status=excluded.workflow_parse_status`,
         args: [
-          run.id, repoId, run.name, run.head_branch, run.head_sha || null,
-          run.status, run.conclusion || null, run.event || null,
+          run.id, repoId, run.name, run.head_branch, run.head_sha ?? null,
+          run.status, run.conclusion ?? null, run.event ?? null,
           run.created_at, run.updated_at, run.html_url, run.durationInSeconds,
           date, run.updated_at,
+          run.workflowFile ?? null, run.workflowRef ?? null, run.workflowPath ?? null,
+          run.workflowParseStatus ?? null,
         ] as InValue[],
       }));
       await tx.batch(stmts);
@@ -343,6 +357,13 @@ export async function writeRunsToTurso(repo: string, runs: RunRow[], date: strin
   } finally {
     tx.close();
   }
+}
+
+export async function writeWorkflowAttemptsToTurso(repo: string, attempts: WorkflowAttemptRow[]): Promise<void> {
+  if (attempts.length === 0) return;
+  const client = requireTursoClient(repo);
+  await ensureRepo(client, repo.split('/')[0], repo.split('/')[1]);
+  await writeWorkflowAttemptsToClient(client, attempts);
 }
 
 export async function getExistingRunIdsFromTurso(repo: string): Promise<Set<number>> {
@@ -612,6 +633,16 @@ export async function writePrWorkflowsToTurso(repo: string, prWorkflows: Map<num
   } finally {
     tx.close();
   }
+}
+
+export async function writePrWorkflowAttemptsToTurso(
+  repo: string,
+  prWorkflowAttempts: Map<number, Array<{ runId: number; runAttempt: number }>>,
+): Promise<void> {
+  if (prWorkflowAttempts.size === 0) return;
+  const client = requireTursoClient(repo);
+  const repoId = await ensureRepo(client, repo.split('/')[0], repo.split('/')[1]);
+  await writePrWorkflowAttemptsToClient(client, repoId, prWorkflowAttempts);
 }
 
 export async function writePrMetricsToTurso(repo: string, prs: PrMetricsSummary[]): Promise<void> {

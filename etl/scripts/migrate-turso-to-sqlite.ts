@@ -35,6 +35,9 @@ const BATCH_SIZE = parseInt(process.env.MIGRATION_BATCH_SIZE || '5000', 10);
 /*  Schema (identical to sqlite-storage.ts)                            */
 /* ------------------------------------------------------------------ */
 
+// FK enforcement intentionally omitted from this schema: bulk import must tolerate
+// legacy orphan rows in the source DB; the app connection (sqlite-storage.ts)
+// sets PRAGMA foreign_keys = ON at runtime.
 const SQLITE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS repos (
   id   INTEGER PRIMARY KEY, owner TEXT NOT NULL, repo  TEXT NOT NULL,
@@ -51,8 +54,8 @@ CREATE TABLE IF NOT EXISTS runs (
 CREATE TABLE IF NOT EXISTS jobs (
   id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL, name TEXT, status TEXT,
   conclusion TEXT, created_at TEXT, started_at TEXT, completed_at TEXT,
-  html_url TEXT, queue_duration_seconds REAL, duration_seconds REAL
-);
+	  html_url TEXT, queue_duration_seconds REAL, duration_seconds REAL
+	);
 CREATE TABLE IF NOT EXISTS steps (
   job_id INTEGER NOT NULL, number INTEGER NOT NULL, name TEXT, status TEXT,
   conclusion TEXT, started_at TEXT, completed_at TEXT, duration_seconds REAL,
@@ -99,37 +102,42 @@ CREATE TABLE IF NOT EXISTS workflow_attempts (
   completed_at TEXT, updated_at TEXT, queue_duration_seconds REAL,
   runtime_seconds REAL, total_duration_seconds REAL,
   tracked INTEGER NOT NULL DEFAULT 0, workflow_file TEXT, workflow_ref TEXT,
-  match_kind TEXT, jobs_fetched_at TEXT, steps_eligibility_checked_at TEXT,
-  steps_collected_at TEXT, step_policy_hash TEXT,
-  PRIMARY KEY (run_id, run_attempt)
-);
+	  match_kind TEXT, jobs_fetched_at TEXT, steps_eligibility_checked_at TEXT,
+	  steps_collected_at TEXT, step_policy_hash TEXT,
+	  PRIMARY KEY (run_id, run_attempt),
+	  FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE
+	);
 CREATE INDEX IF NOT EXISTS idx_workflow_attempts_run ON workflow_attempts(run_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_attempts_tracked ON workflow_attempts(tracked, run_started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_workflow_attempts_file ON workflow_attempts(workflow_file, workflow_ref);
 
 CREATE TABLE IF NOT EXISTS workflow_jobs (
-  run_id INTEGER NOT NULL, run_attempt INTEGER NOT NULL DEFAULT 1,
-  job_id INTEGER NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL,
-  conclusion TEXT, created_at TEXT, started_at TEXT, completed_at TEXT,
-  html_url TEXT, queue_duration_seconds REAL, duration_seconds REAL,
-  PRIMARY KEY (run_id, run_attempt, job_id)
-);
+	  run_id INTEGER NOT NULL, run_attempt INTEGER NOT NULL DEFAULT 1,
+	  job_id INTEGER NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL,
+	  conclusion TEXT, created_at TEXT, started_at TEXT, completed_at TEXT,
+	  html_url TEXT, queue_duration_seconds REAL, runtime_seconds REAL,
+	  total_duration_seconds REAL, duration_seconds REAL,
+	  PRIMARY KEY (run_id, run_attempt, job_id),
+	  FOREIGN KEY (run_id, run_attempt) REFERENCES workflow_attempts(run_id, run_attempt) ON DELETE CASCADE
+	);
 CREATE INDEX IF NOT EXISTS idx_workflow_jobs_attempt ON workflow_jobs(run_id, run_attempt);
 
 CREATE TABLE IF NOT EXISTS workflow_steps (
   run_id INTEGER NOT NULL, run_attempt INTEGER NOT NULL DEFAULT 1,
   job_id INTEGER NOT NULL, step_number INTEGER NOT NULL, name TEXT NOT NULL,
-  status TEXT NOT NULL, conclusion TEXT, started_at TEXT, completed_at TEXT,
-  duration_seconds REAL,
-  PRIMARY KEY (run_id, run_attempt, job_id, step_number)
-);
+	  status TEXT NOT NULL, conclusion TEXT, started_at TEXT, completed_at TEXT,
+	  duration_seconds REAL,
+	  PRIMARY KEY (run_id, run_attempt, job_id, step_number),
+	  FOREIGN KEY (run_id, run_attempt, job_id) REFERENCES workflow_jobs(run_id, run_attempt, job_id) ON DELETE CASCADE
+	);
 CREATE INDEX IF NOT EXISTS idx_workflow_steps_job ON workflow_steps(run_id, run_attempt, job_id);
 
 CREATE TABLE IF NOT EXISTS pr_workflow_attempts (
-  pr_metric_id INTEGER NOT NULL, run_id INTEGER NOT NULL,
-  run_attempt INTEGER NOT NULL DEFAULT 1,
-  PRIMARY KEY (pr_metric_id, run_id, run_attempt)
-);
+	  pr_metric_id INTEGER NOT NULL, run_id INTEGER NOT NULL,
+	  run_attempt INTEGER NOT NULL DEFAULT 1,
+	  PRIMARY KEY (pr_metric_id, run_id, run_attempt),
+	  FOREIGN KEY (run_id, run_attempt) REFERENCES workflow_attempts(run_id, run_attempt) ON DELETE CASCADE
+	);
 CREATE INDEX IF NOT EXISTS idx_pr_workflow_attempts_pr ON pr_workflow_attempts(pr_metric_id);
 `;
 
@@ -207,14 +215,14 @@ async function exportRepoFromTurso(
   let offset = 0;
   while (true) {
     const { rows } = await turso.execute({
-      sql: 'SELECT id, name, head_branch, head_sha, status, conclusion, event, created_at, updated_at, html_url, duration_seconds, date, steps_checked_at FROM runs WHERE repo_id = ? ORDER BY id LIMIT ? OFFSET ?',
+	      sql: 'SELECT id, name, head_branch, head_sha, status, conclusion, event, created_at, updated_at, html_url, duration_seconds, date, steps_checked_at, workflow_file, workflow_ref, workflow_path, workflow_parse_status FROM runs WHERE repo_id = ? ORDER BY id LIMIT ? OFFSET ?',
       args: [tursoRepoId, BATCH_SIZE, offset],
     });
     if (rows.length === 0) break;
     const stmts = rows.map(r => ({
-      sql: 'INSERT INTO runs (id, repo_id, name, head_branch, head_sha, status, conclusion, event, created_at, updated_at, html_url, duration_seconds, date, steps_checked_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING',
-      args: [r.id as number, 1, r.name, r.head_branch, r.head_sha, r.status, r.conclusion, r.event, r.created_at, r.updated_at, r.html_url, r.duration_seconds, r.date, r.steps_checked_at] as InValue[],
-    }));
+	      sql: 'INSERT INTO runs (id, repo_id, name, head_branch, head_sha, status, conclusion, event, created_at, updated_at, html_url, duration_seconds, date, steps_checked_at, workflow_file, workflow_ref, workflow_path, workflow_parse_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING',
+	      args: [r.id as number, 1, r.name, r.head_branch, r.head_sha, r.status, r.conclusion, r.event, r.created_at, r.updated_at, r.html_url, r.duration_seconds, r.date, r.steps_checked_at, r.workflow_file, r.workflow_ref, r.workflow_path, r.workflow_parse_status] as InValue[],
+	    }));
     const tx = await dest.transaction('write');
     try { await tx.batch(stmts); await tx.commit(); } catch (e) { await tx.rollback(); throw e; } finally { tx.close(); }
     runCount += rows.length;
@@ -273,10 +281,104 @@ async function exportRepoFromTurso(
     if (rows.length < BATCH_SIZE) break;
     if (stepCount % 200000 === 0) console.log(`    ${stepCount} steps...`);
   }
-  results.push({ table: `${dbSafe}/steps`, count: stepCount });
-  console.log(`  ${dbSafe}: ${stepCount} steps`);
+	  results.push({ table: `${dbSafe}/steps`, count: stepCount });
+	  console.log(`  ${dbSafe}: ${stepCount} steps`);
 
-  // ---- pr_metrics ----
+	  // ---- workflow_attempts ----
+	  let attemptCount = 0;
+	  offset = 0;
+	  while (true) {
+	    const { rows } = await turso.execute({
+	      sql: `SELECT wa.run_id, wa.run_attempt, wa.status, wa.conclusion, wa.created_at,
+	                   wa.run_started_at, wa.completed_at, wa.updated_at,
+	                   wa.queue_duration_seconds, wa.runtime_seconds, wa.total_duration_seconds,
+	                   wa.tracked, wa.workflow_file, wa.workflow_ref, wa.match_kind,
+	                   wa.jobs_fetched_at, wa.steps_eligibility_checked_at,
+	                   wa.steps_collected_at, wa.step_policy_hash
+	            FROM workflow_attempts wa
+	            JOIN runs r ON r.id = wa.run_id
+	            WHERE r.repo_id = ?
+	            ORDER BY wa.run_id, wa.run_attempt LIMIT ? OFFSET ?`,
+	      args: [tursoRepoId, BATCH_SIZE, offset],
+	    }).catch(() => ({ rows: [] }));
+	    if (rows.length === 0) break;
+	    const stmts = rows.map(r => ({
+	      sql: `INSERT INTO workflow_attempts (
+	              run_id, run_attempt, status, conclusion, created_at, run_started_at,
+	              completed_at, updated_at, queue_duration_seconds, runtime_seconds,
+	              total_duration_seconds, tracked, workflow_file, workflow_ref, match_kind,
+	              jobs_fetched_at, steps_eligibility_checked_at, steps_collected_at, step_policy_hash
+	            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
+	      args: [r.run_id, r.run_attempt, r.status, r.conclusion, r.created_at, r.run_started_at, r.completed_at, r.updated_at, r.queue_duration_seconds, r.runtime_seconds, r.total_duration_seconds, r.tracked, r.workflow_file, r.workflow_ref, r.match_kind, r.jobs_fetched_at, r.steps_eligibility_checked_at, r.steps_collected_at, r.step_policy_hash] as InValue[],
+	    }));
+	    const tx = await dest.transaction('write');
+	    try { await tx.batch(stmts); await tx.commit(); } catch (e) { await tx.rollback(); throw e; } finally { tx.close(); }
+	    attemptCount += rows.length;
+	    offset += BATCH_SIZE;
+	    if (rows.length < BATCH_SIZE) break;
+	  }
+	  if (attemptCount > 0) results.push({ table: `${dbSafe}/workflow_attempts`, count: attemptCount });
+
+	  // ---- workflow_jobs ----
+	  let workflowJobCount = 0;
+	  offset = 0;
+	  while (true) {
+	    const { rows } = await turso.execute({
+	      sql: `SELECT wj.run_id, wj.run_attempt, wj.job_id, wj.name, wj.status,
+	                   wj.conclusion, wj.created_at, wj.started_at, wj.completed_at,
+	                   wj.html_url, wj.queue_duration_seconds, wj.runtime_seconds,
+	                   wj.total_duration_seconds, wj.duration_seconds
+	            FROM workflow_jobs wj
+	            JOIN runs r ON r.id = wj.run_id
+	            WHERE r.repo_id = ?
+	            ORDER BY wj.run_id, wj.run_attempt, wj.job_id LIMIT ? OFFSET ?`,
+	      args: [tursoRepoId, BATCH_SIZE, offset],
+	    }).catch(() => ({ rows: [] }));
+	    if (rows.length === 0) break;
+	    const stmts = rows.map(r => ({
+	      sql: `INSERT INTO workflow_jobs (
+	              run_id, run_attempt, job_id, name, status, conclusion, created_at,
+	              started_at, completed_at, html_url, queue_duration_seconds,
+	              runtime_seconds, total_duration_seconds, duration_seconds
+	            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
+	      args: [r.run_id, r.run_attempt, r.job_id, r.name, r.status, r.conclusion, r.created_at, r.started_at, r.completed_at, r.html_url, r.queue_duration_seconds, r.runtime_seconds, r.total_duration_seconds, r.duration_seconds] as InValue[],
+	    }));
+	    const tx = await dest.transaction('write');
+	    try { await tx.batch(stmts); await tx.commit(); } catch (e) { await tx.rollback(); throw e; } finally { tx.close(); }
+	    workflowJobCount += rows.length;
+	    offset += BATCH_SIZE;
+	    if (rows.length < BATCH_SIZE) break;
+	  }
+	  if (workflowJobCount > 0) results.push({ table: `${dbSafe}/workflow_jobs`, count: workflowJobCount });
+
+	  // ---- workflow_steps ----
+	  let workflowStepCount = 0;
+	  offset = 0;
+	  while (true) {
+	    const { rows } = await turso.execute({
+	      sql: `SELECT ws.run_id, ws.run_attempt, ws.job_id, ws.step_number, ws.name,
+	                   ws.status, ws.conclusion, ws.started_at, ws.completed_at, ws.duration_seconds
+	            FROM workflow_steps ws
+	            JOIN runs r ON r.id = ws.run_id
+	            WHERE r.repo_id = ?
+	            ORDER BY ws.run_id, ws.run_attempt, ws.job_id, ws.step_number LIMIT ? OFFSET ?`,
+	      args: [tursoRepoId, BATCH_SIZE, offset],
+	    }).catch(() => ({ rows: [] }));
+	    if (rows.length === 0) break;
+	    const stmts = rows.map(r => ({
+	      sql: `INSERT INTO workflow_steps (run_id, run_attempt, job_id, step_number, name, status, conclusion, started_at, completed_at, duration_seconds)
+	            VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
+	      args: [r.run_id, r.run_attempt, r.job_id, r.step_number, r.name, r.status, r.conclusion, r.started_at, r.completed_at, r.duration_seconds] as InValue[],
+	    }));
+	    const tx = await dest.transaction('write');
+	    try { await tx.batch(stmts); await tx.commit(); } catch (e) { await tx.rollback(); throw e; } finally { tx.close(); }
+	    workflowStepCount += rows.length;
+	    offset += BATCH_SIZE;
+	    if (rows.length < BATCH_SIZE) break;
+	  }
+	  if (workflowStepCount > 0) results.push({ table: `${dbSafe}/workflow_steps`, count: workflowStepCount });
+
+	  // ---- pr_metrics ----
   let prCount = 0;
   offset = 0;
   while (true) {
@@ -298,31 +400,28 @@ async function exportRepoFromTurso(
   if (prCount > 0) results.push({ table: `${dbSafe}/pr_metrics`, count: prCount });
 
   // ---- pr_workflows ----
-  const { rows: pmIds } = await dest.execute('SELECT id, pr_number FROM pr_metrics');
-  const prNumToNewId = new Map<number, number>();
-  for (const r of pmIds) prNumToNewId.set(Number(r.pr_number), Number(r.id));
+	  const { rows: pmIds } = await dest.execute('SELECT id, pr_number FROM pr_metrics');
+	  const prNumToNewId = new Map<number, number>();
+	  for (const r of pmIds) prNumToNewId.set(Number(r.pr_number), Number(r.id));
 
   let pwCount = 0;
   offset = 0;
   while (true) {
     const { rows } = await turso.execute({
-      sql: `SELECT pw.pr_metric_id, pw.run_id FROM pr_workflows pw JOIN pr_metrics pm ON pw.pr_metric_id = pm.id WHERE pm.repo_id = ? ORDER BY pw.pr_metric_id LIMIT ? OFFSET ?`,
+	      sql: `SELECT pm.pr_number, pw.run_id FROM pr_workflows pw JOIN pr_metrics pm ON pw.pr_metric_id = pm.id WHERE pm.repo_id = ? ORDER BY pw.pr_metric_id LIMIT ? OFFSET ?`,
       args: [tursoRepoId, BATCH_SIZE, offset],
     });
     if (rows.length === 0) break;
     // Need to remap pr_metric_id
     const stmts: { sql: string; args: InValue[] }[] = [];
     for (const r of rows) {
-      const prNum = prNumToNewId.get(Number(r.pr_metric_id));
-      if (prNum !== undefined) {
-        const newPmId = prNumToNewId.get(prNum);
-        if (newPmId !== undefined) {
-          stmts.push({
-            sql: 'INSERT INTO pr_workflows (pr_metric_id, run_id) VALUES (?,?) ON CONFLICT DO NOTHING',
-            args: [newPmId, r.run_id as number],
-          });
-        }
-      }
+	      const newPmId = prNumToNewId.get(Number(r.pr_number));
+	      if (newPmId !== undefined) {
+	        stmts.push({
+	          sql: 'INSERT INTO pr_workflows (pr_metric_id, run_id) VALUES (?,?) ON CONFLICT DO NOTHING',
+	          args: [newPmId, r.run_id as number],
+	        });
+	      }
     }
     if (stmts.length > 0) {
       const tx = await dest.transaction('write');
@@ -332,7 +431,40 @@ async function exportRepoFromTurso(
     offset += BATCH_SIZE;
     if (rows.length < BATCH_SIZE) break;
   }
-  if (pwCount > 0) results.push({ table: `${dbSafe}/pr_workflows`, count: pwCount });
+	  if (pwCount > 0) results.push({ table: `${dbSafe}/pr_workflows`, count: pwCount });
+
+	  // ---- pr_workflow_attempts ----
+	  let pwaCount = 0;
+	  offset = 0;
+	  while (true) {
+	    const { rows } = await turso.execute({
+	      sql: `SELECT pm.pr_number, pwa.run_id, pwa.run_attempt
+	            FROM pr_workflow_attempts pwa
+	            JOIN pr_metrics pm ON pwa.pr_metric_id = pm.id
+	            WHERE pm.repo_id = ?
+	            ORDER BY pwa.pr_metric_id LIMIT ? OFFSET ?`,
+	      args: [tursoRepoId, BATCH_SIZE, offset],
+	    }).catch(() => ({ rows: [] }));
+	    if (rows.length === 0) break;
+	    const stmts: { sql: string; args: InValue[] }[] = [];
+	    for (const r of rows) {
+	      const newPmId = prNumToNewId.get(Number(r.pr_number));
+	      if (newPmId !== undefined) {
+	        stmts.push({
+	          sql: 'INSERT INTO pr_workflow_attempts (pr_metric_id, run_id, run_attempt) VALUES (?,?,?) ON CONFLICT DO NOTHING',
+	          args: [newPmId, r.run_id as number, r.run_attempt as number],
+	        });
+	      }
+	    }
+	    if (stmts.length > 0) {
+	      const tx = await dest.transaction('write');
+	      try { await tx.batch(stmts); await tx.commit(); } catch (e) { await tx.rollback(); throw e; } finally { tx.close(); }
+	      pwaCount += stmts.length;
+	    }
+	    offset += BATCH_SIZE;
+	    if (rows.length < BATCH_SIZE) break;
+	  }
+	  if (pwaCount > 0) results.push({ table: `${dbSafe}/pr_workflow_attempts`, count: pwaCount });
 
   // ---- pr_resolution_cache ----
   let cacheCount = 0;

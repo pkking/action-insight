@@ -15,19 +15,21 @@ vi.mock('./turso-storage.ts', async () => {
     writeCollectionState: vi.fn().mockResolvedValue(undefined),
     getCollectedDatesFromTurso: vi.fn().mockResolvedValue([]),
     getExistingRunIdsFromTurso: vi.fn().mockResolvedValue(new Set()),
-    getExistingRunIdsWithStepsFromTurso: vi.fn().mockResolvedValue(new Map()),
-    writeRunsToTurso: vi.fn().mockResolvedValue(undefined),
-  };
-});
+	    getExistingRunIdsWithStepsFromTurso: vi.fn().mockResolvedValue(new Map()),
+	    writeRunsToTurso: vi.fn().mockResolvedValue(undefined),
+	    writeWorkflowAttemptsToTurso: vi.fn().mockResolvedValue(undefined),
+	  };
+	});
 
 vi.mock('./sqlite-storage.ts', () => ({
   readCollectionStateFromSqlite: vi.fn().mockResolvedValue(null),
   writeCollectionStateToSqlite: vi.fn().mockResolvedValue(undefined),
   getCollectedDatesFromSqlite: vi.fn().mockResolvedValue([]),
-  getExistingRunIdsWithStepsFromSqlite: vi.fn().mockResolvedValue(new Map()),
-  writeRunsToSqlite: vi.fn().mockResolvedValue(undefined),
-  initSqlite: vi.fn().mockResolvedValue('file::memory:'),
-}));
+	  getExistingRunIdsWithStepsFromSqlite: vi.fn().mockResolvedValue(new Map()),
+	  writeRunsToSqlite: vi.fn().mockResolvedValue(undefined),
+	  writeWorkflowAttemptsToSqlite: vi.fn().mockResolvedValue(undefined),
+	  initSqlite: vi.fn().mockResolvedValue('file::memory:'),
+	}));
 
 import {
   readCollectionState,

@@ -7,34 +7,38 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./turso-storage.ts', () => ({
   readPullRequestResolutionCacheFromTurso: vi.fn().mockResolvedValue(new Map()),
-  writePullRequestResolutionCacheToTurso: vi.fn().mockResolvedValue(undefined),
-  writePrMetricsToTurso: vi.fn().mockResolvedValue(undefined),
-  writePrWorkflowsToTurso: vi.fn().mockResolvedValue(undefined),
-}));
+	  writePullRequestResolutionCacheToTurso: vi.fn().mockResolvedValue(undefined),
+	  writePrMetricsToTurso: vi.fn().mockResolvedValue(undefined),
+	  writePrWorkflowsToTurso: vi.fn().mockResolvedValue(undefined),
+	  writePrWorkflowAttemptsToTurso: vi.fn().mockResolvedValue(undefined),
+	}));
 
 vi.mock('./sqlite-storage.ts', () => ({
   readPullRequestResolutionCacheFromSqlite: vi.fn().mockResolvedValue(new Map()),
-  writePullRequestResolutionCacheToSqlite: vi.fn().mockResolvedValue(undefined),
-  writePrMetricsToSqlite: vi.fn().mockResolvedValue(undefined),
-  writePrWorkflowsToSqlite: vi.fn().mockResolvedValue(undefined),
-  initSqlite: vi.fn().mockResolvedValue('file::memory:'),
-}));
+	  writePullRequestResolutionCacheToSqlite: vi.fn().mockResolvedValue(undefined),
+	  writePrMetricsToSqlite: vi.fn().mockResolvedValue(undefined),
+	  writePrWorkflowsToSqlite: vi.fn().mockResolvedValue(undefined),
+	  writePrWorkflowAttemptsToSqlite: vi.fn().mockResolvedValue(undefined),
+	  initSqlite: vi.fn().mockResolvedValue('file::memory:'),
+	}));
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts';
 import {
   readPullRequestResolutionCacheFromTurso,
   writePullRequestResolutionCacheToTurso,
-  writePrMetricsToTurso,
-  writePrWorkflowsToTurso,
-} from './turso-storage';
+	  writePrMetricsToTurso,
+	  writePrWorkflowsToTurso,
+	  writePrWorkflowAttemptsToTurso,
+	} from './turso-storage';
 
 const tempDirs: string[] = [];
 
 afterEach(() => {
   vi.mocked(readPullRequestResolutionCacheFromTurso).mockResolvedValue(new Map());
   vi.mocked(writePullRequestResolutionCacheToTurso).mockClear();
-  vi.mocked(writePrMetricsToTurso).mockClear();
-  vi.mocked(writePrWorkflowsToTurso).mockClear();
+	  vi.mocked(writePrMetricsToTurso).mockClear();
+	  vi.mocked(writePrWorkflowsToTurso).mockClear();
+	  vi.mocked(writePrWorkflowAttemptsToTurso).mockClear();
 
   for (const dir of tempDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -125,8 +129,10 @@ describe('rebuildPullRequestArtifacts', () => {
       ])
     );
     expect(writePrWorkflowsToTurso).toHaveBeenCalledWith('acme/widgets', expect.any(Map));
+    expect(writePrWorkflowAttemptsToTurso).toHaveBeenCalledWith('acme/widgets', expect.any(Map));
     expect(log).toHaveBeenCalledWith('PR metrics written for acme/widgets: 1 rows; latest created_at: 2026-04-18T01:00:00Z');
     expect(log).toHaveBeenCalledWith('PR workflows written for acme/widgets: 1 PRs');
+    expect(log).toHaveBeenCalledWith('PR workflow attempts written for acme/widgets: 1 PRs');
   });
 
   it('recovers PR associations from head_sha when workflow runs have no pull_requests refs', async () => {

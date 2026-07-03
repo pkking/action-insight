@@ -205,7 +205,9 @@ CREATE TABLE IF NOT EXISTS workflow_jobs (
   completed_at TEXT,
   html_url TEXT,
   queue_duration_seconds REAL,    -- Job Queue Duration
-  duration_seconds REAL,          -- Job Total Duration
+  runtime_seconds REAL,           -- Job Runtime
+  total_duration_seconds REAL,    -- Job Total Duration
+  duration_seconds REAL,          -- Compatibility alias for Job Runtime
   PRIMARY KEY (run_id, run_attempt, job_id),
   FOREIGN KEY (run_id, run_attempt) REFERENCES workflow_attempts(run_id, run_attempt) ON DELETE CASCADE
 );

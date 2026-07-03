@@ -39,6 +39,7 @@ export interface PullRequestSnapshot {
 
 export interface Run {
   id: number;
+  runAttempt?: number;
   name: string;
   head_branch: string;
   head_sha?: string;
@@ -46,9 +47,19 @@ export interface Run {
   conclusion: string;
   event?: string;
   created_at: string;
+  run_started_at?: string;
   updated_at: string;
   html_url: string;
   durationInSeconds: number;
+  queueDurationInSeconds?: number;
+  runtimeInSeconds?: number;
+  workflowFile?: string;
+  workflowRef?: string;
+  workflowPath?: string;
+  workflowParseStatus?: 'ok' | 'ref_unavailable' | 'file_unavailable';
+  workflowMatchKind?: 'exact_ref' | 'glob_ref' | 'file_only';
+  stepPolicyHash?: string;
+  tracked?: boolean;
   pull_requests?: PullRequestRef[];
   jobs?: Job[];
   githubPayload?: GitHubApiPayload;
@@ -66,6 +77,7 @@ export interface Step {
 
 export interface Job {
   id: number;
+  runAttempt?: number;
   name: string;
   status: string;
   conclusion: string;
@@ -75,6 +87,8 @@ export interface Job {
   html_url: string;
   queueDurationInSeconds: number;
   durationInSeconds: number;
+  runtimeInSeconds?: number;
+  totalDurationInSeconds?: number;
   githubPayload?: GitHubApiPayload;
   steps?: Step[];
 }

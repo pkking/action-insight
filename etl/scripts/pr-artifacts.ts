@@ -5,12 +5,14 @@ import {
   readPullRequestResolutionCacheFromTurso,
   type PullRequestResolutionCacheEntry,
   writePrMetricsToTurso,
+  writePrWorkflowAttemptsToTurso,
   writePrWorkflowsToTurso,
   writePullRequestResolutionCacheToTurso,
 } from './turso-storage';
 import {
   readPullRequestResolutionCacheFromSqlite,
   writePrMetricsToSqlite,
+  writePrWorkflowAttemptsToSqlite,
   writePrWorkflowsToSqlite,
   writePullRequestResolutionCacheToSqlite,
 } from './sqlite-storage';
@@ -459,8 +461,13 @@ export async function rebuildPullRequestArtifacts({
   log(`PR metrics written for ${repoKey}: ${result.index.prs.length} rows; latest created_at: ${result.index.prs[0]?.created_at ?? 'none'}`);
 
   const prWorkflowsMap = new Map<number, number[]>();
+  const prWorkflowAttemptsMap = new Map<number, Array<{ runId: number; runAttempt: number }>>();
   for (const [prNumber, detail] of result.details.entries()) {
     prWorkflowsMap.set(prNumber, detail.pr.workflows.map((w) => w.id));
+    prWorkflowAttemptsMap.set(
+      prNumber,
+      detail.pr.workflows.map((w) => ({ runId: w.id, runAttempt: w.runAttempt ?? 1 }))
+    );
   }
   await writeWithOptionalSqliteFallback(
     () => writePrWorkflowsToTurso(repoKey, prWorkflowsMap),
@@ -469,4 +476,12 @@ export async function rebuildPullRequestArtifacts({
     warn,
   );
   log(`PR workflows written for ${repoKey}: ${prWorkflowsMap.size} PRs`);
+
+  await writeWithOptionalSqliteFallback(
+    () => writePrWorkflowAttemptsToTurso(repoKey, prWorkflowAttemptsMap),
+    () => writePrWorkflowAttemptsToSqlite(repoKey, prWorkflowAttemptsMap),
+    'writePrWorkflowAttempts',
+    warn,
+  );
+  log(`PR workflow attempts written for ${repoKey}: ${prWorkflowAttemptsMap.size} PRs`);
 }
