@@ -18,7 +18,8 @@
 2.  **样式规范**：使用 Tailwind CSS 进行样式编写，并确保所有新增 UI 支持 `dark:` 模式适配。
 3.  **容错处理**：在渲染图表和列表时，必须优雅处理数据空状态 (Empty State) 和加载中状态 (`jobsLoading`)。
 4.  **成本意识**：避免无意义地频繁调用 GitHub API 列表，尽可能重用现有的离线/本地缓存策略，对于长链路的数据解析，采用二级查询 + 本地脚本离线筛选方案。
-5.  **PR 工作流（唯一发布路径）**：所有变更必须通过 feature 分支 → Pull Request → 合并流程。**禁止直接在 `main` 分支上 commit 或 push**。
+5.  **ADR 记录要求**：当变更涉及架构决策、数据模型、缓存策略、ETL 流程、外部服务集成、跨模块契约或长期维护成本时，必须在 `docs/adr/` 新增或更新 Architecture Decision Record。ADR 应说明背景、决策、取舍、影响范围和后续约束；纯样式、文案或小范围 bugfix 可不写 ADR，但 PR 描述中应说明无需 ADR 的原因。
+6.  **PR 工作流（唯一发布路径）**：所有变更必须通过 feature 分支 → Pull Request → 合并流程。**禁止直接在 `main` 分支上 commit 或 push**。
     - **Step 0 — 分支检查**：在任何 commit 之前，执行 `git branch --show-current`。**如果当前分支是 `main`，必须先创建 feature 分支，禁止直接在 `main` 上 commit**。
     - **Step 1 — 同步 main**：`git fetch origin main && git checkout -B main origin/main && git checkout -b feat/<descriptive-name>`
     - **Step 2 — Commit**：使用 [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#specification) 规范提交，格式为 `type(scope): description` 或 `type: description`，常用类型包括 `feat`、`fix`、`ci`、`docs`、`test`、`refactor`、`chore`。

@@ -1,7 +1,7 @@
 ---
 title: feat: Add monthly and daily CI experience report modes to ci-efficiency-report
 type: feat
-status: active
+status: completed
 date: 2026-04-19
 origin: docs/brainstorms/2026-04-19-monthly-ci-experience-report-requirements.md
 ---
@@ -11,6 +11,8 @@ origin: docs/brainstorms/2026-04-19-monthly-ci-experience-report-requirements.md
 ## Overview
 
 Extend `.agents/skills/ci-efficiency-report` so it can produce both a management-ready monthly CI experience report and a daily technical diagnostic report for a single repository, while preserving enough workflow/job/step detail for actionable investigation (see origin: `docs/brainstorms/2026-04-19-monthly-ci-experience-report-requirements.md`).
+
+**Status note (2026-07-03):** Completed in `.agents/skills/ci-efficiency-report`. The skill now documents `monthly_summary` and `daily_diagnostic` modes, the script contains Management Summary and Diagnostic Appendix output paths, and tests exist under `.agents/skills/ci-efficiency-report/tests/test_ci_efficiency_report.py`.
 
 ## Problem Frame
 
@@ -130,7 +132,7 @@ report mode + time window
 
 ## Implementation Units
 
-- [ ] **Unit 1: Introduce normalized report models and aggregation helpers**
+- [x] **Unit 1: Introduce normalized report models and aggregation helpers**
 
 **Goal:** Separate raw GitHub fetches from report-level structures so the script can support monthly summaries, daily problem lists, workflow/job/step drill-down, and longest-job ranking without entangling the Excel writer.
 
@@ -160,7 +162,7 @@ report mode + time window
 **Verification:**
 - Aggregation helpers can emit stable summary and appendix models from mocked GitHub payloads without depending on Excel output.
 
-- [ ] **Unit 2: Expand data collection from max-only metrics to workflow/job/step detail**
+- [x] **Unit 2: Expand data collection from max-only metrics to workflow/job/step detail**
 
 **Goal:** Capture the detailed GitHub data needed for workflow/job/step drill-down and run-count-aware rankings.
 
@@ -190,7 +192,7 @@ report mode + time window
 **Verification:**
 - Raw fetched data is rich enough to produce per-workflow, per-job, and per-step appendix tables with counts.
 
-- [ ] **Unit 3: Add management-summary metrics and anomaly interpretation**
+- [x] **Unit 3: Add management-summary metrics and anomaly interpretation**
 
 **Goal:** Produce a conclusion-first monthly summary suitable for managers, anchored on the `<= 60 min` target and the fixed CI E2E distribution buckets.
 
@@ -220,7 +222,7 @@ report mode + time window
 **Verification:**
 - The summary layer can be rendered without reading appendix-level details and still communicates target adherence and primary bottleneck.
 
-- [ ] **Unit 4: Render `Management Summary` and `Diagnostic Appendix` artifacts**
+- [x] **Unit 4: Render `Management Summary` and `Diagnostic Appendix` artifacts**
 
 **Goal:** Reshape monthly report output so the workbook and any optional text summary respect the required audience split inside monthly mode.
 
@@ -249,7 +251,7 @@ report mode + time window
 **Verification:**
 - The final artifact is usable directly in a monthly management report without manual reorganization.
 
-- [ ] **Unit 5: Add daily diagnostic mode and problem-list rendering**
+- [x] **Unit 5: Add daily diagnostic mode and problem-list rendering**
 
 **Goal:** Produce a technical-team-focused daily report that highlights current problems, their likely hotspots, and what should be tracked next.
 
@@ -280,7 +282,7 @@ report mode + time window
 **Verification:**
 - Technical users can open the daily artifact and immediately see what needs attention today.
 
-- [ ] **Unit 6: Add CLI/report-window ergonomics for monthly and daily reporting**
+- [x] **Unit 6: Add CLI/report-window ergonomics for monthly and daily reporting**
 
 **Goal:** Make month-scoped and day-scoped reporting practical and repeatable without forcing manual reinterpretation of a generic `--days` window.
 

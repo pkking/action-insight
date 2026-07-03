@@ -1,7 +1,7 @@
 ---
 title: feat: Add overview timeseries dashboard
 type: feat
-status: active
+status: completed
 date: 2026-04-18
 origin: docs/brainstorms/2026-04-18-overview-timeseries-dashboard-requirements.md
 ---
@@ -11,6 +11,8 @@ origin: docs/brainstorms/2026-04-18-overview-timeseries-dashboard-requirements.m
 ## Overview
 
 Add a new homepage aggregation layer that compares tracked repositories over a selectable time range and shows daily trends for the selected repository. The implementation should reuse the existing PR metrics dataset, keep the first release intentionally narrow, and preserve the current PR detail drill-down behavior (see origin: `docs/brainstorms/2026-04-18-overview-timeseries-dashboard-requirements.md`).
+
+**Status note (2026-07-03):** Completed. Code now includes overview aggregation helpers, daily trend data, repository overview rows, homepage rendering, and tests under `src/lib/overview-metrics.ts`, `src/lib/overview-metrics.test.ts`, `src/app/DashboardClient.tsx`, and `src/app/page.test.tsx`.
 
 ## Problem Frame
 
@@ -100,7 +102,7 @@ tracked repos
 
 ## Implementation Units
 
-- [ ] **Unit 1: Add homepage dashboard aggregation models**
+- [x] **Unit 1: Add homepage dashboard aggregation models**
 
 **Goal:** Define the derived dashboard shapes and metric helpers needed to transform per-PR summaries into repository overview rows and daily chart points.
 
@@ -135,7 +137,7 @@ tracked repos
 **Verification:**
 - Aggregation helpers expose deterministic outputs for overview rows and trend buckets across complete, sparse, and empty datasets.
 
-- [ ] **Unit 2: Expand data loading from single-repo to cross-repo overview**
+- [x] **Unit 2: Expand data loading from single-repo to cross-repo overview**
 
 **Goal:** Change homepage data loading so it can populate the all-repo overview while preserving repository selection for trend and PR detail views.
 
@@ -168,7 +170,7 @@ tracked repos
 **Verification:**
 - Homepage state can hold multiple repository indexes while retaining a single selected repository for lower-page detail views.
 
-- [ ] **Unit 3: Redesign homepage UI around overview table and daily trend chart**
+- [x] **Unit 3: Redesign homepage UI around overview table and daily trend chart**
 
 **Goal:** Replace the single-repo-first homepage summary with the new repository overview table, metric toggles, and daily trend visualization.
 
@@ -202,7 +204,7 @@ tracked repos
 **Verification:**
 - The homepage communicates repository comparison first, selected-repo trend second, and PR detail third, without regressing dark mode or empty-state handling.
 
-- [ ] **Unit 4: Backfill and update test coverage for the new homepage flow**
+- [x] **Unit 4: Backfill and update test coverage for the new homepage flow**
 
 **Goal:** Extend unit and UI tests so the aggregate dashboard behavior is covered end-to-end at the component and helper level.
 

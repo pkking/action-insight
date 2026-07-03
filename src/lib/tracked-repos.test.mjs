@@ -10,11 +10,21 @@ describe('tracked repo helpers', () => {
   it('parseTrackedReposYaml returns tracked repo records from repos.yaml content', () => {
     const repos = parseTrackedReposYaml(`
 repos:
-  - vllm-project/vllm-ascend
-  - sgl-project/sglang
-  - tile-ai/tilelang-ascend
-  - verl-project/verl
-  - openai/action-insight
+  - repo: vllm-project/vllm-ascend
+    workflows:
+      - file: pr_test.yaml
+  - repo: sgl-project/sglang
+    workflows:
+      - file: pr-test-npu.yml
+  - repo: tile-ai/tilelang-ascend
+    workflows:
+      - file: ci.yml
+  - repo: verl-project/verl
+    workflows:
+      - file: e2e_ascend.yml
+  - repo: openai/action-insight
+    workflows:
+      - file: ci.yml
 `);
 
     expect(repos).toEqual([
@@ -54,13 +64,33 @@ repos:
   it('resolveTrackedRepo prefers a valid URL selection and falls back to the first tracked repo', () => {
     const repos = parseTrackedReposYaml(`
 repos:
-  - vllm-project/vllm-ascend
-  - openai/action-insight
+  - repo: vllm-project/vllm-ascend
+    workflows:
+      - file: pr_test.yaml
+  - repo: openai/action-insight
+    workflows:
+      - file: ci.yml
 `);
 
     expect(resolveTrackedRepo(repos, 'openai', 'action-insight').slug).toBe('openai/action-insight');
     expect(resolveTrackedRepo(repos, 'bad', 'input').slug).toBe('vllm-project/vllm-ascend');
     expect(resolveTrackedRepo(repos, null, null).slug).toBe('vllm-project/vllm-ascend');
+  });
+
+  it('parseTrackedReposYaml keeps backward compatibility with legacy string entries', () => {
+    const repos = parseTrackedReposYaml(`
+repos:
+  - vllm-project/vllm-ascend
+`);
+
+    expect(repos).toEqual([
+      {
+        owner: 'vllm-project',
+        repo: 'vllm-ascend',
+        slug: 'vllm-project/vllm-ascend',
+        label: 'vllm-project/vllm-ascend',
+      },
+    ]);
   });
 
   it('buildRepoSearchParams preserves existing filters while updating the selected repo', () => {

@@ -4,12 +4,16 @@ on:
   pull_request:
     paths:
       - 'etl/**'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/etl-validate.yml'
   push:
     branches:
       - main
     paths:
       - 'etl/**'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/etl-validate.yml'
 
 permissions:
@@ -31,8 +35,9 @@ jobs:
       - run: npm ci
 
       - name: Validate repos.yaml
-        run: npx tsx etl/scripts/validate-repos.ts
-        if: hashFiles('etl/scripts/validate-repos.ts') != ''
+        run: npm run validate:repos:online
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Dry-run collect
         run: |

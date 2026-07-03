@@ -4,7 +4,7 @@
 
 PR #83 fixed oversized Supabase writes by chunking ETL upserts. PR #84 serialized per-repo ETL workflows to avoid overlapping scheduled collectors rewriting the same recent windows. PR #85 made local PR metrics recovery usable with environment-provided Supabase credentials and an optional `GITHUB_TOKEN`, and added PR metrics rebuild observability. PR #87 extended `pr_resolution_cache` to track resolution status (resolved, not_found, failed, rate_limited) and made SHA resolution resumable across runs.
 
-After those changes, the frontend recovered to current data. Items 1 and 2 below are complete. The remaining work focuses on lowering Supabase storage risk and adding operational visibility.
+After those changes, the frontend recovered to current data. Items 1, 2, 3, and 4 below are complete. The remaining item is only a conditional pagination revisit if rebuild scale or concurrency changes.
 
 ## Goals
 
@@ -53,7 +53,9 @@ Success criteria:
 - A rate-limited rebuild can resume instead of restarting all lookups.
 - Logs make cache hits, misses, unresolved items, and API calls visible.
 
-### 3. Move raw payload storage out of Supabase
+### 3. Move raw payload storage out of Supabase ✅
+
+**Completed via ADR-004 and the SQLite/LFS storage path.**
 
 Move raw `github_payload` data to a repository-tracked SQLite database or equivalent repo artifact, leaving Supabase for queryable frontend metrics.
 
@@ -69,6 +71,8 @@ Success criteria:
 - Supabase database size grows mainly with structured metrics, not raw JSON payloads.
 - A historical metrics rebuild can be performed from the SQLite raw store.
 - The storage path is documented and reproducible in local recovery.
+
+Status note (2026-07-03): per-repo SQLite databases under `etl/data/*.db` are tracked via Git LFS and serve as the local fallback/recovery store for GitHub Actions runs/jobs data. See [ADR-004](../adr/004-sqlite-db-lfs-storage.md).
 
 ### 4. Add operational checks for ETL freshness ✅
 
@@ -101,6 +105,6 @@ Revisit keyset pagination if:
 
 1. ~~Split PR metrics rebuild from raw ETL collection.~~ ✅ PR #85
 2. ~~Improve SHA to PR resolution cache and resumability.~~ ✅ PR #87
-3. Move raw payload storage out of Supabase.
+3. ~~Move raw payload storage out of Supabase.~~ ✅ ADR-004 / SQLite LFS
 4. ~~Add operational freshness and storage checks.~~ ✅ Done
 5. Revisit keyset pagination only if rebuild scale or concurrency requires it.

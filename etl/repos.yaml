@@ -1,10 +1,45 @@
-# List of repositories to track
-# Format: owner/repo
+# List of repositories and workflows to track.
+# Workflow file rules use basenames such as ci.yml, not .github/workflows/ci.yml paths.
+defaults:
+  steps_min_workflow_duration_seconds: 600
+
 repos:
-  - hiyouga/LlamaFactory
-  - modelscope/ms-swift
-  - sgl-project/sglang
-  - tile-ai/tilelang-ascend
-  - triton-lang/triton-ascend
-  - verl-project/verl
-  - vllm-project/vllm-ascend
+  - repo: hiyouga/LlamaFactory
+    workflows:
+      - file: tests_npu.yml
+      - file: tests_cuda.yml
+      - file: tests.yml
+  - repo: modelscope/ms-swift
+    workflows:
+      - file: citest_npu.yaml
+      - file: citest.yaml
+      - file: lint.yaml
+  - repo: sgl-project/sglang
+    workflows:
+      - file: pr-test-npu.yml
+      - file: pr-test-arm64.yml
+      - file: pr-test-xpu.yml
+      - file: pr-test-xeon.yml
+      - file: lint.yml
+  - repo: tile-ai/tilelang-ascend
+    workflows:
+      - file: ci.yml
+      - file: ci_ascend.yml
+      - file: ci_cd.yml
+  - repo: triton-lang/triton-ascend
+    workflows:
+      - file: integration-tests-ascend.yml
+      - file: Ascend950-wheels-build.yml
+      - file: Ascend950-pipeline-tests.yml
+  - repo: verl-project/verl
+    workflows:
+      - file: e2e_ascend.yml
+      - file: pre-commit.yml
+      - file: sanity.yml
+      - file: doc.yml
+  - repo: vllm-project/vllm-ascend
+    workflows:
+      - file: pr_test.yaml
+      - file: schedule_vllm_e2e_test.yaml
+      - file: schedule_nightly_test_a2.yaml
+      - file: schedule_nightly_test_a3.yaml
