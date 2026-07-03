@@ -465,7 +465,6 @@ export async function collectRepo(
       }
 
       let persistedCount = 0;
-      let skippedCount = 0;
 
       for (const run of data.workflow_runs) {
         const runId = run.id;
