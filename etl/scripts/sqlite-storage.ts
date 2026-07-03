@@ -137,6 +137,11 @@ function readPositiveIntEnv(name: string, defaultValue: number): number {
 
 const clientCache = new Map<string, Client>();
 
+// ponytail: schema init is idempotent but runs ~15 statements; skip the repeat
+// work for a client we've already initialized (still re-assert FK enforcement
+// per call since the pragma is connection-scoped).
+const schemaInitializedClients = new WeakSet<Client>();
+
 /** Resolve the data directory. */
 function getDataDir(): string {
   const __filename = fileURLToPath(import.meta.url);
@@ -371,6 +376,10 @@ CREATE INDEX IF NOT EXISTS idx_pr_workflow_attempts_pr ON pr_workflow_attempts(p
 `;
 
 async function ensureRepoSchema(client: Client): Promise<void> {
+  if (schemaInitializedClients.has(client)) {
+    await client.execute({ sql: 'PRAGMA foreign_keys = ON;', args: [] });
+    return;
+  }
   const statements = SQLITE_SCHEMA.split(';').map((s) => s.trim()).filter(Boolean);
   for (const sql of statements) {
     await client.execute({ sql, args: [] });
@@ -386,6 +395,7 @@ async function ensureRepoSchema(client: Client): Promise<void> {
     ['total_duration_seconds', 'REAL'],
   ]);
   await client.execute({ sql: 'CREATE INDEX IF NOT EXISTS idx_runs_workflow_file ON runs(repo_id, workflow_file)', args: [] });
+  schemaInitializedClients.add(client);
 }
 
 async function ensureColumns(client: Client, table: string, columns: Array<[string, string]>): Promise<void> {
