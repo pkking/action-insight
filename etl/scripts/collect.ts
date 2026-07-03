@@ -581,7 +581,7 @@ export async function collectRepo(
       }
 
       totalFetched += data.workflow_runs.length;
-      log(`Page ${page} summary: ${persistedCount} persisted, ${skippedCount} skipped, ${skippedJobsCount} jobs cached/skipped (total fetched: ${totalFetched})`);
+      log(`Page ${page} summary: ${persistedCount} persisted, ${skippedJobsCount} jobs cached/skipped (total fetched: ${totalFetched})`);
 
       if (data.workflow_runs.length < PER_PAGE) {
         log('Last page reached (< per_page)');
