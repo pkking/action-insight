@@ -82,6 +82,8 @@ describe('buildPullRequestIndex', () => {
       workflowCount: 2,
       successfulWorkflowCount: 1,
       conclusion: 'failure',
+      currentCiConclusion: 'failure',
+      attemptSuccessRate: 50,
       created_at: '2026-04-18T01:00:00Z',
       ci_started_at: '2026-04-18T01:05:00Z',
       ci_completed_at: '2026-04-18T01:45:00Z',
@@ -154,6 +156,8 @@ describe('buildPullRequestIndex', () => {
       timeToMergeInSeconds: undefined,
       mergeLeadTimeInSeconds: undefined,
       partialCiHistory: true,
+      currentCiConclusion: 'success',
+      attemptSuccessRate: 100,
     });
   });
 
@@ -201,6 +205,70 @@ describe('buildPullRequestIndex', () => {
     expect(result.index.prs[0]).toMatchObject({
       timeToMergeInSeconds: 900,
       mergeLeadTimeInSeconds: 0,
+    });
+  });
+
+  it('uses the latest terminal attempt per workflow group for current CI and excludes in-progress attempts from success rate', () => {
+    const runs: Run[] = [
+      {
+        id: 501,
+        runAttempt: 1,
+        name: 'ci',
+        head_branch: 'feature/rerun',
+        status: 'completed',
+        conclusion: 'failure',
+        event: 'pull_request',
+        created_at: '2026-04-18T05:00:00Z',
+        updated_at: '2026-04-18T05:10:00Z',
+        html_url: 'https://github.com/acme/widgets/actions/runs/501',
+        durationInSeconds: 600,
+        workflowFile: 'ci.yml',
+        workflowRef: 'main',
+        pull_requests: [{ number: 91 }],
+        jobs: [],
+      },
+      {
+        id: 501,
+        runAttempt: 2,
+        name: 'ci',
+        head_branch: 'feature/rerun',
+        status: 'in_progress',
+        conclusion: '',
+        event: 'pull_request',
+        created_at: '2026-04-18T05:20:00Z',
+        updated_at: '2026-04-18T05:25:00Z',
+        html_url: 'https://github.com/acme/widgets/actions/runs/501/attempts/2',
+        durationInSeconds: 300,
+        workflowFile: 'ci.yml',
+        workflowRef: 'main',
+        pull_requests: [{ number: 91 }],
+        jobs: [],
+      },
+    ];
+
+    const result = buildPullRequestIndex({
+      repo: 'acme/widgets',
+      runs,
+      pullRequests: new Map([
+        [91, {
+          number: 91,
+          title: 'Rerun in progress',
+          state: 'open',
+          created_at: '2026-04-18T04:55:00Z',
+          merged_at: null,
+          html_url: 'https://github.com/acme/widgets/pull/91',
+          user: { login: 'octocat' },
+        }],
+      ]),
+    });
+
+    expect(result.index.prs[0]).toMatchObject({
+      workflowCount: 2,
+      successfulWorkflowCount: 0,
+      currentCiConclusion: 'failure',
+      attemptSuccessRate: 0,
+      ci_started_at: '2026-04-18T05:00:00Z',
+      ci_completed_at: '2026-04-18T05:10:00Z',
     });
   });
 });

@@ -1,4 +1,5 @@
 import { getTursoClient, getRepoId } from './turso';
+import { computePullRequestAttemptMetrics } from './pr-metrics';
 import type { PullRequestDetailFile, PullRequestIndexFile, PullRequestMetricsSummary, Run } from './types';
 
 function mapPrSummary(row: Record<string, unknown>): PullRequestMetricsSummary {
@@ -168,6 +169,52 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
         });
       }
     }
+
+    const jobKeys = Array.from(runMap.values()).flatMap((run) =>
+      (run.jobs ?? []).map((job) => ({
+        runId: run.id,
+        runAttempt: run.runAttempt ?? 1,
+        jobId: job.id,
+      })),
+    );
+    const stepsByJob = new Map<string, Array<Record<string, unknown>>>();
+    const stepChunkSize = 100;
+    for (let i = 0; i < jobKeys.length; i += stepChunkSize) {
+      const chunk = jobKeys.slice(i, i + stepChunkSize);
+      const clauses = chunk.map(() => '(run_id = ? AND run_attempt = ? AND job_id = ?)').join(' OR ');
+      const { rows: stepRows } = await client.execute({
+        sql: `SELECT run_id, run_attempt, job_id, step_number, name, status, conclusion,
+                     started_at, completed_at, duration_seconds
+              FROM workflow_steps
+              WHERE ${clauses}
+              ORDER BY run_id, run_attempt, job_id, step_number`,
+        args: chunk.flatMap((job) => [job.runId, job.runAttempt, job.jobId]),
+      }).catch(() => ({ rows: [] }));
+
+      for (const row of stepRows) {
+        const key = `${Number(row.run_id)}:${Number(row.run_attempt)}:${Number(row.job_id)}`;
+        if (!stepsByJob.has(key)) stepsByJob.set(key, []);
+        stepsByJob.get(key)!.push(row as Record<string, unknown>);
+      }
+    }
+
+    for (const run of runMap.values()) {
+      for (const job of run.jobs ?? []) {
+        const steps = stepsByJob.get(`${run.id}:${run.runAttempt ?? 1}:${job.id}`) ?? [];
+        if (steps.length > 0) {
+          job.steps = steps.map((row) => ({
+            name: row.name as string,
+            status: (row.status as string) || 'unknown',
+            conclusion: (row.conclusion as string) || 'unknown',
+            started_at: (row.started_at as string) || undefined,
+            completed_at: (row.completed_at as string) || undefined,
+            number: Number(row.step_number),
+            duration_seconds: row.duration_seconds == null ? undefined : Number(row.duration_seconds),
+          }));
+        }
+      }
+    }
+
     workflows = Array.from(runMap.values()).sort((a, b) => {
       const timeA = Date.parse(a.created_at);
       const timeB = Date.parse(b.created_at);
@@ -228,12 +275,15 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
   }
 
   const summary = mapPrSummary(prData);
+  const attemptMetrics = computePullRequestAttemptMetrics(workflows);
 
   return {
     repo: `${owner}/${repo}`,
     generated_at: new Date().toISOString(),
     pr: {
       ...summary,
+      currentCiConclusion: attemptMetrics.currentCiConclusion,
+      attemptSuccessRate: attemptMetrics.attemptSuccessRate,
       workflows,
     },
   };

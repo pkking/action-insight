@@ -20,7 +20,19 @@ interface BuildPullRequestIndexResult {
   details: Map<number, PullRequestMetricsDetail>;
 }
 
+function isTerminalRun(run: Run): boolean {
+  return run.status === 'completed' && run.conclusion.length > 0;
+}
+
+function isCountedAttempt(run: Run): boolean {
+  return isTerminalRun(run) && run.conclusion !== 'skipped' && run.conclusion !== 'neutral';
+}
+
 function summarizeConclusion(runs: Run[]): string {
+  if (runs.length === 0) {
+    return 'unknown';
+  }
+
   if (runs.every((run) => run.conclusion === 'success')) {
     return 'success';
   }
@@ -33,6 +45,60 @@ function summarizeConclusion(runs: Run[]): string {
   }
 
   return runs.find((run) => run.conclusion)?.conclusion ?? 'unknown';
+}
+
+function workflowGroupKey(run: Run): string {
+  return `${run.workflowFile ?? run.name}@@${run.workflowRef ?? ''}`;
+}
+
+export function computePullRequestAttemptMetrics(runs: Run[]) {
+  const terminalRuns = runs.filter(isTerminalRun);
+  const countedRuns = terminalRuns.filter(isCountedAttempt);
+  const successfulTerminalRuns = countedRuns.filter((run) => run.conclusion === 'success');
+
+  const latestTerminalByWorkflow = new Map<string, Run>();
+  const sortedForLatest = [...runs].sort((left, right) => {
+    const leftTime = left.updated_at || left.created_at;
+    const rightTime = right.updated_at || right.created_at;
+    if (leftTime !== rightTime) return rightTime.localeCompare(leftTime);
+    if (left.id !== right.id) return right.id - left.id;
+    return (right.runAttempt ?? 1) - (left.runAttempt ?? 1);
+  });
+
+  for (const run of sortedForLatest) {
+    if (!isTerminalRun(run)) continue;
+    const key = workflowGroupKey(run);
+    if (!latestTerminalByWorkflow.has(key)) {
+      latestTerminalByWorkflow.set(key, run);
+    }
+  }
+
+  const latestTerminalRuns = Array.from(latestTerminalByWorkflow.values());
+  const currentCiConclusion = latestTerminalRuns.length === 0
+    ? (runs.length > 0 ? 'pending' : 'unknown')
+    : summarizeConclusion(latestTerminalRuns);
+
+  const terminalCreatedTimes = terminalRuns
+    .map((run) => ({ createdAt: run.created_at, updatedAt: run.updated_at }))
+    .filter((run) => run.createdAt && run.updatedAt);
+  const ciStartedAt = terminalCreatedTimes
+    .map((run) => run.createdAt)
+    .sort((left, right) => left.localeCompare(right))[0];
+  const ciCompletedAt = terminalCreatedTimes
+    .map((run) => run.updatedAt)
+    .sort((left, right) => right.localeCompare(left))[0];
+
+  return {
+    ciStartedAt,
+    ciCompletedAt,
+    workflowCount: runs.length,
+    successfulWorkflowCount: successfulTerminalRuns.length,
+    attemptSuccessRate: countedRuns.length > 0
+      ? Math.round((successfulTerminalRuns.length / countedRuns.length) * 100)
+      : undefined,
+    currentCiConclusion,
+    conclusion: summarizeConclusion(latestTerminalRuns.length > 0 ? latestTerminalRuns : terminalRuns),
+  };
 }
 
 export function buildPullRequestIndex({
@@ -63,13 +129,7 @@ export function buildPullRequestIndex({
     const workflows = [...prRuns].sort(
       (left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
     );
-    const ciStartedAt = [...prRuns]
-      .map((run) => run.created_at)
-      .sort((left, right) => new Date(left).getTime() - new Date(right).getTime())[0];
-    const ciCompletedAt = [...prRuns]
-      .map((run) => run.updated_at)
-      .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0];
-    const successfulWorkflowCount = prRuns.filter((run) => run.conclusion === 'success').length;
+    const metrics = computePullRequestAttemptMetrics(prRuns);
 
     const partialCiHistory = Boolean(metadata?.created_at && retentionStartDate && metadata.created_at < `${retentionStartDate}T00:00:00Z`);
 
@@ -80,18 +140,20 @@ export function buildPullRequestIndex({
       author: metadata?.user?.login ?? 'unknown',
       state: metadata?.state ?? 'unknown',
       html_url: metadata?.html_url ?? '',
-      created_at: metadata?.created_at ?? ciStartedAt ?? workflows[0]?.created_at ?? generatedAt,
-      ci_started_at: ciStartedAt,
-      ci_completed_at: ciCompletedAt,
+      created_at: metadata?.created_at ?? metrics.ciStartedAt ?? workflows[0]?.created_at ?? generatedAt,
+      ci_started_at: metrics.ciStartedAt,
+      ci_completed_at: metrics.ciCompletedAt,
       merged_at: metadata?.merged_at ?? undefined,
       partialCiHistory,
-      timeToCiStartInSeconds: diffSeconds(metadata?.created_at, ciStartedAt),
-      ciDurationInSeconds: diffSeconds(ciStartedAt, ciCompletedAt),
+      timeToCiStartInSeconds: diffSeconds(metadata?.created_at, metrics.ciStartedAt),
+      ciDurationInSeconds: diffSeconds(metrics.ciStartedAt, metrics.ciCompletedAt),
       timeToMergeInSeconds: diffSeconds(metadata?.created_at, metadata?.merged_at),
-      mergeLeadTimeInSeconds: diffSeconds(ciCompletedAt, metadata?.merged_at, { clampNegative: true }),
-      workflowCount: prRuns.length,
-      successfulWorkflowCount,
-      conclusion: summarizeConclusion(prRuns),
+      mergeLeadTimeInSeconds: diffSeconds(metrics.ciCompletedAt, metadata?.merged_at, { clampNegative: true }),
+      workflowCount: metrics.workflowCount,
+      successfulWorkflowCount: metrics.successfulWorkflowCount,
+      conclusion: metrics.conclusion,
+      currentCiConclusion: metrics.currentCiConclusion,
+      attemptSuccessRate: metrics.attemptSuccessRate,
     };
 
     prs.push(summary);
