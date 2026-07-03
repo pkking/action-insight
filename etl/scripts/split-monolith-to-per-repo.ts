@@ -25,10 +25,10 @@ const __dirname = path.dirname(__filename);
 
 const BATCH_SIZE = 5000;
 
-/* Same schema as sqlite-storage.ts */
+/* Same schema as sqlite-storage.ts, minus PRAGMA foreign_keys: bulk split must
+   tolerate legacy orphan rows in the source DB; the app connection
+   (sqlite-storage.ts) sets PRAGMA foreign_keys = ON at runtime. */
 const SQLITE_SCHEMA = `
-PRAGMA foreign_keys = ON;
-
 CREATE TABLE IF NOT EXISTS repos (
   id   INTEGER PRIMARY KEY, owner TEXT NOT NULL, repo  TEXT NOT NULL,
   UNIQUE(owner, repo)

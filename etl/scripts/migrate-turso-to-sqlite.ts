@@ -35,9 +35,10 @@ const BATCH_SIZE = parseInt(process.env.MIGRATION_BATCH_SIZE || '5000', 10);
 /*  Schema (identical to sqlite-storage.ts)                            */
 /* ------------------------------------------------------------------ */
 
+// FK enforcement intentionally omitted from this schema: bulk import must tolerate
+// legacy orphan rows in the source DB; the app connection (sqlite-storage.ts)
+// sets PRAGMA foreign_keys = ON at runtime.
 const SQLITE_SCHEMA = `
-PRAGMA foreign_keys = ON;
-
 CREATE TABLE IF NOT EXISTS repos (
   id   INTEGER PRIMARY KEY, owner TEXT NOT NULL, repo  TEXT NOT NULL,
   UNIQUE(owner, repo)
