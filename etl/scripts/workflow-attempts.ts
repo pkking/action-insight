@@ -120,13 +120,12 @@ export function buildWorkflowAttempts(
 ): WorkflowAttemptRow[] {
   return runs.map((inputRun) => {
     const run = enrichRunWithWorkflowMetadata(inputRun, config, repoConfig);
-    const workflowPath = getWorkflowPath(run);
-    const parsed = parseWorkflowPath(workflowPath);
-    const match = resolveWorkflowMatch(config, repoConfig, parsed);
-    const runAttempt = getRunAttempt(run);
-    const runStartedAt = getRunStartedAt(run);
-    const queueDuration = secondsBetween(run.created_at, runStartedAt);
-    const runtime = secondsBetween(runStartedAt, run.updated_at);
+    // enrich already parsed the path and resolved the match; re-derive only the
+    // threshold (not stored on Run) for step eligibility.
+    const match = resolveWorkflowMatch(config, repoConfig, parseWorkflowPath(run.workflowPath));
+    const runStartedAt = run.run_started_at ?? null;
+    const queueDuration = run.queueDurationInSeconds ?? null;
+    const runtime = run.runtimeInSeconds ?? null;
     const total = secondsBetween(run.created_at, run.updated_at) ?? run.durationInSeconds ?? null;
     const shouldPersistSteps = match.tracked && eligibleSteps(run, match.stepThresholdSeconds);
 
@@ -135,7 +134,7 @@ export function buildWorkflowAttempts(
       const jobTotal = secondsBetween(job.created_at, job.completed_at);
       return {
         run_id: run.id,
-        run_attempt: runAttempt,
+        run_attempt: run.runAttempt ?? 1,
         job_id: job.id,
         name: job.name,
         status: job.status,
@@ -153,7 +152,7 @@ export function buildWorkflowAttempts(
 
     return {
       run_id: run.id,
-      run_attempt: runAttempt,
+      run_attempt: run.runAttempt ?? 1,
       status: run.status,
       conclusion: run.conclusion || null,
       created_at: run.created_at || null,
@@ -164,60 +163,19 @@ export function buildWorkflowAttempts(
       runtime_seconds: runtime,
       total_duration_seconds: total,
       tracked: match.tracked,
-      workflow_file: parsed.file ?? null,
-      workflow_ref: parsed.ref ?? null,
-      workflow_path: workflowPath,
-      workflow_parse_status: parsed.status,
-      match_kind: match.kind ?? null,
+      workflow_file: run.workflowFile ?? null,
+      workflow_ref: run.workflowRef ?? null,
+      workflow_path: run.workflowPath ?? null,
+      workflow_parse_status: run.workflowParseStatus ?? parseWorkflowPath(run.workflowPath).status,
+      match_kind: run.workflowMatchKind ?? null,
       jobs_fetched_at: jobs.length > 0 ? nowIso : null,
       steps_eligibility_checked_at: match.tracked ? nowIso : null,
       steps_collected_at: shouldPersistSteps && jobs.some((job) => (job.steps?.length ?? 0) > 0) ? nowIso : null,
-      step_policy_hash: stepPolicyHash(match),
+      step_policy_hash: run.stepPolicyHash ?? stepPolicyHash(match),
       pr_numbers: getPrNumbers(run),
       jobs,
     };
   });
 }
 
-export function attemptToRun(attempt: WorkflowAttemptRow, base: Omit<Run, 'jobs'>, jobs: WorkflowAttemptJobRow[]): Run {
-  return {
-    ...base,
-    id: attempt.run_id,
-    runAttempt: attempt.run_attempt,
-    status: attempt.status,
-    conclusion: attempt.conclusion ?? '',
-    created_at: attempt.created_at ?? base.created_at,
-    run_started_at: attempt.run_started_at ?? undefined,
-    updated_at: attempt.completed_at ?? attempt.updated_at ?? base.updated_at,
-    durationInSeconds: attempt.total_duration_seconds ?? base.durationInSeconds,
-    queueDurationInSeconds: attempt.queue_duration_seconds ?? undefined,
-    runtimeInSeconds: attempt.runtime_seconds ?? undefined,
-    workflowFile: attempt.workflow_file ?? undefined,
-    workflowRef: attempt.workflow_ref ?? undefined,
-    workflowPath: attempt.workflow_path ?? undefined,
-    workflowParseStatus: attempt.workflow_parse_status,
-    workflowMatchKind: attempt.match_kind ?? undefined,
-    stepPolicyHash: attempt.step_policy_hash ?? undefined,
-    tracked: attempt.tracked,
-    jobs: jobs.map((job) => ({
-      id: job.job_id,
-      runAttempt: job.run_attempt,
-      name: job.name,
-      status: job.status,
-      conclusion: job.conclusion ?? '',
-      created_at: job.created_at ?? '',
-      started_at: job.started_at ?? '',
-      completed_at: job.completed_at ?? '',
-      html_url: job.html_url ?? '',
-      queueDurationInSeconds: job.queue_duration_seconds ?? 0,
-      durationInSeconds: job.runtime_seconds ?? job.total_duration_seconds ?? 0,
-      runtimeInSeconds: job.runtime_seconds ?? undefined,
-      totalDurationInSeconds: job.total_duration_seconds ?? undefined,
-      steps: job.steps,
-    })),
-  };
-}
 
-export function pullRequestRefsFromNumbers(numbers: number[]): PullRequestRef[] {
-  return [...new Set(numbers)].map((number) => ({ number }));
-}
