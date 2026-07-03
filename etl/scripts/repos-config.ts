@@ -101,6 +101,9 @@ function normalizeRepoEntry(value: unknown, index: number, options: ParseReposCo
     throw new Error(`${path}.repo must use owner/repo format`);
   }
 
+  if (value.workflows !== undefined && !Array.isArray(value.workflows)) {
+    throw new Error(`${path}.workflows must be an array`);
+  }
   const workflows = Array.isArray(value.workflows)
     ? value.workflows.map((workflow, workflowIndex) => normalizeWorkflowRule(workflow, `${path}.workflows[${workflowIndex}]`))
     : [];
@@ -142,10 +145,11 @@ export function parseReposConfig(content: string, options: ParseReposConfigOptio
   const repos = reposValue.map((entry, index) => normalizeRepoEntry(entry, index, options));
   const seenRepos = new Set<string>();
   for (const entry of repos) {
-    if (seenRepos.has(entry.repo)) {
+    const repoLower = entry.repo.toLowerCase();
+    if (seenRepos.has(repoLower)) {
       throw new Error(`Duplicate repo entry: ${entry.repo}`);
     }
-    seenRepos.add(entry.repo);
+    seenRepos.add(repoLower);
 
     const seenWorkflowKeys = new Set<string>();
     for (const workflow of entry.workflows) {

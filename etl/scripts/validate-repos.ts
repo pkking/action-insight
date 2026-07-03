@@ -106,7 +106,7 @@ async function fetchAllWorkflows(
       per_page: 100,
       page,
     });
-    const pageWorkflows = (response.data as { workflows?: GitHubWorkflow[] }).workflows ?? [];
+    const pageWorkflows = (response.data as { workflows?: GitHubWorkflow[] } | null)?.workflows ?? [];
     workflows.push(...pageWorkflows);
     if (pageWorkflows.length < 100) break;
     page += 1;

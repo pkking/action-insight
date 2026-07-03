@@ -75,6 +75,30 @@ repos:
     ).toThrow('must be an object with file');
   });
 
+  it('rejects non-array workflows fields', () => {
+    expect(() =>
+      parseReposConfig(`
+repos:
+  - repo: acme/widgets
+    workflows: ci.yml
+`),
+    ).toThrow('workflows must be an array');
+  });
+
+  it('rejects case-insensitive duplicate repo entries', () => {
+    expect(() =>
+      parseReposConfig(`
+repos:
+  - repo: acme/widgets
+    workflows:
+      - file: ci.yml
+  - repo: Acme/Widgets
+    workflows:
+      - file: ci.yml
+`),
+    ).toThrow('Duplicate repo entry');
+  });
+
   it('keeps legacy string repo entries readable when workflows are not required', () => {
     const config = parseReposConfig(`
 repos:
