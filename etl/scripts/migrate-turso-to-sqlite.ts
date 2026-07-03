@@ -44,7 +44,9 @@ CREATE TABLE IF NOT EXISTS runs (
   id INTEGER PRIMARY KEY, repo_id INTEGER NOT NULL, name TEXT, head_branch TEXT,
   head_sha TEXT, status TEXT, conclusion TEXT, event TEXT, created_at TEXT,
   updated_at TEXT, html_url TEXT, duration_seconds REAL, date TEXT,
-  steps_checked_at TEXT
+  steps_checked_at TEXT,
+  workflow_file TEXT, workflow_ref TEXT, workflow_path TEXT,
+  workflow_parse_status TEXT
 );
 CREATE TABLE IF NOT EXISTS jobs (
   id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL, name TEXT, status TEXT,
@@ -88,6 +90,47 @@ CREATE INDEX IF NOT EXISTS idx_jobs_run_id ON jobs(run_id);
 CREATE INDEX IF NOT EXISTS idx_pr_metrics_repo ON pr_metrics(repo_id);
 CREATE INDEX IF NOT EXISTS idx_pr_metrics_repo_ci ON pr_metrics(repo_id, ci_completed_at);
 CREATE INDEX IF NOT EXISTS idx_pr_resolution_cache_repo_sha ON pr_resolution_cache(repo_id, head_sha);
+CREATE INDEX IF NOT EXISTS idx_runs_workflow_file ON runs(repo_id, workflow_file);
+
+-- ADR-005: workflow file and attempt scoped collection (additive)
+CREATE TABLE IF NOT EXISTS workflow_attempts (
+  run_id INTEGER NOT NULL, run_attempt INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL, conclusion TEXT, created_at TEXT, run_started_at TEXT,
+  completed_at TEXT, updated_at TEXT, queue_duration_seconds REAL,
+  runtime_seconds REAL, total_duration_seconds REAL,
+  tracked INTEGER NOT NULL DEFAULT 0, workflow_file TEXT, workflow_ref TEXT,
+  match_kind TEXT, jobs_fetched_at TEXT, steps_eligibility_checked_at TEXT,
+  steps_collected_at TEXT, step_policy_hash TEXT,
+  PRIMARY KEY (run_id, run_attempt)
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_attempts_run ON workflow_attempts(run_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_attempts_tracked ON workflow_attempts(tracked, run_started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_workflow_attempts_file ON workflow_attempts(workflow_file, workflow_ref);
+
+CREATE TABLE IF NOT EXISTS workflow_jobs (
+  run_id INTEGER NOT NULL, run_attempt INTEGER NOT NULL DEFAULT 1,
+  job_id INTEGER NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL,
+  conclusion TEXT, created_at TEXT, started_at TEXT, completed_at TEXT,
+  html_url TEXT, queue_duration_seconds REAL, duration_seconds REAL,
+  PRIMARY KEY (run_id, run_attempt, job_id)
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_jobs_attempt ON workflow_jobs(run_id, run_attempt);
+
+CREATE TABLE IF NOT EXISTS workflow_steps (
+  run_id INTEGER NOT NULL, run_attempt INTEGER NOT NULL DEFAULT 1,
+  job_id INTEGER NOT NULL, step_number INTEGER NOT NULL, name TEXT NOT NULL,
+  status TEXT NOT NULL, conclusion TEXT, started_at TEXT, completed_at TEXT,
+  duration_seconds REAL,
+  PRIMARY KEY (run_id, run_attempt, job_id, step_number)
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_steps_job ON workflow_steps(run_id, run_attempt, job_id);
+
+CREATE TABLE IF NOT EXISTS pr_workflow_attempts (
+  pr_metric_id INTEGER NOT NULL, run_id INTEGER NOT NULL,
+  run_attempt INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (pr_metric_id, run_id, run_attempt)
+);
+CREATE INDEX IF NOT EXISTS idx_pr_workflow_attempts_pr ON pr_workflow_attempts(pr_metric_id);
 `;
 
 /* ------------------------------------------------------------------ */
