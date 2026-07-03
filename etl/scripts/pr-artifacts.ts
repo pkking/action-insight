@@ -14,6 +14,7 @@ import {
   writePrWorkflowsToSqlite,
   writePullRequestResolutionCacheToSqlite,
 } from './sqlite-storage';
+import { isSqliteFallbackEnabled, writeWithOptionalSqliteFallback } from './github-utils';
 
 const prMetricsInterop =
   ('buildPullRequestIndex' in prMetricsModule && typeof prMetricsModule.buildPullRequestIndex === 'function')
@@ -45,30 +46,6 @@ const DEFAULT_SHA_RESOLUTION_LIMIT = 1000;
 const DEFAULT_SEARCH_RESOLUTION_LIMIT = 20;
 const DEFAULT_RATE_LIMIT_RESERVE = 10;
 const RUN_PAYLOAD_PR_SOURCE = 'run_payload';
-
-function isSqliteFallbackEnabled(): boolean {
-  return process.env.ENABLE_SQLITE_FALLBACK === '1' || process.env.ENABLE_SQLITE_FALLBACK === 'true';
-}
-
-async function writeWithOptionalSqliteFallback(
-  primary: () => Promise<void>,
-  fallback: () => Promise<void>,
-  label: string,
-  warn: (...args: unknown[]) => void
-): Promise<void> {
-  try {
-    await primary();
-  } catch (err) {
-    if (!isSqliteFallbackEnabled()) throw err;
-    warn(`${label} Turso write failed, using SQLite fallback:`, err);
-    await fallback();
-    return;
-  }
-
-  if (isSqliteFallbackEnabled()) {
-    await fallback();
-  }
-}
 
 interface ShaResolutionResult {
   entries: PullRequestResolutionCacheEntry[];

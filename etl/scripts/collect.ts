@@ -31,7 +31,7 @@ import {
   writeCollectionStateToSqlite,
   getCollectedDatesFromSqlite,
 } from './sqlite-storage.ts';
-import { readPullRequestsFromPayload } from './github-utils.ts';
+import { readPullRequestsFromPayload, isSqliteFallbackEnabled, writeWithOptionalSqliteFallback } from './github-utils.ts';
 import type { GitHubApiPayload, PullRequestRef, Step } from '../../src/lib/types.ts';
 
 const { buildCollectionWindows, splitCollectionWindow, toCreatedRange } = collectionWindows;
@@ -153,10 +153,6 @@ interface RunCollectionOptions {
 const ETL_DIR = path.join(__dirname, '..');
 const REPOS_CONFIG_PATH = path.join(ETL_DIR, 'repos.yaml');
 
-function isSqliteFallbackEnabled(): boolean {
-  return process.env.ENABLE_SQLITE_FALLBACK === '1' || process.env.ENABLE_SQLITE_FALLBACK === 'true';
-}
-
 /** Helper: run Turso first and use SQLite only when explicitly enabled. */
 async function withOptionalSqliteFallback<T>(primary: () => Promise<T>, fallback: () => Promise<T>, label: string): Promise<T> {
   try {
@@ -165,25 +161,6 @@ async function withOptionalSqliteFallback<T>(primary: () => Promise<T>, fallback
     if (!isSqliteFallbackEnabled()) throw err;
     warn(`${label} primary failed, using fallback:`, err);
     return fallback();
-  }
-}
-
-async function writeWithOptionalSqliteFallback(
-  primary: () => Promise<void>,
-  fallback: () => Promise<void>,
-  label: string,
-): Promise<void> {
-  try {
-    await primary();
-  } catch (err) {
-    if (!isSqliteFallbackEnabled()) throw err;
-    warn(`${label} Turso write failed, using SQLite fallback:`, err);
-    await fallback();
-    return;
-  }
-
-  if (isSqliteFallbackEnabled()) {
-    await fallback();
   }
 }
 
@@ -276,6 +253,7 @@ async function saveRepoState(repo: string, state: RepoCollectionState): Promise<
     () => writeCollectionState(repo, statePayload),
     () => writeCollectionStateToSqlite(repo, statePayload),
     'writeCollectionState',
+    warn,
   );
 }
 
@@ -336,6 +314,7 @@ async function persistCollectedRuns(
       () => writeRunsToTurso(repo, runsByDate[date], date),
       () => writeRunsToSqlite(repo, runsByDate[date], date),
       `writeRuns ${date}`,
+      warn,
     );
   }
 
