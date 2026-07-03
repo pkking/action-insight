@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { Octokit } from '@octokit/core';
+import { Octokit } from 'octokit';
 
-import { parseReposConfig, type ReposConfig, type RepoConfigEntry } from './repos-config.ts';
+import { parseReposConfig, type ReposConfig, type RepoConfigEntry } from './repos-config';
 
 interface CliOptions {
   online: boolean;
@@ -65,10 +65,6 @@ function parseCliOptions(argv: string[]): CliOptions {
   return { online, configPath, help };
 }
 
-function basename(value: string): string {
-  return value.split('/').pop() ?? value;
-}
-
 function formatWorkflowRule(rule: { file: string; ref?: string }): string {
   return rule.ref ? `file=${rule.file}, ref=${rule.ref}` : `file=${rule.file}`;
 }
@@ -78,7 +74,7 @@ export function findWorkflowMatches(repo: RepoConfigEntry, workflows: GitHubWork
     workflows
       .map((workflow) => workflow.path)
       .filter((workflowPath): workflowPath is string => typeof workflowPath === 'string' && workflowPath.length > 0)
-      .map(basename),
+      .map((workflowPath) => path.basename(workflowPath)),
   )).sort((left, right) => left.localeCompare(right));
   const workflowFileSet = new Set(workflowFiles);
   const availableFiles = workflowFiles.length > 0 ? workflowFiles.join(', ') : '(none returned by GitHub)';
