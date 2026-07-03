@@ -94,6 +94,20 @@ describe('workflow matching precedence', () => {
     expect(m.tracked).toBe(false);
     expect(m.reason).toBe('no_match');
   });
+
+  it('distinguishes ref-unavailable-but-configured from a totally unconfigured file', () => {
+    // file is configured with a ref-specific rule, but the run has no ref
+    const configured = repoEntry([{ file: 'ci.yml', ref: 'main' }]);
+    const refUnavailable = matchFor('.github/workflows/ci.yml', configured);
+    expect(refUnavailable.tracked).toBe(false);
+    expect(refUnavailable.reason).toBe('ref_unavailable_no_match');
+
+    // file is not configured at all, and the run also has no ref
+    const unconfigured = repoEntry([{ file: 'ci.yml' }]);
+    const notConfigured = matchFor('.github/workflows/release.yml', unconfigured);
+    expect(notConfigured.tracked).toBe(false);
+    expect(notConfigured.reason).toBe('no_match');
+  });
 });
 
 describe('step threshold override precedence', () => {

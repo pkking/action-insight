@@ -35,7 +35,7 @@ const WORKFLOW_FILE_BASENAME_PATTERN = /^[^/\\]+\.ya?ml$/;
  * Examples:
  *   `.github/workflows/ci.yml@main`      -> { file: 'ci.yml', ref: 'main', status: 'ok' }
  *   `.github/workflows/ci.yml`           -> { file: 'ci.yml', status: 'ref_unavailable' }
- *   `.github/workflows/sub/ci.yml@main`  -> { file: undefined, status: 'file_unavailable' } (nested path not a basename)
+ *   `.github/workflows/sub/ci.yml@main`  -> { file: 'ci.yml', ref: 'main', status: 'ok' } (basename extracted from nested path)
  *   undefined / '' / 'not a path'        -> { status: 'file_unavailable' }
  */
 export function parseWorkflowPath(rawPath: unknown): ParsedWorkflowPath {

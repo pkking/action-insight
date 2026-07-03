@@ -36,19 +36,21 @@ export interface WorkflowMatchResult {
 }
 
 /**
- * Select the rule that matches a parsed workflow path for a repo.
+ * Resolve the full match result for a run against a repo's configuration.
  *
  * Precedence: exact ref > glob ref > file-only. File-only rules match any ref,
- * including Workflow Ref Unavailable runs. Glob rules require a concrete ref.
- * Two rules at the same precedence matching the same run is ambiguous and
- * rejected (returns kind undefined with reason 'ambiguous').
+ * including Workflow Ref Unavailable runs; ref-specific rules cannot match a
+ * ref-unavailable run. Same-precedence overlap is ambiguous configuration.
  */
-export function matchWorkflowRule(
+export function resolveWorkflowMatch(
+  config: ReposConfig,
   repoConfig: RepoConfigEntry,
   parsed: ParsedWorkflowPath,
-): Pick<WorkflowMatchResult, 'rule' | 'kind' | 'reason'> {
+): WorkflowMatchResult {
+  const repo = repoConfig.repo;
+
   if (parsed.status === 'file_unavailable' || !parsed.file) {
-    return { reason: 'file_unavailable' };
+    return { repo, stepThresholdSeconds: DEFAULT_STEP_ANALYSIS_THRESHOLD_SECONDS, tracked: false, reason: 'file_unavailable' };
   }
 
   const file = parsed.file;
@@ -57,12 +59,15 @@ export function matchWorkflowRule(
   const exactRefMatches: WorkflowRule[] = [];
   const globRefMatches: WorkflowRule[] = [];
   const fileOnlyMatches: WorkflowRule[] = [];
+  let fileConfigured = false;
 
   for (const rule of repoConfig.workflows) {
     if (rule.file !== file) continue;
+    fileConfigured = true;
 
     if (rule.ref) {
-      if (ref === undefined) continue; // ref-specific rule cannot match a ref-unavailable run
+      // ref-specific rules cannot match a Workflow Ref Unavailable run
+      if (ref === undefined) continue;
       if (isGlobRef(rule.ref)) {
         if (matchGlobRef(rule.ref, ref)) globRefMatches.push(rule);
       } else if (rule.ref === ref) {
@@ -73,69 +78,32 @@ export function matchWorkflowRule(
     }
   }
 
-  if (exactRefMatches.length === 1) return { rule: exactRefMatches[0], kind: 'exact_ref' };
-  if (exactRefMatches.length > 1) return { reason: 'ambiguous' };
+  let rule: WorkflowRule | undefined;
+  let kind: WorkflowMatchKind | undefined;
+  let ambiguous = false;
+  if (exactRefMatches.length === 1) { rule = exactRefMatches[0]; kind = 'exact_ref'; }
+  else if (exactRefMatches.length > 1) { ambiguous = true; }
+  else if (globRefMatches.length === 1) { rule = globRefMatches[0]; kind = 'glob_ref'; }
+  else if (globRefMatches.length > 1) { ambiguous = true; }
+  else if (fileOnlyMatches.length === 1) { rule = fileOnlyMatches[0]; kind = 'file_only'; }
+  else if (fileOnlyMatches.length > 1) { ambiguous = true; }
 
-  if (globRefMatches.length === 1) return { rule: globRefMatches[0], kind: 'glob_ref' };
-  if (globRefMatches.length > 1) return { reason: 'ambiguous' };
-
-  if (fileOnlyMatches.length === 1) return { rule: fileOnlyMatches[0], kind: 'file_only' };
-  if (fileOnlyMatches.length > 1) return { reason: 'ambiguous' };
-
-  if (fileOnlyMatches.length === 0 && ref === undefined && (exactRefMatches.length || globRefMatches.length) === 0) {
-    return { reason: 'ref_unavailable_no_match' };
-  }
-
-  return { reason: 'no_match' };
-}
-
-/**
- * Compute the effective step threshold for a matched attempt.
- * Precedence: exact-ref workflow > glob-ref workflow > file-only workflow > repo > defaults.
- */
-export function effectiveStepThreshold(
-  config: ReposConfig,
-  repoConfig: RepoConfigEntry,
-  match: Pick<WorkflowMatchResult, 'rule' | 'kind'>,
-): number {
-  if (match.rule?.stepsMinWorkflowDurationSeconds !== undefined) {
-    return match.rule.stepsMinWorkflowDurationSeconds;
-  }
-  // Same-file rules without a threshold at lower precedence could still carry one;
-  // the matched rule already won precedence, so its threshold (if any) is authoritative.
-  if (repoConfig.stepsMinWorkflowDurationSeconds !== undefined) {
-    return repoConfig.stepsMinWorkflowDurationSeconds;
-  }
-  if (config.defaults?.stepsMinWorkflowDurationSeconds !== undefined) {
-    return config.defaults.stepsMinWorkflowDurationSeconds;
-  }
-  return DEFAULT_STEP_ANALYSIS_THRESHOLD_SECONDS;
-}
-
-/**
- * Resolve the full match result for a run against a repo's configuration.
- */
-export function resolveWorkflowMatch(
-  config: ReposConfig,
-  repoConfig: RepoConfigEntry,
-  parsed: ParsedWorkflowPath,
-): WorkflowMatchResult {
-  const { rule, kind, reason } = matchWorkflowRule(repoConfig, parsed);
   if (!rule || !kind) {
-    return {
-      repo: repoConfig.repo,
-      stepThresholdSeconds: DEFAULT_STEP_ANALYSIS_THRESHOLD_SECONDS,
-      tracked: false,
-      reason,
-    };
+    const reason: WorkflowMatchResult['reason'] = ambiguous
+      ? 'ambiguous'
+      : fileConfigured && ref === undefined
+        ? 'ref_unavailable_no_match'
+        : 'no_match';
+    return { repo, stepThresholdSeconds: DEFAULT_STEP_ANALYSIS_THRESHOLD_SECONDS, tracked: false, reason };
   }
-  return {
-    repo: repoConfig.repo,
-    rule,
-    kind,
-    stepThresholdSeconds: effectiveStepThreshold(config, repoConfig, { rule, kind }),
-    tracked: true,
-  };
+
+  const stepThresholdSeconds =
+    rule.stepsMinWorkflowDurationSeconds
+    ?? repoConfig.stepsMinWorkflowDurationSeconds
+    ?? config.defaults?.stepsMinWorkflowDurationSeconds
+    ?? DEFAULT_STEP_ANALYSIS_THRESHOLD_SECONDS;
+
+  return { repo, rule, kind, stepThresholdSeconds, tracked: true };
 }
 
 /** Step eligibility policy version; bump when the eligibility rule semantics change. */
