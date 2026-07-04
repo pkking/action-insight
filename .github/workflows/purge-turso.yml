@@ -1,8 +1,9 @@
 name: Purge Turso Old Data
 on:
-  schedule:
-    # Run daily at 03:00 UTC (before hourly collect at :48)
-    - cron: '0 3 * * *'
+  # ponytail: Turso 写配额已打满，暂停自动清理以止血；恢复时取消注释下方 schedule 块。
+  # schedule:
+  #   # Run daily at 03:00 UTC (before hourly collect at :48)
+  #   - cron: '0 3 * * *'
   workflow_dispatch:
     inputs:
       repo:
