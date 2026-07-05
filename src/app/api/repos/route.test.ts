@@ -13,7 +13,7 @@ describe('/api/repos', () => {
       'hiyouga/LlamaFactory',
       'modelscope/ms-swift',
       'sgl-project/sglang',
-      'tile-ai/tilelang-ascend',
+      'tile-ai/tilelang-mlir-ascend',
       'triton-lang/triton-ascend',
       'verl-project/verl',
       'vllm-project/vllm-ascend',

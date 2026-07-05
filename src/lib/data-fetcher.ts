@@ -139,7 +139,7 @@ async function fetchStepsAndAttach(runs: Run[]): Promise<void> {
   attachStepsToRuns(runs, stepsByJob);
 }
 
-async function fetchAttemptStepsAndAttach(runs: Run[]): Promise<void> {
+export async function fetchAttemptStepsAndAttach(runs: Run[]): Promise<void> {
   const client = getTursoClient();
   const jobKeys = runs.flatMap((run) =>
     (run.jobs ?? []).map((job) => ({

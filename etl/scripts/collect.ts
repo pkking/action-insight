@@ -216,17 +216,25 @@ async function loadRepoState(repo: string, retentionDays: number, now: Date): Pr
   const retentionStart = format(subDays(now, retentionDays), 'yyyy-MM-dd');
   const today = format(now, 'yyyy-MM-dd');
 
-  const dbState = await withOptionalSqliteFallback(
+  let dbState = await withOptionalSqliteFallback(
     () => readCollectionState(repo),
     () => readCollectionStateFromSqlite(repo),
     'readCollectionState',
   );
 
-  const collectedDates = await withOptionalSqliteFallback(
+  if (isSqliteFallbackEnabled() && (!dbState || !dbState.latestDate)) {
+    dbState = await readCollectionStateFromSqlite(repo);
+  }
+
+  let collectedDates = await withOptionalSqliteFallback(
     () => getCollectedDatesFromTurso(repo),
     () => getCollectedDatesFromSqlite(repo),
     'getCollectedDates',
   );
+
+  if (isSqliteFallbackEnabled() && collectedDates.length === 0) {
+    collectedDates = await getCollectedDatesFromSqlite(repo);
+  }
 
   const retainedDates = collectedDates.filter(d => d >= retentionStart);
 
@@ -409,7 +417,7 @@ export async function collectRepo(
   const repoConfig = findRepoConfig(reposConfig, repo);
 
   const now = new Date();
-  const state = await loadRepoState(repo, retentionDays, now);
+  let state = await loadRepoState(repo, retentionDays, now);
   log(`State: latest=${state.latest}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
 
   const existingRunIdsWithSteps = await withOptionalSqliteFallback(
@@ -658,6 +666,19 @@ export async function collectRepo(
         allRunsMap.set(runAttemptKey(run.id, run.runAttempt), run);
       }
       completedWindows.push(window);
+
+      const checkpointState = await persistCollectedRuns(
+        repo,
+        state,
+        Array.from(allRunsMap.values()),
+        retentionDays,
+        reposConfig,
+        repoConfig,
+        completedWindows,
+        now,
+      );
+      state = checkpointState;
+      log(`Checkpointed partial raw collection state for ${repo}: ${checkpointState.collectedDates.length} retained date(s).`);
     } catch (err) {
       if (err instanceof RateLimitAbortError) {
         for (const run of err.partialRuns) {

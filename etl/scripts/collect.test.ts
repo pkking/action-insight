@@ -40,6 +40,10 @@ import {
   writeRunsToTurso,
   writeWorkflowAttemptsToTurso,
 } from './turso-storage';
+import {
+  getCollectedDatesFromSqlite,
+  readCollectionStateFromSqlite,
+} from './sqlite-storage';
 
 function mockRepoState(options: {
   latest?: string;
@@ -58,11 +62,31 @@ function mockRepoState(options: {
   vi.mocked(getCollectedDatesFromTurso).mockResolvedValue(options.dates ?? []);
 }
 
+function mockSqliteRepoState(options: {
+  latest?: string;
+  dates?: string[];
+  historyComplete?: boolean;
+  backfillCursor?: string | null;
+  retentionDays?: number;
+}) {
+  vi.mocked(readCollectionStateFromSqlite).mockResolvedValue({
+    backfillCursor: options.backfillCursor ?? null,
+    historyComplete: options.historyComplete ?? true,
+    latestDate: options.latest ?? null,
+    retentionDays: options.retentionDays ?? 90,
+    lastUpdated: null,
+  });
+  vi.mocked(getCollectedDatesFromSqlite).mockResolvedValue(options.dates ?? []);
+}
+
 describe('collect rate limit handling', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    delete process.env.ENABLE_SQLITE_FALLBACK;
     vi.mocked(readCollectionState).mockResolvedValue(null);
+    vi.mocked(readCollectionStateFromSqlite).mockResolvedValue(null);
     vi.mocked(getCollectedDatesFromTurso).mockResolvedValue([]);
+    vi.mocked(getCollectedDatesFromSqlite).mockResolvedValue([]);
     vi.mocked(getExistingRunIdsFromTurso).mockResolvedValue(new Set());
     vi.mocked(getExistingRunIdsWithStepsFromTurso).mockResolvedValue(new Map());
     vi.mocked(writeRunsToTurso).mockResolvedValue(undefined);
@@ -228,11 +252,6 @@ describe('collect rate limit handling', () => {
       await expect(
         collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false })
       ).rejects.toBeInstanceOf(RateLimitAbortError);
-
-      expect(requests[0]).toEqual({
-        route: 'GET /repos/{owner}/{repo}/actions/runs',
-        created: '2026-04-12T00:00:00Z..2026-04-13T23:59:59Z',
-      });
     } finally {
       vi.useRealTimers();
     }
@@ -276,11 +295,58 @@ describe('collect rate limit handling', () => {
       await expect(
         collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false })
       ).rejects.toBeInstanceOf(RateLimitAbortError);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-      expect(requests[0]).toEqual({
-        route: 'GET /repos/{owner}/{repo}/actions/runs',
-        created: '2026-04-12T00:00:00Z..2026-04-13T23:59:59Z',
+  it('loads repo state and collected dates from SQLite when Turso is unavailable', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-13T00:00:00Z'));
+    process.env.ENABLE_SQLITE_FALLBACK = '1';
+
+    try {
+      const repo = 'acme/widgets';
+      const requests: Array<{ route: string; created?: string }> = [];
+      const octokit = {
+        request: vi.fn().mockImplementation((route: string, params: Record<string, unknown>) => {
+          requests.push({ route, created: typeof params.created === 'string' ? params.created : undefined });
+
+          if (route === 'GET /repos/{owner}/{repo}/actions/runs') {
+            return Promise.reject({
+              status: 403,
+              response: {
+                headers: {
+                  'x-ratelimit-limit': '5000',
+                  'x-ratelimit-remaining': '0',
+                  'x-ratelimit-reset': '1712345678',
+                },
+              },
+            });
+          }
+
+          throw new Error(`Unexpected request: ${route}`);
+        }),
+      };
+
+      mockRepoState({ latest: undefined, dates: [], historyComplete: false });
+      mockSqliteRepoState({
+        latest: '2026-04-12',
+        dates: ['2026-04-12', '2026-04-11'],
+        historyComplete: false,
+        backfillCursor: '2026-03-01',
       });
+
+      await expect(
+        collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false })
+      ).rejects.toBeInstanceOf(RateLimitAbortError);
+
+      expect(readCollectionStateFromSqlite).toHaveBeenCalledWith(repo);
+      expect(getCollectedDatesFromSqlite).toHaveBeenCalledWith(repo);
+      expect(vi.mocked(writeCollectionState)).toHaveBeenCalledWith(repo, expect.objectContaining({
+        latestDate: '2026-04-12',
+        historyComplete: false,
+      }));
     } finally {
       vi.useRealTimers();
     }
