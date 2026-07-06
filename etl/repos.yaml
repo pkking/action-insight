@@ -19,12 +19,19 @@ repos:
   - repo: tile-ai/tilelang-mlir-ascend
     workflows:
       - file: base_ci.yml
+  - repo: tile-ai/tilelang
+    workflows:
+      - file: ci.yml
+  - repo: triton-lang/triton
+    workflows:
+      - file: ci.yml
   - repo: triton-lang/triton-ascend
     workflows:
       - file: ci.yml
   - repo: verl-project/verl
     workflows:
       - file: e2e_ascend.yml
+      - file: e2e_ppo_grpo_trainer_trtllm.yml
   - repo: vllm-project/vllm-ascend
     workflows:
       - file: pr_test.yaml
