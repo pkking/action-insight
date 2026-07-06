@@ -24,7 +24,7 @@
     - **Step 1 — 同步 main**：`git fetch origin main && git checkout -B main origin/main && git checkout -b feat/<descriptive-name>`
     - **Step 2 — Commit**：使用 [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#specification) 规范提交，格式为 `type(scope): description` 或 `type: description`，常用类型包括 `feat`、`fix`、`ci`、`docs`、`test`、`refactor`、`chore`。
     - **Step 3 — Push 分支**：`git push -u origin <feature-branch-name>`
-    - **Step 4 — 创建 PR**：`gh pr create --base main`，PR 标题使用 Conventional Commits 格式，PR 描述需说明变更内容、测试情况、相关文档链接。
+    - **Step 4 — 创建 PR**：`gh pr create --base main`，PR 标题必须使用 Conventional Commits 格式，优先直接复用最新提交标题；如果手动创建，至少要用 `gh pr create --title "$(git log -1 --pretty=%s)"` 这类方式保证标题合规。PR 描述需说明变更内容、测试情况、相关文档链接。
     - **PR 打开后禁止 force push**：审查过程中产生的任何修改都必须追加新的 Conventional Commit 并正常 push，禁止使用 `git commit --amend`、`git rebase` 或 `git push --force/--force-with-lease` 重写 PR 历史，除非用户明确要求。
     - **一个分支只对应一个 PR**：push 过 origin 的分支在 PR 合入后不再用于新任务。每次新任务都必须基于最新 main 创建新分支并新建 PR，禁止复用已合入的 feature 分支。审查期间对同一 PR 的修改仍可追加 commit。
     - 等待审查通过后合并，合并后删除 feature 分支
