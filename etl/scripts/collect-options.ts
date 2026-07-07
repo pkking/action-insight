@@ -2,6 +2,7 @@ export interface CollectCliOptions {
   forceFullBackfill: boolean;
   reverse: boolean;
   forward: boolean;
+  skipJobs: boolean;
   repoName?: string;
   help: boolean;
 }
@@ -20,6 +21,7 @@ Options:
                                 This is the DEFAULT behavior
   --forward                     Collect from oldest to today (legacy behavior)
                                 Useful for rebuilding history in chronological order
+  --skip-jobs, --workflow-only   Collect workflow attempts without fetching jobs
   -h, --help                    Show this help message
 
 Environment Variables:
@@ -44,6 +46,9 @@ Examples:
   # Collect oldest-first
   GITHUB_TOKEN=your_token npx tsx etl/scripts/collect.ts --repo tile-ai/tilelang-ascend --forward
 
+  # Collect workflow attempts only; jobs can be backfilled in a later pass
+  GITHUB_TOKEN=your_token npx tsx etl/scripts/collect.ts --repo tile-ai/tilelang-ascend --workflow-only
+
   # Show help
   npx tsx etl/scripts/collect.ts --help
 `.trim();
@@ -53,6 +58,7 @@ export function parseCollectCliOptions(argv: string[]): CollectCliOptions {
   let forceFullBackfill = false;
   let reverse = true;
   let forward = false;
+  let skipJobs = false;
   let help = false;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -82,9 +88,13 @@ export function parseCollectCliOptions(argv: string[]): CollectCliOptions {
       reverse = false;
       forward = true;
     }
+
+    if (arg === '--skip-jobs' || arg === '--workflow-only') {
+      skipJobs = true;
+    }
   }
 
-  return { forceFullBackfill, reverse, forward, repoName, help };
+  return { forceFullBackfill, reverse, forward, skipJobs, repoName, help };
 }
 
 export function resolveTargetRepos(configuredRepos: string[], repoName?: string): string[] {

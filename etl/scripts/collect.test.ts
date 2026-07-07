@@ -757,6 +757,59 @@ describe('collect rate limit handling', () => {
     );
   });
 
+  it('skips job fetches in workflow-only mode', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-18T00:00:00Z'));
+
+    const repo = 'acme/widgets';
+    mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
+
+    const request = vi.fn().mockImplementation((route: string) => {
+      if (route === 'GET /repos/{owner}/{repo}/actions/runs') {
+        return Promise.resolve({
+          data: {
+            workflow_runs: [
+              {
+                id: 101,
+                name: 'CI',
+                head_branch: 'main',
+                status: 'completed',
+                conclusion: 'success',
+                created_at: '2026-04-18T10:00:00Z',
+                updated_at: '2026-04-18T10:10:00Z',
+                html_url: 'https://example.com/runs/101',
+                path: '.github/workflows/ci.yml@main',
+              },
+            ],
+          },
+        });
+      }
+
+      if (route === 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs') {
+        throw new Error('jobs endpoint should not be called in workflow-only mode');
+      }
+
+      throw new Error(`Unexpected request: ${route}`);
+    });
+
+    try {
+      await collectRepo(
+        { request } as never,
+        repo,
+        90,
+        { forceFullBackfill: false, reverse: false, skipJobs: true },
+        { repos: [{ repo, workflows: [{ file: 'ci.yml' }] }] },
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(request).toHaveBeenCalledWith(
+      'GET /repos/{owner}/{repo}/actions/runs',
+      expect.objectContaining({ created: '2026-04-17T00:00:00Z..2026-04-18T23:59:59Z' })
+    );
+  });
+
   it('keeps the exact retention-boundary day file when pruning old data', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-18T11:55:15.104Z'));
