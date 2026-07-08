@@ -22,7 +22,6 @@ import {
   getCollectedDatesFromTurso,
   checkEtlFreshness,
   formatFreshnessReport,
-  type CollectionState,
 } from './turso-storage.ts';
 import {
   writeRunsToSqlite,
@@ -425,7 +424,8 @@ export async function collectRepo(
     () => getExistingRunIdsWithStepsFromSqlite(repo),
     'getExistingRunIdsWithSteps',
   );
-  log(`Existing runs with cached steps: ${existingRunIdsWithSteps.size}`);
+  const cachedRunIdsWithSteps = options.skipJobs ? new Map<number, string>() : existingRunIdsWithSteps;
+  log(`Existing runs with cached steps: ${cachedRunIdsWithSteps.size}`);
 
   function toCreatedParam(window: CollectionWindow): string {
     return toCreatedRange(window);
@@ -496,13 +496,15 @@ export async function collectRepo(
         }, reposConfig, repoConfig);
         persistedCount++;
 
-        const cachedUpdatedAt = existingRunIdsWithSteps.get(runId);
+        const cachedUpdatedAt = cachedRunIdsWithSteps.get(runId);
         const isCachedRunFresh =
           !!cachedUpdatedAt && Date.parse(cachedUpdatedAt) >= Date.parse(run.updated_at);
         const hasWorkflowRules = repoConfig.workflows.length > 0;
         const supportsStepsCache = baseRun.runAttempt === 1 && baseRun.status === 'completed';
 
-        if (hasWorkflowRules && !baseRun.tracked) {
+        if (options.skipJobs) {
+          log(`Skipping jobs for run #${runId} - workflow-only mode`);
+        } else if (hasWorkflowRules && !baseRun.tracked) {
           skippedJobsCount++;
           log(`Skipping jobs for run #${runId} - workflow is not tracked (${baseRun.workflowParseStatus ?? 'unknown'})`);
         } else if (supportsStepsCache && isCachedRunFresh) {
@@ -731,6 +733,9 @@ export async function runCollection({
   }
   if (cliOptions.reverse) {
     console.log('Reverse collection enabled; starting from today and walking backward.');
+  }
+  if (cliOptions.skipJobs) {
+    console.log('Workflow-only mode enabled; jobs will not be fetched in this pass.');
   }
   if (cliOptions.repoName) {
     console.log(`Single repo mode enabled; collecting only ${cliOptions.repoName}.`);
