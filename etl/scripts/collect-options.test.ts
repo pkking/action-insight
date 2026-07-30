@@ -9,6 +9,7 @@ describe('collect option helpers', () => {
       forward: false,
       help: false,
       reverse: true,
+      skipJobs: false,
       repoName: 'openai/action-insight',
     });
   });
@@ -19,6 +20,7 @@ describe('collect option helpers', () => {
       forward: false,
       help: false,
       reverse: true,
+      skipJobs: false,
       repoName: 'openai/action-insight',
     });
   });
@@ -29,6 +31,7 @@ describe('collect option helpers', () => {
       forward: false,
       help: false,
       reverse: true,
+      skipJobs: false,
       repoName: undefined,
     });
   });
@@ -39,6 +42,7 @@ describe('collect option helpers', () => {
       forward: false,
       help: false,
       reverse: true,
+      skipJobs: false,
       repoName: undefined,
     });
   });
@@ -49,6 +53,7 @@ describe('collect option helpers', () => {
       forward: true,
       help: false,
       reverse: false,
+      skipJobs: false,
       repoName: undefined,
     });
   });
@@ -59,6 +64,7 @@ describe('collect option helpers', () => {
       forward: false,
       help: false,
       reverse: true,
+      skipJobs: false,
       repoName: undefined,
     });
 
@@ -67,8 +73,13 @@ describe('collect option helpers', () => {
       forward: true,
       help: false,
       reverse: false,
+      skipJobs: false,
       repoName: undefined,
     });
+  });
+
+  it('parses workflow-only collection', () => {
+    expect(parseCollectCliOptions(['--workflow-only']).skipJobs).toBe(true);
   });
 
   it('prefers an explicit repo over configured repos', () => {
