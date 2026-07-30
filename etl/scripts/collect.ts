@@ -32,8 +32,9 @@ import {
   getCollectedDatesFromSqlite,
 } from './sqlite-storage.ts';
 import { readPullRequestsFromPayload, isSqliteFallbackEnabled, writeWithOptionalSqliteFallback } from './github-utils.ts';
-import type { GitHubApiPayload, PullRequestRef, Step } from '../../src/lib/types.ts';
+import type { GitHubApiPayload, Run, Job, Step } from '../../src/lib/types.ts';
 import { getRepoNames, parseReposConfig, type RepoConfigEntry, type ReposConfig } from './repos-config.ts';
+import { fetchBuildkitePipelineBuilds } from './buildkite.ts';
 import { buildWorkflowAttempts, enrichRunWithWorkflowMetadata } from './workflow-attempts.ts';
 
 const { buildCollectionWindows, splitCollectionWindow, toCreatedRange } = collectionWindows;
@@ -87,38 +88,6 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelayMs = 
   throw lastErr;
 }
 
-interface Run {
-  id: number;
-  name: string;
-  head_branch: string;
-  head_sha?: string;
-  status: string;
-  conclusion: string;
-  event?: string;
-  created_at: string;
-  updated_at: string;
-  html_url: string;
-  durationInSeconds: number;
-  pull_requests?: PullRequestRef[];
-  jobs?: Job[];
-  githubPayload?: GitHubApiPayload;
-}
-
-interface Job {
-  id: number;
-  name: string;
-  status: string;
-  conclusion: string;
-  created_at: string;
-  started_at: string;
-  completed_at: string;
-  html_url: string;
-  queueDurationInSeconds: number;
-  durationInSeconds: number;
-  githubPayload?: GitHubApiPayload;
-  steps?: Step[];
-}
-
 interface GitHubJobPayload extends GitHubApiPayload {
   id: number;
   name: string;
@@ -144,6 +113,7 @@ interface RepoCollectionState {
 
 interface RunCollectionOptions {
   token?: string;
+  buildkiteToken?: string;
   retentionDays: number;
   cliOptions: CollectCliOptions;
   targetRepos: string[];
@@ -183,7 +153,7 @@ function readReposConfig(): ReposConfig {
 }
 
 function findRepoConfig(config: ReposConfig, repo: string): RepoConfigEntry {
-  return config.repos.find((entry) => entry.repo === repo) ?? { repo, workflows: [] };
+  return config.repos.find((entry) => entry.repo === repo) ?? { repo, workflows: [], githubActions: true, buildkitePipelines: [] };
 }
 
 function computeBackfillCursor(
@@ -400,11 +370,12 @@ async function persistCollectedRuns(
 }
 
 export async function collectRepo(
-  octokit: Octokit,
+  octokit: Octokit | undefined,
   repo: string,
   retentionDays: number,
   options: CollectCliOptions,
-  reposConfig: ReposConfig = { repos: [{ repo, workflows: [] }] },
+  reposConfig: ReposConfig = { repos: [{ repo, workflows: [], githubActions: true, buildkitePipelines: [] }] },
+  buildkiteToken = process.env.BUILDKITE_TOKEN,
 ) {
   console.log(`Processing ${repo}...`);
   const [owner, repoName] = repo.split('/');
@@ -414,6 +385,11 @@ export async function collectRepo(
 
   log(`Owner: ${owner}, Repo: ${repoName}`);
   const repoConfig = findRepoConfig(reposConfig, repo);
+  const hasGitHubSource = repoConfig.githubActions !== false;
+  const buildkitePipelines = repoConfig.buildkitePipelines ?? [];
+  if (hasGitHubSource && !octokit) throw new Error(`GITHUB_TOKEN is required for ${repo}`);
+  if (buildkitePipelines.length > 0 && !buildkiteToken) throw new Error(`BUILDKITE_TOKEN is required for ${repo}`);
+  const github = octokit;
 
   const now = new Date();
   let state = await loadRepoState(repo, retentionDays, now);
@@ -436,6 +412,21 @@ export async function collectRepo(
     log(`Fetching runs with filter: ${createdParam}`);
 
     const allRuns: Run[] = [];
+    for (const pipeline of buildkitePipelines) {
+      const result = await fetchBuildkitePipelineBuilds({
+        token: buildkiteToken!,
+        pipeline,
+        window,
+        skipJobs: options.skipJobs,
+      });
+      allRuns.push(...result.runs);
+      if (result.saturated) {
+        warn(`Buildkite window ${createdParam} is capped for ${pipeline.organization}/${pipeline.pipeline}`);
+        return { runs: allRuns, saturated: true };
+      }
+    }
+    if (!hasGitHubSource) return { runs: allRuns, saturated: false };
+
     let page = 1;
     let totalFetched = 0;
     let skippedJobsCount = 0;
@@ -445,7 +436,7 @@ export async function collectRepo(
       const startTime = Date.now();
       let data;
       try {
-        const response = await withRetry(() => octokit.request('GET /repos/{owner}/{repo}/actions/runs', {
+        const response = await withRetry(() => github!.request('GET /repos/{owner}/{repo}/actions/runs', {
           owner,
           repo: repoName,
           per_page: PER_PAGE,
@@ -515,7 +506,7 @@ export async function collectRepo(
           const jobsStartTime = Date.now();
           let jobsData: GitHubRunJobsResponse;
           try {
-            jobsData = await fetchJobsForRunAttempt(octokit, owner, repoName, runId, baseRun.runAttempt ?? 1);
+            jobsData = await fetchJobsForRunAttempt(github!, owner, repoName, runId, baseRun.runAttempt ?? 1);
           } catch (err) {
             if (isGitHubRateLimitError(err)) {
               const details = getRateLimitDetails(err);
@@ -709,20 +700,23 @@ export async function collectRepo(
 
 export async function runCollection({
   token,
+  buildkiteToken,
   retentionDays,
   cliOptions,
   targetRepos,
-  reposConfig = { repos: targetRepos.map((repo) => ({ repo, workflows: [] })) },
+  reposConfig = { repos: targetRepos.map((repo) => ({ repo, workflows: [], githubActions: true, buildkitePipelines: [] })) },
   octokit,
   collectRepoImpl = collectRepo,
 }: RunCollectionOptions) {
-  if (!token) throw new Error('GITHUB_TOKEN is required');
+  const targetConfigs = targetRepos.map((repo) => findRepoConfig(reposConfig, repo));
+  if (targetConfigs.some((entry) => entry.githubActions !== false) && !token) throw new Error('GITHUB_TOKEN is required');
+  if (targetConfigs.some((entry) => (entry.buildkitePipelines?.length ?? 0) > 0) && !buildkiteToken) throw new Error('BUILDKITE_TOKEN is required');
   if (targetRepos.length === 0) {
     console.log('No repositories configured. Skipping collection.');
     return;
   }
 
-  const client = octokit ?? new Octokit({ auth: token });
+  const client = octokit ?? (token ? new Octokit({ auth: token }) : undefined);
   const failures: string[] = [];
   let stoppedEarly: RateLimitAbortError | null = null;
 
@@ -743,7 +737,7 @@ export async function runCollection({
 
   for (const repo of targetRepos) {
     try {
-      await collectRepoImpl(client, repo, retentionDays, cliOptions, reposConfig);
+      await collectRepoImpl(client, repo, retentionDays, cliOptions, reposConfig, buildkiteToken);
     } catch (err) {
       if (err instanceof RateLimitAbortError) {
         stoppedEarly = err;
@@ -796,6 +790,7 @@ export async function main() {
   }
 
   const token = process.env.GITHUB_TOKEN;
+  const buildkiteToken = process.env.BUILDKITE_TOKEN;
   const reposConfig = readReposConfig();
   const targetRepos = resolveTargetRepos(getRepoNames(reposConfig), cliOptions.repoName);
   const retentionDays = parseInt(process.env.RETENTION_DAYS || '90');
@@ -812,6 +807,7 @@ export async function main() {
 
   await runCollection({
     token,
+    buildkiteToken,
     retentionDays,
     cliOptions,
     targetRepos,

@@ -19,6 +19,7 @@ jobs:
       - run: npx tsx etl/scripts/collect.ts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILDKITE_TOKEN: ${{ secrets.BUILDKITE_TOKEN }}
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           TARGET_REPOS: "vllm-project/vllm-ascend"

@@ -37,7 +37,7 @@ export interface WorkflowAttemptRow {
   workflow_ref: string | null;
   workflow_path: string | null;
   workflow_parse_status: WorkflowParseStatus;
-  match_kind: WorkflowMatchKind | null;
+  match_kind: WorkflowMatchKind | 'provider' | null;
   jobs_fetched_at: string | null;
   steps_eligibility_checked_at: string | null;
   steps_collected_at: string | null;
@@ -89,6 +89,17 @@ export function enrichRunWithWorkflowMetadata(
   config: ReposConfig,
   repoConfig: RepoConfigEntry,
 ): Run {
+  if (run.provider === 'buildkite') {
+    const runStartedAt = getRunStartedAt(run);
+    return {
+      ...run,
+      runAttempt: getRunAttempt(run),
+      run_started_at: runStartedAt ?? undefined,
+      queueDurationInSeconds: secondsBetween(run.created_at, runStartedAt) ?? undefined,
+      runtimeInSeconds: secondsBetween(runStartedAt, run.updated_at) ?? undefined,
+      tracked: true,
+    };
+  }
   const workflowPath = getWorkflowPath(run);
   const parsed = parseWorkflowPath(workflowPath);
   const match = resolveWorkflowMatch(config, repoConfig, parsed);
@@ -122,16 +133,18 @@ export function buildWorkflowAttempts(
     const run = enrichRunWithWorkflowMetadata(inputRun, config, repoConfig);
     // enrich already parsed the path; reuse its result to re-derive only the
     // threshold (not stored on Run) for step eligibility.
-    const match = resolveWorkflowMatch(config, repoConfig, {
-      file: run.workflowFile,
-      ref: run.workflowRef,
-      status: run.workflowParseStatus ?? 'file_unavailable',
-    });
+    const match = run.provider === 'buildkite'
+      ? { tracked: true, kind: 'provider' as const, stepThresholdSeconds: Number.POSITIVE_INFINITY, rule: null }
+      : resolveWorkflowMatch(config, repoConfig, {
+          file: run.workflowFile,
+          ref: run.workflowRef,
+          status: run.workflowParseStatus ?? 'file_unavailable',
+        });
     const runStartedAt = run.run_started_at ?? null;
     const queueDuration = run.queueDurationInSeconds ?? null;
     const runtime = run.runtimeInSeconds ?? null;
     const total = secondsBetween(run.created_at, run.updated_at) ?? run.durationInSeconds ?? null;
-    const shouldPersistSteps = match.tracked && eligibleSteps(run, match.stepThresholdSeconds);
+    const shouldPersistSteps = run.provider !== 'buildkite' && match.tracked && eligibleSteps(run, match.stepThresholdSeconds);
 
     const jobs = (run.jobs ?? []).map((job): WorkflowAttemptJobRow => {
       const jobRuntime = secondsBetween(job.started_at, job.completed_at) ?? job.durationInSeconds ?? null;

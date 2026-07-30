@@ -10,7 +10,7 @@ export interface CollectCliOptions {
 export const CLI_HELP = `
 Usage: npx tsx etl/scripts/collect.ts [options]
 
-Collect GitHub Actions CI/CD data for configured repositories.
+Collect GitHub Actions and Buildkite CI/CD data for configured repositories.
 
 Options:
   -r, --repo <owner/repo>       Collect data for a specific repository only
@@ -25,7 +25,8 @@ Options:
   -h, --help                    Show this help message
 
 Environment Variables:
-  GITHUB_TOKEN                  GitHub personal access token (required)
+  GITHUB_TOKEN                  GitHub token (required when github_actions is enabled)
+  BUILDKITE_TOKEN                Buildkite token with read_builds (required for buildkite_pipelines)
   RETENTION_DAYS                Number of days to retain data (default: 90)
   TARGET_REPOS                  Comma-separated list of repos (fallback if repos.yaml missing)
   VERBOSE                       Enable verbose logging (true or 1)

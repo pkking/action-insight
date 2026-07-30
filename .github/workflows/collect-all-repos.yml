@@ -40,6 +40,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  BUILDKITE_TOKEN: ${{ secrets.BUILDKITE_TOKEN }}
+
 jobs:
   collect-vllm-ascend:
     if: inputs.repo == '' || inputs.repo == 'vllm-project/vllm-ascend'

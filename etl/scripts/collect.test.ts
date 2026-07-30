@@ -21,6 +21,11 @@ vi.mock('./turso-storage.ts', async () => {
 	  };
 	});
 
+vi.mock('./buildkite.ts', async () => {
+  const actual = await vi.importActual<typeof import('./buildkite')>('./buildkite');
+  return { ...actual, fetchBuildkitePipelineBuilds: vi.fn().mockResolvedValue({ runs: [], saturated: false }) };
+});
+
 vi.mock('./sqlite-storage.ts', () => ({
   readCollectionStateFromSqlite: vi.fn().mockResolvedValue(null),
   writeCollectionStateToSqlite: vi.fn().mockResolvedValue(undefined),
@@ -44,6 +49,7 @@ import {
   getCollectedDatesFromSqlite,
   readCollectionStateFromSqlite,
 } from './sqlite-storage';
+import { fetchBuildkitePipelineBuilds } from './buildkite';
 
 function mockRepoState(options: {
   latest?: string;
@@ -91,6 +97,7 @@ describe('collect rate limit handling', () => {
     vi.mocked(getExistingRunIdsWithStepsFromTurso).mockResolvedValue(new Map());
     vi.mocked(writeRunsToTurso).mockResolvedValue(undefined);
     vi.mocked(writeCollectionState).mockResolvedValue(undefined);
+    vi.mocked(fetchBuildkitePipelineBuilds).mockResolvedValue({ runs: [], saturated: false });
   });
 
   it('recognizes GitHub rate limit errors from response headers', () => {
@@ -147,6 +154,8 @@ describe('collect rate limit handling', () => {
   });
 
   it('writes partial results and incomplete-history metadata when rate limit is hit mid-collection', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-14T12:00:00Z'));
     const repo = 'acme/widgets';
     mockRepoState({ latest: '2026-04-13', dates: ['2026-04-13'], historyComplete: true });
 
@@ -217,6 +226,7 @@ describe('collect rate limit handling', () => {
       latestDate: '2026-04-14',
       historyComplete: false,
     }));
+    vi.useRealTimers();
   });
 
   it('refreshes the latest range first when history is marked incomplete', async () => {
@@ -398,6 +408,30 @@ describe('collect rate limit handling', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('requires only the tokens used by configured CI providers', async () => {
+    const repo = 'acme/widgets';
+    const reposConfig = { repos: [{ repo, githubActions: false, workflows: [], buildkitePipelines: [{ organization: 'acme', pipeline: 'widgets' }] }] };
+
+    await expect(runCollection({
+      retentionDays: 90,
+      cliOptions: { forceFullBackfill: false, reverse: false },
+      targetRepos: [repo],
+      reposConfig,
+      collectRepoImpl: vi.fn(),
+    })).rejects.toThrow('BUILDKITE_TOKEN is required');
+
+    const collectRepoImpl = vi.fn().mockResolvedValue(undefined);
+    await runCollection({
+      buildkiteToken: 'buildkite-token',
+      retentionDays: 90,
+      cliOptions: { forceFullBackfill: false, reverse: false },
+      targetRepos: [repo],
+      reposConfig,
+      collectRepoImpl,
+    });
+    expect(collectRepoImpl).toHaveBeenCalledWith(undefined, repo, 90, expect.anything(), reposConfig, 'buildkite-token');
   });
 
   it('fails when a later rate limit would otherwise hide an earlier repo failure', async () => {
@@ -866,6 +900,57 @@ describe('collect rate limit handling', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('collects a Buildkite-only repository without a GitHub client', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-18T12:00:00Z'));
+    const repo = 'acme/widgets';
+    mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
+    vi.mocked(fetchBuildkitePipelineBuilds).mockResolvedValue({
+      saturated: false,
+      runs: [{
+        id: -101,
+        provider: 'buildkite',
+        runAttempt: 1,
+        name: 'widgets',
+        head_branch: 'main',
+        status: 'completed',
+        conclusion: 'success',
+        created_at: '2026-04-18T09:00:00Z',
+        run_started_at: '2026-04-18T09:01:00Z',
+        updated_at: '2026-04-18T09:10:00Z',
+        html_url: 'https://buildkite.com/acme/widgets/builds/1',
+        durationInSeconds: 600,
+        workflowFile: 'buildkite:acme/widgets',
+        workflowRef: 'main',
+        workflowPath: 'buildkite:acme/widgets@main',
+        workflowParseStatus: 'ok',
+        workflowMatchKind: 'provider',
+        tracked: true,
+        jobs: [],
+      }],
+    });
+
+    try {
+      await collectRepo(
+        undefined,
+        repo,
+        90,
+        { forceFullBackfill: false, reverse: false },
+        { repos: [{ repo, githubActions: false, workflows: [], buildkitePipelines: [{ organization: 'acme', pipeline: 'widgets' }] }] },
+        'buildkite-token',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(fetchBuildkitePipelineBuilds).toHaveBeenCalledWith(expect.objectContaining({
+      token: 'buildkite-token',
+      pipeline: { organization: 'acme', pipeline: 'widgets' },
+    }));
+    expect(writeRunsToTurso).toHaveBeenCalledWith(repo, [expect.objectContaining({ id: -101 })], '2026-04-18');
+    expect(writeWorkflowAttemptsToTurso).toHaveBeenCalledWith(repo, [expect.objectContaining({ run_id: -101, tracked: true })]);
   });
 
   it('preserves separate attempts for the same run id and keeps non-terminal attempts', async () => {

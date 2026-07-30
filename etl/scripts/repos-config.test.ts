@@ -30,7 +30,25 @@ repos:
     });
   });
 
-  it('rejects repos without workflows when required', () => {
+  it('parses a Buildkite-only collection source', () => {
+    const config = parseReposConfig(`
+repos:
+  - repo: acme/widgets
+    github_actions: false
+    buildkite_pipelines:
+      - organization: acme-ci
+        pipeline: widgets-test
+`, { requireWorkflows: true });
+
+    expect(config.repos[0]).toMatchObject({
+      repo: 'acme/widgets',
+      workflows: [],
+      githubActions: false,
+      buildkitePipelines: [{ organization: 'acme-ci', pipeline: 'widgets-test' }],
+    });
+  });
+
+  it('rejects repos without a GitHub workflow or Buildkite pipeline when required', () => {
     expect(() =>
       parseReposConfig(
         `
@@ -39,7 +57,19 @@ repos:
 `,
         { requireWorkflows: true },
       ),
-    ).toThrow('workflows must include at least one workflow rule');
+    ).toThrow('must include at least one workflows or buildkite_pipelines rule');
+  });
+
+  it('rejects duplicate Buildkite pipelines', () => {
+    expect(() => parseReposConfig(`
+repos:
+  - repo: acme/widgets
+    buildkite_pipelines:
+      - organization: acme-ci
+        pipeline: widgets-test
+      - organization: ACME-CI
+        pipeline: WIDGETS-TEST
+`)).toThrow('Duplicate Buildkite pipeline');
   });
 
   it('rejects workflow paths as file-name rules', () => {

@@ -39,6 +39,7 @@ export interface PullRequestSnapshot {
 
 export interface Run {
   id: number;
+  provider?: 'github' | 'buildkite';
   runAttempt?: number;
   name: string;
   head_branch: string;
@@ -57,7 +58,7 @@ export interface Run {
   workflowRef?: string;
   workflowPath?: string;
   workflowParseStatus?: 'ok' | 'ref_unavailable' | 'file_unavailable';
-  workflowMatchKind?: 'exact_ref' | 'glob_ref' | 'file_only';
+  workflowMatchKind?: 'exact_ref' | 'glob_ref' | 'file_only' | 'provider';
   stepPolicyHash?: string;
   tracked?: boolean;
   pull_requests?: PullRequestRef[];

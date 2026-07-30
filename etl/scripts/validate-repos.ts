@@ -116,23 +116,40 @@ async function fetchAllWorkflows(
 }
 
 async function validateOnline(config: ReposConfig): Promise<string[]> {
-  const token = process.env.GITHUB_TOKEN;
-  if (!token) {
-    return ['GITHUB_TOKEN is required for online repository validation'];
+  const githubToken = process.env.GITHUB_TOKEN;
+  const buildkiteToken = process.env.BUILDKITE_TOKEN;
+  const needsGitHub = config.repos.some((entry) => entry.githubActions !== false);
+  const needsBuildkite = config.repos.some((entry) => (entry.buildkitePipelines?.length ?? 0) > 0);
+  if (needsGitHub && !githubToken) return ['GITHUB_TOKEN is required for online repository validation'];
+  if (needsBuildkite && !buildkiteToken) {
+    console.warn('BUILDKITE_TOKEN is unavailable; skipping online Buildkite pipeline validation.');
   }
 
-  const octokit = new Octokit({ auth: token });
+  const octokit = githubToken ? new Octokit({ auth: githubToken }) : null;
   const errors: string[] = [];
 
   for (const entry of config.repos) {
     const [owner, repo] = entry.repo.split('/');
-    try {
-      await octokit.request('GET /repos/{owner}/{repo}', { owner, repo });
-      const workflows = await fetchAllWorkflows(octokit, owner, repo);
-      errors.push(...findWorkflowMatches(entry, workflows));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      errors.push(`${entry.repo}: GitHub validation failed: ${message}`);
+    if (entry.githubActions !== false) {
+      try {
+        await octokit!.request('GET /repos/{owner}/{repo}', { owner, repo });
+        const workflows = await fetchAllWorkflows(octokit!, owner, repo);
+        errors.push(...findWorkflowMatches(entry, workflows));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`${entry.repo}: GitHub validation failed: ${message}`);
+      }
+    }
+
+    for (const pipeline of buildkiteToken ? (entry.buildkitePipelines ?? []) : []) {
+      const url = `https://api.buildkite.com/v2/organizations/${encodeURIComponent(pipeline.organization)}/pipelines/${encodeURIComponent(pipeline.pipeline)}`;
+      try {
+        const response = await fetch(url, { headers: { Authorization: `Bearer ${buildkiteToken}` } });
+        if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`${entry.repo}: Buildkite validation failed for ${pipeline.organization}/${pipeline.pipeline}: ${message}`);
+      }
     }
   }
 
@@ -149,7 +166,7 @@ export async function validateReposConfigFile(options: CliOptions): Promise<void
   }
 
   console.log(
-    `Validated ${config.repos.length} repo(s) and ${config.repos.reduce((sum, repo) => sum + repo.workflows.length, 0)} workflow rule(s).`,
+    `Validated ${config.repos.length} repo(s), ${config.repos.reduce((sum, repo) => sum + repo.workflows.length, 0)} GitHub workflow rule(s), and ${config.repos.reduce((sum, repo) => sum + (repo.buildkitePipelines?.length ?? 0), 0)} Buildkite pipeline rule(s).`,
   );
 }
 

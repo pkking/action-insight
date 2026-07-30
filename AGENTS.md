@@ -1,12 +1,12 @@
 # AGENTS.md - Action Insight Repository Context
 
 ## 项目简介 (Project Overview)
-**Action Insight** 是一个用于监控和可视化 GitHub Actions 工作流状态的 Web 应用。
+**Action Insight** 是一个用于监控和可视化 GitHub Actions 与 Buildkite CI 状态的 Web 应用。
 - **技术栈**：Next.js, TypeScript, Tailwind CSS, Recharts, Lucide React, date-fns。
 - **核心组件**：采用 Server/Client Components 结合 (`'use client'`指令处理 React Hooks)。
 
 ## 核心业务逻辑 (Core Business Logic)
-1.  **数据抓取与缓存**：通过 GitHub API 获取 Runs 和 Jobs 数据，并在本地进行缓存处理。
+1.  **数据抓取与缓存**：通过 GitHub 或 Buildkite API 获取 Runs 和 Jobs 数据，并在本地进行缓存处理。
 2.  **筛选与匹配规则**：
     - **Runner Label 筛选**：Workflow 级别匹配采用“任意 Job 命中即选中 Workflow”的原则。只要 Workflow 中的任何一个 Job 带有用户指定的 Runner Label，即在列表中展示该 Workflow。
 3.  **多视图可视化**：支持作业数据的“时间线 (timeline)”和“表格 (table)”视图，并通过图表 (`LineChart`, `ReferenceArea`) 展示排队、耗时等性能数据。

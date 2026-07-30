@@ -1,7 +1,8 @@
 # Per-repo GitHub Action workflow for CI data collection.
 # Each repo has its own workflow and its own GitHub token secret to reduce rate limit issues.
 #
-# Required secret: <OWNER>_<REPO> (uppercase, hyphens replaced with underscores)
+# Required secrets: <OWNER>_<REPO> (uppercase, hyphens replaced with underscores),
+# and BUILDKITE_TOKEN when the repo config includes buildkite_pipelines.
 # Example: For vllm-project/vllm-ascend → VLLM_PROJECT_VLLM_ASCEND
 
 name: Collect CI Data - {{REPO_SLUG}}
@@ -49,6 +50,7 @@ jobs:
           npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.{{TOKEN_SECRET_NAME}} }}
+          BUILDKITE_TOKEN: ${{ secrets.BUILDKITE_TOKEN }}
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           RETENTION_DAYS: 90

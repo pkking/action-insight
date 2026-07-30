@@ -4,9 +4,17 @@ Action Insight collects and analyzes GitHub Actions execution data for selected 
 
 ## Language
 
+**CI Provider**:
+The execution system that supplies run and job data. Supported values are GitHub Actions and Buildkite.
+_Avoid_: backend
+
 **Tracked Repository**:
-A GitHub repository configured for collection and analysis.
+A source repository configured for collection and analysis from one or more CI providers.
 _Avoid_: target repo, configured repo
+
+**Tracked Buildkite Pipeline**:
+A Buildkite organization and pipeline slug configured under a Tracked Repository. Its builds are Workflow Attempts and its jobs are Tracked Jobs; nested Step timing is unavailable.
+_Avoid_: Buildkite workflow
 
 **Tracked Workflow**:
 A workflow whose run, job, and eligible step data is included in detailed analysis by configuration.

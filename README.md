@@ -1,6 +1,6 @@
 # Action Insight
 
-Monitor GitHub Actions CI/CD metrics with a clean, interactive dashboard.
+Monitor GitHub Actions and Buildkite CI/CD metrics with a clean, interactive dashboard.
 
 ## Architecture
 
@@ -40,6 +40,7 @@ Each repository has its own workflow file (`.github/workflows/collect-<owner>-<r
 
 **Required secrets** (configure in repository Settings → Secrets):
 - `<OWNER>_<REPO>` — GitHub token for each repo's workflow (uppercase, hyphens → underscores)
+- `BUILDKITE_TOKEN` — Buildkite API token with `read_builds` scope when `buildkite_pipelines` are configured
 - `SUPABASE_URL` — Supabase project URL
 - `SUPABASE_SERVICE_ROLE_KEY` — Supabase service role key
 - `SUPABASE_DB_URL` — PostgreSQL connection string for automatic schema migrations before ETL collection and production builds. If absent, the migration script also checks `DATABASE_URL`, `POSTGRES_URL_NON_POOLING`, `POSTGRES_URL`, and `POSTGRES_PRISMA_URL`.
@@ -91,6 +92,23 @@ SUPABASE_DB_URL=postgresql://... SUPABASE_DB_SSL=no-verify npm run migrate:supab
 GITHUB_TOKEN=your_token SUPABASE_URL=your_url SUPABASE_SERVICE_ROLE_KEY=your_key npx tsx etl/scripts/collect.ts --repo owner/repo
 ```
 
+Add Buildkite pipelines to `etl/repos.yaml`; set `github_actions: false` for a Buildkite-only repository:
+
+```yaml
+repos:
+  - repo: owner/repo
+    github_actions: false
+    buildkite_pipelines:
+      - organization: my-buildkite-org
+        pipeline: my-pipeline
+```
+
+```bash
+BUILDKITE_TOKEN=your_token npx tsx etl/scripts/collect.ts --repo owner/repo
+```
+
+A Buildkite build maps to a workflow attempt and each Buildkite job maps to a Job row with queue/runtime timing. Buildkite exposes no nested command-step timing, so the adapter creates no synthetic Step rows. See the [Buildkite Builds API](https://buildkite.com/docs/apis/rest-api/builds) and [ADR-007](docs/adr/007-buildkite-collection-adapter.md).
+
 Restart retained backfill from the earliest day:
 
 ```bash
@@ -116,7 +134,7 @@ Use these scripts for local recovery, backfills, and validation:
 | Tool | Use when | Command |
 | --- | --- | --- |
 | Supabase migration | Schema changed, a fresh database is being prepared, or ETL/rebuild jobs need the latest tables/functions. | `SUPABASE_DB_URL=postgresql://... SUPABASE_DB_SSL=no-verify npm run migrate:supabase` |
-| Raw CI collection | `runs` or `jobs` are stale or missing. This fetches GitHub Actions runs/jobs and writes raw records only. | `GITHUB_TOKEN=... SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... npx tsx etl/scripts/collect.ts --repo owner/repo` |
+| Raw CI collection | `runs` or `jobs` are stale or missing. This fetches configured GitHub Actions and Buildkite runs/jobs and writes raw records only. | `GITHUB_TOKEN=... BUILDKITE_TOKEN=... npx tsx etl/scripts/collect.ts --repo owner/repo` |
 | PR artifact rebuild | Raw runs already exist but PR metrics are stale, missing, or partially resolved. Prefer a bounded date range. | `GITHUB_TOKEN=... SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... npm run rebuild:pr-artifacts -- --repo owner/repo --start-date yyyy-mm-dd --end-date yyyy-mm-dd` |
 | Legacy PR rebuild entry | Existing local notes still reference the old filename. It delegates to the new rebuild script. | `npx tsx etl/scripts/rebuild-pr-artifacts-local.ts --repo owner/repo` |
 | Verification | Before handing off code changes. | `npm run lint` and `npm test` |

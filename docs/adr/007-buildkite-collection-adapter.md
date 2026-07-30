@@ -6,7 +6,7 @@
 
 ## Decision
 
-Extend the existing raw collector with a Buildkite REST adapter. A tracked repository may add `buildkite_pipelines` entries containing an organization and pipeline slug. During each existing collection window, the collector fetches those pipelines with `created_from` / `created_to`, normalizes builds and jobs into the current `Run` / `Job` seam, and persists them through the unchanged Turso/SQLite writers.
+Extend the existing raw collector with a Buildkite REST adapter. A tracked repository may add `buildkite_pipelines` entries containing an organization and pipeline slug; `github_actions: false` makes it Buildkite-only, while GitHub Actions remains enabled by default. During each existing collection window, the collector fetches those pipelines with `created_from` / `created_to`, normalizes builds and jobs into the current `Run` / `Job` seam, and persists them through the unchanged Turso/SQLite writers.
 
 Buildkite authentication uses `BUILDKITE_TOKEN` with `read_builds`; GitHub collection continues to use `GITHUB_TOKEN`. Only tokens required by the configured sources are mandatory.
 
