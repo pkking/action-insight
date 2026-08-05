@@ -89,6 +89,13 @@ export interface Job {
   durationInSeconds: number;
   runtimeInSeconds?: number;
   totalDurationInSeconds?: number;
+  labels?: string[];
+  runner_id?: number;
+  runner_name?: string;
+  runner_group_id?: number;
+  runner_group_name?: string;
+  resource_model?: string;
+  resource_count?: number;
   githubPayload?: GitHubApiPayload;
   steps?: Step[];
 }

@@ -10,6 +10,7 @@ describe('collect option helpers', () => {
       help: false,
       reverse: true,
       repoName: 'openai/action-insight',
+      skipJobs: false,
     });
   });
 
@@ -20,6 +21,7 @@ describe('collect option helpers', () => {
       help: false,
       reverse: true,
       repoName: 'openai/action-insight',
+      skipJobs: false,
     });
   });
 
@@ -30,6 +32,7 @@ describe('collect option helpers', () => {
       help: false,
       reverse: true,
       repoName: undefined,
+      skipJobs: false,
     });
   });
 
@@ -40,6 +43,7 @@ describe('collect option helpers', () => {
       help: false,
       reverse: true,
       repoName: undefined,
+      skipJobs: false,
     });
   });
 
@@ -50,6 +54,7 @@ describe('collect option helpers', () => {
       help: false,
       reverse: false,
       repoName: undefined,
+      skipJobs: false,
     });
   });
 
@@ -60,6 +65,7 @@ describe('collect option helpers', () => {
       help: false,
       reverse: true,
       repoName: undefined,
+      skipJobs: false,
     });
 
     expect(parseCollectCliOptions(['--reverse', '--forward'])).toEqual({
@@ -68,6 +74,7 @@ describe('collect option helpers', () => {
       help: false,
       reverse: false,
       repoName: undefined,
+      skipJobs: false,
     });
   });
 

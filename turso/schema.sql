@@ -52,7 +52,14 @@ CREATE TABLE IF NOT EXISTS jobs (
   completed_at TEXT NOT NULL,
   html_url TEXT NOT NULL,
   queue_duration_seconds INTEGER NOT NULL DEFAULT 0,
-  duration_seconds INTEGER NOT NULL DEFAULT 0
+  duration_seconds INTEGER NOT NULL DEFAULT 0,
+  labels_json TEXT,
+  runner_id INTEGER,
+  runner_name TEXT,
+  runner_group_id INTEGER,
+  runner_group_name TEXT,
+  resource_model TEXT,
+  resource_count INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_run_id ON jobs(run_id);
@@ -208,6 +215,13 @@ CREATE TABLE IF NOT EXISTS workflow_jobs (
   runtime_seconds REAL,           -- Job Runtime
   total_duration_seconds REAL,    -- Job Total Duration
   duration_seconds REAL,          -- Compatibility alias for Job Runtime
+  labels_json TEXT,
+  runner_id INTEGER,
+  runner_name TEXT,
+  runner_group_id INTEGER,
+  runner_group_name TEXT,
+  resource_model TEXT,
+  resource_count INTEGER,
   PRIMARY KEY (run_id, run_attempt, job_id),
   FOREIGN KEY (run_id, run_attempt) REFERENCES workflow_attempts(run_id, run_attempt) ON DELETE CASCADE
 );
