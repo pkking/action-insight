@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   collectRepo,
+  fetchJobsForRunAttempt,
   parseRunnerResourceLabels,
   RateLimitAbortError,
   runCollection,
@@ -79,6 +80,19 @@ function mockSqliteRepoState(options: {
   });
   vi.mocked(getCollectedDatesFromSqlite).mockResolvedValue(options.dates ?? []);
 }
+
+describe('fetchJobsForRunAttempt', () => {
+  it('retrieves every job page', async () => {
+    const jobs = Array.from({ length: 101 }, (_, id) => ({ id, name: `job-${id}`, status: 'completed', started_at: '2026-04-14T10:00:00Z', html_url: `https://example.com/jobs/${id}` }));
+    const request = vi.fn((_route: string, params: { page: number; per_page: number }) => Promise.resolve({
+      data: { jobs: params.page === 1 ? jobs.slice(0, 100) : jobs.slice(100) },
+    }));
+
+    await expect(fetchJobsForRunAttempt({ request } as never, 'acme', 'widgets', 42, 1)).resolves.toMatchObject({ jobs });
+    expect(request).toHaveBeenNthCalledWith(1, 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', expect.objectContaining({ page: 1, per_page: 100 }));
+    expect(request).toHaveBeenNthCalledWith(2, 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', expect.objectContaining({ page: 2, per_page: 100 }));
+  });
+});
 
 describe('parseRunnerResourceLabels', () => {
   it('parses the configured NPU runner-label convention', () => {

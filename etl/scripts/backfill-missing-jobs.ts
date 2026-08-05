@@ -50,6 +50,7 @@ interface JobRow {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const JOBS_PER_PAGE = 100;
 
 function warn(...args: unknown[]) {
   console.warn(`[${new Date().toISOString()}] WARN:`, ...args);
@@ -163,33 +164,41 @@ async function fetchJobsForRunAttempt(
   runId: number,
   runAttempt: number,
 ): Promise<JobRow[]> {
-  const response = await withRetry(async () => {
-    try {
-      if (runAttempt > 1) {
-        return await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs', {
+  const jobs: Array<Record<string, unknown>> = [];
+  for (let page = 1; ; page += 1) {
+    const response = await withRetry(async () => {
+      try {
+        if (runAttempt > 1) {
+          return await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs', {
+            owner,
+            repo,
+            run_id: runId,
+            attempt_number: runAttempt,
+            per_page: JOBS_PER_PAGE,
+            page,
+          });
+        }
+
+        return await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
           owner,
           repo,
           run_id: runId,
-          attempt_number: runAttempt,
+          per_page: JOBS_PER_PAGE,
+          page,
         });
+      } catch (err) {
+        const status = typeof err === 'object' && err !== null ? (err as { status?: number }).status : undefined;
+        if (status === 404 || status === 422) {
+          warn(`Skipping run ${repo}#${runId} attempt ${runAttempt} because GitHub returned ${status}`);
+          return { data: { jobs: [] } };
+        }
+        throw err;
       }
-
-      return await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
-        owner,
-        repo,
-        run_id: runId,
-      });
-    } catch (err) {
-      const status = typeof err === 'object' && err !== null ? (err as { status?: number }).status : undefined;
-      if (status === 404 || status === 422) {
-        warn(`Skipping run ${repo}#${runId} attempt ${runAttempt} because GitHub returned ${status}`);
-        return { data: { jobs: [] } };
-      }
-      throw err;
-    }
-  });
-
-  const jobs = (response.data as { jobs?: Array<Record<string, unknown>> }).jobs ?? [];
+    });
+    const pageJobs = (response.data as { jobs?: Array<Record<string, unknown>> }).jobs ?? [];
+    jobs.push(...pageJobs);
+    if (pageJobs.length < JOBS_PER_PAGE) break;
+  }
   return jobs.map((job) => {
     const rawSteps = Array.isArray(job.steps) ? job.steps as Array<Record<string, unknown>> : [];
     const steps: Step[] = rawSteps.map((step, index) => ({

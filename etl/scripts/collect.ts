@@ -310,7 +310,16 @@ function runAttemptKey(runId: number, runAttempt: number | undefined): string {
   return `${runId}:${runAttempt ?? 1}`;
 }
 
-async function fetchJobsForRunAttempt(
+async function fetchAllJobPages(fetchPage: (page: number) => Promise<GitHubRunJobsResponse>): Promise<GitHubRunJobsResponse> {
+  const jobs: GitHubJobPayload[] = [];
+  for (let page = 1; ; page += 1) {
+    const data = await fetchPage(page);
+    jobs.push(...data.jobs);
+    if (data.jobs.length < PER_PAGE) return { jobs };
+  }
+}
+
+export async function fetchJobsForRunAttempt(
   octokit: Octokit,
   owner: string,
   repo: string,
@@ -319,27 +328,33 @@ async function fetchJobsForRunAttempt(
 ): Promise<GitHubRunJobsResponse> {
   if (runAttempt > 1) {
     try {
-      const response = await withRetry(() => octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs', {
-        owner,
-        repo,
-        run_id: runId,
-        attempt_number: runAttempt,
-      }));
-      return response.data as GitHubRunJobsResponse;
+      return await fetchAllJobPages(async (page) => {
+        const response = await withRetry(() => octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs', {
+          owner,
+          repo,
+          run_id: runId,
+          attempt_number: runAttempt,
+          per_page: PER_PAGE,
+          page,
+        }));
+        return response.data as GitHubRunJobsResponse;
+      });
     } catch (err) {
       const status = typeof err === 'object' && err !== null ? (err as { status?: number }).status : undefined;
-      if (status !== 404 && status !== 422) {
-        throw err;
-      }
+      if (status !== 404 && status !== 422) throw err;
     }
   }
 
-  const response = await withRetry(() => octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
-    owner,
-    repo,
-    run_id: runId,
-  }));
-  return response.data as GitHubRunJobsResponse;
+  return fetchAllJobPages(async (page) => {
+    const response = await withRetry(() => octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
+      owner,
+      repo,
+      run_id: runId,
+      per_page: PER_PAGE,
+      page,
+    }));
+    return response.data as GitHubRunJobsResponse;
+  });
 }
 
 async function persistCollectedRuns(
