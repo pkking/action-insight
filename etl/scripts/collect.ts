@@ -115,6 +115,13 @@ interface Job {
   html_url: string;
   queueDurationInSeconds: number;
   durationInSeconds: number;
+  labels?: string[];
+  runner_id?: number;
+  runner_name?: string;
+  runner_group_id?: number;
+  runner_group_name?: string;
+  resource_model?: string;
+  resource_count?: number;
   githubPayload?: GitHubApiPayload;
   steps?: Step[];
 }
@@ -128,10 +135,24 @@ interface GitHubJobPayload extends GitHubApiPayload {
   started_at: string;
   completed_at?: string;
   html_url: string;
+  labels?: unknown;
+  runner_id?: unknown;
+  runner_name?: unknown;
+  runner_group_id?: unknown;
+  runner_group_name?: unknown;
 }
 
 interface GitHubRunJobsResponse {
   jobs: GitHubJobPayload[];
+}
+
+/** Extract the NPU model and card count from the repository's runner-label convention. */
+export function parseRunnerResourceLabels(labels?: string[]): Pick<Job, 'resource_model' | 'resource_count'> {
+  for (const label of labels ?? []) {
+    const match = /^linux-aarch64-(.+)-([1-9]\d*)$/.exec(label);
+    if (match) return { resource_model: `linux-aarch64-${match[1]}`, resource_count: Number(match[2]) };
+  }
+  return {};
 }
 
 interface RepoCollectionState {
@@ -565,6 +586,10 @@ export async function collectRepo(
               }
             }
 
+            const labels = Array.isArray(j.labels) && j.labels.every((label): label is string => typeof label === 'string')
+              ? j.labels
+              : undefined;
+
             return {
               id: j.id,
               name: j.name,
@@ -578,6 +603,12 @@ export async function collectRepo(
               durationInSeconds: Math.max(0, (completedMs - startedMs) / 1000),
               runtimeInSeconds: Math.max(0, (completedMs - startedMs) / 1000),
               totalDurationInSeconds: Math.max(0, (completedMs - createdMs) / 1000),
+              labels,
+              runner_id: typeof j.runner_id === 'number' ? j.runner_id : undefined,
+              runner_name: typeof j.runner_name === 'string' ? j.runner_name : undefined,
+              runner_group_id: typeof j.runner_group_id === 'number' ? j.runner_group_id : undefined,
+              runner_group_name: typeof j.runner_group_name === 'string' ? j.runner_group_name : undefined,
+              ...parseRunnerResourceLabels(labels),
               githubPayload: j,
               steps: steps.length > 0 ? steps : undefined,
             };

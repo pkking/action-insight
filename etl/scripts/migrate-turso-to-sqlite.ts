@@ -54,7 +54,9 @@ CREATE TABLE IF NOT EXISTS runs (
 CREATE TABLE IF NOT EXISTS jobs (
   id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL, name TEXT, status TEXT,
   conclusion TEXT, created_at TEXT, started_at TEXT, completed_at TEXT,
-	  html_url TEXT, queue_duration_seconds REAL, duration_seconds REAL
+	  html_url TEXT, queue_duration_seconds REAL, duration_seconds REAL,
+    labels_json TEXT, runner_id INTEGER, runner_name TEXT, runner_group_id INTEGER,
+    runner_group_name TEXT, resource_model TEXT, resource_count INTEGER
 	);
 CREATE TABLE IF NOT EXISTS steps (
   job_id INTEGER NOT NULL, number INTEGER NOT NULL, name TEXT, status TEXT,
@@ -116,7 +118,9 @@ CREATE TABLE IF NOT EXISTS workflow_jobs (
 	  job_id INTEGER NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL,
 	  conclusion TEXT, created_at TEXT, started_at TEXT, completed_at TEXT,
 	  html_url TEXT, queue_duration_seconds REAL, runtime_seconds REAL,
-	  total_duration_seconds REAL, duration_seconds REAL,
+	  total_duration_seconds REAL, duration_seconds REAL, labels_json TEXT,
+    runner_id INTEGER, runner_name TEXT, runner_group_id INTEGER, runner_group_name TEXT,
+    resource_model TEXT, resource_count INTEGER,
 	  PRIMARY KEY (run_id, run_attempt, job_id),
 	  FOREIGN KEY (run_id, run_attempt) REFERENCES workflow_attempts(run_id, run_attempt) ON DELETE CASCADE
 	);
@@ -240,14 +244,14 @@ async function exportRepoFromTurso(
   offset = 0;
   while (true) {
     const { rows } = await turso.execute({
-      sql: `SELECT j.id, j.run_id, j.name, j.status, j.conclusion, j.created_at, j.started_at, j.completed_at, j.html_url, j.queue_duration_seconds, j.duration_seconds
+      sql: `SELECT j.id, j.run_id, j.name, j.status, j.conclusion, j.created_at, j.started_at, j.completed_at, j.html_url, j.queue_duration_seconds, j.duration_seconds, j.labels_json, j.runner_id, j.runner_name, j.runner_group_id, j.runner_group_name, j.resource_model, j.resource_count
             FROM jobs j JOIN runs r ON j.run_id = r.id WHERE r.repo_id = ? ORDER BY j.id LIMIT ? OFFSET ?`,
       args: [tursoRepoId, BATCH_SIZE, offset],
     });
     if (rows.length === 0) break;
     const stmts = rows.map(r => ({
-      sql: 'INSERT INTO jobs (id, run_id, name, status, conclusion, created_at, started_at, completed_at, html_url, queue_duration_seconds, duration_seconds) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING',
-      args: [r.id as number, r.run_id as number, r.name, r.status, r.conclusion, r.created_at, r.started_at, r.completed_at, r.html_url, r.queue_duration_seconds, r.duration_seconds] as InValue[],
+      sql: 'INSERT INTO jobs (id, run_id, name, status, conclusion, created_at, started_at, completed_at, html_url, queue_duration_seconds, duration_seconds, labels_json, runner_id, runner_name, runner_group_id, runner_group_name, resource_model, resource_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING',
+      args: [r.id as number, r.run_id as number, r.name, r.status, r.conclusion, r.created_at, r.started_at, r.completed_at, r.html_url, r.queue_duration_seconds, r.duration_seconds, r.labels_json, r.runner_id, r.runner_name, r.runner_group_id, r.runner_group_name, r.resource_model, r.resource_count] as InValue[],
     }));
     const tx = await dest.transaction('write');
     try { await tx.batch(stmts); await tx.commit(); } catch (e) { await tx.rollback(); throw e; } finally { tx.close(); }
@@ -327,7 +331,9 @@ async function exportRepoFromTurso(
 	      sql: `SELECT wj.run_id, wj.run_attempt, wj.job_id, wj.name, wj.status,
 	                   wj.conclusion, wj.created_at, wj.started_at, wj.completed_at,
 	                   wj.html_url, wj.queue_duration_seconds, wj.runtime_seconds,
-	                   wj.total_duration_seconds, wj.duration_seconds
+	                   wj.total_duration_seconds, wj.duration_seconds, wj.labels_json,
+                   wj.runner_id, wj.runner_name, wj.runner_group_id, wj.runner_group_name,
+                   wj.resource_model, wj.resource_count
 	            FROM workflow_jobs wj
 	            JOIN runs r ON r.id = wj.run_id
 	            WHERE r.repo_id = ?
@@ -339,9 +345,10 @@ async function exportRepoFromTurso(
 	      sql: `INSERT INTO workflow_jobs (
 	              run_id, run_attempt, job_id, name, status, conclusion, created_at,
 	              started_at, completed_at, html_url, queue_duration_seconds,
-	              runtime_seconds, total_duration_seconds, duration_seconds
-	            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
-	      args: [r.run_id, r.run_attempt, r.job_id, r.name, r.status, r.conclusion, r.created_at, r.started_at, r.completed_at, r.html_url, r.queue_duration_seconds, r.runtime_seconds, r.total_duration_seconds, r.duration_seconds] as InValue[],
+	              runtime_seconds, total_duration_seconds, duration_seconds, labels_json,
+                  runner_id, runner_name, runner_group_id, runner_group_name, resource_model, resource_count
+	            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
+	      args: [r.run_id, r.run_attempt, r.job_id, r.name, r.status, r.conclusion, r.created_at, r.started_at, r.completed_at, r.html_url, r.queue_duration_seconds, r.runtime_seconds, r.total_duration_seconds, r.duration_seconds, r.labels_json, r.runner_id, r.runner_name, r.runner_group_id, r.runner_group_name, r.resource_model, r.resource_count] as InValue[],
 	    }));
 	    const tx = await dest.transaction('write');
 	    try { await tx.batch(stmts); await tx.commit(); } catch (e) { await tx.rollback(); throw e; } finally { tx.close(); }

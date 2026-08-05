@@ -17,6 +17,13 @@ export interface WorkflowAttemptJobRow {
   queue_duration_seconds: number | null;
   runtime_seconds: number | null;
   total_duration_seconds: number | null;
+  labels?: string[];
+  runner_id?: number;
+  runner_name?: string;
+  runner_group_id?: number;
+  runner_group_name?: string;
+  resource_model?: string;
+  resource_count?: number;
   steps?: Step[];
 }
 
@@ -150,6 +157,13 @@ export function buildWorkflowAttempts(
         queue_duration_seconds: job.queueDurationInSeconds ?? secondsBetween(job.created_at, job.started_at),
         runtime_seconds: jobRuntime,
         total_duration_seconds: jobTotal ?? (jobRuntime !== null ? (job.queueDurationInSeconds ?? 0) + jobRuntime : null),
+        labels: job.labels,
+        runner_id: job.runner_id,
+        runner_name: job.runner_name,
+        runner_group_id: job.runner_group_id,
+        runner_group_name: job.runner_group_name,
+        resource_model: job.resource_model,
+        resource_count: job.resource_count,
         steps: shouldPersistSteps ? job.steps : undefined,
       };
     });

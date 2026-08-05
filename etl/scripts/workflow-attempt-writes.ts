@@ -62,8 +62,10 @@ export async function writeWorkflowAttemptsToClient(client: Client, attempts: Wo
         sql: `INSERT INTO workflow_jobs (
                 run_id, run_attempt, job_id, name, status, conclusion, created_at,
                 started_at, completed_at, html_url, queue_duration_seconds,
-                runtime_seconds, total_duration_seconds, duration_seconds
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                runtime_seconds, total_duration_seconds, duration_seconds, labels_json,
+                runner_id, runner_name, runner_group_id, runner_group_name,
+                resource_model, resource_count
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT(run_id, run_attempt, job_id) DO UPDATE SET
                 name=excluded.name, status=excluded.status, conclusion=excluded.conclusion,
                 created_at=excluded.created_at, started_at=excluded.started_at,
@@ -71,12 +73,17 @@ export async function writeWorkflowAttemptsToClient(client: Client, attempts: Wo
                 queue_duration_seconds=excluded.queue_duration_seconds,
                 runtime_seconds=excluded.runtime_seconds,
                 total_duration_seconds=excluded.total_duration_seconds,
-                duration_seconds=excluded.duration_seconds`,
+                duration_seconds=excluded.duration_seconds, labels_json=excluded.labels_json,
+                runner_id=excluded.runner_id, runner_name=excluded.runner_name,
+                runner_group_id=excluded.runner_group_id, runner_group_name=excluded.runner_group_name,
+                resource_model=excluded.resource_model, resource_count=excluded.resource_count`,
         args: [
           job.run_id, job.run_attempt, job.job_id, job.name, job.status, job.conclusion,
           job.created_at, job.started_at, job.completed_at, job.html_url,
           job.queue_duration_seconds, job.runtime_seconds, job.total_duration_seconds,
-          job.runtime_seconds,
+          job.runtime_seconds, job.labels ? JSON.stringify(job.labels) : null,
+          job.runner_id ?? null, job.runner_name ?? null, job.runner_group_id ?? null,
+          job.runner_group_name ?? null, job.resource_model ?? null, job.resource_count ?? null,
         ] as InValue[],
       })));
     }

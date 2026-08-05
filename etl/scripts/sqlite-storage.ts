@@ -33,6 +33,13 @@ interface JobRow {
   html_url: string;
   queueDurationInSeconds: number;
   durationInSeconds: number;
+  labels?: string[];
+  runner_id?: number;
+  runner_name?: string;
+  runner_group_id?: number;
+  runner_group_name?: string;
+  resource_model?: string;
+  resource_count?: number;
   steps?: Step[];
 }
 
@@ -219,7 +226,14 @@ CREATE TABLE IF NOT EXISTS jobs (
   completed_at            TEXT,
   html_url                TEXT,
   queue_duration_seconds  REAL,
-  duration_seconds        REAL
+  duration_seconds        REAL,
+  labels_json             TEXT,
+  runner_id               INTEGER,
+  runner_name             TEXT,
+  runner_group_id         INTEGER,
+  runner_group_name       TEXT,
+  resource_model          TEXT,
+  resource_count          INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS steps (
@@ -341,6 +355,13 @@ CREATE TABLE IF NOT EXISTS workflow_jobs (
   runtime_seconds         REAL,
   total_duration_seconds  REAL,
   duration_seconds        REAL,
+  labels_json             TEXT,
+  runner_id               INTEGER,
+  runner_name             TEXT,
+  runner_group_id         INTEGER,
+  runner_group_name       TEXT,
+  resource_model          TEXT,
+  resource_count          INTEGER,
   PRIMARY KEY (run_id, run_attempt, job_id),
   FOREIGN KEY (run_id, run_attempt) REFERENCES workflow_attempts(run_id, run_attempt) ON DELETE CASCADE
 );
@@ -390,9 +411,25 @@ async function ensureRepoSchema(client: Client): Promise<void> {
     ['workflow_path', 'TEXT'],
     ['workflow_parse_status', 'TEXT'],
   ]);
+  await ensureColumns(client, 'jobs', [
+    ['labels_json', 'TEXT'],
+    ['runner_id', 'INTEGER'],
+    ['runner_name', 'TEXT'],
+    ['runner_group_id', 'INTEGER'],
+    ['runner_group_name', 'TEXT'],
+    ['resource_model', 'TEXT'],
+    ['resource_count', 'INTEGER'],
+  ]);
   await ensureColumns(client, 'workflow_jobs', [
     ['runtime_seconds', 'REAL'],
     ['total_duration_seconds', 'REAL'],
+    ['labels_json', 'TEXT'],
+    ['runner_id', 'INTEGER'],
+    ['runner_name', 'TEXT'],
+    ['runner_group_id', 'INTEGER'],
+    ['runner_group_name', 'TEXT'],
+    ['resource_model', 'TEXT'],
+    ['resource_count', 'INTEGER'],
   ]);
   await client.execute({ sql: 'CREATE INDEX IF NOT EXISTS idx_runs_workflow_file ON runs(repo_id, workflow_file)', args: [] });
   schemaInitializedClients.add(client);
@@ -518,7 +555,9 @@ export async function writeRunsToSqlite(repo: string, runs: RunRow[], date: stri
       id: number; run_id: number; name: string; status: string;
       conclusion: string | null; created_at: string; started_at: string;
       completed_at: string; html_url: string; queue_duration_seconds: number;
-      duration_seconds: number;
+      duration_seconds: number; labels_json: string | null; runner_id: number | null;
+      runner_name: string | null; runner_group_id: number | null; runner_group_name: string | null;
+      resource_model: string | null; resource_count: number | null;
     }[] = [];
 
     for (const run of runs) {
@@ -529,7 +568,10 @@ export async function writeRunsToSqlite(repo: string, runs: RunRow[], date: stri
             conclusion: job.conclusion ?? null, created_at: job.created_at,
             started_at: job.started_at, completed_at: job.completed_at,
             html_url: job.html_url, queue_duration_seconds: job.queueDurationInSeconds,
-            duration_seconds: job.durationInSeconds,
+            duration_seconds: job.durationInSeconds, labels_json: job.labels ? JSON.stringify(job.labels) : null,
+            runner_id: job.runner_id ?? null, runner_name: job.runner_name ?? null,
+            runner_group_id: job.runner_group_id ?? null, runner_group_name: job.runner_group_name ?? null,
+            resource_model: job.resource_model ?? null, resource_count: job.resource_count ?? null,
           });
         }
       }
@@ -537,17 +579,22 @@ export async function writeRunsToSqlite(repo: string, runs: RunRow[], date: stri
 
     for (const batch of chunkArray(jobRows, JOB_UPSERT_BATCH_SIZE)) {
       const stmts = batch.map((job) => ({
-        sql: `INSERT INTO jobs (id, run_id, name, status, conclusion, created_at, started_at, completed_at, html_url, queue_duration_seconds, duration_seconds)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        sql: `INSERT INTO jobs (id, run_id, name, status, conclusion, created_at, started_at, completed_at, html_url, queue_duration_seconds, duration_seconds, labels_json, runner_id, runner_name, runner_group_id, runner_group_name, resource_model, resource_count)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT(id) DO UPDATE SET
                 status=excluded.status, conclusion=excluded.conclusion,
                 started_at=excluded.started_at, completed_at=excluded.completed_at,
                 html_url=excluded.html_url, queue_duration_seconds=excluded.queue_duration_seconds,
-                duration_seconds=excluded.duration_seconds`,
+                duration_seconds=excluded.duration_seconds, labels_json=excluded.labels_json,
+                runner_id=excluded.runner_id, runner_name=excluded.runner_name,
+                runner_group_id=excluded.runner_group_id, runner_group_name=excluded.runner_group_name,
+                resource_model=excluded.resource_model, resource_count=excluded.resource_count`,
         args: [
           job.id, job.run_id, job.name, job.status, job.conclusion,
           job.created_at, job.started_at, job.completed_at, job.html_url,
-          job.queue_duration_seconds, job.duration_seconds,
+          job.queue_duration_seconds, job.duration_seconds, job.labels_json,
+          job.runner_id, job.runner_name, job.runner_group_id, job.runner_group_name,
+          job.resource_model, job.resource_count,
         ] as InValue[],
       }));
       await tx.batch(stmts);

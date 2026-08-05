@@ -38,6 +38,13 @@ interface JobRow {
   html_url: string | null;
   queue_duration_seconds: number | null;
   duration_seconds: number | null;
+  labels?: string[];
+  runner_id?: number;
+  runner_name?: string;
+  runner_group_id?: number;
+  runner_group_name?: string;
+  resource_model?: string;
+  resource_count?: number;
   steps?: Step[];
 }
 
@@ -46,6 +53,14 @@ const __dirname = path.dirname(__filename);
 
 function warn(...args: unknown[]) {
   console.warn(`[${new Date().toISOString()}] WARN:`, ...args);
+}
+
+function parseRunnerResourceLabels(labels?: string[]): Pick<JobRow, 'resource_model' | 'resource_count'> {
+  for (const label of labels ?? []) {
+    const match = /^linux-aarch64-(.+)-([1-9]\d*)$/.exec(label);
+    if (match) return { resource_model: `linux-aarch64-${match[1]}`, resource_count: Number(match[2]) };
+  }
+  return {};
 }
 
 function readReposConfig(): ReposConfig {
@@ -187,6 +202,10 @@ async function fetchJobsForRunAttempt(
       duration_seconds: 0,
     }));
 
+    const labels = Array.isArray(job.labels) && job.labels.every((label): label is string => typeof label === 'string')
+      ? job.labels
+      : undefined;
+
     return {
       id: Number(job.id),
       name: typeof job.name === 'string' ? job.name : 'unknown',
@@ -198,6 +217,12 @@ async function fetchJobsForRunAttempt(
       html_url: typeof job.html_url === 'string' ? job.html_url : null,
       queue_duration_seconds: null,
       duration_seconds: null,
+      labels,
+      runner_id: typeof job.runner_id === 'number' ? job.runner_id : undefined,
+      runner_name: typeof job.runner_name === 'string' ? job.runner_name : undefined,
+      runner_group_id: typeof job.runner_group_id === 'number' ? job.runner_group_id : undefined,
+      runner_group_name: typeof job.runner_group_name === 'string' ? job.runner_group_name : undefined,
+      ...parseRunnerResourceLabels(labels),
       steps,
     };
   });

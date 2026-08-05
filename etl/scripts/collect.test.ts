@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   collectRepo,
+  parseRunnerResourceLabels,
   RateLimitAbortError,
   runCollection,
 } from './collect';
@@ -79,6 +80,19 @@ function mockSqliteRepoState(options: {
   vi.mocked(getCollectedDatesFromSqlite).mockResolvedValue(options.dates ?? []);
 }
 
+describe('parseRunnerResourceLabels', () => {
+  it('parses the configured NPU runner-label convention', () => {
+    expect(parseRunnerResourceLabels(['self-hosted', 'linux-aarch64-ascend910b-8'])).toEqual({
+      resource_model: 'linux-aarch64-ascend910b',
+      resource_count: 8,
+    });
+  });
+
+  it('leaves unsupported labels unknown', () => {
+    expect(parseRunnerResourceLabels(['ubuntu-latest'])).toEqual({});
+  });
+});
+
 describe('collect rate limit handling', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -147,6 +161,8 @@ describe('collect rate limit handling', () => {
   });
 
   it('writes partial results and incomplete-history metadata when rate limit is hit mid-collection', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-14T12:00:00Z'));
     const repo = 'acme/widgets';
     mockRepoState({ latest: '2026-04-13', dates: ['2026-04-13'], historyComplete: true });
 
@@ -217,6 +233,7 @@ describe('collect rate limit handling', () => {
       latestDate: '2026-04-14',
       historyComplete: false,
     }));
+    vi.useRealTimers();
   });
 
   it('refreshes the latest range first when history is marked incomplete', async () => {

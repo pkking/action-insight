@@ -12,6 +12,8 @@ Workflow execution is stored at attempt granularity. Stable run metadata remains
 
 Steps are persisted only when they are eligible for step runtime analysis: the tracked workflow attempt succeeded and its workflow total duration exceeds the configured threshold. Thresholds default to 600 seconds and can be overridden by exact-ref workflow, glob-ref workflow, file-only workflow, repository, then defaults. If a configuration change makes historical attempts newly tracked, workflow details backfill collects jobs and eligible steps within the retention window. If a policy change makes historical attempts step-eligible, step eligibility backfill runs automatically within the retention window and a per-run API budget, defaulting to 100 attempts per collection run.
 
+Job records retain GitHub's runner assignment metadata (`labels`, runner and runner-group identifiers/names). Labels are stored as JSON and the existing `linux-aarch64-<model>-<count>` convention is normalized into nullable model/count fields for card-hour analysis. This measures requested runner-card occupancy, not device utilization; CPU, memory, disk, and accelerator telemetry remain out of scope until runner-side monitoring is integrated.
+
 ## Rationale
 
 Workflow names can be duplicated or renamed without changing the workflow file, so they are not stable enough for tracked workflow identity. Workflow file basename plus ref gives a clearer analysis key while avoiding full-path configuration and daily workflow metadata API calls.
@@ -26,12 +28,14 @@ The jobs API may include steps even when we only need job statistics. Persisting
 - PR metrics can show every workflow attempt, including reruns.
 - Workflow and job statistics are scoped to configured workflow files and refs.
 - Step analysis remains focused on slow successful workflows.
+- Job execution duration can be attributed to runner labels and configured card counts.
 - Configuration mistakes are caught in CI without adding metadata API calls to daily collection.
 
 ### Negative
 - Existing schema needs migration for workflow files, refs, workflow attempts, and attempt-scoped job/step identities.
 - Historical data needs workflow file backfill from stored run payloads before tracked statistics are rebuilt.
 - Threshold changes can trigger additional jobs API calls for step eligibility backfill, though bounded by budget.
+- Historical jobs need a bounded REST recollection to populate runner metadata because old rows did not retain raw job payloads.
 
 ## Alternatives Considered
 
