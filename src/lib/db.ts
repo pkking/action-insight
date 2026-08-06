@@ -1,6 +1,4 @@
-import 'server-only';
-
-import pg, { type Pool, type PoolClient } from 'pg';
+import { type Pool, type PoolClient } from 'pg';
 
 let pool: Pool | null = null;
 

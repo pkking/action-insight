@@ -13,15 +13,6 @@ vi.mock('./turso-storage.ts', () => ({
 	  writePrWorkflowAttemptsToTurso: vi.fn().mockResolvedValue(undefined),
 	}));
 
-vi.mock('./sqlite-storage.ts', () => ({
-  readPullRequestResolutionCacheFromSqlite: vi.fn().mockResolvedValue(new Map()),
-	  writePullRequestResolutionCacheToSqlite: vi.fn().mockResolvedValue(undefined),
-	  writePrMetricsToSqlite: vi.fn().mockResolvedValue(undefined),
-	  writePrWorkflowsToSqlite: vi.fn().mockResolvedValue(undefined),
-	  writePrWorkflowAttemptsToSqlite: vi.fn().mockResolvedValue(undefined),
-	  initSqlite: vi.fn().mockResolvedValue('file::memory:'),
-	}));
-
 import { rebuildPullRequestArtifacts } from './pr-artifacts';
 import {
   readPullRequestResolutionCacheFromTurso,

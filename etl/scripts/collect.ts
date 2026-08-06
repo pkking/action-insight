@@ -1,4 +1,4 @@
-// ETL script: fetches GitHub Actions runs/jobs and writes to Turso
+// ETL script: fetches GitHub Actions runs/jobs and writes to PostgreSQL
 import { Octokit } from '@octokit/core';
 import { addDays, format, subDays, parseISO, isBefore, startOfDay } from 'date-fns';
 import * as fs from 'fs';
@@ -23,15 +23,7 @@ import {
   checkEtlFreshness,
   formatFreshnessReport,
 } from './turso-storage.ts';
-import {
-  writeRunsToSqlite,
-  writeWorkflowAttemptsToSqlite,
-  getExistingRunIdsWithStepsFromSqlite,
-  readCollectionStateFromSqlite,
-  writeCollectionStateToSqlite,
-  getCollectedDatesFromSqlite,
-} from './sqlite-storage.ts';
-import { readPullRequestsFromPayload, isSqliteFallbackEnabled, writeWithOptionalSqliteFallback } from './github-utils.ts';
+import { readPullRequestsFromPayload } from './github-utils.ts';
 import type { GitHubApiPayload, PullRequestRef, Step } from '../../src/lib/types.ts';
 import { getRepoNames, parseReposConfig, type RepoConfigEntry, type ReposConfig } from './repos-config.ts';
 import { buildWorkflowAttempts, enrichRunWithWorkflowMetadata } from './workflow-attempts.ts';
@@ -177,17 +169,6 @@ interface RunCollectionOptions {
 const ETL_DIR = path.join(__dirname, '..');
 const REPOS_CONFIG_PATH = path.join(ETL_DIR, 'repos.yaml');
 
-/** Helper: run Turso first and use SQLite only when explicitly enabled. */
-async function withOptionalSqliteFallback<T>(primary: () => Promise<T>, fallback: () => Promise<T>, label: string): Promise<T> {
-  try {
-    return await primary();
-  } catch (err) {
-    if (!isSqliteFallbackEnabled()) throw err;
-    warn(`${label} primary failed, using fallback:`, err);
-    return fallback();
-  }
-}
-
 function readReposConfig(): ReposConfig {
   try {
     log(`Reading repos config from: ${REPOS_CONFIG_PATH}`);
@@ -236,25 +217,8 @@ async function loadRepoState(repo: string, retentionDays: number, now: Date): Pr
   const retentionStart = format(subDays(now, retentionDays), 'yyyy-MM-dd');
   const today = format(now, 'yyyy-MM-dd');
 
-  let dbState = await withOptionalSqliteFallback(
-    () => readCollectionState(repo),
-    () => readCollectionStateFromSqlite(repo),
-    'readCollectionState',
-  );
-
-  if (isSqliteFallbackEnabled() && (!dbState || !dbState.latestDate)) {
-    dbState = await readCollectionStateFromSqlite(repo);
-  }
-
-  let collectedDates = await withOptionalSqliteFallback(
-    () => getCollectedDatesFromTurso(repo),
-    () => getCollectedDatesFromSqlite(repo),
-    'getCollectedDates',
-  );
-
-  if (isSqliteFallbackEnabled() && collectedDates.length === 0) {
-    collectedDates = await getCollectedDatesFromSqlite(repo);
-  }
+  const dbState = await readCollectionState(repo);
+  const collectedDates = await getCollectedDatesFromTurso(repo);
 
   const retainedDates = collectedDates.filter(d => d >= retentionStart);
 
@@ -285,12 +249,7 @@ async function saveRepoState(repo: string, state: RepoCollectionState): Promise<
     lastUpdated: new Date().toISOString(),
   };
 
-  await writeWithOptionalSqliteFallback(
-    () => writeCollectionState(repo, statePayload),
-    () => writeCollectionStateToSqlite(repo, statePayload),
-    'writeCollectionState',
-    warn,
-  );
+  await writeCollectionState(repo, statePayload);
 }
 
 
@@ -397,22 +356,12 @@ async function persistCollectedRuns(
 
   for (const date of dates) {
     const runCount = runsByDate[date].length;
-    console.log(`  Writing ${date} to Turso${isSqliteFallbackEnabled() ? ' + SQLite fallback' : ''} (${runCount} runs)`);
+    console.log(`  Writing ${date} (${runCount} runs)`);
 
-    await writeWithOptionalSqliteFallback(
-      () => writeRunsToTurso(repo, runsByDate[date], date),
-      () => writeRunsToSqlite(repo, runsByDate[date], date),
-      `writeRuns ${date}`,
-      warn,
-    );
+    await writeRunsToTurso(repo, runsByDate[date], date);
 
     const attempts = buildWorkflowAttempts(runsByDate[date], reposConfig, repoConfig);
-    await writeWithOptionalSqliteFallback(
-      () => writeWorkflowAttemptsToTurso(repo, attempts),
-      () => writeWorkflowAttemptsToSqlite(repo, attempts),
-      `writeWorkflowAttempts ${date}`,
-      warn,
-    );
+    await writeWorkflowAttemptsToTurso(repo, attempts);
   }
 
   const cutoffDate = startOfDay(subDays(now, retentionDays));
@@ -455,11 +404,7 @@ export async function collectRepo(
   let state = await loadRepoState(repo, retentionDays, now);
   log(`State: latest=${state.latest}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
 
-  const existingRunIdsWithSteps = await withOptionalSqliteFallback(
-    () => getExistingRunIdsWithStepsFromTurso(repo),
-    () => getExistingRunIdsWithStepsFromSqlite(repo),
-    'getExistingRunIdsWithSteps',
-  );
+  const existingRunIdsWithSteps = await getExistingRunIdsWithStepsFromTurso(repo);
   const cachedRunIdsWithSteps = options.skipJobs ? new Map<number, string>() : existingRunIdsWithSteps;
   log(`Existing runs with cached steps: ${cachedRunIdsWithSteps.size}`);
 
@@ -854,7 +799,7 @@ export async function main() {
   log(`Target repos: ${targetRepos.join(', ') || '(none)'}`);
   log(`Node version: ${process.version}`);
   log(`ETL_DIR: ${ETL_DIR}`);
-  log(`State storage: Turso${isSqliteFallbackEnabled() ? ' + SQLite fallback' : ''}`);
+  log(`State storage: PostgreSQL`);
 
   await runCollection({
     token,

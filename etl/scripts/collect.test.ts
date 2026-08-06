@@ -23,15 +23,6 @@ vi.mock('./turso-storage.ts', async () => {
 	  };
 	});
 
-vi.mock('./sqlite-storage.ts', () => ({
-  readCollectionStateFromSqlite: vi.fn().mockResolvedValue(null),
-  writeCollectionStateToSqlite: vi.fn().mockResolvedValue(undefined),
-  getCollectedDatesFromSqlite: vi.fn().mockResolvedValue([]),
-	  getExistingRunIdsWithStepsFromSqlite: vi.fn().mockResolvedValue(new Map()),
-	  writeRunsToSqlite: vi.fn().mockResolvedValue(undefined),
-	  writeWorkflowAttemptsToSqlite: vi.fn().mockResolvedValue(undefined),
-	  initSqlite: vi.fn().mockResolvedValue('file::memory:'),
-	}));
 
 import {
   readCollectionState,
@@ -42,10 +33,6 @@ import {
   writeRunsToTurso,
   writeWorkflowAttemptsToTurso,
 } from './turso-storage';
-import {
-  getCollectedDatesFromSqlite,
-  readCollectionStateFromSqlite,
-} from './sqlite-storage';
 
 function mockRepoState(options: {
   latest?: string;
@@ -64,22 +51,6 @@ function mockRepoState(options: {
   vi.mocked(getCollectedDatesFromTurso).mockResolvedValue(options.dates ?? []);
 }
 
-function mockSqliteRepoState(options: {
-  latest?: string;
-  dates?: string[];
-  historyComplete?: boolean;
-  backfillCursor?: string | null;
-  retentionDays?: number;
-}) {
-  vi.mocked(readCollectionStateFromSqlite).mockResolvedValue({
-    backfillCursor: options.backfillCursor ?? null,
-    historyComplete: options.historyComplete ?? true,
-    latestDate: options.latest ?? null,
-    retentionDays: options.retentionDays ?? 90,
-    lastUpdated: null,
-  });
-  vi.mocked(getCollectedDatesFromSqlite).mockResolvedValue(options.dates ?? []);
-}
 
 describe('fetchJobsForRunAttempt', () => {
   it('retrieves every job page', async () => {
@@ -112,9 +83,7 @@ describe('collect rate limit handling', () => {
     vi.restoreAllMocks();
     delete process.env.ENABLE_SQLITE_FALLBACK;
     vi.mocked(readCollectionState).mockResolvedValue(null);
-    vi.mocked(readCollectionStateFromSqlite).mockResolvedValue(null);
     vi.mocked(getCollectedDatesFromTurso).mockResolvedValue([]);
-    vi.mocked(getCollectedDatesFromSqlite).mockResolvedValue([]);
     vi.mocked(getExistingRunIdsFromTurso).mockResolvedValue(new Set());
     vi.mocked(getExistingRunIdsWithStepsFromTurso).mockResolvedValue(new Map());
     vi.mocked(writeRunsToTurso).mockResolvedValue(undefined);
@@ -360,8 +329,7 @@ describe('collect rate limit handling', () => {
         }),
       };
 
-      mockRepoState({ latest: undefined, dates: [], historyComplete: false });
-      mockSqliteRepoState({
+      mockRepoState({
         latest: '2026-04-12',
         dates: ['2026-04-12', '2026-04-11'],
         historyComplete: false,
@@ -372,8 +340,6 @@ describe('collect rate limit handling', () => {
         collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false })
       ).rejects.toBeInstanceOf(RateLimitAbortError);
 
-      expect(readCollectionStateFromSqlite).toHaveBeenCalledWith(repo);
-      expect(getCollectedDatesFromSqlite).toHaveBeenCalledWith(repo);
       expect(vi.mocked(writeCollectionState)).toHaveBeenCalledWith(repo, expect.objectContaining({
         latestDate: '2026-04-12',
         historyComplete: false,
