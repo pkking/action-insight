@@ -1,4 +1,5 @@
-import { getTursoClient, getRepoId } from './turso';
+import { getDatabaseClient, getRepoId } from './db';
+import { toPgSql, pgPlaceholders } from './pg-utils';
 import { computePullRequestAttemptMetrics } from './pr-metrics';
 import type { PullRequestDetailFile, PullRequestIndexFile, PullRequestMetricsSummary, Run } from './types';
 
@@ -66,12 +67,9 @@ function mapAttemptRunRow(row: Record<string, unknown>): Run {
 
 export async function fetchPullRequestIndex(owner: string, repo: string): Promise<PullRequestIndexFile> {
   const repoId = await getRepoId(owner, repo);
-  const client = getTursoClient();
-
-  const { rows } = await client.execute({
-    sql: `SELECT * FROM pr_metrics WHERE repo_id = ? ORDER BY created_at DESC`,
-    args: [repoId],
-  });
+  const client = await getDatabaseClient();
+  try {
+  const { rows } = await client.query(toPgSql(`SELECT * FROM pr_metrics WHERE repo_id = ? ORDER BY created_at DESC`), [repoId]);
 
   if (rows.length === 0) {
     return {
@@ -87,17 +85,17 @@ export async function fetchPullRequestIndex(owner: string, repo: string): Promis
     generated_at: new Date().toISOString(),
     prs: rows.map((r) => mapPrSummary(r as Record<string, unknown>)),
   };
+  } finally {
+    client.release();
+  }
 }
 
 export async function fetchPullRequestDetail(owner: string, repo: string, number: number): Promise<PullRequestDetailFile> {
   const repoId = await getRepoId(owner, repo);
-  const client = getTursoClient();
-
+  const client = await getDatabaseClient();
+  try {
   // Fetch PR metrics
-  const { rows: prRows } = await client.execute({
-    sql: `SELECT * FROM pr_metrics WHERE repo_id = ? AND pr_number = ?`,
-    args: [repoId, number],
-  });
+  const { rows: prRows } = await client.query(toPgSql(`SELECT * FROM pr_metrics WHERE repo_id = ? AND pr_number = ?`), [repoId, number]);
 
   if (prRows.length === 0) {
     throw new Error(`PR #${number} not found for ${owner}/${repo}`);
@@ -106,10 +104,10 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
   const prData = prRows[0] as Record<string, unknown>;
 
   // Fetch PR workflow attempts first; fall back to legacy run-level links.
-  const { rows: attemptRows } = await client.execute({
-    sql: `SELECT run_id, run_attempt FROM pr_workflow_attempts WHERE pr_metric_id = ?`,
-    args: [prData.id as number],
-  }).catch(() => ({ rows: [] }));
+  const { rows: attemptRows } = await client.query(
+    toPgSql(`SELECT run_id, run_attempt FROM pr_workflow_attempts WHERE pr_metric_id = ?`),
+    [prData.id as number],
+  ).catch(() => ({ rows: [] }));
 
   let workflows: Run[] = [];
 
@@ -120,10 +118,9 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
     const chunkSize = 100;
     for (let i = 0; i < attemptRows.length; i += chunkSize) {
       const chunk = attemptRows.slice(i, i + chunkSize);
-      const clauses = chunk.map(() => '(wa.run_id = ? AND wa.run_attempt = ?)').join(' OR ');
-      const args = chunk.flatMap((w) => [w.run_id as number, w.run_attempt as number]);
-      const { rows: chunkRows } = await client.execute({
-        sql: `SELECT r.*, wa.run_attempt, wa.status AS attempt_status,
+      const clauses = chunk.map((_, idx) => `(wa.run_id = $${idx * 2 + 1} AND wa.run_attempt = $${idx * 2 + 2})`).join(' OR ');
+      const { rows: chunkRows } = await client.query(
+        toPgSql(`SELECT r.*, wa.run_attempt, wa.status AS attempt_status,
                      wa.conclusion AS attempt_conclusion, wa.created_at AS attempt_created_at,
                      wa.run_started_at, wa.completed_at, wa.updated_at AS attempt_updated_at,
                      wa.queue_duration_seconds, wa.runtime_seconds, wa.total_duration_seconds,
@@ -138,9 +135,9 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
               FROM workflow_attempts wa
               JOIN runs r ON r.id = wa.run_id
               LEFT JOIN workflow_jobs wj ON wj.run_id = wa.run_id AND wj.run_attempt = wa.run_attempt
-              WHERE ${clauses}`,
-        args,
-      });
+              WHERE ${clauses}`),
+        chunk.flatMap((w) => [w.run_id as number, w.run_attempt as number]),
+      );
       runRows.push(...chunkRows);
     }
 
@@ -181,15 +178,15 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
     const stepChunkSize = 100;
     for (let i = 0; i < jobKeys.length; i += stepChunkSize) {
       const chunk = jobKeys.slice(i, i + stepChunkSize);
-      const clauses = chunk.map(() => '(run_id = ? AND run_attempt = ? AND job_id = ?)').join(' OR ');
-      const { rows: stepRows } = await client.execute({
-        sql: `SELECT run_id, run_attempt, job_id, step_number, name, status, conclusion,
+      const clauses = chunk.map((_, idx) => `(run_id = $${idx * 3 + 1} AND run_attempt = $${idx * 3 + 2} AND job_id = $${idx * 3 + 3})`).join(' OR ');
+      const { rows: stepRows } = await client.query(
+        toPgSql(`SELECT run_id, run_attempt, job_id, step_number, name, status, conclusion,
                      started_at, completed_at, duration_seconds
               FROM workflow_steps
               WHERE ${clauses}
-              ORDER BY run_id, run_attempt, job_id, step_number`,
-        args: chunk.flatMap((job) => [job.runId, job.runAttempt, job.jobId]),
-      }).catch(() => ({ rows: [] }));
+              ORDER BY run_id, run_attempt, job_id, step_number`),
+        chunk.flatMap((job) => [job.runId, job.runAttempt, job.jobId]),
+      ).catch(() => ({ rows: [] }));
 
       for (const row of stepRows) {
         const key = `${Number(row.run_id)}:${Number(row.run_attempt)}:${Number(row.job_id)}`;
@@ -223,18 +220,15 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
       return (b.runAttempt ?? 1) - (a.runAttempt ?? 1);
     });
   } else {
-    const { rows: workflowRows } = await client.execute({
-      sql: `SELECT run_id FROM pr_workflows WHERE pr_metric_id = ?`,
-      args: [prData.id as number],
-    });
+    const { rows: workflowRows } = await client.query(toPgSql(`SELECT run_id FROM pr_workflows WHERE pr_metric_id = ?`), [prData.id as number]);
 
     if (workflowRows.length > 0) {
     const runIds = workflowRows.map((w) => w.run_id as number);
-    const placeholders = runIds.map(() => '?').join(',');
+    const placeholders = pgPlaceholders(runIds.length);
 
     // Fetch runs with jobs via JOIN
-    const { rows: runRows } = await client.execute({
-      sql: `SELECT r.*, j.id AS job_id, j.name AS job_name, j.status AS job_status,
+    const { rows: runRows } = await client.query(
+      toPgSql(`SELECT r.*, j.id AS job_id, j.name AS job_name, j.status AS job_status,
                    j.conclusion AS job_conclusion, j.created_at AS job_created_at,
                    j.started_at AS job_started_at, j.completed_at AS job_completed_at,
                    j.html_url AS job_html_url,
@@ -242,9 +236,9 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
             FROM runs r
             LEFT JOIN jobs j ON j.run_id = r.id
             WHERE r.id IN (${placeholders})
-            ORDER BY r.created_at DESC`,
-      args: runIds,
-    });
+            ORDER BY r.created_at DESC`),
+      runIds,
+    );
 
     // Group by run
     const runMap = new Map<number, Run>();
@@ -287,6 +281,9 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
       workflows,
     },
   };
+  } finally {
+    client.release();
+  }
 }
 
 type RepoDescriptor = {
