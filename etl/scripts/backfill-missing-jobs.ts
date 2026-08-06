@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { getDatabaseClient } from '../../src/lib/db.ts';
-import { writeWorkflowAttemptsToTurso } from './turso-storage.ts';
+import { writeWorkflowAttempts } from './pg-storage.ts';
 import { toPgSql, pgPlaceholders } from './pg-utils.ts';
 import { buildWorkflowAttempts, enrichRunWithWorkflowMetadata } from './workflow-attempts.ts';
 import { parseReposConfig, type RepoConfigEntry, type ReposConfig } from './repos-config.ts';
@@ -350,7 +350,7 @@ async function backfillRepo(repo: string, config: ReposConfig, days: number): Pr
 
     const enriched = enrichRunWithWorkflowMetadata(run, config, repoConfig);
     const attempts = buildWorkflowAttempts([enriched], config, repoConfig);
-    await writeWorkflowAttemptsToTurso(repo, attempts);
+    await writeWorkflowAttempts(repo, attempts);
 
     completed += 1;
     if (completed % 25 === 0 || completed === missingAttempts.length) {

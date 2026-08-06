@@ -5,31 +5,31 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./turso-storage.ts', () => ({
-  readPullRequestResolutionCacheFromTurso: vi.fn().mockResolvedValue(new Map()),
-	  writePullRequestResolutionCacheToTurso: vi.fn().mockResolvedValue(undefined),
-	  writePrMetricsToTurso: vi.fn().mockResolvedValue(undefined),
-	  writePrWorkflowsToTurso: vi.fn().mockResolvedValue(undefined),
-	  writePrWorkflowAttemptsToTurso: vi.fn().mockResolvedValue(undefined),
+vi.mock('./pg-storage.ts', () => ({
+  readPullRequestResolutionCache: vi.fn().mockResolvedValue(new Map()),
+	  writePullRequestResolutionCache: vi.fn().mockResolvedValue(undefined),
+	  writePrMetrics: vi.fn().mockResolvedValue(undefined),
+	  writePrWorkflows: vi.fn().mockResolvedValue(undefined),
+	  writePrWorkflowAttempts: vi.fn().mockResolvedValue(undefined),
 	}));
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts';
 import {
-  readPullRequestResolutionCacheFromTurso,
-  writePullRequestResolutionCacheToTurso,
-	  writePrMetricsToTurso,
-	  writePrWorkflowsToTurso,
-	  writePrWorkflowAttemptsToTurso,
-	} from './turso-storage';
+  readPullRequestResolutionCache,
+  writePullRequestResolutionCache,
+	  writePrMetrics,
+	  writePrWorkflows,
+	  writePrWorkflowAttempts,
+	} from './pg-storage';
 
 const tempDirs: string[] = [];
 
 afterEach(() => {
-  vi.mocked(readPullRequestResolutionCacheFromTurso).mockResolvedValue(new Map());
-  vi.mocked(writePullRequestResolutionCacheToTurso).mockClear();
-	  vi.mocked(writePrMetricsToTurso).mockClear();
-	  vi.mocked(writePrWorkflowsToTurso).mockClear();
-	  vi.mocked(writePrWorkflowAttemptsToTurso).mockClear();
+  vi.mocked(readPullRequestResolutionCache).mockResolvedValue(new Map());
+  vi.mocked(writePullRequestResolutionCache).mockClear();
+	  vi.mocked(writePrMetrics).mockClear();
+	  vi.mocked(writePrWorkflows).mockClear();
+	  vi.mocked(writePrWorkflowAttempts).mockClear();
 
   for (const dir of tempDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -110,7 +110,7 @@ describe('rebuildPullRequestArtifacts', () => {
       ],
     });
 
-    expect(writePrMetricsToTurso).toHaveBeenCalledWith(
+    expect(writePrMetrics).toHaveBeenCalledWith(
       'acme/widgets',
       expect.arrayContaining([
         expect.objectContaining({
@@ -119,8 +119,8 @@ describe('rebuildPullRequestArtifacts', () => {
         }),
       ])
     );
-    expect(writePrWorkflowsToTurso).toHaveBeenCalledWith('acme/widgets', expect.any(Map));
-    expect(writePrWorkflowAttemptsToTurso).toHaveBeenCalledWith('acme/widgets', expect.any(Map));
+    expect(writePrWorkflows).toHaveBeenCalledWith('acme/widgets', expect.any(Map));
+    expect(writePrWorkflowAttempts).toHaveBeenCalledWith('acme/widgets', expect.any(Map));
     expect(log).toHaveBeenCalledWith('PR metrics written for acme/widgets: 1 rows; latest created_at: 2026-04-18T01:00:00Z');
     expect(log).toHaveBeenCalledWith('PR workflows written for acme/widgets: 1 PRs');
     expect(log).toHaveBeenCalledWith('PR workflow attempts written for acme/widgets: 1 PRs');
@@ -287,7 +287,7 @@ describe('rebuildPullRequestArtifacts', () => {
       'GET /search/issues',
       expect.objectContaining({ q: 'abc123 repo:acme/widgets type:pr', per_page: 1 })
     );
-    expect(writePullRequestResolutionCacheToTurso).toHaveBeenCalledWith(
+    expect(writePullRequestResolutionCache).toHaveBeenCalledWith(
       'acme/widgets',
       expect.arrayContaining([
         expect.objectContaining({
@@ -384,7 +384,7 @@ describe('rebuildPullRequestArtifacts', () => {
     const commitCalls = request.mock.calls.filter(call => call[0] === 'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls');
     expect(commitCalls.length).toBe(15);
 
-    expect(writePullRequestResolutionCacheToTurso).toHaveBeenCalledWith(
+    expect(writePullRequestResolutionCache).toHaveBeenCalledWith(
       'acme/widgets',
       expect.arrayContaining([
         expect.objectContaining({
@@ -401,7 +401,7 @@ describe('rebuildPullRequestArtifacts', () => {
   });
 
   it('uses cached SHA to PR resolutions before calling GitHub', async () => {
-    vi.mocked(readPullRequestResolutionCacheFromTurso).mockResolvedValue(new Map([
+    vi.mocked(readPullRequestResolutionCache).mockResolvedValue(new Map([
       [
         'abc123',
         {
@@ -539,7 +539,7 @@ describe('rebuildPullRequestArtifacts', () => {
       }
     }
 
-    expect(writePullRequestResolutionCacheToTurso).toHaveBeenCalledWith(
+    expect(writePullRequestResolutionCache).toHaveBeenCalledWith(
       'acme/widgets',
       expect.arrayContaining([
         expect.objectContaining({
@@ -553,7 +553,7 @@ describe('rebuildPullRequestArtifacts', () => {
       'PR resolution API calls for acme/widgets: 1 core, 1 search; resolved 0, not_found 1, failed 0, rate_limited 0, skipped 0'
     );
 
-    vi.mocked(readPullRequestResolutionCacheFromTurso).mockResolvedValue(new Map([
+    vi.mocked(readPullRequestResolutionCache).mockResolvedValue(new Map([
       [
         'abc123',
         {
@@ -668,7 +668,7 @@ describe('rebuildPullRequestArtifacts', () => {
 
     const commitCalls = request.mock.calls.filter(call => call[0] === 'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls');
     expect(commitCalls.length).toBe(1);
-    expect(writePullRequestResolutionCacheToTurso).toHaveBeenCalledWith(
+    expect(writePullRequestResolutionCache).toHaveBeenCalledWith(
       'acme/widgets',
       expect.arrayContaining([
         expect.objectContaining({

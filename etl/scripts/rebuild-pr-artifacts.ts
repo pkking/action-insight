@@ -7,7 +7,7 @@ import { addDays, format, parseISO } from 'date-fns';
 import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
-import { getCollectedDatesFromTurso, checkEtlFreshness, formatFreshnessReport, getTursoClient } from './turso-storage.ts';
+import { getCollectedDates, checkEtlFreshness, formatFreshnessReport, getDatabaseClient } from './pg-storage.ts';
 import { toPgSql, pgPlaceholders } from './pg-utils.ts';
 import type { PoolClient } from 'pg';
 import type { Run } from '../../src/lib/types.ts';
@@ -161,7 +161,7 @@ function selectDates(collectedDates: string[], options: RebuildCliOptions): stri
 }
 
 async function fetchRunsFromDatabase(repo: string, dates: string[]): Promise<Run[]> {
-  const client = await getTursoClient();
+  const client = await getDatabaseClient();
   if (!client) {
     throw new Error('Database is not configured for PR artifact rebuild (set PG_DATABASE_URL)');
   }
@@ -410,7 +410,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     }
 
     try {
-      const collectedDates = await getCollectedDatesFromTurso(repoKey);
+      const collectedDates = await getCollectedDates(repoKey);
       const dates = selectDates(collectedDates, options);
       if (dates.length === 0) {
         console.warn(`Skipping ${repoKey}: no collected dates matched the selected range`);

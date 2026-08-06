@@ -14,15 +14,15 @@ import {
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
 import { isGitHubRateLimitError, getRateLimitDetails, type RateLimitDetails } from './github.ts';
 import {
-  writeRunsToTurso,
-  writeWorkflowAttemptsToTurso,
-  getExistingRunIdsWithStepsFromTurso,
+  writeRuns,
+  writeWorkflowAttempts,
+  getExistingRunIdsWithSteps,
   readCollectionState,
   writeCollectionState,
-  getCollectedDatesFromTurso,
+  getCollectedDates,
   checkEtlFreshness,
   formatFreshnessReport,
-} from './turso-storage.ts';
+} from './pg-storage.ts';
 import { readPullRequestsFromPayload } from './github-utils.ts';
 import type { GitHubApiPayload, PullRequestRef, Step } from '../../src/lib/types.ts';
 import { getRepoNames, parseReposConfig, type RepoConfigEntry, type ReposConfig } from './repos-config.ts';
@@ -218,7 +218,7 @@ async function loadRepoState(repo: string, retentionDays: number, now: Date): Pr
   const today = format(now, 'yyyy-MM-dd');
 
   const dbState = await readCollectionState(repo);
-  const collectedDates = await getCollectedDatesFromTurso(repo);
+  const collectedDates = await getCollectedDates(repo);
 
   const retainedDates = collectedDates.filter(d => d >= retentionStart);
 
@@ -358,10 +358,10 @@ async function persistCollectedRuns(
     const runCount = runsByDate[date].length;
     console.log(`  Writing ${date} (${runCount} runs)`);
 
-    await writeRunsToTurso(repo, runsByDate[date], date);
+    await writeRuns(repo, runsByDate[date], date);
 
     const attempts = buildWorkflowAttempts(runsByDate[date], reposConfig, repoConfig);
-    await writeWorkflowAttemptsToTurso(repo, attempts);
+    await writeWorkflowAttempts(repo, attempts);
   }
 
   const cutoffDate = startOfDay(subDays(now, retentionDays));
@@ -404,7 +404,7 @@ export async function collectRepo(
   let state = await loadRepoState(repo, retentionDays, now);
   log(`State: latest=${state.latest}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
 
-  const existingRunIdsWithSteps = await getExistingRunIdsWithStepsFromTurso(repo);
+  const existingRunIdsWithSteps = await getExistingRunIdsWithSteps(repo);
   const cachedRunIdsWithSteps = options.skipJobs ? new Map<number, string>() : existingRunIdsWithSteps;
   log(`Existing runs with cached steps: ${cachedRunIdsWithSteps.size}`);
 

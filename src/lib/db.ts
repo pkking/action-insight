@@ -2,11 +2,11 @@ import { type Pool, type PoolClient } from 'pg';
 
 let pool: Pool | null = null;
 
-/** Singleton pg.Pool — reads PG_DATABASE_URL (falls back to TURSO_DATABASE_URL during transition). */
+/** Singleton pg.Pool — reads PG_DATABASE_URL. */
 function getPool(): Pool {
   if (pool) return pool;
 
-  const url = process.env.PG_DATABASE_URL ?? process.env.TURSO_DATABASE_URL;
+  const url = process.env.PG_DATABASE_URL;
   if (!url) {
     throw new Error(
       'Database connection not configured. Please set PG_DATABASE_URL ' +
@@ -47,7 +47,3 @@ export async function getRepoId(owner: string, repo: string): Promise<number> {
   return Number(rows[0].id);
 }
 
-/** Transition shim: returns a PoolClient for code still calling getTursoClient(). */
-export async function getTursoClient(): Promise<PoolClient> {
-  return getDatabaseClient();
-}

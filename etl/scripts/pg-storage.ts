@@ -137,15 +137,15 @@ function readPositiveIntEnv(name: string, defaultValue: number): number {
   return Number.isInteger(value) && value > 0 ? value : defaultValue;
 }
 
-/** Transition shim: returns a PoolClient for code still calling getTursoClient(). */
-export async function getTursoClient(): Promise<PoolClient | null> {
-  const url = process.env.PG_DATABASE_URL ?? process.env.TURSO_DATABASE_URL;
+/** Transition shim: returns a PoolClient for code still calling getDatabaseClient(). */
+export async function getDatabaseClient(): Promise<PoolClient | null> {
+  const url = process.env.PG_DATABASE_URL;
   if (!url) return null;
   return getDatabaseClient();
 }
 
 async function requireClient(repo: string): Promise<PoolClient> {
-  const url = process.env.PG_DATABASE_URL ?? process.env.TURSO_DATABASE_URL;
+  const url = process.env.PG_DATABASE_URL;
   if (!url) {
     throw new Error(`Database is not configured for ${repo} (set PG_DATABASE_URL)`);
   }
@@ -223,7 +223,7 @@ function shouldWritePrResolutionCacheEntry(
 /*  Public API                                                         */
 /* ------------------------------------------------------------------ */
 
-export async function writeRunsToTurso(repo: string, runs: RunRow[], date: string): Promise<void> {
+export async function writeRuns(repo: string, runs: RunRow[], date: string): Promise<void> {
   if (runs.length === 0) return;
 
   const client = await requireClient(repo);
@@ -358,7 +358,7 @@ export async function writeRunsToTurso(repo: string, runs: RunRow[], date: strin
   }
 }
 
-export async function writeWorkflowAttemptsToTurso(repo: string, attempts: WorkflowAttemptRow[]): Promise<void> {
+export async function writeWorkflowAttempts(repo: string, attempts: WorkflowAttemptRow[]): Promise<void> {
   if (attempts.length === 0) return;
   const client = await requireClient(repo);
   await ensureRepo(client, repo.split('/')[0], repo.split('/')[1]);
@@ -369,8 +369,8 @@ export async function writeWorkflowAttemptsToTurso(repo: string, attempts: Workf
   }
 }
 
-export async function getExistingRunIdsFromTurso(repo: string): Promise<Set<number>> {
-  const client = await getTursoClient();
+export async function getExistingRunIds(repo: string): Promise<Set<number>> {
+  const client = await getDatabaseClient();
   if (!client) return new Set();
 
   try {
@@ -384,8 +384,8 @@ export async function getExistingRunIdsFromTurso(repo: string): Promise<Set<numb
   }
 }
 
-export async function getExistingRunIdsWithJobsFromTurso(repo: string): Promise<Set<number>> {
-  const client = await getTursoClient();
+export async function getExistingRunIdsWithJobs(repo: string): Promise<Set<number>> {
+  const client = await getDatabaseClient();
   if (!client) return new Set();
 
   try {
@@ -415,8 +415,8 @@ export async function getExistingRunIdsWithJobsFromTurso(repo: string): Promise<
   }
 }
 
-export async function getExistingRunIdsWithStepsFromTurso(repo: string): Promise<Map<number, string>> {
-  const client = await getTursoClient();
+export async function getExistingRunIdsWithSteps(repo: string): Promise<Map<number, string>> {
+  const client = await getDatabaseClient();
   if (!client) return new Map();
 
   try {
@@ -449,11 +449,11 @@ export async function getExistingRunIdsWithStepsFromTurso(repo: string): Promise
   }
 }
 
-export async function readPullRequestResolutionCacheFromTurso(
+export async function readPullRequestResolutionCache(
   repo: string,
   shas: string[],
 ): Promise<Map<string, PullRequestResolutionCacheRecord>> {
-  const client = await getTursoClient();
+  const client = await getDatabaseClient();
   if (!client || shas.length === 0) return new Map();
 
   try {
@@ -495,7 +495,7 @@ export async function readPullRequestResolutionCacheFromTurso(
   }
 }
 
-export async function writePullRequestResolutionCacheToTurso(
+export async function writePullRequestResolutionCache(
   repo: string,
   entries: PullRequestResolutionCacheEntry[],
 ): Promise<void> {
@@ -598,7 +598,7 @@ export async function writePullRequestResolutionCacheToTurso(
   }
 }
 
-export async function writePrWorkflowsToTurso(repo: string, prWorkflows: Map<number, number[]>): Promise<void> {
+export async function writePrWorkflows(repo: string, prWorkflows: Map<number, number[]>): Promise<void> {
   if (prWorkflows.size === 0) return;
 
   const client = await requireClient(repo);
@@ -654,7 +654,7 @@ export async function writePrWorkflowsToTurso(repo: string, prWorkflows: Map<num
   }
 }
 
-export async function writePrWorkflowAttemptsToTurso(
+export async function writePrWorkflowAttempts(
   repo: string,
   prWorkflowAttempts: Map<number, Array<{ runId: number; runAttempt: number }>>,
 ): Promise<void> {
@@ -668,7 +668,7 @@ export async function writePrWorkflowAttemptsToTurso(
   }
 }
 
-export async function writePrMetricsToTurso(repo: string, prs: PrMetricsSummary[]): Promise<void> {
+export async function writePrMetrics(repo: string, prs: PrMetricsSummary[]): Promise<void> {
   if (prs.length === 0) return;
 
   const client = await requireClient(repo);
@@ -715,7 +715,7 @@ export async function writePrMetricsToTurso(repo: string, prs: PrMetricsSummary[
 }
 
 export async function readCollectionState(repo: string): Promise<CollectionState | null> {
-  const client = await getTursoClient();
+  const client = await getDatabaseClient();
   if (!client) return null;
 
   try {
@@ -770,8 +770,8 @@ export async function writeCollectionState(repo: string, state: CollectionState)
   }
 }
 
-export async function getCollectedDatesFromTurso(repo: string): Promise<string[]> {
-  const client = await getTursoClient();
+export async function getCollectedDates(repo: string): Promise<string[]> {
+  const client = await getDatabaseClient();
   if (!client) return [];
 
   try {
@@ -801,7 +801,7 @@ export function formatFreshnessReport(report: EtlFreshnessReport, repo: string):
 }
 
 export async function checkEtlFreshness(repo: string, staleThresholdSeconds = 86400): Promise<EtlFreshnessReport | null> {
-  const client = await getTursoClient();
+  const client = await getDatabaseClient();
   if (!client) return null;
 
   try {

@@ -82,7 +82,7 @@ function error(...args: unknown[]) {
   console.error(`[${new Date().toISOString()}] ERROR:`, ...args);
 }
 
-function getTursoClient(): Promise<PoolClient> {
+function getDbClient(): Promise<PoolClient> {
   return getDatabaseClient();
 }
 
@@ -523,7 +523,7 @@ async function main() {
     console.log('');
   }
 
-  const client = await getTursoClient();
+  const client = await getDbClient();
 
   let repoId: number;
   try {
