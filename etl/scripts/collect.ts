@@ -213,8 +213,8 @@ function computeBackfillCursor(
   };
 }
 
-async function loadRepoState(repo: string, retentionDays: number, now: Date): Promise<RepoCollectionState> {
-  const retentionStart = format(subDays(now, retentionDays), 'yyyy-MM-dd');
+async function loadRepoState(repo: string, collectDays: number, now: Date): Promise<RepoCollectionState> {
+  const retentionStart = format(subDays(now, collectDays), 'yyyy-MM-dd');
   const today = format(now, 'yyyy-MM-dd');
 
   const dbState = await readCollectionState(repo);
@@ -232,11 +232,11 @@ async function loadRepoState(repo: string, retentionDays: number, now: Date): Pr
   }
 
   return {
-    latest: dbState?.latestDate ?? '',
+    latest: dbState?.latestDate && dbState.latestDate >= retentionStart ? dbState.latestDate : '',
     collectedDates: retainedDates,
     historyComplete,
     backfillCursor,
-    retentionDays: dbState?.retentionDays ?? retentionDays,
+    retentionDays: dbState?.retentionDays ?? collectDays,
   };
 }
 
@@ -401,8 +401,12 @@ export async function collectRepo(
   const repoConfig = findRepoConfig(reposConfig, repo);
 
   const now = new Date();
-  let state = await loadRepoState(repo, retentionDays, now);
-  log(`State: latest=${state.latest}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
+  const effectiveDays = options.collectDays ?? retentionDays;
+  if (options.collectDays) {
+    log(`Collecting most recent ${options.collectDays} day(s) (retention still ${retentionDays} day(s))`);
+  }
+  let state = await loadRepoState(repo, effectiveDays, now);
+  log(`State: latest=${state.latest || '(none)'}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
 
   const existingRunIdsWithSteps = await getExistingRunIdsWithSteps(repo);
   const cachedRunIdsWithSteps = options.skipJobs ? new Map<number, string>() : existingRunIdsWithSteps;
@@ -614,7 +618,7 @@ export async function collectRepo(
       return runs;
     }
 
-    log(`Splitting saturated window ${JSON.stringify(window)} into ${childWindows.length} sub-windows`);
+    console.log(`Splitting saturated window (${window.start}..${window.end}) into ${childWindows.length} sub-windows`);
     const mergedRuns = new Map<string, Run>();
 
     for (const childWindow of childWindows) {
@@ -644,17 +648,22 @@ export async function collectRepo(
     existingFileCount: state.collectedDates.length,
     historyComplete: state.historyComplete,
     backfillCursor: state.backfillCursor,
-    retentionDays,
+    retentionDays: effectiveDays,
     forceFullBackfill: options.forceFullBackfill,
     reverse: options.reverse,
   });
-  log(`Collecting ${windows.length} window(s) for ${repo}`);
+  const rangeStart = windows.length > 0 ? windows[windows.length - 1].start : '(?)';
+  const rangeEnd = windows.length > 0 ? windows[0].end : '(?)';
+  console.log(`Collecting ${windows.length} window(s) for ${repo} (${rangeStart} → ${rangeEnd})`);
 
   const allRunsMap = new Map<string, Run>();
   const completedWindows: CollectionWindow[] = [];
-  for (const window of windows) {
+  for (let wi = 0; wi < windows.length; wi += 1) {
+    const window = windows[wi];
+    console.log(`Window ${wi + 1}/${windows.length} (${window.start}..${window.end})`);
     try {
       const windowRuns = await collectRunsForWindow(window);
+      console.log(`Window ${wi + 1}/${windows.length} done: ${windowRuns.length} run(s)`);
       for (const run of windowRuns) {
         allRunsMap.set(runAttemptKey(run.id, run.runAttempt), run);
       }
@@ -671,7 +680,7 @@ export async function collectRepo(
         now,
       );
       state = checkpointState;
-      log(`Checkpointed partial raw collection state for ${repo}: ${checkpointState.collectedDates.length} retained date(s).`);
+      console.log(`Checkpointed ${repo}: ${checkpointState.collectedDates.length} retained date(s), latest=${checkpointState.latest || '(none)'} (${wi + 1}/${windows.length})`);
     } catch (err) {
       if (err instanceof RateLimitAbortError) {
         for (const run of err.partialRuns) {
@@ -687,7 +696,7 @@ export async function collectRepo(
           completedWindows,
           now,
         );
-        log(`Persisted partial raw collection state for ${repo}: ${persistedState.collectedDates.length} retained date(s).`);
+        log(`Persisted partial raw collection state for ${repo}: ${persistedState.collectedDates.length} retained date(s) (${wi + 1}/${windows.length}).`);
       }
       throw err;
     }
@@ -727,6 +736,9 @@ export async function runCollection({
   }
   if (cliOptions.skipJobs) {
     console.log('Workflow-only mode enabled; jobs will not be fetched in this pass.');
+  }
+  if (cliOptions.collectDays) {
+    console.log(`Scoped collection: most recent ${cliOptions.collectDays} day(s) (data retention stays ${retentionDays} day(s)).`);
   }
   if (cliOptions.repoName) {
     console.log(`Single repo mode enabled; collecting only ${cliOptions.repoName}.`);
@@ -793,6 +805,7 @@ export async function main() {
 
   log(`VERBOSE mode: ${VERBOSE}`);
   log(`Retention days: ${retentionDays}`);
+  log(`Collect days: ${cliOptions.collectDays ?? '(full retention)'}`);
   log(`Force full backfill: ${cliOptions.forceFullBackfill}`);
   log(`Reverse collection: ${cliOptions.reverse}`);
   log(`Requested repo: ${cliOptions.repoName || '(all configured repos)'}`);

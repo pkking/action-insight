@@ -3,6 +3,7 @@ export interface CollectCliOptions {
   reverse: boolean;
   forward: boolean;
   skipJobs: boolean;
+  collectDays?: number;
   repoName?: string;
   help: boolean;
 }
@@ -22,6 +23,9 @@ Options:
   --forward                     Collect from oldest to today (legacy behavior)
                                 Useful for rebuilding history in chronological order
   --skip-jobs, --workflow-only   Collect workflow attempts without fetching jobs
+  -d, --days <N>                Limit collection to the most recent N days
+                                Narrow scope for quick catch-up; does not trim retained
+                                data beyond RETENTION_DAYS (default: RETENTION_DAYS)
   -h, --help                    Show this help message
 
 Environment Variables:
@@ -46,8 +50,8 @@ Examples:
   # Collect oldest-first
   GITHUB_TOKEN=your_token npx tsx etl/scripts/collect.ts --repo tile-ai/tilelang-ascend --forward
 
-  # Collect workflow attempts only; jobs can be backfilled in a later pass
-  GITHUB_TOKEN=your_token npx tsx etl/scripts/collect.ts --repo tile-ai/tilelang-ascend --workflow-only
+  # Collect only the last 14 days (quick recent catch-up)
+  GITHUB_TOKEN=your_token npx tsx etl/scripts/collect.ts --repo vllm-project/vllm-ascend --days 14
 
   # Show help
   npx tsx etl/scripts/collect.ts --help
@@ -59,6 +63,7 @@ export function parseCollectCliOptions(argv: string[]): CollectCliOptions {
   let reverse = true;
   let forward = false;
   let skipJobs = false;
+  let collectDays: number | undefined;
   let help = false;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -92,9 +97,18 @@ export function parseCollectCliOptions(argv: string[]): CollectCliOptions {
     if (arg === '--skip-jobs' || arg === '--workflow-only') {
       skipJobs = true;
     }
+
+    if ((arg === '--days' || arg === '-d') && argv[index + 1] && !argv[index + 1].startsWith('-')) {
+      const parsed = Number(argv[index + 1]);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        collectDays = Math.floor(parsed);
+      }
+      index += 1;
+      continue;
+    }
   }
 
-  return { forceFullBackfill, reverse, forward, skipJobs, repoName, help };
+  return { forceFullBackfill, reverse, forward, skipJobs, collectDays, repoName, help };
 }
 
 export function resolveTargetRepos(configuredRepos: string[], repoName?: string): string[] {
