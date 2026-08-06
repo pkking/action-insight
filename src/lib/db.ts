@@ -1,4 +1,4 @@
-import { type Pool, type PoolClient } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 
 let pool: Pool | null = null;
 
