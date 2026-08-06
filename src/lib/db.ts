@@ -2,19 +2,13 @@ import { Pool, type PoolClient } from 'pg';
 
 let pool: Pool | null = null;
 
-/** Singleton pg.Pool — reads PG_DATABASE_URL. */
+/** Singleton pg.Pool — reads PG_DATABASE_URL, defaults to local Docker Compose PG. */
+const DEFAULT_PG_URL = 'postgresql://action_insight:action_insight@localhost:5433/action_insight';
+
 function getPool(): Pool {
   if (pool) return pool;
 
-  const url = process.env.PG_DATABASE_URL;
-  if (!url) {
-    throw new Error(
-      'Database connection not configured. Please set PG_DATABASE_URL ' +
-      '(e.g., postgresql://user:pass@localhost:5432/dbname).'
-    );
-  }
-
-  pool = new Pool({ connectionString: url, max: 10 });
+  pool = new Pool({ connectionString: process.env.PG_DATABASE_URL ?? DEFAULT_PG_URL, max: 10 });
   return pool;
 }
 

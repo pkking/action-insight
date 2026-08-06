@@ -137,18 +137,7 @@ function readPositiveIntEnv(name: string, defaultValue: number): number {
   return Number.isInteger(value) && value > 0 ? value : defaultValue;
 }
 
-/** Transition shim: returns a PoolClient for code still calling getDatabaseClient(). */
-export async function getDatabaseClient(): Promise<PoolClient | null> {
-  const url = process.env.PG_DATABASE_URL;
-  if (!url) return null;
-  return getDatabaseClient();
-}
-
 async function requireClient(repo: string): Promise<PoolClient> {
-  const url = process.env.PG_DATABASE_URL;
-  if (!url) {
-    throw new Error(`Database is not configured for ${repo} (set PG_DATABASE_URL)`);
-  }
   return getDatabaseClient();
 }
 
