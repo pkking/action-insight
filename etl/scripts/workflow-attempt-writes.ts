@@ -138,7 +138,7 @@ export async function writePrWorkflowAttemptsToClient(
   const prNumberToId = new Map<number, number>();
   const prNumbers = Array.from(prWorkflowAttempts.keys());
   for (const batch of chunkArray(prNumbers, PR_METRIC_UPSERT_BATCH_SIZE)) {
-    const placeholders = pgPlaceholders(batch.length);
+    const placeholders = pgPlaceholders(batch.length, 2);
     const { rows } = await client.query(
       `SELECT id, pr_number FROM pr_metrics WHERE repo_id = $1 AND pr_number IN (${placeholders})`,
       [repoId, ...batch],

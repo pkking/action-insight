@@ -7,7 +7,8 @@ import { addDays, format, parseISO } from 'date-fns';
 import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
-import { getCollectedDates, checkEtlFreshness, formatFreshnessReport, getDatabaseClient } from './pg-storage.ts';
+import { getCollectedDates, checkEtlFreshness, formatFreshnessReport } from './pg-storage.ts';
+import { getDatabaseClient } from '../../src/lib/db.ts';
 import { toPgSql, pgPlaceholders } from './pg-utils.ts';
 import type { PoolClient } from 'pg';
 import type { Run } from '../../src/lib/types.ts';
@@ -449,8 +450,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : '';
       failures.push(`${repoKey}: ${message}`);
       console.error(`Error rebuilding PR artifacts for ${repoKey}:`, message);
+      console.error(stack);
     }
   }
 

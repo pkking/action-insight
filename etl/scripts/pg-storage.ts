@@ -453,7 +453,7 @@ export async function readPullRequestResolutionCache(
     const uniqueShas = Array.from(new Set(shas));
 
     for (const batch of chunkArray(uniqueShas, CACHE_UPSERT_BATCH_SIZE)) {
-      const placeholders = pgPlaceholders(batch.length);
+      const placeholders = pgPlaceholders(batch.length, 2);
       const { rows } = await client.query(
         `SELECT head_sha, pr_number, source, status, error_message
          FROM pr_resolution_cache
@@ -517,7 +517,7 @@ export async function writePullRequestResolutionCache(
     const existingEntries = new Map<string, { source: string; status: PullRequestResolutionStatus; error_message: string | null }>();
 
     for (const batch of chunkArray(uniqueShas, CACHE_UPSERT_BATCH_SIZE)) {
-      const placeholders = pgPlaceholders(batch.length);
+      const placeholders = pgPlaceholders(batch.length, 2);
       const { rows } = await client.query(
         `SELECT head_sha, pr_number, source, status, error_message
          FROM pr_resolution_cache
@@ -599,7 +599,7 @@ export async function writePrWorkflows(repo: string, prWorkflows: Map<number, nu
     const prNumbers = Array.from(prWorkflows.keys());
 
     for (const batch of chunkArray(prNumbers, PR_METRIC_UPSERT_BATCH_SIZE)) {
-      const placeholders = pgPlaceholders(batch.length);
+      const placeholders = pgPlaceholders(batch.length, 2);
       const { rows } = await client.query(
         `SELECT id, pr_number FROM pr_metrics WHERE repo_id = $1 AND pr_number IN (${placeholders})`,
         [repoId, ...batch],
@@ -803,7 +803,7 @@ export async function checkEtlFreshness(repo: string, staleThresholdSeconds = 86
     const repoId = await ensureRepo(client, parts[0], parts[1]);
 
     const prRelatedEvents = ['pull_request', 'pull_request_target', 'pull_request_review', 'push'];
-    const eventPlaceholders = pgPlaceholders(prRelatedEvents.length);
+    const eventPlaceholders = pgPlaceholders(prRelatedEvents.length, 2);
 
     const [runsResult, metricsResult] = await Promise.all([
       client.query(
