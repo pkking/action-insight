@@ -9,8 +9,7 @@
  *   npx tsx etl/scripts/collect-test-case-stats.ts --repo owner/repo
  *
  * Environment:
- *   TURSO_DATABASE_URL            Turso database URL (required)
- *   TURSO_AUTH_TOKEN              Turso auth token (required)
+ *   PG_DATABASE_URL              PostgreSQL database URL (required)
  *   GITHUB_TOKEN                  GitHub token for authenticated clone (optional)
  *   TEST_CASE_STATS_CACHE_DIR     Cache directory for cloned repos (default: /tmp/action-insight-repos)
  *   VERBOSE                       Enable verbose logging (true or 1)
@@ -20,7 +19,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync, spawnSync } from 'child_process';
 import * as yaml from 'js-yaml';
-import { createClient, type Client } from '@libsql/client';
+import type { PoolClient } from 'pg';
+import { getDatabaseClient } from '../../src/lib/db.ts';
+import { toPgSql } from './pg-utils.ts';
 import { format, subDays } from 'date-fns';
 import { fileURLToPath } from 'url';
 
@@ -81,49 +82,30 @@ function error(...args: unknown[]) {
   console.error(`[${new Date().toISOString()}] ERROR:`, ...args);
 }
 
-function getTursoClient() {
-  const url = process.env.TURSO_DATABASE_URL;
-  const authToken = process.env.TURSO_AUTH_TOKEN;
-
-  if (!url) {
-    throw new Error('TURSO_DATABASE_URL is required');
-  }
-
-  return createClient({ url, authToken });
+function getDbClient(): Promise<PoolClient> {
+  return getDatabaseClient();
 }
 
-function isTursoWriteBlocked(err: unknown): boolean {
-  if (typeof err !== 'object' || err === null) return false;
-  const message = (err as Error).message || '';
-  return message.includes('writes are blocked') || message.includes('SQL write operations are forbidden');
-}
+async function ensureRepoId(client: PoolClient, owner: string, repo: string): Promise<number> {
+  await client.query(
+    `INSERT INTO repos (owner, repo) VALUES ($1, $2) ON CONFLICT(owner, repo) DO NOTHING`,
+    [owner, repo],
+  );
 
-async function ensureRepoId(client: Client, owner: string, repo: string): Promise<number> {
-  // Try upsert first (required for repos not yet in Turso)
-  try {
-    await client.execute({
-      sql: `INSERT INTO repos (owner, repo) VALUES (?, ?) ON CONFLICT(owner, repo) DO NOTHING`,
-      args: [owner, repo],
-    });
-  } catch (err) {
-    if (!isTursoWriteBlocked(err)) throw err;
-    // Turso is read-only; fall through to SELECT-only lookup
-  }
-
-  const { rows } = await client.execute({
-    sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
-    args: [owner, repo],
-  });
+  const { rows } = await client.query(
+    `SELECT id FROM repos WHERE owner = $1 AND repo = $2`,
+    [owner, repo],
+  );
 
   if (rows.length === 0) {
-    throw new Error(`Failed to ensure repository ${owner}/${repo} in Turso`);
+    throw new Error(`Failed to ensure repository ${owner}/${repo} in database`);
   }
 
   return Number(rows[0].id);
 }
 
 async function upsertTestCaseStats(
-  client: Client,
+  client: PoolClient,
   repoId: number,
   stats: {
     window_start: string;
@@ -133,20 +115,20 @@ async function upsertTestCaseStats(
     nvidia_test_cases: number;
   },
 ): Promise<void> {
-  await client.execute({
-    sql: `INSERT INTO test_case_stats (repo_id, window_start, window_end, total_test_cases, ascend_test_cases, nvidia_test_cases, generated_at)
+  await client.query(
+    toPgSql(`INSERT INTO test_case_stats (repo_id, window_start, window_end, total_test_cases, ascend_test_cases, nvidia_test_cases, generated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(repo_id, window_start, window_end) DO UPDATE SET
             total_test_cases=excluded.total_test_cases,
             ascend_test_cases=excluded.ascend_test_cases,
             nvidia_test_cases=excluded.nvidia_test_cases,
-            generated_at=excluded.generated_at`,
-    args: [
+            generated_at=excluded.generated_at`),
+    [
       repoId, stats.window_start, stats.window_end,
       stats.total_test_cases, stats.ascend_test_cases, stats.nvidia_test_cases,
       new Date().toISOString(),
     ],
-  });
+  );
 }
 
 function getRepoDir(owner: string, repo: string): string {
@@ -487,8 +469,7 @@ async function main() {
     console.error('Usage: npx tsx etl/scripts/collect-test-case-stats.ts --repo owner/repo');
     console.error('');
     console.error('Environment Variables:');
-    console.error('  TURSO_DATABASE_URL            Turso database URL (required)');
-    console.error('  TURSO_AUTH_TOKEN              Turso auth token (required)');
+    console.error('  PG_DATABASE_URL              PostgreSQL database URL (required)');
     console.error('  GITHUB_TOKEN                  GitHub token for authenticated clone (optional)');
     console.error('  TEST_CASE_STATS_CACHE_DIR     Cache directory (default: /tmp/action-insight-repos)');
     console.error('  VERBOSE                       Enable verbose logging (true or 1)');
@@ -542,13 +523,13 @@ async function main() {
     console.log('');
   }
 
-  const client = getTursoClient();
+  const client = await getDbClient();
 
   let repoId: number;
   try {
     repoId = await ensureRepoId(client, owner, repoName);
   } catch (err) {
-    error(`Failed to ensure repo in Turso: ${err instanceof Error ? err.message : String(err)}`);
+    error(`Failed to ensure repo in database: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   }
 
@@ -566,12 +547,10 @@ async function main() {
     });
     info(`Upserted test_case_stats for ${owner}/${repoName} (window: ${windowStart} to ${windowEnd})`);
   } catch (err) {
-    if (isTursoWriteBlocked(err)) {
-      warn(`Turso writes are blocked; test_case_stats not updated for ${owner}/${repoName}`);
-    } else {
-      error(`Failed to write to Turso: ${err instanceof Error ? err.message : String(err)}`);
-      process.exit(1);
-    }
+    error(`Failed to write to database: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  } finally {
+    client.release();
   }
 
   info('Done!');

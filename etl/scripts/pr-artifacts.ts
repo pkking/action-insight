@@ -2,21 +2,13 @@ import * as prMetricsModule from '../../src/lib/pr-metrics';
 import type { PullRequestRef, PullRequestSnapshot, Run } from '../../src/lib/types';
 import { isGitHubRateLimitError, checkRateLimitBudget } from './github';
 import {
-  readPullRequestResolutionCacheFromTurso,
+  readPullRequestResolutionCache,
   type PullRequestResolutionCacheEntry,
-  writePrMetricsToTurso,
-  writePrWorkflowAttemptsToTurso,
-  writePrWorkflowsToTurso,
-  writePullRequestResolutionCacheToTurso,
-} from './turso-storage';
-import {
-  readPullRequestResolutionCacheFromSqlite,
-  writePrMetricsToSqlite,
-  writePrWorkflowAttemptsToSqlite,
-  writePrWorkflowsToSqlite,
-  writePullRequestResolutionCacheToSqlite,
-} from './sqlite-storage';
-import { isSqliteFallbackEnabled, writeWithOptionalSqliteFallback } from './github-utils';
+  writePrMetrics,
+  writePrWorkflowAttempts,
+  writePrWorkflows,
+  writePullRequestResolutionCache,
+} from './pg-storage';
 
 const prMetricsInterop =
   ('buildPullRequestIndex' in prMetricsModule && typeof prMetricsModule.buildPullRequestIndex === 'function')
@@ -296,19 +288,7 @@ export async function rebuildPullRequestArtifacts({
     }
   }
 
-  const persistedCache = await readPullRequestResolutionCacheFromTurso(repoKey, [...uniqueShas]).catch((error) => {
-    if (!isSqliteFallbackEnabled()) throw error;
-    warn(`Turso cache read failed for ${repoKey}, falling back to SQLite:`, error);
-    return new Map();
-  });
-  if (isSqliteFallbackEnabled()) {
-    const persistedCacheSqlite = await readPullRequestResolutionCacheFromSqlite(repoKey, [...uniqueShas]).catch(() => new Map());
-    for (const [sha, record] of persistedCacheSqlite.entries()) {
-      if (!persistedCache.has(sha)) {
-        persistedCache.set(sha, record);
-      }
-    }
-  }
+  const persistedCache = await readPullRequestResolutionCache(repoKey, [...uniqueShas]);
   let resolvedCacheHitCount = 0;
   let notFoundCacheHitCount = 0;
   let retryableCacheHitCount = 0;
@@ -387,12 +367,7 @@ export async function rebuildPullRequestArtifacts({
 
     cacheEntriesToWrite.push(entry);
   }
-  await writeWithOptionalSqliteFallback(
-    () => writePullRequestResolutionCacheToTurso(repoKey, cacheEntriesToWrite),
-    () => writePullRequestResolutionCacheToSqlite(repoKey, cacheEntriesToWrite),
-    'writePullRequestResolutionCache',
-    warn,
-  );
+  await writePullRequestResolutionCache(repoKey, cacheEntriesToWrite);
   log(
     `PR resolution API calls for ${repoKey}: ${resolutionResult.coreApiCalls} core, ${resolutionResult.searchApiCalls} search; resolved ${newlyResolvedShaCount}, not_found ${newlyNotFoundShaCount}, failed ${newlyFailedShaCount}, rate_limited ${newlyRateLimitedShaCount}, skipped ${skippedPrShaCount}`
   );
@@ -426,12 +401,7 @@ export async function rebuildPullRequestArtifacts({
   const partialPrResolution = unresolvedRelevantShaCount > 0;
 
   if (prNumbers.length === 0) {
-    await writeWithOptionalSqliteFallback(
-      () => writePrMetricsToTurso(repoKey, []),
-      () => writePrMetricsToSqlite(repoKey, []),
-      'writePrMetrics-empty',
-      warn,
-    );
+    await writePrMetrics(repoKey, []);
     log(`PR metrics written for ${repoKey}: 0 rows; latest created_at: none`);
     return;
   }
@@ -452,12 +422,7 @@ export async function rebuildPullRequestArtifacts({
   result.index.unresolvedPrShaCount = unresolvedRelevantShaCount;
   result.index.skippedPrShaCount = skippedPrShaCount;
 
-  await writeWithOptionalSqliteFallback(
-    () => writePrMetricsToTurso(repoKey, result.index.prs),
-    () => writePrMetricsToSqlite(repoKey, result.index.prs),
-    'writePrMetrics',
-    warn,
-  );
+  await writePrMetrics(repoKey, result.index.prs);
   log(`PR metrics written for ${repoKey}: ${result.index.prs.length} rows; latest created_at: ${result.index.prs[0]?.created_at ?? 'none'}`);
 
   const prWorkflowsMap = new Map<number, number[]>();
@@ -469,19 +434,9 @@ export async function rebuildPullRequestArtifacts({
       detail.pr.workflows.map((w) => ({ runId: w.id, runAttempt: w.runAttempt ?? 1 }))
     );
   }
-  await writeWithOptionalSqliteFallback(
-    () => writePrWorkflowsToTurso(repoKey, prWorkflowsMap),
-    () => writePrWorkflowsToSqlite(repoKey, prWorkflowsMap),
-    'writePrWorkflows',
-    warn,
-  );
+  await writePrWorkflows(repoKey, prWorkflowsMap);
   log(`PR workflows written for ${repoKey}: ${prWorkflowsMap.size} PRs`);
 
-  await writeWithOptionalSqliteFallback(
-    () => writePrWorkflowAttemptsToTurso(repoKey, prWorkflowAttemptsMap),
-    () => writePrWorkflowAttemptsToSqlite(repoKey, prWorkflowAttemptsMap),
-    'writePrWorkflowAttempts',
-    warn,
-  );
+  await writePrWorkflowAttempts(repoKey, prWorkflowAttemptsMap);
   log(`PR workflow attempts written for ${repoKey}: ${prWorkflowAttemptsMap.size} PRs`);
 }

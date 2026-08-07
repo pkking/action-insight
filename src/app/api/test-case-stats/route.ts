@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getTursoClient } from '@/lib/turso';
+import { getDatabaseClient } from '@/lib/db';
+import { toPgSql } from '@/lib/pg-utils';
 import { getTrackedRepoOptions } from '@/lib/server-homepage-data';
 
 function isSameOrigin(request: Request): boolean {
@@ -49,12 +50,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Repository not found' }, { status: 404 });
     }
 
-    const client = getTursoClient();
-
-    const { rows: repoRows } = await client.execute({
-      sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
-      args: [body.owner, body.repo],
-    });
+    const client = await getDatabaseClient();
+    try {
+    const { rows: repoRows } = await client.query(
+      toPgSql(`SELECT id FROM repos WHERE owner = ? AND repo = ?`),
+      [body.owner, body.repo],
+    );
 
     if (repoRows.length === 0) {
       return NextResponse.json({ data: null });
@@ -62,10 +63,10 @@ export async function POST(request: Request) {
 
     const repoId = repoRows[0].id;
 
-    const { rows: statsRows } = await client.execute({
-      sql: `SELECT * FROM test_case_stats WHERE repo_id = ? ORDER BY generated_at DESC LIMIT 1`,
-      args: [repoId],
-    });
+    const { rows: statsRows } = await client.query(
+      toPgSql(`SELECT * FROM test_case_stats WHERE repo_id = ? ORDER BY generated_at DESC LIMIT 1`),
+      [repoId],
+    );
 
     if (statsRows.length === 0) {
       return NextResponse.json({ data: null });
@@ -82,6 +83,9 @@ export async function POST(request: Request) {
         generated_at: statsData.generated_at as string,
       },
     });
+    } finally {
+      client.release();
+    }
   } catch (err) {
     console.error('Test case stats API error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

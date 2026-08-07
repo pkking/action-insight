@@ -3,14 +3,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Octokit } from '@octokit/core';
-import { type Client } from '@libsql/client';
 import { addDays, format, parseISO } from 'date-fns';
 import yaml from 'js-yaml';
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts.ts';
-import { getCollectedDatesFromTurso, checkEtlFreshness, formatFreshnessReport, getTursoClient } from './turso-storage.ts';
-import { getCollectedDatesFromSqlite, getRepoClient } from './sqlite-storage.ts';
-import { isSqliteFallbackEnabled } from './github-utils.ts';
+import { getCollectedDates, checkEtlFreshness, formatFreshnessReport } from './pg-storage.ts';
+import { getDatabaseClient } from '../../src/lib/db.ts';
+import { toPgSql, pgPlaceholders } from './pg-utils.ts';
+import type { PoolClient } from 'pg';
 import type { Run } from '../../src/lib/types.ts';
 
 interface ReposConfig {
@@ -162,28 +162,24 @@ function selectDates(collectedDates: string[], options: RebuildCliOptions): stri
 }
 
 async function fetchRunsFromDatabase(repo: string, dates: string[]): Promise<Run[]> {
-  const tursoClient = getTursoClient();
-  if (tursoClient) {
-    try {
-      return await fetchRunsFromClient(tursoClient, repo, dates, 'Turso');
-    } catch (err) {
-      if (!isSqliteFallbackEnabled()) throw err;
-      console.warn(`Turso fetch failed for ${repo}, falling back to SQLite:`, err);
-    }
+  const client = await getDatabaseClient();
+  if (!client) {
+    throw new Error('Database is not configured for PR artifact rebuild (set PG_DATABASE_URL)');
   }
-  if (!isSqliteFallbackEnabled()) {
-    throw new Error('Turso is not configured for PR artifact rebuild (set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN)');
+  try {
+    return await fetchRunsFromClient(client, repo, dates, 'PG');
+  } finally {
+    client.release();
   }
-  return fetchRunsFromClient(getRepoClient(repo), repo, dates, 'SQLite');
 }
 
-async function fetchRunsFromClient(client: Client, repo: string, dates: string[], label: string): Promise<Run[]> {
+async function fetchRunsFromClient(client: PoolClient, repo: string, dates: string[], label: string): Promise<Run[]> {
   const [owner, repoName] = repo.split('/');
 
-  const { rows: repoRows } = await client.execute({
-    sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
-    args: [owner, repoName],
-  });
+  const { rows: repoRows } = await client.query(
+    `SELECT id FROM repos WHERE owner = $1 AND repo = $2`,
+    [owner, repoName],
+  );
 
   if (repoRows.length === 0) {
     console.warn(`Repo ${repo} not found in ${label}`);
@@ -206,16 +202,16 @@ async function fetchRunsFromClient(client: Client, repo: string, dates: string[]
 
     while (true) {
       // Step 1: Paginate runs only
-	      const { rows: runRows } = await client.execute({
-	        sql: `SELECT id, name, head_branch, head_sha, status, conclusion,
+	      const { rows: runRows } = await client.query(
+	        `SELECT id, name, head_branch, head_sha, status, conclusion,
 	                     event, created_at, updated_at, html_url, duration_seconds, date,
 	                     workflow_file, workflow_ref, workflow_path, workflow_parse_status
 	              FROM runs
-              WHERE repo_id = ? AND date = ?
+              WHERE repo_id = $1 AND date = $2
               ORDER BY created_at DESC, id DESC
-              LIMIT ? OFFSET ?`,
-        args: [repoId, date, RUN_SELECT_PAGE_SIZE, offset],
-      });
+              LIMIT $3 OFFSET $4`,
+        [repoId, date, RUN_SELECT_PAGE_SIZE, offset],
+      );
 
       if (runRows.length === 0 && offset === 0) {
         break;
@@ -225,14 +221,14 @@ async function fetchRunsFromClient(client: Client, repo: string, dates: string[]
 
       // Step 2: Batch-fetch jobs for these runs
       if (runIds.length > 0) {
-        const placeholders = runIds.map(() => '?').join(',');
-        const { rows: jobRows } = await client.execute({
-          sql: `SELECT id, run_id, name, status, conclusion, created_at, started_at,
+        const placeholders = pgPlaceholders(runIds.length);
+        const { rows: jobRows } = await client.query(
+          `SELECT id, run_id, name, status, conclusion, created_at, started_at,
                        completed_at, html_url, queue_duration_seconds, duration_seconds
                 FROM jobs WHERE run_id IN (${placeholders})
                 ORDER BY run_id, started_at ASC`,
-          args: runIds,
-        });
+          runIds,
+        );
 
         const jobsByRun = new Map<number, Array<Record<string, unknown>>>();
         for (const j of jobRows) {
@@ -290,11 +286,11 @@ async function fetchRunsFromClient(client: Client, repo: string, dates: string[]
   return allRuns;
 }
 
-async function fetchWorkflowAttemptRunsFromClient(client: Client, repoId: number, dates: string[]): Promise<Run[]> {
+async function fetchWorkflowAttemptRunsFromClient(client: PoolClient, repoId: number, dates: string[]): Promise<Run[]> {
   const allRuns: Run[] = [];
   for (const date of dates) {
-    const { rows } = await client.execute({
-      sql: `SELECT r.id, r.name, r.head_branch, r.head_sha, r.event, r.html_url,
+    const { rows } = await client.query(
+      `SELECT r.id, r.name, r.head_branch, r.head_sha, r.event, r.html_url,
                    r.workflow_path, r.workflow_parse_status,
                    wa.run_attempt, wa.status, wa.conclusion, wa.created_at, wa.run_started_at,
                    wa.completed_at, wa.updated_at, wa.queue_duration_seconds,
@@ -302,12 +298,12 @@ async function fetchWorkflowAttemptRunsFromClient(client: Client, repoId: number
                    wa.workflow_ref, wa.match_kind, wa.step_policy_hash
             FROM workflow_attempts wa
             JOIN runs r ON r.id = wa.run_id
-            WHERE r.repo_id = ? AND r.date = ? AND wa.tracked = 1
+            WHERE r.repo_id = $1 AND r.date = $2 AND wa.tracked = 1
             ORDER BY wa.created_at DESC, wa.run_id DESC, wa.run_attempt DESC`,
-      args: [repoId, date],
-    }).catch((error) => {
+      [repoId, date],
+    ).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('no such table: workflow_attempts')) {
+      if (message.includes('does not exist')) {
         return { rows: [] };
       }
       throw error;
@@ -325,16 +321,16 @@ async function fetchWorkflowAttemptRunsFromClient(client: Client, repoId: number
     const chunkSize = 100;
     for (let i = 0; i < attemptKeys.length; i += chunkSize) {
       const chunk = attemptKeys.slice(i, i + chunkSize);
-      const clauses = chunk.map(() => '(run_id = ? AND run_attempt = ?)').join(' OR ');
-      const chunkRows = await client.execute({
-          sql: `SELECT run_id, run_attempt, job_id, name, status, conclusion, created_at,
+      const clauses = chunk.map((_, idx) => `(run_id = $${idx * 2 + 1} AND run_attempt = $${idx * 2 + 2})`).join(' OR ');
+      const chunkRows = await client.query(
+          `SELECT run_id, run_attempt, job_id, name, status, conclusion, created_at,
                        started_at, completed_at, html_url, queue_duration_seconds,
                        runtime_seconds, total_duration_seconds, duration_seconds
                 FROM workflow_jobs
                 WHERE ${clauses}
                 ORDER BY run_id, run_attempt, started_at ASC`,
-          args: chunk.flatMap((key) => [key.runId, key.runAttempt]),
-        }).then((result) => result.rows).catch(() => []);
+          chunk.flatMap((key) => [key.runId, key.runAttempt]),
+        ).then((result) => result.rows).catch(() => []);
       jobRows.push(...chunkRows);
     }
 
@@ -415,11 +411,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     }
 
     try {
-      const collectedDates = await getCollectedDatesFromTurso(repoKey).catch(async (error) => {
-        if (!isSqliteFallbackEnabled()) throw error;
-        console.warn(`Turso unavailable for ${repoKey}, reading dates from SQLite`);
-        return getCollectedDatesFromSqlite(repoKey);
-      });
+      const collectedDates = await getCollectedDates(repoKey);
       const dates = selectDates(collectedDates, options);
       if (dates.length === 0) {
         console.warn(`Skipping ${repoKey}: no collected dates matched the selected range`);
@@ -458,8 +450,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : '';
       failures.push(`${repoKey}: ${message}`);
       console.error(`Error rebuilding PR artifacts for ${repoKey}:`, message);
+      console.error(stack);
     }
   }
 

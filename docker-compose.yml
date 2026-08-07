@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: action_insight
+      POSTGRES_USER: action_insight
+      POSTGRES_PASSWORD: action_insight
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./pg/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U action_insight -d action_insight"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PG_DATABASE_URL: postgresql://action_insight:action_insight@postgres:5432/action_insight
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:

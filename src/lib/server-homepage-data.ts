@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { cache } from 'react';
 
-import { getTursoClient, getRepoId as _getRepoId } from './turso';
+import { getDatabaseClient, getRepoId as _getRepoId } from './db';
+import { toPgSql } from './pg-utils';
 import { parseTrackedReposYaml } from './tracked-repos.js';
 import type { PullRequestIndexFile, PullRequestMetricsSummary, TestCaseStats } from './types';
 
@@ -39,11 +40,12 @@ const getTestCaseStats = cache(async (owner: string, repo: string): Promise<Test
     return null;
   }
 
-  const client = getTursoClient();
-  const { rows } = await client.execute({
-    sql: `SELECT * FROM test_case_stats WHERE repo_id = ? ORDER BY generated_at DESC LIMIT 1`,
-    args: [repoId],
-  });
+  const client = await getDatabaseClient();
+  try {
+  const { rows } = await client.query(
+    toPgSql(`SELECT * FROM test_case_stats WHERE repo_id = ? ORDER BY generated_at DESC LIMIT 1`),
+    [repoId],
+  );
 
   if (rows.length === 0) return null;
 
@@ -56,6 +58,9 @@ const getTestCaseStats = cache(async (owner: string, repo: string): Promise<Test
     window_end: data.window_end as string,
     generated_at: data.generated_at as string,
   };
+  } finally {
+    client.release();
+  }
 });
 
 function mapPrSummary(row: Record<string, unknown>): PullRequestMetricsSummary {
@@ -94,11 +99,12 @@ const getPullRequestIndex = cache(async (owner: string, repo: string): Promise<P
     };
   }
 
-  const client = getTursoClient();
-  const { rows } = await client.execute({
-    sql: `SELECT * FROM pr_metrics WHERE repo_id = ? ORDER BY created_at DESC`,
-    args: [repoId],
-  });
+  const client = await getDatabaseClient();
+  try {
+  const { rows } = await client.query(
+    toPgSql(`SELECT * FROM pr_metrics WHERE repo_id = ? ORDER BY created_at DESC`),
+    [repoId],
+  );
 
   if (rows.length === 0) {
     return {
@@ -114,6 +120,9 @@ const getPullRequestIndex = cache(async (owner: string, repo: string): Promise<P
     generated_at: new Date().toISOString(),
     prs: rows.map((r) => mapPrSummary(r as Record<string, unknown>)),
   };
+  } finally {
+    client.release();
+  }
 });
 
 export async function getHomepageData() {

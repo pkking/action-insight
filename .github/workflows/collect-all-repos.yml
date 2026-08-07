@@ -51,7 +51,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
+      - run: npm install tsx @octokit/core date-fns js-yaml pg
       - id: collect
         continue-on-error: true
         run: |
@@ -65,8 +65,7 @@ jobs:
           npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.VLLM_PROJECT_VLLM_ASCEND }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           RETENTION_DAYS: 90
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
@@ -76,12 +75,11 @@ jobs:
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "vllm-project/vllm-ascend"
         env:
           GITHUB_TOKEN: ${{ secrets.VLLM_PROJECT_VLLM_ASCEND }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           VERBOSE: 1
       - if: always() && steps.collect.outcome == 'failure'
         run: |
-          echo "Collection completed with partial failures. Data was written to Turso."
+          echo "Collection completed with partial failures. Data was written to PostgreSQL."
           exit 1
 
   collect-verl:
@@ -95,7 +93,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
+      - run: npm install tsx @octokit/core date-fns js-yaml pg
       - id: collect
         continue-on-error: true
         run: |
@@ -109,8 +107,7 @@ jobs:
           npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.VERL_PROJECT_VERL }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           RETENTION_DAYS: 90
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
@@ -120,12 +117,11 @@ jobs:
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "verl-project/verl"
         env:
           GITHUB_TOKEN: ${{ secrets.VERL_PROJECT_VERL }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           VERBOSE: 1
       - if: always() && steps.collect.outcome == 'failure'
         run: |
-          echo "Collection completed with partial failures. Data was written to Turso."
+          echo "Collection completed with partial failures. Data was written to PostgreSQL."
           exit 1
 
   collect-triton-ascend:
@@ -139,7 +135,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
+      - run: npm install tsx @octokit/core date-fns js-yaml pg
       - id: collect
         continue-on-error: true
         run: |
@@ -153,8 +149,7 @@ jobs:
           npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.TRITON_LANG_TRITON_ASCEND }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           RETENTION_DAYS: 90
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
@@ -164,12 +159,11 @@ jobs:
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "triton-lang/triton-ascend"
         env:
           GITHUB_TOKEN: ${{ secrets.TRITON_LANG_TRITON_ASCEND }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           VERBOSE: 1
       - if: always() && steps.collect.outcome == 'failure'
         run: |
-          echo "Collection completed with partial failures. Data was written to Turso."
+          echo "Collection completed with partial failures. Data was written to PostgreSQL."
           exit 1
 
   collect-llamafactory:
@@ -183,7 +177,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
+      - run: npm install tsx @octokit/core date-fns js-yaml pg
       - id: collect
         continue-on-error: true
         run: |
@@ -197,8 +191,7 @@ jobs:
           npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.HIYOUGA_LLAMAFACTORY }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           RETENTION_DAYS: 90
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
@@ -208,12 +201,11 @@ jobs:
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "hiyouga/LlamaFactory"
         env:
           GITHUB_TOKEN: ${{ secrets.HIYOUGA_LLAMAFACTORY }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           VERBOSE: 1
       - if: always() && steps.collect.outcome == 'failure'
         run: |
-          echo "Collection completed with partial failures. Data was written to Turso."
+          echo "Collection completed with partial failures. Data was written to PostgreSQL."
           exit 1
 
   collect-ms-swift:
@@ -227,7 +219,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
+      - run: npm install tsx @octokit/core date-fns js-yaml pg
       - id: collect
         continue-on-error: true
         run: |
@@ -241,8 +233,7 @@ jobs:
           npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.MODELSCOPE_MS_SWIFT }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           RETENTION_DAYS: 90
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
@@ -252,12 +243,11 @@ jobs:
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "modelscope/ms-swift"
         env:
           GITHUB_TOKEN: ${{ secrets.MODELSCOPE_MS_SWIFT }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           VERBOSE: 1
       - if: always() && steps.collect.outcome == 'failure'
         run: |
-          echo "Collection completed with partial failures. Data was written to Turso."
+          echo "Collection completed with partial failures. Data was written to PostgreSQL."
           exit 1
 
   collect-sglang:
@@ -271,7 +261,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
+      - run: npm install tsx @octokit/core date-fns js-yaml pg
       - id: collect
         continue-on-error: true
         run: |
@@ -285,8 +275,7 @@ jobs:
           npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.SGL_PROJECT_SGLANG }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           RETENTION_DAYS: 90
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
@@ -296,12 +285,11 @@ jobs:
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "sgl-project/sglang"
         env:
           GITHUB_TOKEN: ${{ secrets.SGL_PROJECT_SGLANG }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           VERBOSE: 1
       - if: always() && steps.collect.outcome == 'failure'
         run: |
-          echo "Collection completed with partial failures. Data was written to Turso."
+          echo "Collection completed with partial failures. Data was written to PostgreSQL."
           exit 1
 
   collect-tilelang-ascend:
@@ -315,7 +303,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
+      - run: npm install tsx @octokit/core date-fns js-yaml pg
       - id: collect
         continue-on-error: true
         run: |
@@ -329,8 +317,7 @@ jobs:
           npx tsx etl/scripts/collect.ts "${args[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.TILE_AI_TILELANG_ASCEND }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           RETENTION_DAYS: 90
           VERBOSE: 1
           WORKFLOW_FORCE: ${{ inputs.force }}
@@ -340,12 +327,11 @@ jobs:
         run: npx tsx etl/scripts/collect-test-case-stats.ts --repo "tile-ai/tilelang-ascend"
         env:
           GITHUB_TOKEN: ${{ secrets.TILE_AI_TILELANG_ASCEND }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           VERBOSE: 1
       - if: always() && steps.collect.outcome == 'failure'
         run: |
-          echo "Collection completed with partial failures. Data was written to Turso."
+          echo "Collection completed with partial failures. Data was written to PostgreSQL."
           exit 1
 
   rebuild:
@@ -385,7 +371,7 @@ jobs:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
         if: steps.gate.outputs.should_run == 'true'
-      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
+      - run: npm install tsx @octokit/core date-fns js-yaml pg
         if: steps.gate.outputs.should_run == 'true'
       - name: Set default date range for scheduled runs
         if: steps.gate.outputs.should_run == 'true' && github.event_name == 'schedule'
@@ -410,8 +396,7 @@ jobs:
           REBUILD_REPO: ${{ inputs.repo || '' }}
           REBUILD_START_DATE: ${{ inputs.start_date || env.SCHEDULED_START_DATE || '' }}
           REBUILD_END_DATE: ${{ inputs.end_date || env.SCHEDULED_END_DATE || '' }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           PR_ARTIFACT_SEARCH_RESOLUTION_LIMIT: 20
           PR_ARTIFACT_SHA_RESOLUTION_LIMIT: 1000
           GITHUB_TOKEN_PER_REPO_HIYOUGA_LLAMAFACTORY: ${{ secrets.HIYOUGA_LLAMAFACTORY }}

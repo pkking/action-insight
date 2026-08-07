@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { getRepoClient, writeWorkflowAttemptsToSqlite } from './sqlite-storage.ts';
+import { getDatabaseClient } from '../../src/lib/db.ts';
+import { writeWorkflowAttempts } from './pg-storage.ts';
+import { toPgSql, pgPlaceholders } from './pg-utils.ts';
 import { buildWorkflowAttempts, enrichRunWithWorkflowMetadata } from './workflow-attempts.ts';
 import { parseReposConfig, type RepoConfigEntry, type ReposConfig } from './repos-config.ts';
 import type { Run, Step } from '../../src/lib/types.ts';
@@ -241,20 +243,21 @@ async function fetchMissingAttempts(
   repo: string,
   days: number,
 ): Promise<MissingAttemptRow[]> {
-  const client = getRepoClient(repo);
+  const client = await getDatabaseClient();
+  try {
   const [owner, repoName] = repo.split('/');
   const sinceDate = format(subDays(new Date(), days), 'yyyy-MM-dd');
 
-  const { rows: repoRows } = await client.execute({
-    sql: `SELECT id FROM repos WHERE owner = ? AND repo = ?`,
-    args: [owner, repoName],
-  });
+  const { rows: repoRows } = await client.query(
+    `SELECT id FROM repos WHERE owner = $1 AND repo = $2`,
+    [owner, repoName],
+  );
 
   if (repoRows.length === 0) return [];
   const repoId = Number(repoRows[0].id);
 
-  const { rows } = await client.execute({
-    sql: `SELECT r.id AS run_id,
+  const { rows } = await client.query(
+    toPgSql(`SELECT r.id AS run_id,
                  wa.run_attempt,
                  r.name,
                  r.head_branch,
@@ -280,9 +283,9 @@ async function fetchMissingAttempts(
               WHERE wj.run_id = wa.run_id
                 AND wj.run_attempt = wa.run_attempt
             )
-          ORDER BY r.created_at DESC, wa.run_id DESC, wa.run_attempt DESC`,
-    args: [repoId, sinceDate],
-  });
+          ORDER BY r.created_at DESC, wa.run_id DESC, wa.run_attempt DESC`),
+    [repoId, sinceDate],
+  );
 
   return rows.map((row) => ({
     run_id: Number(row.run_id),
@@ -301,6 +304,9 @@ async function fetchMissingAttempts(
     workflow_parse_status: typeof row.workflow_parse_status === 'string' ? row.workflow_parse_status : null,
     run_started_at: typeof row.run_started_at === 'string' ? row.run_started_at : null,
   }));
+  } finally {
+    client.release();
+  }
 }
 
 async function backfillRepo(repo: string, config: ReposConfig, days: number): Promise<void> {
@@ -344,7 +350,7 @@ async function backfillRepo(repo: string, config: ReposConfig, days: number): Pr
 
     const enriched = enrichRunWithWorkflowMetadata(run, config, repoConfig);
     const attempts = buildWorkflowAttempts([enriched], config, repoConfig);
-    await writeWorkflowAttemptsToSqlite(repo, attempts);
+    await writeWorkflowAttempts(repo, attempts);
 
     completed += 1;
     if (completed % 25 === 0 || completed === missingAttempts.length) {

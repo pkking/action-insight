@@ -1,4 +1,4 @@
-// ETL script: fetches GitHub Actions runs/jobs and writes to Turso
+// ETL script: fetches GitHub Actions runs/jobs and writes to PostgreSQL
 import { Octokit } from '@octokit/core';
 import { addDays, format, subDays, parseISO, isBefore, startOfDay } from 'date-fns';
 import * as fs from 'fs';
@@ -14,24 +14,16 @@ import {
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
 import { isGitHubRateLimitError, getRateLimitDetails, type RateLimitDetails } from './github.ts';
 import {
-  writeRunsToTurso,
-  writeWorkflowAttemptsToTurso,
-  getExistingRunIdsWithStepsFromTurso,
+  writeRuns,
+  writeWorkflowAttempts,
+  getExistingRunIdsWithSteps,
   readCollectionState,
   writeCollectionState,
-  getCollectedDatesFromTurso,
+  getCollectedDates,
   checkEtlFreshness,
   formatFreshnessReport,
-} from './turso-storage.ts';
-import {
-  writeRunsToSqlite,
-  writeWorkflowAttemptsToSqlite,
-  getExistingRunIdsWithStepsFromSqlite,
-  readCollectionStateFromSqlite,
-  writeCollectionStateToSqlite,
-  getCollectedDatesFromSqlite,
-} from './sqlite-storage.ts';
-import { readPullRequestsFromPayload, isSqliteFallbackEnabled, writeWithOptionalSqliteFallback } from './github-utils.ts';
+} from './pg-storage.ts';
+import { readPullRequestsFromPayload } from './github-utils.ts';
 import type { GitHubApiPayload, PullRequestRef, Step } from '../../src/lib/types.ts';
 import { getRepoNames, parseReposConfig, type RepoConfigEntry, type ReposConfig } from './repos-config.ts';
 import { buildWorkflowAttempts, enrichRunWithWorkflowMetadata } from './workflow-attempts.ts';
@@ -177,17 +169,6 @@ interface RunCollectionOptions {
 const ETL_DIR = path.join(__dirname, '..');
 const REPOS_CONFIG_PATH = path.join(ETL_DIR, 'repos.yaml');
 
-/** Helper: run Turso first and use SQLite only when explicitly enabled. */
-async function withOptionalSqliteFallback<T>(primary: () => Promise<T>, fallback: () => Promise<T>, label: string): Promise<T> {
-  try {
-    return await primary();
-  } catch (err) {
-    if (!isSqliteFallbackEnabled()) throw err;
-    warn(`${label} primary failed, using fallback:`, err);
-    return fallback();
-  }
-}
-
 function readReposConfig(): ReposConfig {
   try {
     log(`Reading repos config from: ${REPOS_CONFIG_PATH}`);
@@ -232,29 +213,12 @@ function computeBackfillCursor(
   };
 }
 
-async function loadRepoState(repo: string, retentionDays: number, now: Date): Promise<RepoCollectionState> {
-  const retentionStart = format(subDays(now, retentionDays), 'yyyy-MM-dd');
+async function loadRepoState(repo: string, collectDays: number, now: Date): Promise<RepoCollectionState> {
+  const retentionStart = format(subDays(now, collectDays), 'yyyy-MM-dd');
   const today = format(now, 'yyyy-MM-dd');
 
-  let dbState = await withOptionalSqliteFallback(
-    () => readCollectionState(repo),
-    () => readCollectionStateFromSqlite(repo),
-    'readCollectionState',
-  );
-
-  if (isSqliteFallbackEnabled() && (!dbState || !dbState.latestDate)) {
-    dbState = await readCollectionStateFromSqlite(repo);
-  }
-
-  let collectedDates = await withOptionalSqliteFallback(
-    () => getCollectedDatesFromTurso(repo),
-    () => getCollectedDatesFromSqlite(repo),
-    'getCollectedDates',
-  );
-
-  if (isSqliteFallbackEnabled() && collectedDates.length === 0) {
-    collectedDates = await getCollectedDatesFromSqlite(repo);
-  }
+  const dbState = await readCollectionState(repo);
+  const collectedDates = await getCollectedDates(repo);
 
   const retainedDates = collectedDates.filter(d => d >= retentionStart);
 
@@ -268,11 +232,11 @@ async function loadRepoState(repo: string, retentionDays: number, now: Date): Pr
   }
 
   return {
-    latest: dbState?.latestDate ?? '',
+    latest: dbState?.latestDate && dbState.latestDate >= retentionStart ? dbState.latestDate : '',
     collectedDates: retainedDates,
     historyComplete,
     backfillCursor,
-    retentionDays: dbState?.retentionDays ?? retentionDays,
+    retentionDays: dbState?.retentionDays ?? collectDays,
   };
 }
 
@@ -285,12 +249,7 @@ async function saveRepoState(repo: string, state: RepoCollectionState): Promise<
     lastUpdated: new Date().toISOString(),
   };
 
-  await writeWithOptionalSqliteFallback(
-    () => writeCollectionState(repo, statePayload),
-    () => writeCollectionStateToSqlite(repo, statePayload),
-    'writeCollectionState',
-    warn,
-  );
+  await writeCollectionState(repo, statePayload);
 }
 
 
@@ -397,22 +356,12 @@ async function persistCollectedRuns(
 
   for (const date of dates) {
     const runCount = runsByDate[date].length;
-    console.log(`  Writing ${date} to Turso${isSqliteFallbackEnabled() ? ' + SQLite fallback' : ''} (${runCount} runs)`);
+    console.log(`  Writing ${date} (${runCount} runs)`);
 
-    await writeWithOptionalSqliteFallback(
-      () => writeRunsToTurso(repo, runsByDate[date], date),
-      () => writeRunsToSqlite(repo, runsByDate[date], date),
-      `writeRuns ${date}`,
-      warn,
-    );
+    await writeRuns(repo, runsByDate[date], date);
 
     const attempts = buildWorkflowAttempts(runsByDate[date], reposConfig, repoConfig);
-    await writeWithOptionalSqliteFallback(
-      () => writeWorkflowAttemptsToTurso(repo, attempts),
-      () => writeWorkflowAttemptsToSqlite(repo, attempts),
-      `writeWorkflowAttempts ${date}`,
-      warn,
-    );
+    await writeWorkflowAttempts(repo, attempts);
   }
 
   const cutoffDate = startOfDay(subDays(now, retentionDays));
@@ -452,14 +401,14 @@ export async function collectRepo(
   const repoConfig = findRepoConfig(reposConfig, repo);
 
   const now = new Date();
-  let state = await loadRepoState(repo, retentionDays, now);
-  log(`State: latest=${state.latest}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
+  const effectiveDays = options.collectDays ?? retentionDays;
+  if (options.collectDays) {
+    log(`Collecting most recent ${options.collectDays} day(s) (retention still ${retentionDays} day(s))`);
+  }
+  let state = await loadRepoState(repo, effectiveDays, now);
+  log(`State: latest=${state.latest || '(none)'}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
 
-  const existingRunIdsWithSteps = await withOptionalSqliteFallback(
-    () => getExistingRunIdsWithStepsFromTurso(repo),
-    () => getExistingRunIdsWithStepsFromSqlite(repo),
-    'getExistingRunIdsWithSteps',
-  );
+  const existingRunIdsWithSteps = await getExistingRunIdsWithSteps(repo);
   const cachedRunIdsWithSteps = options.skipJobs ? new Map<number, string>() : existingRunIdsWithSteps;
   log(`Existing runs with cached steps: ${cachedRunIdsWithSteps.size}`);
 
@@ -669,7 +618,7 @@ export async function collectRepo(
       return runs;
     }
 
-    log(`Splitting saturated window ${JSON.stringify(window)} into ${childWindows.length} sub-windows`);
+    console.log(`Splitting saturated window (${window.start}..${window.end}) into ${childWindows.length} sub-windows`);
     const mergedRuns = new Map<string, Run>();
 
     for (const childWindow of childWindows) {
@@ -699,17 +648,22 @@ export async function collectRepo(
     existingFileCount: state.collectedDates.length,
     historyComplete: state.historyComplete,
     backfillCursor: state.backfillCursor,
-    retentionDays,
+    retentionDays: effectiveDays,
     forceFullBackfill: options.forceFullBackfill,
     reverse: options.reverse,
   });
-  log(`Collecting ${windows.length} window(s) for ${repo}`);
+  const rangeStart = windows.length > 0 ? windows[windows.length - 1].start : '(?)';
+  const rangeEnd = windows.length > 0 ? windows[0].end : '(?)';
+  console.log(`Collecting ${windows.length} window(s) for ${repo} (${rangeStart} → ${rangeEnd})`);
 
   const allRunsMap = new Map<string, Run>();
   const completedWindows: CollectionWindow[] = [];
-  for (const window of windows) {
+  for (let wi = 0; wi < windows.length; wi += 1) {
+    const window = windows[wi];
+    console.log(`Window ${wi + 1}/${windows.length} (${window.start}..${window.end})`);
     try {
       const windowRuns = await collectRunsForWindow(window);
+      console.log(`Window ${wi + 1}/${windows.length} done: ${windowRuns.length} run(s)`);
       for (const run of windowRuns) {
         allRunsMap.set(runAttemptKey(run.id, run.runAttempt), run);
       }
@@ -726,7 +680,7 @@ export async function collectRepo(
         now,
       );
       state = checkpointState;
-      log(`Checkpointed partial raw collection state for ${repo}: ${checkpointState.collectedDates.length} retained date(s).`);
+      console.log(`Checkpointed ${repo}: ${checkpointState.collectedDates.length} retained date(s), latest=${checkpointState.latest || '(none)'} (${wi + 1}/${windows.length})`);
     } catch (err) {
       if (err instanceof RateLimitAbortError) {
         for (const run of err.partialRuns) {
@@ -742,7 +696,7 @@ export async function collectRepo(
           completedWindows,
           now,
         );
-        log(`Persisted partial raw collection state for ${repo}: ${persistedState.collectedDates.length} retained date(s).`);
+        log(`Persisted partial raw collection state for ${repo}: ${persistedState.collectedDates.length} retained date(s) (${wi + 1}/${windows.length}).`);
       }
       throw err;
     }
@@ -782,6 +736,9 @@ export async function runCollection({
   }
   if (cliOptions.skipJobs) {
     console.log('Workflow-only mode enabled; jobs will not be fetched in this pass.');
+  }
+  if (cliOptions.collectDays) {
+    console.log(`Scoped collection: most recent ${cliOptions.collectDays} day(s) (data retention stays ${retentionDays} day(s)).`);
   }
   if (cliOptions.repoName) {
     console.log(`Single repo mode enabled; collecting only ${cliOptions.repoName}.`);
@@ -848,13 +805,14 @@ export async function main() {
 
   log(`VERBOSE mode: ${VERBOSE}`);
   log(`Retention days: ${retentionDays}`);
+  log(`Collect days: ${cliOptions.collectDays ?? '(full retention)'}`);
   log(`Force full backfill: ${cliOptions.forceFullBackfill}`);
   log(`Reverse collection: ${cliOptions.reverse}`);
   log(`Requested repo: ${cliOptions.repoName || '(all configured repos)'}`);
   log(`Target repos: ${targetRepos.join(', ') || '(none)'}`);
   log(`Node version: ${process.version}`);
   log(`ETL_DIR: ${ETL_DIR}`);
-  log(`State storage: Turso${isSqliteFallbackEnabled() ? ' + SQLite fallback' : ''}`);
+  log(`State storage: PostgreSQL`);
 
   await runCollection({
     token,

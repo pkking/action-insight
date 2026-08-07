@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: 22
       - run: npm config set registry https://registry.npmjs.org
-      - run: npm install tsx @octokit/core date-fns js-yaml @libsql/client
+      - run: npm install tsx @octokit/core date-fns js-yaml pg
       - name: Rebuild PR artifacts
         run: |
           args=()
@@ -42,8 +42,7 @@ jobs:
           fi
           npx tsx etl/scripts/rebuild-pr-artifacts.ts "${args[@]}"
         env:
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          PG_DATABASE_URL: ${{ secrets.PG_DATABASE_URL }}
           REBUILD_REPO: ${{ inputs.repo || '' }}
           START_DATE: ${{ inputs.start_date || '' }}
           END_DATE: ${{ inputs.end_date || '' }}

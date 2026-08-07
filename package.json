@@ -5,20 +5,17 @@
   "scripts": {
     "dev": "next dev",
     "collect": "tsx etl/scripts/collect.ts",
-    "migrate:turso": "tsx etl/scripts/migrate-turso.ts",
-    "migrate:supabase-to-turso": "tsx etl/scripts/migrate-supabase-to-turso.ts",
-    "migrate:turso-to-sqlite": "tsx etl/scripts/migrate-turso-to-sqlite.ts",
+    "purge": "tsx etl/scripts/purge-pg.ts",
+    "migrate:turso-to-pg": "tsx etl/scripts/migrate-turso-to-pg.ts",
     "rebuild:pr-artifacts": "tsx etl/scripts/rebuild-pr-artifacts.ts",
     "validate:repos": "node --import tsx etl/scripts/validate-repos.ts",
     "validate:repos:online": "node --import tsx etl/scripts/validate-repos.ts --online",
-    "prebuild": "npm run migrate:turso",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run"
   },
   "dependencies": {
-    "@libsql/client": "^0.17.4",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "js-yaml": "^4.2.0",
@@ -51,6 +48,7 @@
     "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "@libsql/client": "^0.17.4"
   }
 }

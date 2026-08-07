@@ -9,43 +9,30 @@ import {
 } from './collect';
 import { isGitHubRateLimitError } from './github';
 
-vi.mock('./turso-storage.ts', async () => {
-  const actual = await vi.importActual<typeof import('./turso-storage')>('./turso-storage');
+vi.mock('./pg-storage.ts', async () => {
+  const actual = await vi.importActual<typeof import('./pg-storage')>('./pg-storage');
   return {
     ...actual,
     readCollectionState: vi.fn().mockResolvedValue(null),
     writeCollectionState: vi.fn().mockResolvedValue(undefined),
-    getCollectedDatesFromTurso: vi.fn().mockResolvedValue([]),
-    getExistingRunIdsFromTurso: vi.fn().mockResolvedValue(new Set()),
-	    getExistingRunIdsWithStepsFromTurso: vi.fn().mockResolvedValue(new Map()),
-	    writeRunsToTurso: vi.fn().mockResolvedValue(undefined),
-	    writeWorkflowAttemptsToTurso: vi.fn().mockResolvedValue(undefined),
+    getCollectedDates: vi.fn().mockResolvedValue([]),
+    getExistingRunIds: vi.fn().mockResolvedValue(new Set()),
+	    getExistingRunIdsWithSteps: vi.fn().mockResolvedValue(new Map()),
+	    writeRuns: vi.fn().mockResolvedValue(undefined),
+	    writeWorkflowAttempts: vi.fn().mockResolvedValue(undefined),
 	  };
 	});
 
-vi.mock('./sqlite-storage.ts', () => ({
-  readCollectionStateFromSqlite: vi.fn().mockResolvedValue(null),
-  writeCollectionStateToSqlite: vi.fn().mockResolvedValue(undefined),
-  getCollectedDatesFromSqlite: vi.fn().mockResolvedValue([]),
-	  getExistingRunIdsWithStepsFromSqlite: vi.fn().mockResolvedValue(new Map()),
-	  writeRunsToSqlite: vi.fn().mockResolvedValue(undefined),
-	  writeWorkflowAttemptsToSqlite: vi.fn().mockResolvedValue(undefined),
-	  initSqlite: vi.fn().mockResolvedValue('file::memory:'),
-	}));
 
 import {
   readCollectionState,
   writeCollectionState,
-  getCollectedDatesFromTurso,
-  getExistingRunIdsFromTurso,
-  getExistingRunIdsWithStepsFromTurso,
-  writeRunsToTurso,
-  writeWorkflowAttemptsToTurso,
-} from './turso-storage';
-import {
-  getCollectedDatesFromSqlite,
-  readCollectionStateFromSqlite,
-} from './sqlite-storage';
+  getCollectedDates,
+  getExistingRunIds,
+  getExistingRunIdsWithSteps,
+  writeRuns,
+  writeWorkflowAttempts,
+} from './pg-storage';
 
 function mockRepoState(options: {
   latest?: string;
@@ -61,25 +48,9 @@ function mockRepoState(options: {
     retentionDays: options.retentionDays ?? 90,
     lastUpdated: null,
   });
-  vi.mocked(getCollectedDatesFromTurso).mockResolvedValue(options.dates ?? []);
+  vi.mocked(getCollectedDates).mockResolvedValue(options.dates ?? []);
 }
 
-function mockSqliteRepoState(options: {
-  latest?: string;
-  dates?: string[];
-  historyComplete?: boolean;
-  backfillCursor?: string | null;
-  retentionDays?: number;
-}) {
-  vi.mocked(readCollectionStateFromSqlite).mockResolvedValue({
-    backfillCursor: options.backfillCursor ?? null,
-    historyComplete: options.historyComplete ?? true,
-    latestDate: options.latest ?? null,
-    retentionDays: options.retentionDays ?? 90,
-    lastUpdated: null,
-  });
-  vi.mocked(getCollectedDatesFromSqlite).mockResolvedValue(options.dates ?? []);
-}
 
 describe('fetchJobsForRunAttempt', () => {
   it('retrieves every job page', async () => {
@@ -112,12 +83,10 @@ describe('collect rate limit handling', () => {
     vi.restoreAllMocks();
     delete process.env.ENABLE_SQLITE_FALLBACK;
     vi.mocked(readCollectionState).mockResolvedValue(null);
-    vi.mocked(readCollectionStateFromSqlite).mockResolvedValue(null);
-    vi.mocked(getCollectedDatesFromTurso).mockResolvedValue([]);
-    vi.mocked(getCollectedDatesFromSqlite).mockResolvedValue([]);
-    vi.mocked(getExistingRunIdsFromTurso).mockResolvedValue(new Set());
-    vi.mocked(getExistingRunIdsWithStepsFromTurso).mockResolvedValue(new Map());
-    vi.mocked(writeRunsToTurso).mockResolvedValue(undefined);
+    vi.mocked(getCollectedDates).mockResolvedValue([]);
+    vi.mocked(getExistingRunIds).mockResolvedValue(new Set());
+    vi.mocked(getExistingRunIdsWithSteps).mockResolvedValue(new Map());
+    vi.mocked(writeRuns).mockResolvedValue(undefined);
     vi.mocked(writeCollectionState).mockResolvedValue(undefined);
   });
 
@@ -360,8 +329,7 @@ describe('collect rate limit handling', () => {
         }),
       };
 
-      mockRepoState({ latest: undefined, dates: [], historyComplete: false });
-      mockSqliteRepoState({
+      mockRepoState({
         latest: '2026-04-12',
         dates: ['2026-04-12', '2026-04-11'],
         historyComplete: false,
@@ -372,8 +340,6 @@ describe('collect rate limit handling', () => {
         collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false })
       ).rejects.toBeInstanceOf(RateLimitAbortError);
 
-      expect(readCollectionStateFromSqlite).toHaveBeenCalledWith(repo);
-      expect(getCollectedDatesFromSqlite).toHaveBeenCalledWith(repo);
       expect(vi.mocked(writeCollectionState)).toHaveBeenCalledWith(repo, expect.objectContaining({
         latestDate: '2026-04-12',
         historyComplete: false,
@@ -667,8 +633,8 @@ describe('collect rate limit handling', () => {
 
     const repo = 'acme/widgets';
     mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
-    vi.mocked(getExistingRunIdsFromTurso).mockResolvedValue(new Set([101]));
-    vi.mocked(getExistingRunIdsWithStepsFromTurso).mockResolvedValue(new Map());
+    vi.mocked(getExistingRunIds).mockResolvedValue(new Set([101]));
+    vi.mocked(getExistingRunIdsWithSteps).mockResolvedValue(new Map());
 
     const request = vi.fn().mockImplementation((route: string, params: Record<string, unknown>) => {
       if (route === 'GET /repos/{owner}/{repo}/actions/runs') {
@@ -730,7 +696,7 @@ describe('collect rate limit handling', () => {
 
     const repo = 'acme/widgets';
     mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
-    vi.mocked(getExistingRunIdsWithStepsFromTurso).mockResolvedValue(
+    vi.mocked(getExistingRunIdsWithSteps).mockResolvedValue(
       new Map([[101, '2026-04-18T10:05:00Z']])
     );
 
@@ -963,7 +929,7 @@ describe('collect rate limit handling', () => {
       vi.useRealTimers();
     }
 
-    expect(vi.mocked(writeWorkflowAttemptsToTurso)).toHaveBeenCalledWith(
+    expect(vi.mocked(writeWorkflowAttempts)).toHaveBeenCalledWith(
       repo,
       expect.arrayContaining([
         expect.objectContaining({ run_id: 101, run_attempt: 1, status: 'completed' }),
