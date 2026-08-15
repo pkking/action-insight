@@ -160,6 +160,26 @@ _Avoid_: job duration
 The elapsed time from when a job is created to when it finishes.
 _Avoid_: job runtime
 
+**Resource Model**:
+The normalized runner accelerator model attributed to a job from its runner labels, such as `npu-a3`.
+_Avoid_: runner type, resource type
+
+**Resource Count**:
+The positive number of accelerator resources attributed to a job from its runner labels.
+_Avoid_: card count, runner count
+
+**Machine-Hours**:
+The attributed runner occupancy of a job, computed as **Job Runtime** multiplied by **Resource Count** and converted to hours. It is not device utilization or monetary cost.
+_Avoid_: cost, compute time, NPU hours
+
+**Unknown-Cost Sample**:
+A job whose **Machine-Hours** cannot be computed because **Job Runtime** or a positive **Resource Count** is unavailable.
+_Avoid_: zero-cost job
+
+**Forced Merge Indicator**:
+Whether a pull request was merged before its tracked CI completed.
+_Avoid_: failed merge, forced push
+
 **Invalid Timing Sample**:
 A workflow, job, or step sample whose required timestamps are missing, malformed, or produce a negative duration.
 _Avoid_: bad duration
@@ -244,6 +264,10 @@ _Avoid_: failure analysis
 - **Job Queue Duration** is computed from job `created_at` to job `started_at`
 - **Job Runtime** is computed from job `started_at` to job `completed_at`
 - UI metrics must explain that **Job Total Duration** equals **Job Queue Duration** plus **Job Runtime**
+- **Machine-Hours** equal **Job Runtime** × **Resource Count** ÷ 3600 and exclude **Job Queue Duration**
+- Jobs without a valid **Job Runtime** and positive **Resource Count** are **Unknown-Cost Samples**, excluded from Machine-Hour totals, and counted separately
+- Missing **Resource Model** values are grouped under an explicit unknown bucket rather than guessed from job or workflow names
+- **Forced Merge Indicator** requires both merge and tracked-CI completion timestamps; pull requests with partial CI history are excluded from its rate denominator
 - **Invalid Timing Samples** are excluded from duration averages and percentiles, counted separately, and surfaced as data quality warnings
 - **Step Runtime Analysis** includes only **Slow Successful Workflows**
 - Step-level duration analysis uses **Step Runtime** only; steps do not have queue or total duration metrics
