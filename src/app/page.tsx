@@ -1,5 +1,5 @@
 import DashboardShell from './DashboardShell';
-import { getDashboardReadModel, parsePrDashboardQuery } from '@/lib/dashboard-read-model';
+import { getDashboardReadModel, parseDashboardQuery } from '@/lib/dashboard-read-model';
 import { getTrackedRepoOptions } from '@/lib/server-homepage-data';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +21,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     }
   }
 
-  const query = parsePrDashboardQuery(urlParams);
+  const query = parseDashboardQuery(urlParams);
   const [repoOptions, result] = await Promise.all([
     getTrackedRepoOptions(),
     getDashboardReadModel(query),

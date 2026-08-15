@@ -18,6 +18,7 @@ import {
   ComposedChart,
   Legend,
   Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -30,7 +31,11 @@ import {
   machineHours,
   summarizeMachineHoursByResourceModel,
 } from '@/lib/dashboard-metrics';
-import type { PrDashboardResult, PrTableRow } from '@/lib/dashboard-read-model';
+import type {
+  CostDashboardResult,
+  DashboardReadResult,
+  PrTableRow,
+} from '@/lib/dashboard-read-model';
 import type { RepoOption } from '@/lib/server-homepage-data';
 import type {
   PullRequestMetricsSummary,
@@ -38,10 +43,10 @@ import type {
   Step,
 } from '@/lib/types';
 
-// ponytail: slice 1 ships the shared shell + PR tab only. Cost / Workflow /
-// Job / Queue tabs are stubbed until their slices. Reuses Recharts, the
-// metric-tooltip pattern, date controls, repo options, and the existing
-// fetchPullRequestDetail drill-down path (now resource-aware).
+// ponytail: slice 1 ships the shared shell + PR tab; slice 2 adds the Cost
+// tab (spec §5.2). Workflow / Job / Queue tabs remain stubbed. Reuses
+// Recharts, the metric-tooltip pattern, date controls, repo options, and
+// the existing fetchPullRequestDetail drill-down path (resource-aware).
 
 const TABS = [
   { key: 'pr', label: 'PR' },
@@ -53,7 +58,7 @@ const TABS = [
 
 type DashboardShellProps = {
   repoOptions: RepoOption[];
-  result: PrDashboardResult;
+  result: DashboardReadResult;
   searchParams: Record<string, string | string[] | undefined>;
 };
 
@@ -314,6 +319,223 @@ function StatusDot({ conclusion }: { conclusion: string }) {
   return <XCircle className="h-3.5 w-3.5 text-red-500" />;
 }
 
+const COST_REPO_COLORS = ['#3b82f6', '#14b8a6', '#f59e0b', '#a78bfa', '#ec4899', '#10b981', '#f43f5e', '#8b5cf6'];
+
+/** Cost tab body: Machine-Hour cards, daily per-repo trend, grouped table (spec §5.2). */
+function CostBody({
+  result,
+}: {
+  result: CostDashboardResult;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const urlSearchParams = useSearchParams();
+  const cards = result.cards;
+
+  // Map of repoKey → color for the multi-line chart.
+  const repoColors = useMemo(() => {
+    const keys = [...new Set(result.series.map((p) => p.repoKey))];
+    return new Map(keys.map((key, i) => [key, COST_REPO_COLORS[i % COST_REPO_COLORS.length]]));
+  }, [result.series]);
+
+  // Pivot the daily series into one row per date with a column per repo.
+  const dailyData = useMemo(() => {
+    const byDate = new Map<string, Record<string, number>>();
+    for (const p of result.series) {
+      const row = byDate.get(p.date) ?? {};
+      row[p.repoKey] = (row[p.repoKey] ?? 0) + p.machineHours;
+      byDate.set(p.date, row);
+    }
+    return [...byDate.entries()]
+      .map(([date, values]) => ({ date, ...values }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [result.series]);
+
+  const reposInSeries = useMemo(
+    () => [...repoColors.keys()],
+    [repoColors],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(result.totalRows / result.pageSize));
+  const currentPage = Math.min(result.page, totalPages);
+
+  function pushPage(page: number) {
+    const params = new URLSearchParams(urlSearchParams.toString());
+    params.set('page', String(page));
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  return (
+    <>
+      {/* Cost metric cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <CostCard label="Total Machine-Hours" definition="Job Runtime × Resource Count ÷ 3600, excluding queue (spec §4)." value={fmtMachineHours(cards.totalMachineHours)} />
+        <CostCard
+          label="Per Merged PR"
+          definition="Total Machine-Hours ÷ merged PRs with at least one attributable job in the window."
+          value={cards.machineHoursPerMergedPr !== undefined ? fmtMachineHours(cards.machineHoursPerMergedPr) : '—'}
+        />
+        <CostCard
+          label={cards.topWorkflow ? 'Top Workflow' : 'Top Repository'}
+          definition={cards.topWorkflow ? 'Highest-Machine-Hour workflow in the selected repository.' : 'Highest-Machine-Hour repository.'}
+          value={(cards.topWorkflow?.workflowFile ?? cards.topRepo?.repoKey ?? '—')}
+          sub={fmtMachineHours(cards.topWorkflow?.machineHours ?? cards.topRepo?.machineHours)}
+        />
+        <CostCard label="Daily Average" definition="Total Machine-Hours ÷ days in the selected range." value={fmtMachineHours(cards.dailyAverageMachineHours)} />
+        <CostCard
+          label={cards.topWorkflow ? 'PR Count' : 'Repos'}
+          definition={cards.topWorkflow ? 'Merged PRs with attributable jobs in the window.' : 'Repositories contributing Machine-Hours.'}
+          value={String(cards.contributingCount)}
+        />
+      </div>
+
+      {/* Data-quality / truncation notices */}
+      {result.truncated && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+          Showing latest {result.displayedObservationCount} of {result.totalRows} workflow/resource groups — narrow the date range to see all.
+        </div>
+      )}
+      {result.quality.unknownResourceSamples > 0 && (
+        <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-400">
+          {result.quality.unknownResourceSamples} job(s) without a positive Resource Count / valid runtime are excluded from Machine-Hours (Unknown-Cost).
+        </div>
+      )}
+
+      {/* Chart: daily Machine-Hours per repository */}
+      <div className="rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <h2 className="mb-4 text-lg font-bold">Daily Machine-Hours by Repository</h2>
+        {dailyData.length === 0 ? (
+          <div className="flex h-72 items-center justify-center rounded-lg border border-dashed border-neutral-200 text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+            No attributable jobs in the selected range.
+          </div>
+        ) : (
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={dailyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" className="dark:opacity-20" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#888' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                <YAxis tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
+                <Tooltip formatter={(value) => fmtMachineHours(Number(value))} />
+                <Legend />
+                {reposInSeries.map((repoKey) => (
+                  <Line
+                    key={repoKey}
+                    type="monotone"
+                    dataKey={repoKey}
+                    stroke={repoColors.get(repoKey)}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      {/* Paged detail table: one row per (workflow, resource model) */}
+      <div className="overflow-hidden rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="border-b border-neutral-100 p-4 dark:border-neutral-800">
+          <h2 className="text-lg font-bold">Cost by Workflow &amp; Resource</h2>
+          <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
+            {result.displayedObservationCount} group(s){result.truncated ? ' (truncated)' : ''}.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-neutral-50 text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+              <tr>
+                <th className="px-4 py-3">Repo</th>
+                <th className="px-4 py-3">Workflow</th>
+                <th className="px-4 py-3">Resource Model</th>
+                <th className="px-4 py-3">Avg Total</th>
+                <th className="px-4 py-3">Attempts</th>
+                <th className="px-4 py-3">Success</th>
+                <th className="px-4 py-3">Fail Rate</th>
+                <th className="px-4 py-3">Machine-Hours</th>
+                <th className="px-4 py-3">Share</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+              {result.rows.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-neutral-400 dark:text-neutral-500">
+                    No tracked workflow jobs in range. Try “All repositories” or a wider range.
+                  </td>
+                </tr>
+              ) : (
+                result.rows.map((row, i) => (
+                  <tr key={i} className="hover:bg-neutral-50 dark:hover:bg-neutral-950/60">
+                    <td className="px-4 py-3 text-xs text-neutral-500 dark:text-neutral-400">{row.repoKey}</td>
+                    <td className="px-4 py-3 font-medium" title={row.workflowRef || undefined}>{row.workflowFile || '—'}</td>
+                    <td className="px-4 py-3 text-xs">{row.resourceModel || '—'}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{fmtSeconds(row.avgWorkflowTotalDuration)}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{row.attemptCount}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-emerald-600 dark:text-emerald-400">{row.successCount}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{Math.round(row.failureRate)}%</td>
+                    <td className="px-4 py-3 font-mono text-xs text-blue-600 dark:text-blue-400">{fmtMachineHours(row.machineHours)}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-neutral-500 dark:text-neutral-400">{Math.round(row.shareOfTotal)}%</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {result.totalRows > result.pageSize && (
+          <div className="flex items-center justify-between border-t border-neutral-100 px-4 py-3 dark:border-neutral-800">
+            <span className="text-xs text-neutral-500 dark:text-neutral-400">
+              Page {currentPage} of {totalPages} · {result.totalRows} groups
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={currentPage <= 1}
+                onClick={() => pushPage(currentPage - 1)}
+                className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => pushPage(currentPage + 1)}
+                className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function CostCard({
+  label,
+  definition,
+  value,
+  sub,
+}: {
+  label: string;
+  definition: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+      <div className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+        {label}
+        <MetricTooltip definition={definition} />
+      </div>
+      <div className="mt-2 text-2xl font-bold font-mono text-neutral-900 dark:text-neutral-100">
+        {value}
+      </div>
+      {sub && <div className="mt-1 text-[11px] text-neutral-400 dark:text-neutral-500">{sub}</div>}
+    </div>
+  );
+}
+
 export default function DashboardShell({
   repoOptions,
   result,
@@ -346,15 +568,21 @@ export default function DashboardShell({
   const detailAbortRef = useRef<AbortController | null>(null);
   const lastUrlRef = useRef<string>('');
 
-  // Sync state → URL (PR tab only; other tabs defer to their slices).
+  const activeTab = result.tab;
+  const tabDefaultDays = activeTab === 'pr' ? 1 : 14;
+
+  // Sync state → URL. `tab` is read back from the current URL so a tab switch
+  // (written directly by switchTab) survives subsequent filter edits.
   useEffect(() => {
     const params = new URLSearchParams();
+    const urlTab = urlSearchParams.get('tab');
+    if (urlTab && urlTab !== 'pr') params.set('tab', urlTab);
     if (selectedRepoKey) params.set('repo', selectedRepoKey);
     if (useCustomRange) {
       params.set('useCustomRange', 'true');
       if (startDate) params.set('startDate', startDate);
       if (endDate) params.set('endDate', endDate);
-    } else if (days !== 1) {
+    } else if (days !== tabDefaultDays) {
       params.set('days', String(days));
     }
     const query = params.toString();
@@ -362,7 +590,24 @@ export default function DashboardShell({
     if (lastUrlRef.current === nextUrl) return;
     lastUrlRef.current = nextUrl;
     router.replace(nextUrl, { scroll: false });
-  }, [days, endDate, pathname, router, selectedRepoKey, startDate, useCustomRange]);
+  }, [days, endDate, pathname, router, selectedRepoKey, startDate, tabDefaultDays, urlSearchParams, useCustomRange]);
+
+  /** Switch the active tab, resetting the date filter to that tab's default. */
+  const switchTab = useCallback(
+    (tab: 'pr' | 'cost') => {
+      if (tab === activeTab) return;
+      const defaultDays = tab === 'pr' ? 1 : 14;
+      setUseCustomRange(false);
+      setDays(defaultDays);
+      const params = new URLSearchParams();
+      params.set('tab', tab);
+      if (selectedRepoKey) params.set('repo', selectedRepoKey);
+      // days omitted → server applies the tab default (matches local defaultDays)
+      lastUrlRef.current = `${pathname}?${params.toString()}`;
+      router.replace(lastUrlRef.current, { scroll: false });
+    },
+    [activeTab, pathname, router, selectedRepoKey],
+  );
 
   const selectedRepo = useMemo(
     () =>
@@ -404,8 +649,9 @@ export default function DashboardShell({
   const totalPages = Math.max(1, Math.ceil(result.totalRows / result.pageSize));
   const currentPage = Math.min(result.page, totalPages);
 
-  // Daily count line derived from the bounded series (newest 500 PRs).
+  // Daily count line derived from the bounded PR series (newest 500 PRs).
   const dailyCounts = useMemo(() => {
+    if (result.tab !== 'pr') return [];
     const byDate = new Map<string, number>();
     for (const point of result.series) {
       byDate.set(point.date, (byDate.get(point.date) ?? 0) + 1);
@@ -413,19 +659,21 @@ export default function DashboardShell({
     return [...byDate.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, count]) => ({ date, count }));
-  }, [result.series]);
+  }, [result]);
 
   const chartData = useMemo(
-    () =>
-      result.series.map((p) => ({
+    () => {
+      if (result.tab !== 'pr') return [];
+      return result.series.map((p) => ({
         label: `#${p.prNumber}`,
         queue: p.queue,
         ciRuntime: p.ciRuntime,
         review: p.review,
         repoKey: p.repoKey,
         prNumber: p.prNumber,
-      })),
-    [result.series],
+      }));
+    },
+    [result],
   );
 
   return (
@@ -507,21 +755,29 @@ export default function DashboardShell({
           </div>
         </div>
 
-        {/* Five-tab nav (PR active; others stubbed for later slices) */}
+        {/* Five-tab nav (PR + Cost active; others stubbed for later slices) */}
         <div className="flex rounded-lg border border-neutral-100 bg-white p-1 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
           {TABS.map((tab) => {
-            const active = tab.key === 'pr';
+            const active = tab.key === activeTab;
+            const enabled = tab.key === 'pr' || tab.key === 'cost';
             return (
               <button
                 key={tab.key}
                 type="button"
-                disabled={tab.key !== 'pr'}
+                disabled={!enabled}
+                onClick={() => enabled && switchTab(tab.key as 'pr' | 'cost')}
                 className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   active
                     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400'
                     : 'text-neutral-400 hover:text-neutral-600 dark:text-neutral-500 disabled:cursor-not-allowed'
                 }`}
-                title={tab.key === 'pr' ? 'PR lifecycle analysis' : 'Coming in a later slice'}
+                title={
+                  tab.key === 'pr'
+                    ? 'PR lifecycle analysis'
+                    : tab.key === 'cost'
+                      ? 'Machine-Hours cost analysis'
+                      : 'Coming in a later slice'
+                }
               >
                 {tab.label}
               </button>
@@ -529,6 +785,8 @@ export default function DashboardShell({
           })}
         </div>
 
+        {result.tab === 'pr' && (
+        <>
         {/* PR metric cards */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard
@@ -734,6 +992,12 @@ export default function DashboardShell({
             </div>
           )}
         </div>
+        </>
+        )}
+
+        {result.tab === 'cost' && (
+          <CostBody result={result} />
+        )}
 
         <footer className="pb-4 text-center text-xs text-neutral-400 dark:text-neutral-600">
           Metrics computed server-side from attempt-scoped PostgreSQL data (ADR-008). No GitHub API calls on dashboard reads.

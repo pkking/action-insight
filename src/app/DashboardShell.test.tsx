@@ -3,7 +3,10 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DashboardShell from './DashboardShell';
-import type { PrDashboardResult } from '@/lib/dashboard-read-model';
+import type {
+  CostDashboardResult,
+  PrDashboardResult,
+} from '@/lib/dashboard-read-model';
 
 const replaceMock = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -15,6 +18,7 @@ vi.mock('next/navigation', () => ({
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   ComposedChart: ({ data }: { data?: unknown[] }) => <div data-testid="chart" data-len={data?.length ?? 0} />,
+  LineChart: ({ data }: { data?: unknown[] }) => <div data-testid="cost-chart" data-len={data?.length ?? 0} />,
   Bar: () => null,
   Line: () => null,
   XAxis: () => null,
@@ -28,6 +32,7 @@ const repoOptions = [{ owner: 'owner', repo: 'repo', key: 'owner/repo' }];
 
 function emptyResult(): PrDashboardResult {
   return {
+    tab: 'pr',
     cards: {
       endToEnd: { avg: 0, p50: 0, p90: 0, sampleCount: 0 },
       ciRuntime: { avg: 0, p50: 0, p90: 0, sampleCount: 0 },
@@ -79,6 +84,64 @@ function rowResult(): PrDashboardResult {
         mergeState: 'closed',
         forcedMerge: false,
         partialCiHistory: false,
+      },
+    ],
+    totalRows: 1,
+    displayedObservationCount: 1,
+  };
+}
+
+function emptyCostResult(): CostDashboardResult {
+  return {
+    tab: 'cost',
+    cards: {
+      totalMachineHours: 0,
+      dailyAverageMachineHours: 0,
+      contributingCount: 0,
+    },
+    series: [],
+    rows: [],
+    page: 1,
+    pageSize: 20,
+    totalRows: 0,
+    displayedObservationCount: 0,
+    truncated: false,
+    quality: {
+      invalidTimingSamples: 0,
+      unknownResourceSamples: 0,
+      partialHistorySamples: 0,
+      legacyFallbackSamples: 0,
+    },
+  };
+}
+
+function costResult(): CostDashboardResult {
+  return {
+    ...emptyCostResult(),
+    cards: {
+      totalMachineHours: 8,
+      machineHoursPerMergedPr: 4,
+      topRepo: { repoKey: 'owner/repo', machineHours: 8 },
+      dailyAverageMachineHours: 0.57,
+      contributingCount: 2,
+    },
+    series: [
+      { date: '2026-01-01', repoKey: 'owner/repo', machineHours: 4 },
+      { date: '2026-01-02', repoKey: 'owner/repo', machineHours: 4 },
+    ],
+    rows: [
+      {
+        repoKey: 'owner/repo',
+        workflowFile: 'ci.yml',
+        workflowRef: 'refs/heads/main',
+        resourceModel: 'npu-a3',
+        avgWorkflowTotalDuration: 3600,
+        attemptCount: 2,
+        successCount: 1,
+        failureRate: 50,
+        machineHours: 8,
+        shareOfTotal: 100,
+        unknownCostCount: 0,
       },
     ],
     totalRows: 1,
@@ -214,5 +277,21 @@ describe('DashboardShell', () => {
     };
     render(<DashboardShell repoOptions={repoOptions} result={truncated} searchParams={{}} />);
     expect(screen.getByText(/Showing latest 500 of 600 observations/i)).toBeInTheDocument();
+  });
+
+  it('renders the Cost tab cards, chart, and table from the read-model result', () => {
+    render(<DashboardShell repoOptions={repoOptions} result={costResult()} searchParams={{}} />);
+    // Total card + table row render.
+    expect(screen.getByText('Total Machine-Hours')).toBeInTheDocument();
+    expect(screen.getByText('ci.yml')).toBeInTheDocument();
+    expect(screen.getByText('npu-a3')).toBeInTheDocument();
+    // Daily chart received the two series points.
+    expect(screen.getByTestId('cost-chart').getAttribute('data-len')).toBe('2');
+  });
+
+  it('renders the Cost empty state when there are no attributable jobs', () => {
+    render(<DashboardShell repoOptions={repoOptions} result={emptyCostResult()} searchParams={{}} />);
+    expect(screen.getByText(/No tracked workflow jobs in range/i)).toBeInTheDocument();
+    expect(screen.getByText(/No attributable jobs in the selected range/i)).toBeInTheDocument();
   });
 });
