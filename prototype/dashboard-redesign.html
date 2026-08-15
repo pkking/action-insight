@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<!-- PROTOTYPE — throwaway. Not wired to real data. -->
+<html lang="zh" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Action Insight — 看板重设计原型</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['"Noto Sans SC"','sans-serif']}}}}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--md-surface:#fafafa;--md-card:#fff;--md-border:#e0e0e0;--md-text:#212121;--md-text-sec:#757575;--md-shadow:0 1px 3px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.08);--md-shadow-h:0 4px 8px rgba(0,0,0,.12),0 2px 4px rgba(0,0,0,.08)}
+.dark{--md-surface:#121212;--md-card:#1e1e1e;--md-border:#2e2e2e;--md-text:#e0e0e0;--md-text-sec:#a0a0a0;--md-shadow:0 1px 3px rgba(0,0,0,.4),0 1px 2px rgba(0,0,0,.3);--md-shadow-h:0 4px 12px rgba(0,0,0,.5),0 2px 4px rgba(0,0,0,.3)}
+*{font-family:'Noto Sans SC',sans-serif!important}
+body{background:var(--md-surface);color:var(--md-text)}
+.num{font-variant-numeric:tabular-nums}
+.bar-rect{transition:opacity .15s}.bar-rect:hover{opacity:1!important}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:#999;border-radius:4px}
+/* MD elevation: 卡片圈角+阴影 */
+.rounded-lg{border-radius:12px;box-shadow:var(--md-shadow);background:var(--md-card)!important;border-color:var(--md-border)!important;border:1px solid var(--md-border)}
+.rounded{border-radius:8px}
+/* neutral 覆盖→MD色 */
+.bg-neutral-900/60,.bg-neutral-900,.bg-neutral-950,.bg-neutral-900/95,.bg-neutral-900/40{background:var(--md-card)!important}
+.border-neutral-800,.border-neutral-700,.border-neutral-900,.border-neutral-200{border-color:var(--md-border)!important}
+.dark .text-neutral-200{color:#e0e0e0!important}.dark .text-neutral-100{color:#fff!important}
+.dark .text-neutral-300{color:#c0c0c0!important}.dark .text-neutral-400{color:#a0a0a0!important}
+.dark .text-neutral-500{color:#808080!important}.dark .text-neutral-600{color:#606060!important}
+html:not(.dark) .text-neutral-200{color:#212121!important}html:not(.dark) .text-neutral-100{color:#000!important}
+html:not(.dark) .text-neutral-300{color:#424242!important}html:not(.dark) .text-neutral-400{color:#616161!important}
+html:not(.dark) .text-neutral-500{color:#757575!important}html:not(.dark) .text-neutral-600{color:#9e9e9e!important}
+.dark .bg-neutral-800{background:#2a2a2a!important}
+html:not(.dark) .bg-neutral-800{background:#e0e0e0!important}
+/* 图表轴色 */
+.chart-grid{stroke:#333}.chart-axis{fill:#666}.chart-axis-line{stroke:#555}
+html:not(.dark) .chart-grid{stroke:#ccc}html:not(.dark) .chart-axis{fill:#757575}html:not(.dark) .chart-axis-line{stroke:#9e9e9e}
+/* 语义色 */
+.text-emerald-400{color:#43a047!important}html:not(.dark) .text-emerald-400{color:#2e7d32!important}
+.text-amber-400{color:#fb8c00!important}html:not(.dark) .text-amber-400{color:#ef6c00!important}
+.text-red-400{color:#e53935!important}html:not(.dark) .text-red-400{color:#c62828!important}
+.text-sky-400{color:#1e88e5!important}.text-sky-300{color:#42a5f5!important}html:not(.dark) .text-sky-400{color:#1565c0!important}
+/* MD primary 按钮 */
+button{font-family:'Noto Sans SC',sans-serif!important;text-transform:none}
+/* select 下拉适配 */
+.dark select{background:#1e1e1e;color:#a0a0a0;border-color:#2e2e2e}
+html:not(.dark) select{background:#fff;color:#424242;border-color:#e0e0e0}
+html:not(.dark) option{background:#fff;color:#212121}
+/* 表格居中：表头+单元格垂直居中，合并单元格居中 */
+table th,table td{vertical-align:middle!important;text-align:center!important}
+</style>
+</head>
+<body class="min-h-screen" style="font-family:'Noto Sans SC',sans-serif">
+<div id="app"></div>
+<div id="switcher" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 rounded-full border px-2 py-1 text-xs" style="background:var(--md-card);border-color:var(--md-border);box-shadow:var(--md-shadow-h)">
+<button id="prev" class="px-2 py-1 rounded-full hover:bg-neutral-800 text-neutral-300">&larr;</button>
+<span id="vlabel" class="px-3 py-1 font-medium text-neutral-100"></span>
+<button id="next" class="px-2 py-1 rounded-full hover:bg-neutral-800 text-neutral-300">&rarr;</button>
+</div>
+<script>
+// PR drilldown jobs+steps (nested under each PR)
+// job fields: name, q(排队m), ex(执行m), res(资源), card(卡数), hours(机时=ex*card), succ, steps
+var PR_JOBS = {
+  '#39201': [
+    {name:'Recommend tests from coverage',q:138.7,ex:0.75,res:'npu-a2',card:0,hours:0,succ:'success',steps:[
+      {n:1,name:'Set up job',dur:0.1,type:'CI启动',c:'success'},
+      {n:2,name:'Checkout vllm-ascend scripts',dur:0.07,type:'构建',c:'success'},
+      {n:3,name:'Download test case map',dur:0.0,type:'CI启动',c:'success'},
+      {n:5,name:'Recommend tests for current PR',dur:0.2,type:'CI启动',c:'success'},
+      {n:12,name:'Post Checkout vllm-ascend scripts',dur:0.02,type:'排除',c:'success'}
+    ]},
+    {name:'pre-commit',q:139.5,ex:3.4,res:'npu-a2',card:0,hours:0,succ:'success',steps:[
+      {n:1,name:'Set up job',dur:0.28,type:'CI启动',c:'success'},
+      {n:3,name:'Validate PR title prefix',dur:0.05,type:'CI启动',c:'success'},
+      {n:4,name:'Checkout vllm-project/vllm-ascend repo',dur:0.1,type:'构建',c:'success'},
+      {n:16,name:'Run pre-commit',dur:0.38,type:'执行测试',c:'success'},
+      {n:17,name:'Run mypy',dur:1.63,type:'执行测试',c:'success'},
+      {n:34,name:'Stop containers',dur:0.02,type:'排除',c:'success'}
+    ]},
+    {name:'e2e-npu-a3 (0)',q:142.1,ex:58.3,res:'npu-a3',card:8,hours:7.77,succ:'success',steps:[
+      {n:1,name:'Set up job',dur:0.3,type:'CI启动',c:'success'},
+      {n:3,name:'Initialize containers',dur:0.5,type:'构建',c:'success'},
+      {n:8,name:'Build vllm-ascend wheel',dur:12.4,type:'构建',c:'success'},
+      {n:15,name:'Run E2E test suite',dur:38.2,type:'执行测试',c:'success'},
+      {n:18,name:'Upload test results',dur:2.1,type:'CI启动',c:'success'}
+    ]},
+    {name:'e2e-npu-a3 (1)',q:148.9,ex:61.7,res:'npu-a3',card:8,hours:8.23,succ:'failure',steps:[
+      {n:1,name:'Set up job',dur:0.3,type:'CI启动',c:'success'},
+      {n:8,name:'Build vllm-ascend wheel',dur:11.8,type:'构建',c:'success'},
+      {n:15,name:'Run E2E test suite',dur:41.5,type:'执行测试',c:'failure'},
+      {n:16,name:'Collect failure artifacts',dur:3.2,type:'CI启动',c:'success'}
+    ]}
+  ],
+  '#39188': [
+    {name:'select-tests',q:143.2,ex:0.73,res:'npu-a2',card:0,hours:0,succ:'success',steps:[
+      {n:1,name:'Set up job',dur:0.1,type:'CI启动',c:'success'},
+      {n:7,name:'Select tests based on changed files',dur:0.05,type:'CI启动',c:'success'},
+      {n:18,name:'Complete job',dur:0.0,type:'排除',c:'success'}
+    ]},
+    {name:'e2e-npu-a3 (0)',q:150.4,ex:72.0,res:'npu-a3',card:8,hours:9.6,succ:'failure',steps:[
+      {n:1,name:'Set up job',dur:0.3,type:'CI启动',c:'success'},
+      {n:8,name:'Build vllm-ascend wheel',dur:13.1,type:'构建',c:'success'},
+      {n:15,name:'Run E2E test suite',dur:52.4,type:'执行测试',c:'failure'},
+      {n:16,name:'Collect failure artifacts',dur:3.9,type:'CI启动',c:'success'}
+    ]},
+    {name:'build-npu',q:118.6,ex:65.0,res:'npu-a3',card:8,hours:8.67,succ:'success',steps:[
+      {n:1,name:'Set up job',dur:0.3,type:'CI启动',c:'success'},
+      {n:6,name:'Restore csrc cache',dur:8.2,type:'构建',c:'success'},
+      {n:12,name:'Compile NPU kernels',dur:48.6,type:'构建',c:'success'},
+      {n:20,name:'Upload build artifacts',dur:4.1,type:'CI启动',c:'success'}
+    ]}
+  ]
+};
+var DAYS = ['07-25','07-26','07-27','07-28','07-29','07-30','07-31','08-01','08-02','08-03','08-04','08-05','08-06','08-07'];
+var DATA = {
+  repo:'vllm-project/vllm-ascend',range:'近 14 天',
+  pr:{e2eAvg:80,e2eP50:66,e2eP90:172,ciAvg:55,ciP50:42,ciP90:89,revAvg:150,revP50:108,revP90:390,forceMerge:12,prCount:15,
+    repos:[
+      {name:'vllm-project/vllm-ascend',color:'#3b82f6',e2eAvg:80,e2eP50:66,e2eP90:172,ciAvg:55,ciP50:42,ciP90:89,revAvg:150,revP50:108,revP90:390,forceMerge:12,prCount:15,
+        rows:[
+          {n:'#39201',t:'feat: support ascend attention',q:38,ex:42,rv:104,date:'08-07',state:'merged'},
+          {n:'#39188',t:'fix: npu oom in long context',q:52,ex:72,rv:138,date:'08-06',state:'merged'},
+          {n:'#39154',t:'refactor: cleanup op dispatch',q:24,ex:36,rv:62,date:'08-06',state:'merged'},
+          {n:'#39120',t:'test: add e2e npu cases',q:46,ex:54,rv:124,date:'08-05',state:'merged'},
+          {n:'#39088',t:'docs: update ascend install',q:18,ex:42,rv:10,date:'08-05',state:'force-merged'},
+          {n:'#39055',t:'feat: ragel kernel npu',q:61,ex:89,rv:176,date:'08-04',state:'merged'},
+          {n:'#39021',t:'fix: scheduler deadlock',q:48,ex:68,rv:120,date:'08-03',state:'merged'},
+          {n:'#38998',t:'chore: bump deps',q:12,ex:30,rv:15,date:'08-02',state:'merged'},
+          {n:'#38975',t:'feat: moe expert balance',q:55,ex:78,rv:142,date:'08-01',state:'merged'},
+          {n:'#38942',t:'fix: dtype mismatch',q:33,ex:45,rv:88,date:'07-31',state:'merged'},
+          {n:'#38910',t:'test: pipeline parallel',q:42,ex:61,rv:115,date:'07-30',state:'merged'},
+          {n:'#38888',t:'docs: tuning guide',q:15,ex:38,rv:8,date:'07-29',state:'force-merged'},
+          {n:'#38855',t:'feat: prefix cache npu',q:58,ex:81,rv:158,date:'07-28',state:'merged'},
+          {n:'#38820',t:'refactor: attn backend',q:44,ex:63,rv:132,date:'07-27',state:'merged'},
+          {n:'#38790',t:'fix: graph capture',q:50,ex:70,rv:126,date:'07-26',state:'merged'}
+        ],dailyCount:[5,6,4,7,5,6,8,6,5,7,8,6,7,7]},
+      {name:'sgl-project/sglang',color:'#14b8a6',e2eAvg:95,e2eP50:80,e2eP90:210,ciAvg:60,ciP50:48,ciP90:92,revAvg:170,revP50:120,revP90:440,forceMerge:18,prCount:22,
+        rows:[
+          {n:'#28001',t:'fix: attention shape mismatch',q:45,ex:48,rv:162,date:'08-07',state:'merged'},
+          {n:'#27988',t:'feat: support deepseek v3',q:62,ex:85,rv:190,date:'08-06',state:'merged'},
+          {n:'#27954',t:'refactor: kv cache',q:30,ex:42,rv:88,date:'08-06',state:'merged'},
+          {n:'#27920',t:'test: add benchmark',q:40,ex:58,rv:120,date:'08-05',state:'merged'}
+        ],dailyCount:[3,2,2,3,2,3,3,2,2,3,3,2,3,3]},
+      {name:'verl-project/verl',color:'#f97316',e2eAvg:120,e2eP50:100,e2eP90:280,ciAvg:70,ciP50:55,ciP90:105,revAvg:200,revP50:140,revP90:520,forceMerge:15,prCount:9,
+        rows:[
+          {n:'#1500',t:'feat: ppo trainer',q:55,ex:72,rv:180,date:'08-07',state:'merged'},
+          {n:'#1488',t:'fix: grad sync',q:42,ex:58,rv:150,date:'08-06',state:'merged'}
+        ],dailyCount:[1,1,1,1,1,1,1,1,1,1,1,1,1,1]}
+    ]},
+  cost:{totalNpuHours:12400,perPr:827,
+    repos:[
+      {name:'vllm-project/vllm-ascend',color:'#3b82f6',prCount:15,
+        daily:[360,350,420,380,400,410,440,420,360,400,420,450,460,400],
+        workflows:[
+          {name:'E2E',res:'npu-a3',avgDur:72,runs:42,succ:38,fail:4,hours:5180},
+          {name:'build-npu',res:'npu-a3',avgDur:65,runs:18,succ:16,fail:2,hours:1930},
+          {name:'PR Create',res:'npu-a2',avgDur:5,runs:87,succ:87,fail:0,hours:2410},
+          {name:'unit-test',res:'npu-a2',avgDur:12,runs:35,succ:34,fail:1,hours:1120},
+          {name:'multimodal',res:'npu-a3',avgDur:54,runs:12,succ:10,fail:2,hours:980}
+        ]},
+      {name:'sgl-project/sglang',color:'#14b8a6',prCount:22,
+        daily:[180,175,190,182,178,185,195,180,178,182,188,185,190,182],
+        workflows:[
+          {name:'CI',res:'npu-a3',avgDur:68,runs:58,succ:50,fail:8,hours:3940},
+          {name:'build',res:'npu-a3',avgDur:42,runs:22,succ:21,fail:1,hours:924},
+          {name:'lint',res:'npu-a2',avgDur:3,runs:22,succ:22,fail:0,hours:66}
+        ]},
+      {name:'verl-project/verl',color:'#f97316',prCount:9,
+        daily:[90,88,95,92,88,92,98,90,88,92,95,92,95,88],
+        workflows:[
+          {name:'E2E',res:'npu-a3',avgDur:85,runs:18,succ:14,fail:4,hours:1530},
+          {name:'unit-test',res:'npu-a2',avgDur:15,runs:9,succ:9,fail:0,hours:135}
+        ]},
+      {name:'hiyouga/LlamaFactory',color:'#8b5cf6',prCount:6,
+        daily:[40,38,42,40,38,42,44,40,38,42,44,40,42,38],
+        workflows:[
+          {name:'test',res:'npu-a2',avgDur:18,runs:6,succ:6,fail:0,hours:108}]},
+      {name:'modelscope/ms-swift',color:'#ef4444',prCount:11,
+        daily:[55,52,58,55,52,58,60,55,52,58,60,55,58,52],
+        workflows:[
+          {name:'CI',res:'npu-a3',avgDur:48,runs:11,succ:10,fail:1,hours:528}]}
+    ]},
+  workflows:{totalRuns:5805,p50:5,p90:42,succ:94,
+    repos:[
+      {name:'vllm-project/vllm-ascend',color:'#3b82f6',
+        workflows:[
+          {name:'E2E',resources:[{res:'npu-a3',runs:30,avgDur:78,succ:26,fail:4,hours:4680},{res:'npu-a2',runs:12,avgDur:42,succ:12,fail:0,hours:500}],avgDur:72,runs:42,succ:38,fail:4,hours:5180,daily:[3,3,4,3,3,3,4,3,3,3,4,3,3,3]},
+          {name:'build-npu',res:'npu-a3',avgDur:65,runs:18,succ:16,fail:2,hours:1930,daily:[1,1,2,1,1,2,1,1,1,1,2,1,2,1]},
+          {name:'PR Create',res:'npu-a2',avgDur:5,runs:87,succ:87,fail:0,hours:2410,daily:[6,6,4,7,5,6,8,6,5,7,8,6,7,7]},
+          {name:'unit-test',res:'npu-a2',avgDur:12,runs:35,succ:34,fail:1,hours:1120,daily:[2,3,2,3,2,3,3,2,2,3,3,2,3,2]},
+          {name:'multimodal',res:'npu-a3',avgDur:54,runs:12,succ:10,fail:2,hours:980,daily:[1,1,1,1,1,1,1,1,1,1,1,1,1,1]}
+        ],
+        runs:[
+          {wf:'E2E',id:31120017755,q:24,ex:72,date:'08-07',succ:true},
+          {wf:'E2E',id:31120008462,q:18,ex:68,date:'08-07',succ:true},
+          {wf:'PR Create',id:31120006279,q:2,ex:5,date:'08-07',succ:true},
+          {wf:'E2E',id:31119456742,q:31,ex:78,date:'08-06',succ:false},
+          {wf:'build-npu',id:31119457109,q:12,ex:65,date:'08-06',succ:true},
+          {wf:'E2E',id:31119164640,q:28,ex:70,date:'08-06',succ:true},
+          {wf:'PR Create',id:31119161405,q:1,ex:4,date:'08-05',succ:true},
+          {wf:'E2E',id:31119099001,q:22,ex:66,date:'08-05',succ:true},
+          {wf:'build-npu',id:31118933010,q:9,ex:58,date:'08-05',succ:true},
+          {wf:'E2E',id:31118801234,q:35,ex:82,date:'08-04',succ:false},
+          {wf:'Docs link check',id:31118777888,q:1,ex:3,date:'08-04',succ:true},
+          {wf:'PR Create',id:31118555001,q:2,ex:6,date:'08-03',succ:true},
+          {wf:'E2E',id:31118333002,q:26,ex:74,date:'08-03',succ:true},
+          {wf:'unit-test',id:31118111003,q:5,ex:24,date:'08-02',succ:true},
+          {wf:'E2E',id:31117889004,q:29,ex:76,date:'08-01',succ:true}
+        ]},
+      {name:'sgl-project/sglang',color:'#14b8a6',
+        workflows:[
+          {name:'CI',res:'npu-a3',avgDur:68,runs:58,succ:50,fail:8,hours:3940,daily:[4,4,5,4,4,5,5,4,4,5,5,4,5,4]},
+          {name:'build',res:'npu-a3',avgDur:42,runs:22,succ:21,fail:1,hours:924,daily:[2,2,2,2,2,2,2,2,2,2,2,2,2,2]},
+          {name:'lint',res:'npu-a2',avgDur:3,runs:22,succ:22,fail:0,hours:66,daily:[2,2,2,2,2,2,2,2,2,2,2,2,2,2]}
+        ],
+        runs:[
+          {wf:'CI',id:31121001234,q:28,ex:70,date:'08-07',succ:true},
+          {wf:'CI',id:31120998001,q:35,ex:75,date:'08-06',succ:false},
+          {wf:'build',id:31120995001,q:10,ex:44,date:'08-06',succ:true},
+          {wf:'lint',id:31120993001,q:1,ex:3,date:'08-05',succ:true}
+        ]},
+      {name:'verl-project/verl',color:'#f97316',
+        workflows:[
+          {name:'E2E',resources:[{res:'npu-a3',runs:12,avgDur:88,succ:10,fail:2,hours:1380},{res:'npu-a2',runs:6,avgDur:52,succ:4,fail:2,hours:150}],avgDur:85,runs:18,succ:14,fail:4,hours:1530,daily:[1,1,2,1,1,2,1,1,1,1,2,1,2,1]},
+          {name:'unit-test',res:'npu-a2',avgDur:15,runs:9,succ:9,fail:0,hours:135,daily:[1,1,1,1,1,1,1,1,1,1,1,1,1,1]}
+        ],
+        runs:[
+          {wf:'E2E',id:31122001234,q:40,ex:88,date:'08-07',succ:false},
+          {wf:'E2E',id:31121998001,q:30,ex:82,date:'08-06',succ:true}
+        ]}
+    ]},
+  jobs:{total:8200,p50:42,p90:61,succ:91,
+    repos:[
+      {name:'vllm-project/vllm-ascend',color:'#3b82f6',
+        jobs:[
+          {name:'e2e-npu-a3 (0)',res:'npu-a3',avgDur:41,runs:1604,succ:1411,fail:193,hours:5180,daily:[114,110,120,115,118,122,128,120,114,118,122,128,118,114]},
+          {name:'e2e-npu-a3 (1)',res:'npu-a3',avgDur:39,runs:1604,succ:1443,fail:161,hours:4850,daily:[114,110,120,115,118,122,128,120,114,118,122,128,118,114]},
+          {name:'build-npu',res:'npu-a3',avgDur:36,runs:410,succ:381,fail:29,hours:1930,daily:[29,28,31,30,29,32,33,30,29,30,32,31,30,29]},
+          {name:'unit-test-npu',res:'npu-a2',avgDur:12,runs:780,succ:756,fail:24,hours:1120,daily:[55,54,58,55,55,58,60,55,55,56,58,57,56,55]},
+          {name:'multimodal-gen-test-npu',res:'npu-a3',avgDur:28,runs:240,succ:204,fail:36,hours:980,daily:[17,16,18,17,17,18,19,17,17,18,18,17,18,17]},
+          {name:'stage-b-test-npu-a3',res:'npu-a3',avgDur:31,runs:880,succ:765,fail:115,hours:2900,daily:[62,60,66,63,62,66,68,62,62,64,66,65,64,62]}
+        ],
+        runs:[
+          {job:'e2e-npu-a3 (0)',id:92455969913,q:14,ex:41,date:'08-07',res:'npu-a3',succ:true},
+          {job:'e2e-npu-a3 (1)',id:92455968903,q:15,ex:39,date:'08-07',res:'npu-a3',succ:true},
+          {job:'build-npu',id:92455968874,q:8,ex:36,date:'08-06',res:'npu-a3',succ:true},
+          {job:'unit-test-npu',id:92455968915,q:5,ex:12,date:'08-06',res:'npu-a2',succ:true},
+          {job:'multimodal-gen-test-npu',id:92455968917,q:11,ex:28,date:'08-05',res:'npu-a3',succ:false},
+          {job:'stage-b-test-npu-a3',id:92455969001,q:13,ex:31,date:'08-05',res:'npu-a3',succ:true},
+          {job:'e2e-npu-a3 (0)',id:92455969100,q:16,ex:43,date:'08-04',res:'npu-a3',succ:true},
+          {job:'build-npu',id:92455969150,q:9,ex:38,date:'08-04',res:'npu-a3',succ:false},
+          {job:'unit-test-npu',id:92455969200,q:4,ex:14,date:'08-03',res:'npu-a2',succ:true},
+          {job:'e2e-npu-a3 (1)',id:92455969250,q:18,ex:45,date:'08-03',res:'npu-a3',succ:false},
+          {job:'multimodal-gen-test-npu',id:92455969300,q:13,ex:30,date:'08-02',res:'npu-a3',succ:false},
+          {job:'stage-b-test-npu-a3',id:92455969350,q:15,ex:33,date:'08-02',res:'npu-a3',succ:true},
+          {job:'build-npu',id:92455969400,q:10,ex:40,date:'08-01',res:'npu-a3',succ:true},
+          {job:'e2e-npu-a3 (0)',id:92455969450,q:20,ex:47,date:'08-01',res:'npu-a3',succ:false},
+          {job:'unit-test-npu',id:92455969500,q:6,ex:15,date:'07-31',res:'npu-a2',succ:true}
+        ]},
+      {name:'sgl-project/sglang',color:'#14b8a6',
+        jobs:[
+          {name:'ci-npu-a3',res:'npu-a3',avgDur:68,runs:580,succ:500,fail:80,hours:3940,daily:[41,40,43,41,41,42,44,41,41,42,44,43,42,41]},
+          {name:'build-npu',res:'npu-a3',avgDur:42,runs:220,succ:210,fail:10,hours:924,daily:[15,15,16,15,15,16,17,15,15,16,16,16,15,15]},
+          {name:'lint',res:'npu-a2',avgDur:3,runs:220,succ:220,fail:0,hours:66,daily:[15,15,16,15,15,16,17,15,15,16,16,16,15,15]}
+        ],
+        runs:[
+          {job:'ci-npu-a3',id:92456001234,q:28,ex:70,date:'08-07',res:'npu-a3',succ:true},
+          {job:'ci-npu-a3',id:92455998001,q:35,ex:75,date:'08-06',res:'npu-a3',succ:false},
+          {job:'build-npu',id:92455995001,q:10,ex:44,date:'08-06',res:'npu-a3',succ:true}
+        ]},
+      {name:'verl-project/verl',color:'#f97316',
+        jobs:[
+          {name:'e2e-npu-a3',res:'npu-a3',avgDur:85,runs:180,succ:140,fail:40,hours:1530,daily:[12,12,13,12,12,13,14,12,12,13,14,13,13,12]},
+          {name:'unit-test-npu',res:'npu-a2',avgDur:15,runs:90,succ:90,fail:0,hours:135,daily:[6,6,7,6,6,7,7,6,6,7,7,6,7,6]}
+        ],
+        runs:[
+          {job:'e2e-npu-a3',id:92456012345,q:40,ex:88,date:'08-07',res:'npu-a3',succ:false},
+          {job:'e2e-npu-a3',id:92456009801,q:30,ex:82,date:'08-06',res:'npu-a3',succ:true}
+        ]}
+    ]},
+  queue:{p50:14,p90:33,max:267,over1h:18,
+    byResource:[
+      {type:'npu-a3',color:'#3b82f6',daily:[22,28,26,32,35,38,32,30,28,26,24,22,20,18]},
+      {type:'npu-a2',color:'#14b8a6',daily:[8,10,9,12,14,16,13,12,10,9,8,7,6,5]}
+    ],
+    items:[
+      {name:'e2e-npu-a3 (0)',p90q:52,count:1604,succ:88,res:'npu-a3'},
+      {name:'e2e-npu-a3 (1)',p90q:48,count:1604,succ:90,res:'npu-a3'},
+      {name:'stage-b-test-npu-a3',p90q:41,count:880,succ:87,res:'npu-a3'},
+      {name:'multimodal-gen-test-npu',p90q:33,count:640,succ:85,res:'npu-a3'},
+      {name:'unit-test-npu',p90q:12,count:780,succ:97,res:'npu-a2'},
+      {name:'build-npu',p90q:18,count:410,succ:93,res:'npu-a3'}
+    ]}
+};
+
+// ---- helpers ----
+var fmt=function(m){return m>=60?(m/60).toFixed(1)+'h':Math.round(m)+'m'};
+function tip(def){return '<span class="group relative inline-flex align-middle ml-1"><span class="inline-flex items-center justify-center rounded-full bg-neutral-700 text-[9px] font-bold leading-none text-neutral-300 cursor-help" style="width:14px;height:14px">?</span><span class="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 w-max max-w-[220px] rounded-lg border border-neutral-700 bg-neutral-800 px-2.5 py-1.5 text-[11px] font-normal normal-case tracking-normal text-neutral-200 shadow-md opacity-0 group-hover:opacity-100 transition-opacity">'+def+'</span></span>';}
+function metricCard(label,def,rows){return '<div class="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4"><div class="text-[11px] uppercase tracking-wide text-neutral-400">'+label+tip(def)+'</div><div class="mt-2 space-y-1">'+rows.map(function(r){return '<div class="flex justify-between text-sm font-medium text-neutral-100 num"><span class="text-neutral-500">'+r.k+'</span><span>'+r.v+'</span></div>'}).join('')+'</div></div>';}
+function cardGrid(cards){return '<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">'+cards.join('')+'</div>';}
+var rows3=function(a,b,c){return [{k:'avg',v:fmt(a)},{k:'p50',v:fmt(b)},{k:'p90',v:fmt(c)}]};
+var single=function(v){return [{k:'占比',v:v}]};
+
+var PAGE={};
+function stackedBar(key,stacks,opts){
+  opts=opts||{};
+  var w=1200,h=200,pL=34,pR=opts.line?34:16,pT=16,pB=28;
+  var n=stacks[0].values.length;
+  var step=(w-pL-pR)/n,bw=step*0.7;
+  var x=function(i){return pL+bw/2+i*step};
+  var tot=[];for(var i=0;i<n;i++){var s=0;for(var j=0;j<stacks.length;j++){s+=(stacks[j].values[i]||0)}tot.push(s)}
+  var mx=Math.max.apply(null,tot.concat([1]));
+  var yb=function(v){return h-pB-(v/mx)*(h-pT-pB)};
+  var lc=opts.line;if(lc){var lm=Math.max.apply(null,lc.values.concat([1]));lc._y=function(v){return h-pB-(v/lm)*(h-pT-pB)};}
+  var grid=[0,.25,.5,.75,1].map(function(f){var yy=(pT+f*(h-pT-pB)).toFixed(1);return '<line x1="'+pL+'" y1="'+yy+'" x2="'+(w-pR)+'" y2="'+yy+'" class="chart-grid"/>'}).join('');
+  var yLabs=[0,.25,.5,.75,1].map(function(f){var v=Math.round(mx*(1-f));var yy=(pT+f*(h-pT-pB)).toFixed(1);return '<text x="'+(pL-4)+'" y="'+(parseFloat(yy)+3)+'" class="chart-axis" font-size="9" text-anchor="end">'+v+'m</text>';}).join('');
+  var axisL='<line x1="'+pL+'" y1="'+pT+'" x2="'+pL+'" y2="'+(h-pB)+'" class="chart-axis-line"/><line x1="'+pL+'" y1="'+(h-pB)+'" x2="'+(w-pR)+'" y2="'+(h-pB)+'" class="chart-axis-line"/>';
+  // 右轴刻度（PR数量，仅当有 line）
+  var yRabs='',axisR='';
+  if(lc){yRabs=[0,.25,.5,.75,1].map(function(f){var v=Math.round(lm*(1-f));var yy=(pT+f*(h-pT-pB)).toFixed(1);return '<text x="'+(w-pR+4)+'" y="'+(parseFloat(yy)+3)+'" class="chart-axis" style="fill:'+lc.color+'" font-size="9">'+v+'</text>';}).join('');axisR='<line x1="'+(w-pR)+'" y1="'+pT+'" x2="'+(w-pR)+'" y2="'+(h-pB)+'" class="chart-axis-line"/>';}
+  var leg=stacks.map(function(s){return '<span class="inline-flex items-center gap-1 text-xs text-neutral-400 ml-3"><span class="inline-block w-2.5 h-2.5 rounded-sm" style="background:'+s.color+'"></span>'+s.label+'</span>'}).join('');
+  if(lc)leg+='<span class="inline-flex items-center gap-1 text-xs text-neutral-400 ml-3"><span class="inline-block w-3 h-0.5" style="background:'+lc.color+'"></span>'+lc.label+'(右轴)</span>';
+  var bars='';
+  for(var i=0;i<n;i++){var y0=h-pB;stacks.forEach(function(seg){var v=seg.values[i]||0;var y1=yb(v);var hh=y0-y1;if(hh>0.3)bars+='<rect data-key="'+key+'" data-i="'+i+'" x="'+(x(i)-bw/2).toFixed(1)+'" y="'+y1.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+hh.toFixed(1)+'" fill="'+seg.color+'" opacity="0.85" class="bar-rect" style="cursor:pointer"/>';y0=y1;});}
+  var lp='';
+  if(lc){lp=lc.values.map(function(v,i){return (i?'L':'M')+x(i).toFixed(1)+','+lc._y(v).toFixed(1)}).join(' ');lp='<path d="'+lp+'" fill="none" stroke="'+lc.color+'" stroke-width="1.5"/>'+lc.values.map(function(v,i){return '<circle cx="'+x(i).toFixed(1)+'" cy="'+lc._y(v).toFixed(1)+'" r="2" fill="'+lc.color+'"/>'}).join('');}
+  var xl=opts.xlabels?'<text x="'+pL+'" y="'+(h-8)+'" class="chart-axis" font-size="9">'+opts.xlabels[0]+'</text><text x="'+(w-pR)+'" y="'+(h-8)+'" class="chart-axis" font-size="9" text-anchor="end">'+opts.xlabels[n-1]+'</text>':'';
+  return '<div class="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4"><div class="flex items-center justify-between"><div class="text-[11px] uppercase tracking-wide text-neutral-500">'+(opts.title||'趋势')+tip(opts.def||'')+'</div><div>'+(opts.controls||'')+leg+'</div></div><div class="mt-2 overflow-x-auto"><svg viewBox="0 0 '+w+' '+h+'" style="width:100%;height:'+h+'px;display:block">'+grid+axisL+axisR+yLabs+yRabs+bars+lp+xl+'</svg></div></div>';
+}
+function multiLine(series,opts){
+  opts=opts||{};
+  var w=1200,h=200,pL=34,pR=16,pT=16,pB=28;
+  var n=series[0].values.length;
+  var all=[];series.forEach(function(s){all=all.concat(s.values)});
+  var mn=Math.min.apply(null,all.concat([0])),mx2=Math.max.apply(null,all.concat([1]));
+  var x=function(i){return pL+i*(w-pL-pR)/(n-1||1)};
+  var y=function(v){return h-pB-(v-mn)/(mx2-mn||1)*(h-pT-pB)};
+  var grid=[0,.25,.5,.75,1].map(function(f){var yy=(pT+f*(h-pT-pB)).toFixed(1);return '<line x1="'+pL+'" y1="'+yy+'" x2="'+(w-pR)+'" y2="'+yy+'" class="chart-grid"/>'}).join('');
+  // 纵轴刻度
+  var yLabs=[0,.25,.5,.75,1].map(function(f){var v=Math.round((mn+(mx2-mn)*(1-f)));var yy=(pT+f*(h-pT-pB)).toFixed(1);return '<text x="'+(pL-4)+'" y="'+(parseFloat(yy)+3)+'" class="chart-axis" font-size="9" text-anchor="end">'+v+'</text>';}).join('');
+  var axisL='<line x1="'+pL+'" y1="'+pT+'" x2="'+pL+'" y2="'+(h-pB)+'" class="chart-axis-line"/><line x1="'+pL+'" y1="'+(h-pB)+'" x2="'+(w-pR)+'" y2="'+(h-pB)+'" class="chart-axis-line"/>';
+  var leg=series.map(function(s){return '<span class="inline-flex items-center gap-1 text-xs text-neutral-400 ml-3"><span class="inline-block w-3 h-0.5" style="background:'+s.color+'"></span>'+s.label+'</span>'}).join('');
+  var xl=opts.xlabels?'<text x="'+pL+'" y="'+(h-8)+'" class="chart-axis" font-size="9">'+opts.xlabels[0]+'</text><text x="'+(w-pR)+'" y="'+(h-8)+'" class="chart-axis" font-size="9" text-anchor="end">'+opts.xlabels[n-1]+'</text>':'';
+  var paths=series.map(function(s){return '<path d="'+s.values.map(function(v,i){return (i?'L':'M')+x(i).toFixed(1)+','+y(v).toFixed(1)}).join(' ')+'" fill="none" stroke="'+s.color+'" stroke-width="1.5"/>'}).join('');
+  return '<div class="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4"><div class="flex items-center justify-between"><div class="text-[11px] uppercase tracking-wide text-neutral-500">'+(opts.title||'趋势')+tip(opts.def||'')+'</div><div>'+(opts.controls||'')+leg+'</div></div><div class="mt-2 overflow-x-auto"><svg viewBox="0 0 '+w+' '+h+'" style="width:100%;height:'+h+'px;display:block">'+grid+axisL+yLabs+paths+xl+'</svg></div></div>';
+}
+function pagedTable(key,headers,rows,page,ps,merge){
+  page=page||1;ps=ps||5;
+  var MAX=500,overCap=false,orig=rows.length;
+  if(rows.length>MAX){overCap=true;rows=rows.slice(0,MAX);}
+  var tp=Math.max(1,Math.ceil(rows.length/ps));
+  page=Math.min(Math.max(1,page),tp);
+  PAGE[key]=page;
+  var slice=rows.slice((page-1)*ps,page*ps);
+  var th=headers.map(function(h){return '<th class="'+(h.cls||'')+' font-medium py-2">'+h.label+(h.def?tip(h.def):'')+'</th>'}).join('');
+  function cellVal(r,h){var v=r[h.key];return (h.fmt?fmt(v):v)+(h.suffix||'');}
+  function cellCls(h){return h.cls||'';}
+  var body=slice.map(function(r,ri){
+    var tds='';
+    headers.forEach(function(h,ci){
+      var doMerge=merge&&merge.indexOf(ci)>=0;
+      if(doMerge){
+        var prev=ri>0?slice[ri-1][h.key]:undefined;
+        if(r[h.key]===prev){return;}
+        var span=1;for(var k=ri+1;k<slice.length&&slice[k][h.key]===r[h.key];k++){span++;}
+        tds+='<td class="'+cellCls(h)+'" rowspan="'+span+'" valign="middle">'+cellVal(r,h)+'</td>';
+      }else{
+        var c=cellCls(h);if(h.color){var v=r[h.key];c+=' '+(v>=h.color[2]?'text-emerald-400':v>=h.color[1]?'text-amber-400':'text-red-400');}
+        tds+='<td class="'+c+'">'+cellVal(r,h)+'</td>';
+      }
+    });
+    return '<tr id="tr-'+key+'-'+ri+'" class="border-b border-neutral-900 hover:bg-neutral-900/50">'+tds+'</tr>';
+  }).join('');
+  var warn=overCap?'<div class="px-3 py-2 text-xs text-amber-400 border-t border-amber-900 bg-amber-900/10">⚠ 采集点超过 '+MAX+' 个（共 '+orig+'），只显示最新 '+MAX+' 个。缩小日期范围可查看更多。</div>':'';
+  return '<div class="rounded-lg border border-neutral-800 bg-neutral-900/60"><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-neutral-500 border-b border-neutral-800">'+th+'</tr></thead><tbody class="num text-sm font-medium">'+body+'</tbody></table></div><div class="flex items-center justify-between px-3 py-2 text-xs text-neutral-500"><span>第 '+page+'/'+tp+' 页 · 共 '+rows.length+' 行'+(overCap?'(截断)':'')+'</span><span class="flex gap-1"><button onclick="setPage(\''+key+'\','+(page-1)+')" class="px-2 py-0.5 rounded '+(page<=1?'opacity-30 cursor-default':'hover:bg-neutral-800')+'">上一页</button><button onclick="setPage(\''+key+'\','+(page+1)+')" class="px-2 py-0.5 rounded '+(page>=tp?'opacity-30 cursor-default':'hover:bg-neutral-800')+'">下一页</button></span></div>'+warn+'</div>';
+}
+
+function threeSeg(c,t,tab,f,tb){return '<div class="space-y-4">'+(tb?'<div class="flex items-center py-1">'+tb+'</div>':'')+cardGrid(c)+t+tab+(f?'<div class="text-xs text-neutral-600">'+f+'</div>':'')+'</div>';}
+
+
+// ---- blocks ----
+function prBlock(){
+  var p=DATA.pr;
+  var sel=window._prSel||'all';
+  var days=window._prDays||1;
+  window._prRepo=sel;
+  var ctrl='<select onchange="window._prSel=this.value;PAGE.pr=1;render()" class="bg-neutral-900 border border-neutral-800 rounded px-2 py-0.5 text-xs text-neutral-400 mr-3"><option value="all" '+(sel==='all'?'selected':'')+'>全部仓库</option>'+p.repos.map(function(r){return '<option value="'+r.name+'" '+(sel===r.name?'selected':'')+'>'+r.name+'</option>'}).join('')+'</select>';
+  var dateCtrl='<select onchange="window._prDays=parseInt(this.value);PAGE.pr=1;render()" class="bg-neutral-900 border border-neutral-800 rounded px-2 py-0.5 text-xs text-neutral-400 mr-3"><option value="1" '+(days==1?'selected':'')+'>最近1天</option><option value="3" '+(days==3?'selected':'')+'>最近3天</option><option value="7" '+(days==7?'selected':'')+'>最近7天</option><option value="14" '+(days==14?'selected':'')+'>最近14天</option></select>';
+  // 按 days 筛选 + 截断 500
+  var allRows=[];
+  if(sel==='all'){p.repos.forEach(function(r){r.rows.forEach(function(x){allRows.push(x)})})}
+  else{allRows=p.repos.filter(function(x){return x.name===sel})[0].rows}
+  // 按日期筛（days内）— mock 数据有 date，取最近 days 天
+  var dates=[...new Set(allRows.map(function(r){return r.date}))].sort().reverse();
+  var dateLimit=dates.slice(0,days);
+  var filtered=allRows.filter(function(r){return dateLimit.indexOf(r.date)>=0;});
+  var truncated=false,MAX=500;
+  if(filtered.length>MAX){truncated=true;filtered=filtered.slice(0,MAX);}
+  var cards,sl,pg=PAGE.pr||1,ps=5;
+  sl=filtered.slice((pg-1)*ps,pg*ps);
+  var statRepo=(sel==='all')?p:p.repos.filter(function(x){return x.name===sel})[0];
+  cards=[
+    metricCard('PR 端到端时间','从 PR 提交到最终合入的总时长（排队+执行+审核）。',rows3(statRepo.e2eAvg,statRepo.e2eP50,statRepo.e2eP90)),
+    metricCard('CI 时间','workflow 的执行耗时（CI 部分）。',rows3(statRepo.ciAvg,statRepo.ciP50,statRepo.ciP90)),
+    metricCard('审核时间','最后一次 workflow CI 结束到合入的时长。',rows3(statRepo.revAvg,statRepo.revP50,statRepo.revP90)),
+    metricCard('强行合入率','PR 合入时间早于 CI 完成时间的比例。',single(statRepo.forceMerge+'%')),
+    metricCard('总 PR 数','当前区间内合入的 PR 总数。',[{k:'合计',v:filtered.length+(truncated?'+(截断)':'')}])
+  ];
+  var stacks=[{label:'排队',color:'#3b82f6',values:sl.map(function(r){return r.q})},{label:'执行',color:'#14b8a6',values:sl.map(function(r){return r.ex})},{label:'审核',color:'#f97316',values:sl.map(function(r){return r.rv})}];
+  var cnt=sl.map(function(_,i){var dc=(sel==='all')?p.repos[0].dailyCount:statRepo.dailyCount;return (dc&&dc[(pg-1)*ps+i])||0});
+  var t=stackedBar('pr',stacks,{title:'每个 PR 的端到端耗时（堆叠）+ PR数量',def:'端到端=排队+执行+审核。点击柱子展开 PR 详情。',xlabels:sl.map(function(r){return r.n}),line:{label:'PR数量',color:'#a78bfa',values:cnt}});
+  var tab=prTable(sl,pg,ps,filtered.length);
+  var warn=truncated?'<div class="rounded-lg border border-amber-800 bg-amber-900/20 px-3 py-2 text-xs text-amber-400">⚠ 当前区间 PR 超过 '+MAX+' 个，只显示最新的 '+MAX+' 个。如需查看更多，请缩小日期范围。</div>':'';
+  var tb=dateCtrl+ctrl;
+  return threeSeg(cards,t,tab,'端到端=排队+执行+审核',tb)+(warn?'<div class="mt-3">'+warn+'</div>':'');
+}
+// PR table with clickable rows → drill into jobs gantt + steps
+function prTable(sl,pg,ps,total){
+  var sel=window._prRepo||'all';
+  var days=window._prDays||1;
+  var allRows=[];
+  if(sel==='all'){DATA.pr.repos.forEach(function(r){r.rows.forEach(function(x){allRows.push(x)})})}
+  else{allRows=DATA.pr.repos.filter(function(x){return x.name===sel})[0].rows}
+  var dates=[...new Set(allRows.map(function(r){return r.date}))].sort().reverse();
+  var dateLimit=dates.slice(0,days);
+  allRows=allRows.filter(function(r){return dateLimit.indexOf(r.date)>=0;});
+  if(allRows.length>500){allRows=allRows.slice(0,500);}
+  var tp=Math.max(1,Math.ceil((total||allRows.length)/ps));
+  PAGE.pr=pg;
+  var th='<tr class="text-xs text-neutral-500 border-b border-neutral-800"><th class="w-8"></th><th class="text-left pl-2 font-medium py-2">PR</th><th class="text-left font-medium">标题</th><th class="text-right font-medium"'+tip('time_to_ci_start（提交→CI开始）。')+'>排队</th><th class="text-right font-medium"'+tip('ci_duration（CI 运行耗时）。')+'>执行</th><th class="text-right font-medium"'+tip('最后一次 CI 结束→合入。')+'>审核</th><th class="text-right font-medium pr-2">状态</th></tr>';
+  var body=sl.map(function(r,ri){
+    var idx=(pg-1)*ps+ri;
+    var st=r.state==='force-merged'?'强行合入':'已合入';
+    return '<tr class="run-row border-b border-neutral-900 hover:bg-neutral-900/50 cursor-pointer" onclick="togglePr('+idx+')"><td class="w-8 text-center text-sky-400"><span class="arrow inline-block transition-transform" id="arpr_'+idx+'">▶</span></td><td class="pl-2 text-neutral-300">'+r.n+'</td><td class="font-normal truncate max-w-[200px] text-neutral-400">'+r.t+'</td><td class="text-right num text-neutral-200">'+fmt(r.q)+'</td><td class="text-right num text-neutral-200">'+fmt(r.ex)+'</td><td class="text-right num text-neutral-200">'+fmt(r.rv)+'</td><td class="text-right pr-2 '+(r.state==='force-merged'?'text-amber-400':'text-neutral-400')+'">'+st+'</td></tr><tr class="detail" id="detpr_'+idx+'" style="display:none"><td colspan="7" class="bg-neutral-950/50 p-3" id="dcpr_'+idx+'"></td></tr>';
+  }).join('');
+  return '<div class="rounded-lg border border-neutral-800 bg-neutral-900/60"><div class="overflow-x-auto"><table class="w-full text-sm"><thead>'+th+'</thead><tbody class="num text-sm font-medium">'+body+'</tbody></table></div>'+pager('pr',pg,tp,allRows.length)+'</div>';
+}
+// toggle PR drilldown (lazy render jobs gantt)
+function togglePr(idx){
+  var det=document.getElementById('detpr_'+idx),ar=document.getElementById('arpr_'+idx);
+  var open=det.style.display==='table-row';
+  if(open){det.style.display='none';ar.classList.remove('rotate-90');return;}
+  if(!det.dataset.d){document.getElementById('dcpr_'+idx).innerHTML=renderPrJobs(idx);det.dataset.d='1';}
+  det.style.display='table-row';ar.classList.add('rotate-90');
+}
+// jobs gantt for a PR: queue bar + run bar per job, expandable steps
+function renderPrJobs(idx){
+  var sel=window._prRepo||'all';
+  var allRows=[];
+  if(sel==='all'){DATA.pr.repos.forEach(function(r){r.rows.forEach(function(x){allRows.push(x)})})}
+  else{allRows=DATA.pr.repos.filter(function(x){return x.name===sel})[0].rows}
+  var pr=allRows[idx];
+  var jobs=PR_JOBS[pr.n];
+  if(!jobs||!jobs.length)return '<p class="text-xs text-neutral-600 p-2">无 job 数据</p>';
+  // ---- workflow 级资源汇聚：机时按 resource_type 汇聚 ----
+  var byRes={};
+  jobs.forEach(function(j){var k=j.res||'cpu';if(!byRes[k])byRes[k]={res:k,hours:0,jobs:0};byRes[k].hours+=j.hours||0;byRes[k].jobs+=1;});
+  var totalH=Object.keys(byRes).reduce(function(s,k){return s+byRes[k].hours},0);
+  var agg=Object.keys(byRes).map(function(k){var r=byRes[k];return '<div class="flex items-center justify-between text-xs py-1"><span class="text-neutral-400">'+r.res+'</span><span class="num text-sky-400">'+r.hours.toFixed(1)+' h</span><span class="num text-neutral-600">'+r.jobs+' job</span><span class="num text-neutral-500">'+(totalH?Math.round(r.hours/totalH*100):0)+'%</span></div>';}).join('');
+  var aggCard='<div class="rounded border border-neutral-800 bg-neutral-900/40 p-3 mb-2"><div class="text-[11px] uppercase tracking-wide text-neutral-500 mb-1.5">该 PR 机时按资源汇聚'+tip('该 PR 各 job 机时按 resource_type 汇聚；机时=执行耗时×卡数，不含排队。')+'</div>'+agg+'<div class="flex justify-between text-xs pt-1.5 mt-1 border-t border-neutral-800"><span class="text-neutral-400">合计</span><span class="num font-medium text-sky-400">'+totalH.toFixed(1)+' h</span></div></div>';
+  // ---- job 表格：资源/排队/执行/机时 ----
+  var th='<tr class="text-xs text-neutral-500 border-b border-neutral-800"><th class="w-7"></th><th class="text-left font-medium py-1.5 pl-2">Job</th><th class="text-right font-medium"'+tip('resource_model（runner 机型）。')+'>资源</th><th class="text-right font-medium"'+tip('卡数。')+'>卡数</th><th class="text-right font-medium"'+tip('queue_duration（created→started）。')+'>排队</th><th class="text-right font-medium"'+tip('duration（started→completed）。')+'>执行</th><th class="text-right font-medium"'+tip('执行耗时×卡数，不含排队。')+'>机时</th><th class="text-right font-medium pr-2">状态</th></tr>';
+  var body=jobs.map(function(j,ji){
+    var st=j.succ==='success'?'text-emerald-400':j.succ==='failure'?'text-red-400':'text-amber-400';
+    return '<tr class="border-b border-neutral-900 cursor-pointer hover:bg-neutral-900/50" onclick="toggleJob(\''+pr.n+'\','+ji+')"><td class="w-7 text-center text-sky-400"><span class="arrow inline-block transition-transform" id="arj_'+pr.n+'_'+ji+'">▶</span></td><td class="pl-2 font-normal text-neutral-300">'+j.name+'</td><td class="text-right text-neutral-400">'+(j.res||'-')+'</td><td class="text-right text-neutral-400">'+(j.card||'-')+'</td><td class="text-right num text-amber-400/80">'+fmt(j.q)+'</td><td class="text-right num text-neutral-200">'+fmt(j.ex)+'</td><td class="text-right num text-sky-400">'+(j.hours?j.hours.toFixed(1)+' h':'-')+'</td><td class="text-right pr-2 '+st+'">'+(j.succ==='success'?'成功':j.succ==='failure'?'失败':'取消')+'</td></tr><tr class="detail" id="detj_'+pr.n+'_'+ji+'" style="display:none"><td colspan="8" class="bg-neutral-950/50 p-2 pl-9" id="dcj_'+pr.n+'_'+ji+'"></td></tr>';
+  }).join('');
+  return aggCard+'<div class="rounded border border-neutral-800 overflow-x-auto"><table class="w-full text-sm"><thead>'+th+'</thead><tbody class="num text-sm font-medium">'+body+'</tbody></table></div>';
+}
+// toggle job → render steps table
+function toggleJob(prn,ji){
+  var det=document.getElementById('detj_'+prn+'_'+ji),ar=document.getElementById('arj_'+prn+'_'+ji);
+  var open=det.style.display==='table-row';
+  if(open){det.style.display='none';ar.classList.remove('rotate-90');return;}
+  if(!det.dataset.d){document.getElementById('dcj_'+prn+'_'+ji).innerHTML=renderSteps(PR_JOBS[prn][ji]);det.dataset.d='1';}
+  det.style.display='table-row';ar.classList.add('rotate-90');
+}
+function renderSteps(j){
+  if(!j.steps.length)return '<p class="text-xs text-neutral-600 p-2">无 step 数据</p>';
+  var rows=j.steps.map(function(s){var st=s.c==='success'?'text-emerald-400':s.c==='failure'?'text-red-400':s.c==='skipped'?'text-neutral-600':'text-amber-400';return '<tr class="border-b border-neutral-900"><td class="py-1 text-neutral-500">'+s.n+'</td><td class="font-normal text-neutral-300">'+s.name+'</td><td class="text-neutral-500">'+s.type+'</td><td class="text-right num text-neutral-200">'+s.dur+'</td><td class="text-right '+st+'">'+(s.c==='success'?'成功':s.c==='failure'?'失败':'跳过')+'</td></tr>';}).join('');
+  return '<table class="w-full text-xs mt-1 mb-2"><thead><tr class="text-neutral-500"><th class="text-left font-normal py-1">#</th><th class="text-left font-normal">步骤</th><th class="text-left font-normal">类型</th><th class="text-right font-normal">耗时m</th><th class="text-right font-normal">状态</th></tr></thead><tbody class="num">'+rows+'</tbody></table>';
+}
+function pager(key,pg,tp,total){return '<div class="flex items-center justify-between px-3 py-2 text-xs text-neutral-500"><span>第 '+pg+'/'+tp+' 页 · 共 '+total+' 行</span><span class="flex gap-1"><button onclick="setPage(\''+key+'\','+(pg-1)+')" class="px-2 py-0.5 rounded '+(pg<=1?'opacity-30 cursor-default':'hover:bg-neutral-800')+'">上一页</button><button onclick="setPage(\''+key+'\','+(pg+1)+')" class="px-2 py-0.5 rounded '+(pg>=tp?'opacity-30 cursor-default':'hover:bg-neutral-800')+'">下一页</button></span></div>';}
+
+function costBlock(){
+  var c=DATA.cost;
+  var sel=window._costSel||'all';
+  var ctrl='<select onchange="window._costSel=this.value;render()" class="bg-neutral-900 border border-neutral-800 rounded px-2 py-0.5 text-xs text-neutral-400 mr-3"><option value="all" '+(sel==='all'?'selected':'')+'>全部仓库</option>'+c.repos.map(function(r){return '<option value="'+r.name+'" '+(sel===r.name?'selected':'')+'>'+r.name+'</option>'}).join('')+'</select>';
+  var cards,t,rows;
+  if(sel==='all'){
+    // 全局对比：各仓库对比
+    var dt=c.repos[0].daily.map(function(_,d){return c.repos.reduce(function(s,r){return s+r.daily[d]},0)});
+    cards=[
+      metricCard('总 NPU·h','作业执行耗时 × runner 数量（不含排队）。',[{k:'合计',v:c.totalNpuHours.toLocaleString()+' h'}]),
+      metricCard('单 PR 均值','每个 PR 的平均 NPU 机时。',[{k:'avg',v:c.perPr+' h'}]),
+      metricCard('TOP 仓库','消耗最大的仓库。',[{k:c.repos[0].name,v:c.repos[0].daily.reduce(function(a,b){return a+b},0).toLocaleString()+' h'}]),
+      metricCard('每日均值','平均每日 NPU 机时。',[{k:'avg',v:Math.round(dt.reduce(function(a,b){return a+b},0)/dt.length)+' h'}]),
+      metricCard('仓库数','产生机时的仓库数。',[{k:'合计',v:c.repos.length}])
+    ];
+    t=multiLine(c.repos.map(function(r){return {label:r.name,color:r.color,values:r.daily}}),{title:'各仓库每日 NPU·h 趋势',def:'每个仓库每天消耗的机时。选某仓库可聚焦。',xlabels:DAYS});
+    // 明细表：全部仓库×workflow 机时总耗时
+    rows=[];c.repos.forEach(function(r){r.workflows.forEach(function(w){rows.push({repo:r.name,wf:w.name,res:w.res,avgDur:w.avgDur,runs:w.runs,succ:w.succ,fail:w.fail,hours:w.hours.toLocaleString(),pct:Math.round(w.hours/c.totalNpuHours*100)})})});
+  }else{
+    // 选中仓库聚焦视图
+    var r=c.repos.filter(function(x){return x.name===sel})[0];
+    var tot=r.daily.reduce(function(a,b){return a+b},0);
+    var avgDay=Math.round(tot/r.daily.length);
+    var perPr=(r.prCount?Math.round(tot/r.prCount):0);
+    var topWf=r.workflows.length?r.workflows[0]:null;
+    cards=[
+      metricCard('总成本','该仓库消耗的 NPU 机时。',[{k:'合计',v:tot.toLocaleString()+' h'}]),
+      metricCard('平均每 PR','每个 PR 的平均机时。',[{k:'avg',v:perPr+' h'}]),
+      metricCard('平均每日','每日平均机时。',[{k:'avg',v:avgDay+' h'}]),
+      metricCard('PR 数','统计区间内该仓库的 PR 数。',[{k:'合计',v:r.prCount||'-'}]),
+      metricCard('TOP workflow','消耗最大的 workflow。',[{k:(topWf?topWf.name:'-'),v:(topWf?topWf.hours.toLocaleString():0)+' h'}])
+    ];
+    // 趋势图：该仓库高亮，其他灰显
+    t=multiLine(c.repos.map(function(x){return {label:x.name,color:x.name===sel?x.color:'#3a3a3a',values:x.daily}}),{title:'该仓库每日 NPU·h（其他仓库灰显）',def:'选中仓库高亮，其余灰化。',xlabels:DAYS});
+    // 明细表：该仓库所有 workflow 的机时总耗时详情
+    rows=r.workflows.map(function(w){return {repo:r.name,wf:w.name,res:w.res,avgDur:w.avgDur,runs:w.runs,succ:w.succ,fail:w.fail,hours:w.hours.toLocaleString(),pct:Math.round(w.hours/tot*100)}});
+  }
+  var h=[
+    {label:'Workflow',cls:'text-left pl-2 font-normal text-neutral-300',key:'wf'},
+    {label:'仓库',cls:'text-right font-normal text-neutral-400',key:'repo'},
+    {label:'资源',cls:'text-right',key:'res',def:'resource_model（runner 机型）。'},
+    {label:'平均耗时',cls:'text-right',key:'avgDur',fmt:true,def:'该 workflow 运行的平均端到端耗时。'},
+    {label:'次数',cls:'text-right font-normal text-neutral-400',key:'runs',def:'统计区间内运行次数。'},
+    {label:'成功',cls:'text-right text-emerald-400',key:'succ',def:'conclusion=success 的次数。'},
+    {label:'失败率',cls:'text-right pr-2',key:'_fail',def:'失败次数/总次数。'}
+  ];
+  rows=rows.map(function(x){return Object.assign({},x,{_fail:(x.runs?(Math.round(x.fail/x.runs*100)+'%'):'-')})});
+  var tab=pagedTable('cost',h,rows,PAGE.cost||1,5,[0,1]);
+  return threeSeg(cards,t,tab,'成本 = duration_seconds × resource_count（仅执行，不含排队）',ctrl);
+}
+function wfBlock(){
+  var w=DATA.workflows;
+  var sel=window._wfSel||'all';
+  var ctrl='<select onchange="window._wfSel=this.value;render()" class="bg-neutral-900 border border-neutral-800 rounded px-2 py-0.5 text-xs text-neutral-400 mr-3"><option value="all" '+(sel==='all'?'selected':'')+'>全部仓库</option>'+w.repos.map(function(r){return '<option value="'+r.name+'" '+(sel===r.name?'selected':'')+'>'+r.name+'</option>'}).join('')+'</select>';
+  var cards,t,rows;
+  if(sel==='all'){
+    // 全部仓库对比
+    cards=[
+      metricCard('总运行数','所有仓库所有 workflow 的运行总次数。',[{k:'合计',v:w.totalRuns.toLocaleString()}]),
+      metricCard('端到端 P50','全部运行端到端的 50 分位。',[{k:'p50',v:fmt(w.p50)}]),
+      metricCard('端到端 P90','全部运行端到端的 90 分位。',[{k:'p90',v:fmt(w.p90)}]),
+      metricCard('成功率','conclusion=success 的运行占比。',single(w.succ+'%')),
+      metricCard('仓库数','产生运行的仓库数。',[{k:'合计',v:w.repos.length}])
+    ];
+    // 明细：所有 workflow 对比（耗时/资源/成功率）
+    rows=[];w.repos.forEach(function(r){r.workflows.forEach(function(wf){if(wf.resources){wf.resources.forEach(function(rd){rows.push({repo:r.name,wf:wf.name,res:rd.res,avgDur:rd.avgDur,runs:rd.runs,succ:rd.succ,fail:rd.fail,hours:rd.hours.toLocaleString(),_multi:true})})}else{rows.push({repo:r.name,wf:wf.name,res:wf.res,avgDur:wf.avgDur,runs:wf.runs,succ:wf.succ,fail:wf.fail,hours:wf.hours.toLocaleString()})}})});
+    t=multiLine(w.repos.map(function(r){var tot=r.workflows.reduce(function(s,wf){return s+wf.runs},0);var d=r.workflows[0].daily.map(function(_,i){return r.workflows.reduce(function(s,wf){return s+(wf.daily[i]||0)},0)});return {label:r.name,color:r.color,values:d}}),{title:'各仓库每日运行数趋势',def:'选某仓库可聚焦。',xlabels:DAYS});
+  }else{
+    // 选中仓库聚焦
+    var r=w.repos.filter(function(x){return x.name===sel})[0];
+    var totRuns=r.workflows.reduce(function(s,wf){return s+wf.runs},0);
+    var totSucc=r.workflows.reduce(function(s,wf){return s+wf.succ},0);
+    var totHours=r.workflows.reduce(function(s,wf){return s+wf.hours},0);
+    var topWf=r.workflows.slice().sort(function(a,b){return b.hours-a.hours})[0];
+    cards=[
+      metricCard('总运行数','该仓库所有 workflow 的运行总次数。',[{k:'合计',v:totRuns.toLocaleString()}]),
+      metricCard('成功率','该仓库 conclusion=success 的运行占比。',[{k:'占比',v:(totRuns?Math.round(totSucc/totRuns*100):0)+'%'}]),
+      metricCard('总机时','该仓库消耗的 NPU 机时。',[{k:'合计',v:totHours.toLocaleString()+' h'}]),
+      metricCard('workflow 数','该仓库的 workflow 数量。',[{k:'合计',v:r.workflows.length}]),
+      metricCard('TOP workflow','机时消耗最大的 workflow。',[{k:topWf.name,v:topWf.hours.toLocaleString()+' h'}])
+    ];
+    // 趋势：各 workflow 每日运行数
+    t=multiLine(r.workflows.map(function(wf){return {label:wf.name,color:wf.color||'#3b82f6',values:wf.daily}}),{title:'该仓库各 workflow 每日运行数',def:'选某 workflow 可下钻看运行流水。',xlabels:DAYS});
+    // 明细表：该仓库所有 workflow 的耗时/资源/成功率
+    rows=[];r.workflows.forEach(function(wf){if(wf.resources){wf.resources.forEach(function(rd){rows.push({repo:r.name,wf:wf.name,res:rd.res,avgDur:rd.avgDur,runs:rd.runs,succ:rd.succ,fail:rd.fail,hours:rd.hours.toLocaleString(),_multi:true,_wfkey:sel+'||'+wf.name})})}else{rows.push({repo:r.name,wf:wf.name,res:wf.res,avgDur:wf.avgDur,runs:wf.runs,succ:wf.succ,fail:wf.fail,hours:wf.hours.toLocaleString(),_wfkey:sel+'||'+wf.name})}});
+  }
+  var h=[
+    {label:'Workflow',cls:'text-left pl-2 font-normal text-neutral-300',key:'wf'},
+    {label:'仓库',cls:'text-right font-normal text-neutral-400',key:'repo'},
+    {label:'资源',cls:'text-right',key:'res',def:'resource_model（runner 机型）。'},
+    {label:'平均耗时',cls:'text-right',key:'avgDur',fmt:true,def:'该 workflow 平均端到端耗时。'},
+    {label:'次数',cls:'text-right font-normal text-neutral-400',key:'runs',def:'运行次数。'},
+    {label:'成功',cls:'text-right text-emerald-400',key:'succ',def:'conclusion=success 次数。'},
+    {label:'失败率',cls:'text-right pr-2',key:'_fail',def:'失败次数/总次数。'}
+  ];
+  rows=rows.map(function(x){return Object.assign({},x,{_fail:(x.runs?(Math.round(x.fail/x.runs*100)+'%'):'-')})});
+  // 如果选了仓库，行可点击下钻
+  var tabHtml=pagedTable('wf',h,rows,PAGE.wf||1,5,[0,1]);
+  if(sel!=='all'){
+    // 包裹成可下钻的表：点击 workflow 行展开运行流水
+    tabHtml=wfDrillTable(sel,rows,PAGE.wf||1);
+  }
+  return threeSeg(cards,t,tabHtml,'端到端=排队+执行',ctrl);
+}
+// workflow 可下钻明细表（选中仓库后）
+function wfDrillTable(repo,rows,pg){
+  var ps=5;
+  var tp=Math.max(1,Math.ceil(rows.length/ps));
+  pg=Math.min(Math.max(1,pg),tp);PAGE.wf=pg;
+  var sl=rows.slice((pg-1)*ps,pg*ps);
+  var th='<tr class="text-xs text-neutral-500 border-b border-neutral-800"><th class="w-7"></th><th class="text-left font-medium py-1.5 pl-2">Workflow</th><th class="text-right font-medium"'+tip('resource_model。')+'>资源</th><th class="text-right font-medium"'+tip('平均端到端耗时。')+'>平均耗时</th><th class="text-right font-medium"'+tip('运行次数。')+'>次数</th><th class="text-right font-medium">成功</th><th class="text-right font-medium pr-2">失败率</th></tr>';
+  // 合并同类项：连续同 workflow 的行用 rowspan 合并 Workflow 名 + toggle
+  var body=sl.map(function(x,ri){
+    var idx=(pg-1)*ps+ri;
+    var wf=x.wf;
+    var isStart=ri===0||sl[ri-1].wf!==wf;
+    var span=1;
+    if(isStart){for(var k=ri+1;k<sl.length&&sl[k].wf===wf;k++){span++;}}
+    var wfCell=isStart?'<td class="pl-2 font-normal text-neutral-300" '+(span>1?'rowspan="'+span+'"':'')+' valign="middle">'+wf+'</td>':'';
+    var toggle=isStart?'<td class="w-7 text-center text-sky-400" '+(span>1?'rowspan="'+span+'"':'')+' valign="middle"><span class="arrow inline-block transition-transform" id="arwf_'+idx+'">▶</span></td>':'<td class="w-7"></td>';
+    return '<tr class="border-b border-neutral-900 cursor-pointer hover:bg-neutral-900/50" onclick="toggleWf(\''+repo+'\',\''+wf+'\','+idx+')">'+toggle+wfCell+'<td class="text-right text-neutral-400">'+x.res+'</td><td class="text-right num text-neutral-200">'+fmt(x.avgDur)+'</td><td class="text-right num text-neutral-400">'+x.runs+'</td><td class="text-right num text-emerald-400">'+x.succ+'</td><td class="text-right pr-2 num text-red-400">'+(x.runs?Math.round(x.fail/x.runs*100)+'%':'-')+'</td></tr><tr class="detail" id="detwf_'+idx+'" style="display:none"><td colspan="7" class="bg-neutral-950/50 p-2 pl-9" id="dcwf_'+idx+'"></td></tr>';
+  }).join('');
+  return '<div class="rounded-lg border border-neutral-800 bg-neutral-900/60"><div class="overflow-x-auto"><table class="w-full text-sm"><thead>'+th+'</thead><tbody class="num text-sm font-medium">'+body+'</tbody></table></div>'+pager('wf',pg,tp,rows.length)+'</div>';
+}
+// 点击 workflow 行 → 展开该 workflow 的运行流水（耗时堆叠柱）
+function toggleWf(repo,wf,idx){
+  var det=document.getElementById('detwf_'+idx),ar=document.getElementById('arwf_'+idx);
+  var open=det.style.display==='table-row';
+  if(open){det.style.display='none';ar.classList.remove('rotate-90');return;}
+  if(!det.dataset.d){
+    var r=DATA.workflows.repos.filter(function(x){return x.name===repo})[0];
+    var wfObj=r.workflows.filter(function(x){return x.name===wf})[0];
+    var runs=r.runs.filter(function(x){return x.wf===wf});
+    var html='';
+    if(wfObj&&wfObj.resources){html+=renderResourceSplit(wfObj);}
+    html+=renderWfRuns(runs);
+    document.getElementById('dcwf_'+idx).innerHTML=html;
+    det.dataset.d='1';
+  }
+  det.style.display='table-row';ar.classList.add('rotate-90');
+}
+// 资源拆分子表：workflow 跨多资源时展示每种资源的耗时/次数/成功率/机时
+function renderResourceSplit(wfObj){
+  var th='<tr class="text-xs text-neutral-500 border-b border-neutral-800"><th class="text-left font-medium py-1.5 pl-2">资源</th><th class="text-right font-medium">次数</th><th class="text-right font-medium">平均耗时</th><th class="text-right font-medium">成功</th><th class="text-right font-medium">失败率</th><th class="text-right font-medium pr-2">机时</th></tr>';
+  var body=wfObj.resources.map(function(r){var f=(r.runs?Math.round(r.fail/r.runs*100):0);return '<tr class="border-b border-neutral-900"><td class="pl-2 text-neutral-300">'+r.res+'</td><td class="text-right num text-neutral-400">'+r.runs+'</td><td class="text-right num text-neutral-200">'+fmt(r.avgDur)+'</td><td class="text-right num text-emerald-400">'+r.succ+'</td><td class="text-right num text-red-400">'+f+'%</td><td class="text-right pr-2 num text-sky-400">'+r.hours.toLocaleString()+' h</td></tr>';}).join('');
+  return '<div class="mb-2"><div class="text-[11px] uppercase tracking-wide text-neutral-500 mb-1">该 workflow 机时按资源拆分'+tip('同一 workflow 跨多种资源，按 resource_model 拆分。')+'>机时拆分</div><table class="w-full text-sm"><thead>'+th+'</thead><tbody class="num text-sm font-medium">'+body+'</tbody></table></div>';
+}
+function renderWfRuns(runs){
+  if(!runs.length)return '<p class="text-xs text-neutral-600 p-2">无运行数据</p>';
+  var sl=runs.slice(0,5);
+  var stacks=[{label:'排队',color:'#3b82f6',values:sl.map(function(r){return r.q})},{label:'执行',color:'#14b8a6',values:sl.map(function(r){return r.ex})}];
+  var chart=stackedBar('wfr',stacks,{title:'该 workflow 运行流水（堆叠：排队+执行）',def:'端到端=排队+执行。每根=一次运行。',xlabels:sl.map(function(r){return String(r.id).slice(-5)})});
+  var th='<tr class="text-xs text-neutral-500 border-b border-neutral-800"><th class="text-left font-medium py-1.5 pl-2">Run ID</th><th class="text-right font-medium">排队</th><th class="text-right font-medium">执行</th><th class="text-right font-medium">日期</th><th class="text-right font-medium pr-2">状态</th></tr>';
+  var body=sl.map(function(r){return '<tr class="border-b border-neutral-900"><td class="pl-2 text-neutral-300">'+r.id+'</td><td class="text-right num text-amber-400/80">'+fmt(r.q)+'</td><td class="text-right num text-neutral-200">'+fmt(r.ex)+'</td><td class="text-right text-neutral-400">'+r.date+'</td><td class="text-right pr-2 '+(r.succ?'text-emerald-400':'text-red-400')+'">'+(r.succ?'成功':'失败')+'</td></tr>'}).join('');
+  return chart+'<div class="mt-2 overflow-x-auto"><table class="w-full text-sm"><thead>'+th+'</thead><tbody class="num text-sm font-medium">'+body+'</tbody></table></div>';
+}
+
+function jobBlock(){
+  var j=DATA.jobs;
+  var sel=window._jobSel||'all';
+  var ctrl='<select onchange="window._jobSel=this.value;render()" class="bg-neutral-900 border border-neutral-800 rounded px-2 py-0.5 text-xs text-neutral-400 mr-3"><option value="all" '+(sel==='all'?'selected':'')+'>全部仓库</option>'+j.repos.map(function(r){return '<option value="'+r.name+'" '+(sel===r.name?'selected':'')+'>'+r.name+'</option>'}).join('')+'</select>';
+  var cards,t,rows;
+  if(sel==='all'){
+    cards=[
+      metricCard('总作业数','所有仓库所有作业总数。',[{k:'合计',v:j.total.toLocaleString()}]),
+      metricCard('端到端 P50','全部作业端到端的 50 分位。',[{k:'p50',v:fmt(j.p50)}]),
+      metricCard('端到端 P90','全部作业端到端的 90 分位。',[{k:'p90',v:fmt(j.p90)}]),
+      metricCard('成功率','conclusion=success 的作业占比。',single(j.succ+'%')),
+      metricCard('仓库数','产生作业的仓库数。',[{k:'合计',v:j.repos.length}])
+    ];
+    rows=[];j.repos.forEach(function(r){r.jobs.forEach(function(jb){rows.push({repo:r.name,job:jb.name,res:jb.res,avgDur:jb.avgDur,runs:jb.runs,succ:jb.succ,fail:jb.fail,hours:jb.hours.toLocaleString()})})});
+    t=multiLine(j.repos.map(function(r){var d=r.jobs[0].daily.map(function(_,i){return r.jobs.reduce(function(s,jb){return s+(jb.daily[i]||0)},0)});return {label:r.name,color:r.color,values:d}}),{title:'各仓库每日作业数趋势',def:'选某仓库可聚焦。',xlabels:DAYS});
+  }else{
+    var r=j.repos.filter(function(x){return x.name===sel})[0];
+    var totRuns=r.jobs.reduce(function(s,jb){return s+jb.runs},0);
+    var totSucc=r.jobs.reduce(function(s,jb){return s+jb.succ},0);
+    var totHours=r.jobs.reduce(function(s,jb){return s+jb.hours},0);
+    var topJob=r.jobs.slice().sort(function(a,b){return b.hours-a.hours})[0];
+    cards=[
+      metricCard('总作业数','该仓库所有作业总数。',[{k:'合计',v:totRuns.toLocaleString()}]),
+      metricCard('成功率','该仓库 conclusion=success 的作业占比。',[{k:'占比',v:(totRuns?Math.round(totSucc/totRuns*100):0)+'%'}]),
+      metricCard('总机时','该仓库消耗的 NPU 机时。',[{k:'合计',v:totHours.toLocaleString()+' h'}]),
+      metricCard('job 数','该仓库的 job 数量。',[{k:'合计',v:r.jobs.length}]),
+      metricCard('TOP job','机时消耗最大的 job。',[{k:topJob.name,v:topJob.hours.toLocaleString()+' h'}])
+    ];
+    t=multiLine(r.jobs.map(function(jb){return {label:jb.name,color:jb.color||'#3b82f6',values:jb.daily}}),{title:'该仓库各 job 每日次数',def:'选某 job 可下钻看运行流水。',xlabels:DAYS});
+    rows=r.jobs.map(function(jb){return {repo:r.name,job:jb.name,res:jb.res,avgDur:jb.avgDur,runs:jb.runs,succ:jb.succ,fail:jb.fail,hours:jb.hours.toLocaleString()}});
+  }
+  var h=[
+    {label:'Job',cls:'text-left pl-2 font-normal text-neutral-300',key:'job'},
+    {label:'仓库',cls:'text-right font-normal text-neutral-400',key:'repo'},
+    {label:'资源',cls:'text-right',key:'res',def:'resource_model（runner 机型）。'},
+    {label:'平均耗时',cls:'text-right',key:'avgDur',fmt:true,def:'该 job 平均端到端耗时。'},
+    {label:'次数',cls:'text-right font-normal text-neutral-400',key:'runs',def:'运行次数。'},
+    {label:'成功',cls:'text-right text-emerald-400',key:'succ',def:'conclusion=success 次数。'},
+    {label:'失败率',cls:'text-right pr-2',key:'_fail',def:'失败次数/总次数。'}
+  ];
+  rows=rows.map(function(x){return Object.assign({},x,{_fail:(x.runs?(Math.round(x.fail/x.runs*100)+'%'):'-')})});
+  var tabHtml=pagedTable('job',h,rows,PAGE.job||1,5,[0,1]);
+  if(sel!=='all'){tabHtml=jobDrillTable(sel,rows,PAGE.job||1);}
+  return threeSeg(cards,t,tabHtml,'端到端=排队+执行（成本仅计执行部分）',ctrl);
+}
+// job 可下钻明细表（选中仓库后）
+function jobDrillTable(repo,rows,pg){
+  var ps=5;var tp=Math.max(1,Math.ceil(rows.length/ps));pg=Math.min(Math.max(1,pg),tp);PAGE.job=pg;
+  var sl=rows.slice((pg-1)*ps,pg*ps);
+  var th='<tr class="text-xs text-neutral-500 border-b border-neutral-800"><th class="w-7"></th><th class="text-left font-medium py-1.5 pl-2">Job</th><th class="text-right font-medium"'+tip('resource_model。')+'>资源</th><th class="text-right font-medium"'+tip('平均端到端耗时。')+'>平均耗时</th><th class="text-right font-medium"'+tip('运行次数。')+'>次数</th><th class="text-right font-medium">成功</th><th class="text-right font-medium pr-2">失败率</th></tr>';
+  var body=sl.map(function(x,ri){var idx=(pg-1)*ps+ri;return '<tr class="border-b border-neutral-900 cursor-pointer hover:bg-neutral-900/50" onclick="toggleJobDrill(\''+repo+'\',\''+x.job+'\','+idx+')"><td class="w-7 text-center text-sky-400"><span class="arrow inline-block transition-transform" id="arjb_'+idx+'">▶</span></td><td class="pl-2 font-normal text-neutral-300">'+x.job+'</td><td class="text-right text-neutral-400">'+x.res+'</td><td class="text-right num text-neutral-200">'+fmt(x.avgDur)+'</td><td class="text-right num text-neutral-400">'+x.runs+'</td><td class="text-right num text-emerald-400">'+x.succ+'</td><td class="text-right pr-2 num text-red-400">'+(x.runs?Math.round(x.fail/x.runs*100)+'%':'-')+'</td></tr><tr class="detail" id="detjb_'+idx+'" style="display:none"><td colspan="7" class="bg-neutral-950/50 p-2 pl-9" id="dcjb_'+idx+'"></td></tr>';}).join('');
+  return '<div class="rounded-lg border border-neutral-800 bg-neutral-900/60"><div class="overflow-x-auto"><table class="w-full text-sm"><thead>'+th+'</thead><tbody class="num text-sm font-medium">'+body+'</tbody></table></div>'+pager('job',pg,tp,rows.length)+'</div>';
+}
+function toggleJobDrill(repo,job,idx){
+  var det=document.getElementById('detjb_'+idx),ar=document.getElementById('arjb_'+idx);
+  var open=det.style.display==='table-row';
+  if(open){det.style.display='none';ar.classList.remove('rotate-90');return;}
+  if(!det.dataset.d){var r=DATA.jobs.repos.filter(function(x){return x.name===repo})[0];var runs=r.runs.filter(function(x){return x.job===job});document.getElementById('dcjb_'+idx).innerHTML=renderJobRuns(runs);det.dataset.d='1';}
+  det.style.display='table-row';ar.classList.add('rotate-90');
+}
+function renderJobRuns(runs){
+  if(!runs.length)return '<p class="text-xs text-neutral-600 p-2">无运行数据</p>';
+  var sl=runs.slice(0,5);
+  var stacks=[{label:'排队',color:'#3b82f6',values:sl.map(function(r){return r.q})},{label:'执行',color:'#14b8a6',values:sl.map(function(r){return r.ex})}];
+  var chart=stackedBar('jbr',stacks,{title:'该 job 运行流水（堆叠：排队+执行）',def:'排队=queue_duration_seconds；执行=duration_seconds。',xlabels:sl.map(function(r){return String(r.id).slice(-5)})});
+  var th='<tr class="text-xs text-neutral-500 border-b border-neutral-800"><th class="text-left font-medium py-1.5 pl-2">Job ID</th><th class="text-right font-medium">排队</th><th class="text-right font-medium">执行</th><th class="text-right font-medium">资源</th><th class="text-right font-medium">日期</th><th class="text-right font-medium pr-2">状态</th></tr>';
+  var body=sl.map(function(r){return '<tr class="border-b border-neutral-900"><td class="pl-2 text-neutral-300">'+r.id+'</td><td class="text-right num text-amber-400/80">'+fmt(r.q)+'</td><td class="text-right num text-neutral-200">'+fmt(r.ex)+'</td><td class="text-right text-neutral-400">'+r.res+'</td><td class="text-right text-neutral-400">'+r.date+'</td><td class="text-right pr-2 '+(r.succ?'text-emerald-400':'text-red-400')+'">'+(r.succ?'成功':'失败')+'</td></tr>'}).join('');
+  return chart+'<div class="mt-2 overflow-x-auto"><table class="w-full text-sm"><thead>'+th+'</thead><tbody class="num text-sm font-medium">'+body+'</tbody></table></div>';
+}
+
+function queueBlock(){
+  var q=DATA.queue;
+  var c=[
+    metricCard('排队 P50','全部作业排队时间的 50 分位。',[{k:'p50',v:fmt(q.p50)}]),
+    metricCard('排队 P90','全部作业排队时间的 90 分位。',[{k:'p90',v:fmt(q.p90)}]),
+    metricCard('最长排队','单次作业最长排队时间。',[{k:'max',v:fmt(q.max)}]),
+    metricCard('排队>1h 占比','排队超过1小时的作业占比。',[{k:'占比',v:q.over1h+'%'}]),
+    metricCard('资源类型','采集到的 runner 类型数。',[{k:'合计',v:q.byResource.length}])
+  ];
+  var sel=window._qs||'all';
+  var ser=sel==='all'?q.byResource:q.byResource.filter(function(r){return r.type===sel});
+  var ctrl='<select onchange="window._qs=this.value;render()" class="bg-neutral-900 border border-neutral-800 rounded px-2 py-0.5 text-xs text-neutral-400 mr-3"><option value="all" '+(sel==='all'?'selected':'')+'>全部资源</option>'+q.byResource.map(function(r){return '<option value="'+r.type+'" '+(sel===r.type?'selected':'')+'>'+r.type+'</option>'}).join('')+'</select>';
+  var t=multiLine(ser.map(function(r){return {label:r.type,color:r.color,values:r.daily}}),{title:'各资源类型的排队趋势',def:'按 resource_type 拆分的每日排队时间。',xlabels:DAYS});
+  var h=[{label:'Job',cls:'text-left pl-2 font-normal text-neutral-300',key:'name'},{label:'排队 P90',cls:'text-right',key:'p90q',def:'该作业排队时间的 90 分位。',fmt:true},{label:'资源',cls:'text-right',key:'res',def:'resource_model。'},{label:'次数',cls:'text-right font-normal text-neutral-400',key:'count'},{label:'成功率',cls:'text-right pr-2',key:'succ',def:'conclusion=success 的作业占比。',color:[100,90,80],suffix:'%'}];
+  var queueItems = sel==='all' ? q.items : q.items.filter(function(x){return x.res===sel});
+  var tab=pagedTable('queue',h,queueItems,PAGE.queue||1,5);
+  return threeSeg(c,t,tab,'排队 = created_at → started_at',ctrl);
+}
+
+// ---- variants & router ----
+var DIMS=[
+  {key:'pr',label:'PR 分析',render:prBlock},
+  {key:'cost',label:'成本',render:costBlock},
+  {key:'workflow',label:'工作流',render:wfBlock},
+  {key:'job',label:'作业',render:jobBlock},
+  {key:'queue',label:'排队',render:queueBlock}
+];
+function chrome(){
+  var isDark=document.documentElement.classList.contains('dark');
+  return '<div class="flex items-center gap-3 px-4 py-3 border-b" style="background:var(--md-surface);border-color:var(--md-border)"><div class="font-medium text-base" style="color:var(--md-text)">Action Insight</div><div class="text-xs" style="color:var(--md-text-sec)">'+DATA.range+'</div><button onclick="toggleTheme()" class="ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs" style="background:var(--md-card);color:var(--md-text-sec);box-shadow:var(--md-shadow);border:1px solid var(--md-border)"><span id="theme-icon">'+(isDark?'☀':'☾')+'</span><span id="theme-label">'+(isDark?'亮色':'暗色')+'</span></button></div>';
+}
+function toggleTheme(){
+  var html=document.documentElement;html.classList.toggle('dark');
+  var isDark=html.classList.contains('dark');
+  var icon=document.getElementById('theme-icon'),label=document.getElementById('theme-label');
+  if(icon)icon.textContent=isDark?'☀':'☾';
+  if(label)label.textContent=isDark?'亮色':'暗色';
+}
+function variantA(active){
+  var cur=DIMS.filter(function(d){return d.key===active})[0]||DIMS[0];
+  var items=DIMS.map(function(d){return '<button onclick="go(\''+d.key+'\')" class="w-full text-left px-3 py-2 rounded text-xs '+(d.key===active?'bg-sky-900/40 text-sky-300 border-l-2 border-sky-500':'text-neutral-400 hover:bg-neutral-900 border-l-2 border-transparent')+'">'+d.label+'</button>'}).join('');
+  return chrome()+'<div class="flex" style="height:calc(100vh - 49px)"><nav class="w-44 shrink-0 p-2 overflow-y-auto" style="background:var(--md-surface);border-right:1px solid var(--md-border)"><div class="text-[10px] uppercase tracking-wider px-3 mt-1 mb-2" style="color:var(--md-text-sec)">维度</div>'+items+'</nav><main class="flex-1 overflow-auto p-5"><div class="flex items-center justify-between mb-4"><h2 class="text-lg font-semibold" style="color:var(--md-text)">'+cur.label+'</h2><div class="text-xs" style="color:var(--md-text-sec)">Variant A · Rail + Dense</div></div>'+cur.render()+'</main></div>';
+}
+function variantB(){
+  return chrome()+'<div class="px-5 pt-4 pb-20"><div class="flex items-center mb-5"><div class="text-xs text-neutral-500">Variant B · Card Wall（全部维度同屏滚动）</div></div><div class="space-y-6">'+DIMS.map(function(c){return '<section><h3 class="text-sm font-semibold text-neutral-200 mb-2.5">'+c.label+'</h3>'+c.render()+'</section>'}).join('')+'</div></div>';
+}
+function variantC(active){
+  var cur=DIMS.filter(function(d){return d.key===active})[0]||DIMS[0];
+  var tabs=DIMS.map(function(d){return '<button onclick="go(\''+d.key+'\')" class="px-3 py-1.5 rounded-md text-xs '+(d.key===active?'bg-neutral-800 text-sky-300':'text-neutral-400 hover:text-neutral-200')+'">'+d.label+'</button>'}).join('');
+  return chrome()+'<div class="flex items-center gap-1 px-4 py-2 border-b border-neutral-800">'+tabs+'<div class="ml-auto text-xs text-neutral-500">Variant C · Tabs</div></div><main class="p-5 overflow-auto" style="height:calc(100vh - 89px)">'+cur.render()+'</main>';
+}
+var VARIANTS=[
+  {key:'A',name:'Rail + Dense',render:function(s){return variantA(s.tab)}},
+  {key:'B',name:'Card Wall',render:function(){return variantB()}},
+  {key:'C',name:'Tabs',render:function(s){return variantC(s.tab)}}
+];
+function state(){var p=new URLSearchParams(location.search);return{variant:p.get('variant')||'A',tab:p.get('tab')||'pr'};}
+function setParam(k,v){var p=new URLSearchParams(location.search);p.set(k,v);history.replaceState(null,'','?'+p.toString());render();}
+function go(tab){setParam('tab',tab);}
+function setPage(key,page){PAGE[key]=page;render();}
+function render(){
+  var s=state();var v=VARIANTS.filter(function(x){return x.key===s.variant})[0]||VARIANTS[0];
+  document.getElementById('app').innerHTML=v.render(s);
+  document.getElementById('vlabel').textContent=s.variant+' — '+v.name;
+  // wire chart-bar → click expands PR drilldown (PR) or highlights row (others)
+  document.querySelectorAll('.bar-rect').forEach(function(rect){
+    rect.addEventListener('click',function(){
+      var key=rect.getAttribute('data-key'),i=parseInt(rect.getAttribute('data-i'));
+      if(key==='pr'){togglePr((state().tab==='pr'?((PAGE.pr||1)-1)*5:0)+i);}
+      else{var row=document.getElementById('tr-'+key+'-'+i);if(row){document.querySelectorAll('tr[id^=tr-]').forEach(function(r){r.classList.remove('bg-sky-900/40')});row.classList.add('bg-sky-900/40');row.scrollIntoView({behavior:'smooth',block:'center'});}}
+    });
+  });
+}
+function cycle(dir){var s=state();var i=VARIANTS.findIndex(function(v){return v.key===s.variant});var n=(i+dir+VARIANTS.length)%VARIANTS.length;setParam('variant',VARIANTS[n].key);}
+document.getElementById('prev').onclick=function(){cycle(-1)};
+document.getElementById('next').onclick=function(){cycle(1)};
+document.addEventListener('keydown',function(e){var tag=(e.target.tagName||'').toLowerCase();if(['input','textarea','select'].includes(tag)||e.target.isContentEditable)return;if(e.key==='ArrowLeft')cycle(-1);if(e.key==='ArrowRight')cycle(1);});
+render();
+
+</script>
+</body>
+</html>
