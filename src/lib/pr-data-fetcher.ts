@@ -3,6 +3,16 @@ import { toPgSql, pgPlaceholders } from './pg-utils';
 import { computePullRequestAttemptMetrics } from './pr-metrics';
 import type { PullRequestDetailFile, PullRequestIndexFile, PullRequestMetricsSummary, Run } from './types';
 
+function parseLabelsJson(value: unknown): string[] | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value as string);
+    return Array.isArray(parsed) ? parsed.filter((l) => typeof l === 'string') : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function mapPrSummary(row: Record<string, unknown>): PullRequestMetricsSummary {
   return {
     number: Number(row.pr_number),
@@ -131,7 +141,12 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
                      wj.html_url AS job_html_url,
                      wj.queue_duration_seconds AS job_queue_duration_seconds,
                      wj.runtime_seconds AS job_runtime_seconds,
-                     wj.total_duration_seconds AS job_total_duration_seconds
+                     wj.total_duration_seconds AS job_total_duration_seconds,
+                     wj.labels_json AS job_labels_json,
+                     wj.runner_id AS job_runner_id, wj.runner_name AS job_runner_name,
+                     wj.runner_group_id AS job_runner_group_id, wj.runner_group_name AS job_runner_group_name,
+                     wj.resource_model AS job_resource_model,
+                     wj.resource_count AS job_resource_count
               FROM workflow_attempts wa
               JOIN runs r ON r.id = wa.run_id
               LEFT JOIN workflow_jobs wj ON wj.run_id = wa.run_id AND wj.run_attempt = wa.run_attempt
@@ -163,6 +178,13 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
           durationInSeconds: Number(row.job_runtime_seconds ?? row.job_total_duration_seconds ?? 0),
           runtimeInSeconds: row.job_runtime_seconds == null ? undefined : Number(row.job_runtime_seconds),
           totalDurationInSeconds: row.job_total_duration_seconds == null ? undefined : Number(row.job_total_duration_seconds),
+          labels: parseLabelsJson(row.job_labels_json),
+          runner_id: row.job_runner_id == null ? undefined : Number(row.job_runner_id),
+          runner_name: (row.job_runner_name as string) || undefined,
+          runner_group_id: row.job_runner_group_id == null ? undefined : Number(row.job_runner_group_id),
+          runner_group_name: (row.job_runner_group_name as string) || undefined,
+          resource_model: (row.job_resource_model as string) || undefined,
+          resource_count: row.job_resource_count == null ? undefined : Number(row.job_resource_count),
         });
       }
     }
@@ -232,7 +254,12 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
                    j.conclusion AS job_conclusion, j.created_at AS job_created_at,
                    j.started_at AS job_started_at, j.completed_at AS job_completed_at,
                    j.html_url AS job_html_url,
-                   j.queue_duration_seconds, j.duration_seconds AS job_duration_seconds
+                   j.queue_duration_seconds, j.duration_seconds AS job_duration_seconds,
+                   j.labels_json AS job_labels_json,
+                   j.runner_id AS job_runner_id, j.runner_name AS job_runner_name,
+                   j.runner_group_id AS job_runner_group_id, j.runner_group_name AS job_runner_group_name,
+                   j.resource_model AS job_resource_model,
+                   j.resource_count AS job_resource_count
             FROM runs r
             LEFT JOIN jobs j ON j.run_id = r.id
             WHERE r.id IN (${placeholders})
@@ -260,6 +287,13 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
           html_url: row.job_html_url as string,
           queueDurationInSeconds: Number(row.queue_duration_seconds),
           durationInSeconds: Number(row.job_duration_seconds),
+          labels: parseLabelsJson(row.job_labels_json),
+          runner_id: row.job_runner_id == null ? undefined : Number(row.job_runner_id),
+          runner_name: (row.job_runner_name as string) || undefined,
+          runner_group_id: row.job_runner_group_id == null ? undefined : Number(row.job_runner_group_id),
+          runner_group_name: (row.job_runner_group_name as string) || undefined,
+          resource_model: (row.job_resource_model as string) || undefined,
+          resource_count: row.job_resource_count == null ? undefined : Number(row.job_resource_count),
         });
       }
     }

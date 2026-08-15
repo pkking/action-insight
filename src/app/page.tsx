@@ -1,5 +1,6 @@
-import DashboardClient from './DashboardClient';
-import { getHomepageData } from '@/lib/server-homepage-data';
+import DashboardShell from './DashboardShell';
+import { getDashboardReadModel, parsePrDashboardQuery } from '@/lib/dashboard-read-model';
+import { getTrackedRepoOptions } from '@/lib/server-homepage-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,15 +12,26 @@ type DashboardPageProps = {
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const { repoOptions, repoIndexesByKey, testCaseStatsByKey, failedRepoKeys } = await getHomepageData();
+  const urlParams = new URLSearchParams();
+  for (const [key, rawValue] of Object.entries(resolvedSearchParams)) {
+    if (Array.isArray(rawValue)) {
+      for (const value of rawValue) urlParams.append(key, value);
+    } else if (rawValue !== undefined) {
+      urlParams.set(key, rawValue);
+    }
+  }
+
+  const query = parsePrDashboardQuery(urlParams);
+  const [repoOptions, result] = await Promise.all([
+    getTrackedRepoOptions(),
+    getDashboardReadModel(query),
+  ]);
 
   return (
-    <DashboardClient
-      initialFailedRepoKeys={failedRepoKeys}
-      initialRepoIndexesByKey={repoIndexesByKey}
-      initialRepoOptions={repoOptions}
-      initialTestCaseStatsByKey={testCaseStatsByKey}
-      initialSearchParams={resolvedSearchParams}
+    <DashboardShell
+      repoOptions={repoOptions}
+      result={result}
+      searchParams={resolvedSearchParams}
     />
   );
 }
