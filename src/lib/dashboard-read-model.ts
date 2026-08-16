@@ -7,6 +7,7 @@ import { pgPlaceholders } from './pg-utils';
 import {
   computePrTimingParts,
   computeStats,
+  machineHours,
   type MetricStats,
 } from './dashboard-metrics';
 
@@ -45,6 +46,10 @@ export type DashboardResult<TCards, TSeries, TRow> = {
   quality: DashboardQuality;
 };
 
+// Discriminated union keyed by the active tab so the shell can narrow the
+// result without casts (spec §6: one seam dispatches by tab).
+export type DashboardReadResult = PrDashboardResult | CostDashboardResult;
+
 // ---- PR tab types -------------------------------------------------------
 
 export type PrCardSet = {
@@ -79,7 +84,47 @@ export type PrTableRow = {
   partialCiHistory: boolean;
 };
 
-export type PrDashboardResult = DashboardResult<PrCardSet, PrSeriesPoint, PrTableRow>;
+export type PrDashboardResult = DashboardResult<PrCardSet, PrSeriesPoint, PrTableRow> & {
+  tab: 'pr';
+};
+
+// ---- Cost tab types (spec §5.2) ----------------------------------------
+// ponytail: Machine-Hours come from attempt-scoped workflow_jobs joined to
+// workflow_attempts (ADR-008, spec §6). The "per merged PR" denominator is the
+// only pr_metrics touch — a count-only join, never PR timing.
+
+export type CostCardSet = {
+  totalMachineHours: number;
+  machineHoursPerMergedPr?: number; // undefined when no eligible merged PR
+  topRepo?: { repoKey: string; machineHours: number };
+  topWorkflow?: { workflowFile: string; machineHours: number }; // one repo only
+  dailyAverageMachineHours: number; // total / days in range
+  contributingCount: number; // repo count (all) or merged-PR count (one repo)
+};
+
+export type CostSeriesPoint = {
+  date: string; // run date (yyyy-mm-dd)
+  repoKey: string;
+  machineHours: number;
+};
+
+export type CostTableRow = {
+  repoKey: string;
+  workflowFile: string;
+  workflowRef: string;
+  resourceModel: string;
+  avgWorkflowTotalDuration?: number; // avg over distinct attempts in group
+  attemptCount: number; // distinct attempts contributing jobs to this group
+  successCount: number; // terminal attempts with conclusion='success'
+  failureRate: number; // failures / terminal attempts (0-100)
+  machineHours: number;
+  shareOfTotal: number; // 0-100
+  unknownCostCount: number; // jobs without attributable Machine-Hours
+};
+
+export type CostDashboardResult = DashboardResult<CostCardSet, CostSeriesPoint, CostTableRow> & {
+  tab: 'cost';
+};
 
 // ---- Query input validation --------------------------------------------
 
@@ -287,6 +332,7 @@ export function buildPrDashboardResult(
   ).length;
 
   return {
+    tab: 'pr',
     cards,
     series,
     rows: pagedRows,
@@ -307,20 +353,390 @@ export function buildPrDashboardResult(
 const DEFAULT_PR_PAGE_SIZE = 20;
 const DEFAULT_OBSERVATION_LIMIT = 500;
 
+// ---- Cost tab read model (spec §5.2) -----------------------------------
+
+export type CostJobRow = {
+  repoKey: string;
+  runId: number;
+  runAttempt: number;
+  jobId: number;
+  runDate: string; // runs.date (yyyy-mm-dd) — the Cost tab date anchor
+  workflowFile: string | null;
+  workflowRef: string | null;
+  resourceModel: string | null;
+  resourceCount: number | null;
+  runtimeSeconds: number | null; // Job Runtime
+  attemptConclusion: string | null;
+  attemptTotalDurationSeconds: number | null; // Workflow Total Duration
+};
+
+/**
+ * Fetch tracked workflow_jobs joined to workflow_attempts + runs for the
+ * filtered repo/date window. Machine-Hours are computed downstream from
+ * Job Runtime × Resource Count (ADR-008, spec §6). Tracked attempts only.
+ */
+export async function fetchCostJobRows(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<CostJobRow[]> {
+  if (repoRows.length === 0) return [];
+  const client = await getDatabaseClient();
+  try {
+    const placeholders = pgPlaceholders(repoRows.length);
+    const { rows } = await client.query(
+      `SELECT r.id AS run_id, r.repo_id, r.date, wa.run_attempt,
+              wa.workflow_file, wa.workflow_ref, wa.conclusion AS attempt_conclusion,
+              wa.total_duration_seconds AS attempt_total_duration_seconds,
+              wj.job_id, wj.resource_model, wj.resource_count, wj.runtime_seconds
+       FROM workflow_jobs wj
+       JOIN workflow_attempts wa
+         ON wa.run_id = wj.run_id AND wa.run_attempt = wj.run_attempt
+       JOIN runs r ON r.id = wa.run_id
+       WHERE r.repo_id IN (${placeholders})
+         AND r.date >= $${repoRows.length + 1}
+         AND r.date <= $${repoRows.length + 2}
+         AND wa.tracked = 1
+       ORDER BY r.date DESC, r.id DESC, wa.run_attempt DESC, wj.job_id`,
+      [...repoRows.map((r) => r.id), startDate, endDate],
+    );
+    const idToKey = new Map(repoRows.map((r) => [r.id, r.key]));
+    return rows.map((row) => ({
+      repoKey: idToKey.get(Number(row.repo_id)) ?? 'unknown',
+      runId: Number(row.run_id),
+      runAttempt: Number(row.run_attempt),
+      jobId: Number(row.job_id),
+      runDate: String(row.date),
+      workflowFile: (row.workflow_file as string | null) ?? null,
+      workflowRef: (row.workflow_ref as string | null) ?? null,
+      resourceModel: (row.resource_model as string | null) ?? null,
+      resourceCount: row.resource_count == null ? null : Number(row.resource_count),
+      runtimeSeconds:
+        row.runtime_seconds == null ? null : Number(row.runtime_seconds),
+      attemptConclusion: (row.attempt_conclusion as string | null) ?? null,
+      attemptTotalDurationSeconds:
+        row.attempt_total_duration_seconds == null
+          ? null
+          : Number(row.attempt_total_duration_seconds),
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Count distinct merged PRs (pr_metrics.merged_at IS NOT NULL) that have at
+ * least one attributable job (positive Resource Count + valid Job Runtime)
+ * whose run falls in the same filtered window. Count-only join — no PR
+ * timing is read (the single pr_metrics touch for the "per merged PR" card).
+ */
+export async function fetchCostMergedPrCount(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<number> {
+  if (repoRows.length === 0) return 0;
+  const client = await getDatabaseClient();
+  try {
+    const placeholders = pgPlaceholders(repoRows.length);
+    const { rows } = await client.query(
+      `SELECT COUNT(DISTINCT pwa.pr_metric_id) AS n
+       FROM pr_workflow_attempts pwa
+       JOIN pr_metrics pm ON pm.id = pwa.pr_metric_id
+       JOIN workflow_attempts wa
+         ON wa.run_id = pwa.run_id AND wa.run_attempt = pwa.run_attempt
+       JOIN workflow_jobs wj
+         ON wj.run_id = wa.run_id AND wj.run_attempt = wa.run_attempt
+       JOIN runs r ON r.id = pwa.run_id
+       WHERE r.repo_id IN (${placeholders})
+         AND r.date >= $${repoRows.length + 1}
+         AND r.date <= $${repoRows.length + 2}
+         AND wa.tracked = 1
+         AND pm.merged_at IS NOT NULL
+         AND wj.runtime_seconds IS NOT NULL AND wj.runtime_seconds >= 0
+         AND wj.resource_count IS NOT NULL AND wj.resource_count > 0`,
+      [...repoRows.map((r) => r.id), startDate, endDate],
+    );
+    return Number(rows[0]?.n ?? 0);
+  } finally {
+    client.release();
+  }
+}
+
+const TERMINAL_CONCLUSIONS = new Set([
+  'success',
+  'failure',
+  'cancelled',
+  'timed_out',
+  'startup_failure',
+]);
+
+export function buildCostCards(
+  jobRows: CostJobRow[],
+  mergedPrCount: number,
+  daysInRange: number,
+  oneRepo: boolean,
+): CostCardSet {
+  let totalMachineHours = 0;
+  const repoTotals = new Map<string, number>();
+  const wfTotals = new Map<string, number>();
+
+  for (const row of jobRows) {
+    const mh = machineHours(row.runtimeSeconds, row.resourceCount);
+    if (mh !== undefined) {
+      totalMachineHours += mh;
+      repoTotals.set(row.repoKey, (repoTotals.get(row.repoKey) ?? 0) + mh);
+      // Top workflow only meaningful for a single-repo selection.
+      if (oneRepo && row.workflowFile) {
+        wfTotals.set(
+          row.workflowFile,
+          (wfTotals.get(row.workflowFile) ?? 0) + mh,
+        );
+      }
+    }
+  }
+
+  const topRepo = [...repoTotals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([repoKey, machineHours]) => ({ repoKey, machineHours }))[0];
+  const topWorkflow = [...wfTotals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([workflowFile, machineHours]) => ({ workflowFile, machineHours }))[0];
+
+  const dailyAverageMachineHours =
+    daysInRange > 0 ? totalMachineHours / daysInRange : 0;
+  const machineHoursPerMergedPr =
+    mergedPrCount > 0 ? totalMachineHours / mergedPrCount : undefined;
+  // contributingCount: repo count for all-repos; merged-PR count for one repo.
+  const contributingCount = oneRepo ? mergedPrCount : repoTotals.size;
+
+  return {
+    totalMachineHours,
+    machineHoursPerMergedPr,
+    topRepo,
+    topWorkflow,
+    dailyAverageMachineHours,
+    contributingCount,
+  };
+}
+
+/** Inclusive day count between two yyyy-mm-dd dates (UTC). */
+export function dayCount(startDate: string, endDate: string): number {
+  const start = Date.parse(`${startDate}T00:00:00Z`);
+  const end = Date.parse(`${endDate}T00:00:00Z`);
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return 0;
+  return Math.round((end - start) / 86_400_000) + 1;
+}
+
+export type CostGroupKey = string;
+
+/** Group jobs by (repo, workflow_file, workflow_ref, resource_model). */
+export function costGroupKey(row: CostJobRow): CostGroupKey {
+  return [
+    row.repoKey,
+    row.workflowFile ?? '',
+    row.workflowRef ?? '',
+    row.resourceModel ?? 'unknown',
+  ].join('\u0001');
+}
+
+type CostGroup = {
+  key: CostGroupKey;
+  repoKey: string;
+  workflowFile: string;
+  workflowRef: string;
+  resourceModel: string;
+  machineHours: number;
+  unknownCostCount: number;
+  attempts: Map<string, { totalDuration?: number; conclusion: string | null }>;
+  // newest run date among the group's jobs — observation order anchor
+  latestDate: string;
+};
+
+/**
+ * Pure transformation from the full filtered job population to the bounded
+ * Cost result: cards over the full population, daily series + grouped table
+ * rows over the newest `observationLimit` job-observations (spec §3, §6).
+ */
+export function buildCostDashboardResult(
+  jobRows: CostJobRow[],
+  cards: CostCardSet,
+  query: Pick<DashboardQuery, 'page' | 'pageSize' | 'observationLimit'>,
+): CostDashboardResult {
+  // Group the full population by (repo, workflow_file, workflow_ref, model).
+  const groups = new Map<CostGroupKey, CostGroup>();
+  for (const row of jobRows) {
+    const key = costGroupKey(row);
+    let g = groups.get(key);
+    if (!g) {
+      g = {
+        key,
+        repoKey: row.repoKey,
+        workflowFile: row.workflowFile ?? '',
+        workflowRef: row.workflowRef ?? '',
+        resourceModel: row.resourceModel ?? 'unknown',
+        machineHours: 0,
+        unknownCostCount: 0,
+        attempts: new Map(),
+        latestDate: '',
+      };
+      groups.set(key, g);
+    }
+    const mh = machineHours(row.runtimeSeconds, row.resourceCount);
+    if (mh !== undefined) g.machineHours += mh;
+    else g.unknownCostCount += 1;
+    const attemptKey = `${row.runId}:${row.runAttempt}`;
+    const existing = g.attempts.get(attemptKey);
+    if (!existing) {
+      g.attempts.set(attemptKey, {
+        totalDuration:
+          row.attemptTotalDurationSeconds == null ||
+          row.attemptTotalDurationSeconds < 0
+            ? undefined
+            : row.attemptTotalDurationSeconds,
+        conclusion: row.attemptConclusion,
+      });
+    }
+    if (row.runDate > g.latestDate) g.latestDate = row.runDate;
+  }
+
+  // Table rows: one per group. Sort newest-first by latest job date, then MH.
+  const allRows: CostTableRow[] = [...groups.values()]
+    .map((g) => buildCostTableRow(g, cards.totalMachineHours))
+    .sort((a, b) =>
+      b.latestDate.localeCompare(a.latestDate) ||
+      b.machineHours - a.machineHours,
+    );
+
+  const observations = allRows.slice(0, query.observationLimit);
+  const truncated = allRows.length > query.observationLimit;
+  const totalRows = observations.length;
+  const pageStart = (query.page - 1) * query.pageSize;
+  const pagedRows = observations.slice(pageStart, pageStart + query.pageSize);
+
+  // Daily series per repo over the full filtered population, capped at the
+  // newest `observationLimit` (repo,date) points (spec §3). Daily points are
+  // sparse (days × repos), so the cap rarely bites.
+  const dailyByRepo = new Map<string, Map<string, number>>();
+  for (const row of jobRows) {
+    const mh = machineHours(row.runtimeSeconds, row.resourceCount);
+    if (mh === undefined) continue;
+    if (!dailyByRepo.has(row.repoKey)) dailyByRepo.set(row.repoKey, new Map());
+    const dm = dailyByRepo.get(row.repoKey)!;
+    dm.set(row.runDate, (dm.get(row.runDate) ?? 0) + mh);
+  }
+  const series: CostSeriesPoint[] = [];
+  for (const [repoKey, dm] of dailyByRepo) {
+    for (const [date, machineHours] of dm) {
+      series.push({ date, repoKey, machineHours });
+    }
+  }
+  // Newest-first to cap, then ascending for the left-to-right chart axis.
+  series.sort((a, b) => b.date.localeCompare(a.date));
+  const boundedSeries = series.slice(0, query.observationLimit);
+  boundedSeries.sort((a, b) =>
+    a.date === b.date
+      ? a.repoKey.localeCompare(b.repoKey)
+      : a.date.localeCompare(b.date),
+  );
+
+  const unknownResourceSamples = jobRows.filter(
+    (r) =>
+      machineHours(r.runtimeSeconds, r.resourceCount) === undefined,
+  ).length;
+
+  return {
+    tab: 'cost',
+    cards,
+    series: boundedSeries,
+    rows: pagedRows,
+    page: query.page,
+    pageSize: query.pageSize,
+    totalRows,
+    displayedObservationCount: observations.length,
+    truncated,
+    quality: {
+      invalidTimingSamples: 0,
+      unknownResourceSamples,
+      partialHistorySamples: 0,
+      legacyFallbackSamples: 0,
+    },
+  };
+}
+
+/** Build one table row from a (repo, workflow, ref, model) group. */
+function buildCostTableRow(
+  g: CostGroup,
+  totalMachineHours: number,
+): CostTableRow & { latestDate: string } {
+  const attemptList = [...g.attempts.values()];
+  const terminal = attemptList.filter((a) =>
+    a.conclusion ? TERMINAL_CONCLUSIONS.has(a.conclusion) : false,
+  );
+  const successCount = terminal.filter(
+    (a) => a.conclusion === 'success',
+  ).length;
+  const validDurations = attemptList
+    .map((a) => a.totalDuration)
+    .filter((v): v is number => v !== undefined);
+  const avgWorkflowTotalDuration =
+    validDurations.length > 0
+      ? validDurations.reduce((s, v) => s + v, 0) / validDurations.length
+      : undefined;
+  const failureRate =
+    terminal.length > 0
+      ? ((terminal.length - successCount) / terminal.length) * 100
+      : 0;
+  return {
+    repoKey: g.repoKey,
+    workflowFile: g.workflowFile,
+    workflowRef: g.workflowRef,
+    resourceModel: g.resourceModel,
+    avgWorkflowTotalDuration,
+    attemptCount: attemptList.length,
+    successCount,
+    failureRate,
+    machineHours: g.machineHours,
+    shareOfTotal:
+      totalMachineHours > 0
+        ? (g.machineHours / totalMachineHours) * 100
+        : 0,
+    unknownCostCount: g.unknownCostCount,
+    latestDate: g.latestDate,
+  };
+}
+
 /**
  * Server seam entry point. Fetches the filtered population, computes the
  * full-population cards and the bounded observation result. Cached per
  * identical query via React `cache` (spec §6: no GitHub API on reads).
  */
 export const getDashboardReadModel = cache(
-  async (input: DashboardQuery): Promise<PrDashboardResult> => {
+  async (input: DashboardQuery): Promise<DashboardReadResult> => {
     validateDashboardQuery(input);
-    if (input.tab !== 'pr') {
-      throw new Error(`Tab "${input.tab}" is not implemented in slice 1`);
-    }
 
     const options = await getTrackedRepoOptions();
     const repoRows = await resolveRepoRows(options, input.repoKey);
+
+    if (input.tab === 'cost') {
+      const [jobRows, mergedPrCount] = await Promise.all([
+        fetchCostJobRows(repoRows, input.startDate, input.endDate),
+        fetchCostMergedPrCount(repoRows, input.startDate, input.endDate),
+      ]);
+      const cards = buildCostCards(
+        jobRows,
+        mergedPrCount,
+        dayCount(input.startDate, input.endDate),
+        repoRows.length === 1,
+      );
+      return buildCostDashboardResult(jobRows, cards, {
+        page: input.page,
+        pageSize: input.pageSize,
+        observationLimit: input.observationLimit,
+      });
+    }
+
+    // PR tab (slice 1).
     const rawRows = await fetchPrMetricRows(repoRows, input.startDate, input.endDate);
     const enriched = buildEnrichedRows(rawRows, repoRows);
     return buildPrDashboardResult(enriched, {
@@ -331,14 +747,30 @@ export const getDashboardReadModel = cache(
   },
 );
 
-/** Parse dashboard search params into a validated query (PR tab slice 1). */
-export function parsePrDashboardQuery(params: URLSearchParams): DashboardQuery {
+const DEFAULT_DAY_WINDOW: Record<DashboardTab, number> = {
+  pr: 1,
+  cost: 14,
+  workflow: 14,
+  job: 14,
+  queue: 14,
+};
+
+/**
+ * Parse dashboard search params into a validated query. Date range defaults
+ * to 1 day for the PR tab and 14 days otherwise (spec §3).
+ */
+export function parseDashboardQuery(params: URLSearchParams): DashboardQuery {
+  const tabRaw = params.get('tab');
+  const tab: DashboardTab =
+    tabRaw && TABS.includes(tabRaw as DashboardTab)
+      ? (tabRaw as DashboardTab)
+      : 'pr';
   const repoKey = params.get('repo') || undefined;
-  const startDate = params.get('startDate') || defaultDate(1);
+  const startDate = params.get('startDate') || defaultDate(DEFAULT_DAY_WINDOW[tab]);
   const endDate = params.get('endDate') || todayUtc();
   const page = intParam(params, 'page', 1);
   return {
-    tab: 'pr',
+    tab,
     startDate,
     endDate,
     repoKey,
@@ -346,6 +778,11 @@ export function parsePrDashboardQuery(params: URLSearchParams): DashboardQuery {
     pageSize: DEFAULT_PR_PAGE_SIZE,
     observationLimit: DEFAULT_OBSERVATION_LIMIT,
   };
+}
+
+/** Parse dashboard search params into a validated query (PR tab slice 1). */
+export function parsePrDashboardQuery(params: URLSearchParams): DashboardQuery {
+  return parseDashboardQuery(params);
 }
 
 function intParam(params: URLSearchParams, key: string, fallback: number): number {
