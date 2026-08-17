@@ -12,7 +12,7 @@ import {
   type CollectCliOptions,
 } from './collect-options.ts';
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
-import { isGitHubRateLimitError, getRateLimitDetails, type RateLimitDetails } from './github.ts';
+import { createOctokit, isGitHubRateLimitError, getRateLimitDetails, type RateLimitDetails } from './github.ts';
 import {
   writeRuns,
   writeWorkflowAttempts,
@@ -722,7 +722,7 @@ export async function runCollection({
     return;
   }
 
-  const client = octokit ?? new Octokit({ auth: token });
+  const client = octokit ?? createOctokit(token);
   const failures: string[] = [];
   let stoppedEarly: RateLimitAbortError | null = null;
 
