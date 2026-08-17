@@ -51,7 +51,9 @@ export type DashboardResult<TCards, TSeries, TRow> = {
 export type DashboardReadResult =
   | PrDashboardResult
   | CostDashboardResult
-  | WorkflowDashboardResult;
+  | WorkflowDashboardResult
+  | JobDashboardResult
+  | QueueDashboardResult;
 
 // ---- PR tab types -------------------------------------------------------
 
@@ -169,6 +171,79 @@ export type WorkflowDashboardResult = DashboardResult<
   WorkflowTableRow
 > & {
   tab: 'workflow';
+};
+
+// ---- Job tab types (spec §5.4) ------------------------------------------
+// ponytail: Job/Queue share a richer job-row population (job-level queue +
+// total + runtime). Job grouping adds job_name to the Workflow key.
+
+export type JobCardSet = {
+  totalJobs: number;
+  p50TotalDuration?: number; // successful Job Total Duration (spec §4)
+  p90TotalDuration?: number;
+  successRate: number; // success / terminal jobs (0-100)
+  contributingRepoCount: number;
+  topJob?: { jobName: string; machineHours: number }; // one repo
+};
+
+export type JobSeriesPoint = {
+  date: string;
+  key: string; // repoKey (all) or jobName (one repo)
+  jobs: number;
+};
+
+export type JobTableRow = {
+  repoKey: string;
+  workflowFile: string;
+  workflowRef: string;
+  jobName: string;
+  resourceModel: string;
+  avgJobTotalDuration?: number;
+  executionCount: number; // job instances in the group
+  successCount: number;
+  failureRate: number;
+  machineHours: number;
+  unknownCostCount: number;
+  latestDate: string;
+};
+
+export type JobDashboardResult = DashboardResult<JobCardSet, JobSeriesPoint, JobTableRow> & {
+  tab: 'job';
+};
+
+// ---- Queue tab types (spec §5.5) ---------------------------------------
+
+export type QueueCardSet = {
+  p50QueueDuration?: number; // valid queue samples only
+  p90QueueDuration?: number;
+  maxQueueDuration?: number; // longest valid queue sample
+  shareOverOneHour: number; // valid samples > 3600s ÷ valid samples (0-100)
+  distinctResourceModelCount: number;
+};
+
+export type QueueSeriesPoint = {
+  date: string;
+  resourceModel: string;
+  p90: number; // daily P90 queue duration (spec §5.5)
+};
+
+export type QueueTableRow = {
+  repoKey: string;
+  workflowFile: string;
+  workflowRef: string;
+  jobName: string;
+  resourceModel: string;
+  queueP90?: number;
+  executionCount: number;
+  successRate: number; // success / terminal (0-100)
+};
+
+export type QueueDashboardResult = DashboardResult<
+  QueueCardSet,
+  QueueSeriesPoint,
+  QueueTableRow
+> & {
+  tab: 'queue';
 };
 
 // ---- Query input validation --------------------------------------------
@@ -1096,6 +1171,529 @@ export async function fetchWorkflowAttemptDrilldown(
   }
 }
 
+// ---- Job + Queue tab read models (spec §5.4, §5.5) ---------------------
+
+export type JobRow = {
+  repoKey: string;
+  runId: number;
+  runAttempt: number;
+  jobId: number;
+  runDate: string;
+  workflowFile: string | null;
+  workflowRef: string | null;
+  jobName: string;
+  resourceModel: string | null;
+  resourceCount: number | null;
+  queueDurationSeconds: number | null;
+  runtimeSeconds: number | null;
+  totalDurationSeconds: number | null; // Job Total Duration
+  jobConclusion: string | null;
+};
+
+/**
+ * Fetch tracked workflow_jobs (joined to workflow_attempts + runs) in the
+ * filtered repo/date window, with job-level queue/total/runtime + resource
+ * metadata. Shared population for the Job and Queue tabs (spec §5.4/§5.5).
+ */
+export async function fetchJobRows(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<JobRow[]> {
+  if (repoRows.length === 0) return [];
+  const client = await getDatabaseClient();
+  try {
+    const placeholders = pgPlaceholders(repoRows.length);
+    const { rows } = await client.query(
+      `SELECT r.id AS run_id, r.repo_id, r.date, wa.run_attempt,
+              wa.workflow_file, wa.workflow_ref,
+              wj.job_id, wj.name AS job_name, wj.resource_model,
+              wj.resource_count, wj.queue_duration_seconds,
+              wj.runtime_seconds, wj.total_duration_seconds,
+              wj.conclusion AS job_conclusion
+       FROM workflow_jobs wj
+       JOIN workflow_attempts wa
+         ON wa.run_id = wj.run_id AND wa.run_attempt = wj.run_attempt
+       JOIN runs r ON r.id = wa.run_id
+       WHERE r.repo_id IN (${placeholders})
+         AND r.date >= $${repoRows.length + 1}
+         AND r.date <= $${repoRows.length + 2}
+         AND wa.tracked = 1
+       ORDER BY r.date DESC, r.id DESC, wa.run_attempt DESC, wj.job_id`,
+      [...repoRows.map((r) => r.id), startDate, endDate],
+    );
+    const idToKey = new Map(repoRows.map((r) => [r.id, r.key]));
+    return rows.map((row) => ({
+      repoKey: idToKey.get(Number(row.repo_id)) ?? 'unknown',
+      runId: Number(row.run_id),
+      runAttempt: Number(row.run_attempt),
+      jobId: Number(row.job_id),
+      runDate: String(row.date),
+      workflowFile: (row.workflow_file as string | null) ?? null,
+      workflowRef: (row.workflow_ref as string | null) ?? null,
+      jobName: (row.job_name as string | null) ?? '',
+      resourceModel: (row.resource_model as string | null) ?? null,
+      resourceCount: row.resource_count == null ? null : Number(row.resource_count),
+      queueDurationSeconds:
+        row.queue_duration_seconds == null
+          ? null
+          : Number(row.queue_duration_seconds),
+      runtimeSeconds:
+        row.runtime_seconds == null ? null : Number(row.runtime_seconds),
+      totalDurationSeconds:
+        row.total_duration_seconds == null
+          ? null
+          : Number(row.total_duration_seconds),
+      jobConclusion: (row.job_conclusion as string | null) ?? null,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+/** Group key for (repo, workflow_file, workflow_ref, job_name, resource_model). */
+export function jobGroupKey(row: JobRow): string {
+  return [
+    row.repoKey,
+    row.workflowFile ?? '',
+    row.workflowRef ?? '',
+    row.jobName,
+    row.resourceModel ?? 'unknown',
+  ].join('\u0001');
+}
+
+export function buildJobCards(
+  jobRows: JobRow[],
+  oneRepo: boolean,
+): JobCardSet {
+  const terminal = jobRows.filter((j) =>
+    j.jobConclusion ? TERMINAL_CONCLUSIONS.has(j.jobConclusion) : false,
+  );
+  const successCount = terminal.filter(
+    (j) => j.jobConclusion === 'success',
+  ).length;
+  // Percentiles over successful Job Total Duration (spec §4).
+  const successTotals = jobRows
+    .filter(
+      (j) =>
+        j.jobConclusion === 'success' &&
+        j.totalDurationSeconds != null &&
+        j.totalDurationSeconds >= 0,
+    )
+    .map((j) => j.totalDurationSeconds!);
+  const stats = computeStats(successTotals);
+  const contributingRepoCount = new Set(jobRows.map((j) => j.repoKey)).size;
+
+  const jobTotals = new Map<string, number>();
+  if (oneRepo) {
+    for (const row of jobRows) {
+      const mh = machineHours(row.runtimeSeconds, row.resourceCount);
+      if (mh !== undefined && row.jobName) {
+        jobTotals.set(row.jobName, (jobTotals.get(row.jobName) ?? 0) + mh);
+      }
+    }
+  }
+  const topJob = [...jobTotals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([jobName, machineHours]) => ({ jobName, machineHours }))[0];
+
+  return {
+    totalJobs: jobRows.length,
+    p50TotalDuration: stats.sampleCount > 0 ? stats.p50 : undefined,
+    p90TotalDuration: stats.sampleCount > 0 ? stats.p90 : undefined,
+    successRate:
+      terminal.length > 0 ? (successCount / terminal.length) * 100 : 0,
+    contributingRepoCount,
+    topJob,
+  };
+}
+
+export function buildJobDashboardResult(
+  jobRows: JobRow[],
+  cards: JobCardSet,
+  oneRepo: boolean,
+  query: Pick<DashboardQuery, 'page' | 'pageSize' | 'observationLimit'>,
+): JobDashboardResult {
+  // Daily job count: per repo (all) or per job name (one repo).
+  const dailyByKey = new Map<string, Map<string, number>>();
+  for (const j of jobRows) {
+    const key = oneRepo ? (j.jobName || '(unknown)') : j.repoKey;
+    if (!dailyByKey.has(key)) dailyByKey.set(key, new Map());
+    const dm = dailyByKey.get(key)!;
+    dm.set(j.runDate, (dm.get(j.runDate) ?? 0) + 1);
+  }
+  const series: JobSeriesPoint[] = [];
+  for (const [key, dm] of dailyByKey) {
+    for (const [date, jobs] of dm) {
+      series.push({ date, key, jobs });
+    }
+  }
+  series.sort((a, b) => b.date.localeCompare(a.date));
+  const boundedSeries = series.slice(0, query.observationLimit);
+  boundedSeries.sort((a, b) =>
+    a.date === b.date
+      ? a.key.localeCompare(b.key)
+      : a.date.localeCompare(b.date),
+  );
+
+  // Group by (repo, workflow_file, workflow_ref, job_name, resource_model).
+  const groups = new Map<
+    string,
+    {
+      repoKey: string;
+      workflowFile: string;
+      workflowRef: string;
+      jobName: string;
+      resourceModel: string;
+      machineHours: number;
+      unknownCostCount: number;
+      totals: number[];
+      terminal: number;
+      success: number;
+      latestDate: string;
+      count: number;
+    }
+  >();
+  for (const row of jobRows) {
+    const key = jobGroupKey(row);
+    let g = groups.get(key);
+    if (!g) {
+      g = {
+        repoKey: row.repoKey,
+        workflowFile: row.workflowFile ?? '',
+        workflowRef: row.workflowRef ?? '',
+        jobName: row.jobName,
+        resourceModel: row.resourceModel ?? 'unknown',
+        machineHours: 0,
+        unknownCostCount: 0,
+        totals: [],
+        terminal: 0,
+        success: 0,
+        latestDate: '',
+        count: 0,
+      };
+      groups.set(key, g);
+    }
+    g.count += 1;
+    const mh = machineHours(row.runtimeSeconds, row.resourceCount);
+    if (mh !== undefined) g.machineHours += mh;
+    else g.unknownCostCount += 1;
+    if (
+      row.totalDurationSeconds != null &&
+      row.totalDurationSeconds >= 0
+    ) {
+      g.totals.push(row.totalDurationSeconds);
+    }
+    if (row.jobConclusion && TERMINAL_CONCLUSIONS.has(row.jobConclusion)) {
+      g.terminal += 1;
+      if (row.jobConclusion === 'success') g.success += 1;
+    }
+    if (row.runDate > g.latestDate) g.latestDate = row.runDate;
+  }
+
+  const allRows: JobTableRow[] = [...groups.values()].map((g) => ({
+    repoKey: g.repoKey,
+    workflowFile: g.workflowFile,
+    workflowRef: g.workflowRef,
+    jobName: g.jobName,
+    resourceModel: g.resourceModel,
+    avgJobTotalDuration:
+      g.totals.length > 0
+        ? g.totals.reduce((s, v) => s + v, 0) / g.totals.length
+        : undefined,
+    executionCount: g.count,
+    successCount: g.success,
+    failureRate:
+      g.terminal > 0 ? ((g.terminal - g.success) / g.terminal) * 100 : 0,
+    machineHours: g.machineHours,
+    unknownCostCount: g.unknownCostCount,
+    latestDate: g.latestDate,
+  }));
+  allRows.sort(
+    (a, b) =>
+      b.latestDate.localeCompare(a.latestDate) ||
+      b.machineHours - a.machineHours,
+  );
+
+  const observations = allRows.slice(0, query.observationLimit);
+  const truncated = allRows.length > query.observationLimit;
+  const totalRows = observations.length;
+  const pageStart = (query.page - 1) * query.pageSize;
+  const pagedRows = observations.slice(pageStart, pageStart + query.pageSize);
+  const unknownResourceSamples = jobRows.filter(
+    (r) => machineHours(r.runtimeSeconds, r.resourceCount) === undefined,
+  ).length;
+
+  return {
+    tab: 'job',
+    cards,
+    series: boundedSeries,
+    rows: pagedRows,
+    page: query.page,
+    pageSize: query.pageSize,
+    totalRows,
+    displayedObservationCount: observations.length,
+    truncated,
+    quality: {
+      invalidTimingSamples: 0,
+      unknownResourceSamples,
+      partialHistorySamples: 0,
+      legacyFallbackSamples: 0,
+    },
+  };
+}
+
+/**
+ * Lazy drill-down: job attempt instances (run_id + run_attempt + job_id)
+ * for one (repo, workflow_file, workflow_ref, job_name, resource_model)
+ * group, bounded to newest N. Returns queue/runtime/conclusion for the
+ * stacked chart (spec §5.4).
+ */
+export async function fetchJobAttemptDrilldown(
+  repoId: number,
+  repoKey: string,
+  workflowFile: string,
+  workflowRef: string | null,
+  jobName: string,
+  resourceModel: string | null,
+  limit = 100,
+): Promise<Array<{
+  runId: number;
+  runAttempt: number;
+  jobId: number;
+  repoKey: string;
+  queueDurationSeconds: number | null;
+  runtimeSeconds: number | null;
+  totalDurationSeconds: number | null;
+  resourceModel: string | null;
+  conclusion: string | null;
+  runDate: string;
+}>> {
+  const client = await getDatabaseClient();
+  try {
+    const params: Array<string | number> = [
+      repoId,
+      workflowFile,
+      jobName,
+      limit,
+    ];
+    let clauses = '';
+    if (workflowRef) {
+      params.push(workflowRef);
+      clauses += ` AND wa.workflow_ref = $${params.length}`;
+    }
+    if (resourceModel && resourceModel !== 'unknown') {
+      params.push(resourceModel);
+      clauses += ` AND wj.resource_model = $${params.length}`;
+    }
+    const { rows } = await client.query(
+      `SELECT r.id AS run_id, r.date, wa.run_attempt, wj.job_id, wj.queue_duration_seconds,
+              wj.runtime_seconds, wj.total_duration_seconds, wj.resource_model,
+              wj.conclusion
+       FROM workflow_jobs wj
+       JOIN workflow_attempts wa
+         ON wa.run_id = wj.run_id AND wa.run_attempt = wj.run_attempt
+       JOIN runs r ON r.id = wa.run_id
+       WHERE r.repo_id = $1
+         AND wa.tracked = 1
+         AND wa.workflow_file = $2
+         AND wj.name = $3${clauses}
+       ORDER BY r.date DESC, r.id DESC, wa.run_attempt DESC, wj.job_id DESC
+       LIMIT $4`,
+      params,
+    );
+    return rows.map((row) => ({
+      runId: Number(row.run_id),
+      runAttempt: Number(row.run_attempt),
+      jobId: Number(row.job_id),
+      repoKey,
+      queueDurationSeconds:
+        row.queue_duration_seconds == null
+          ? null
+          : Number(row.queue_duration_seconds),
+      runtimeSeconds:
+        row.runtime_seconds == null ? null : Number(row.runtime_seconds),
+      totalDurationSeconds:
+        row.total_duration_seconds == null
+          ? null
+          : Number(row.total_duration_seconds),
+      resourceModel: (row.resource_model as string | null) ?? null,
+      conclusion: (row.conclusion as string | null) ?? null,
+      runDate: String(row.date),
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+export function buildQueueCards(jobRows: JobRow[]): QueueCardSet {
+  const validQueue = jobRows
+    .filter(
+      (j) =>
+        j.queueDurationSeconds != null && j.queueDurationSeconds >= 0,
+    )
+    .map((j) => j.queueDurationSeconds!);
+  const stats = computeStats(validQueue);
+  const overOneHour = validQueue.filter((q) => q > 3600).length;
+  const distinctResourceModelCount = new Set(
+    jobRows
+      .map((j) => j.resourceModel)
+      .filter((m): m is string => Boolean(m)),
+  ).size;
+  return {
+    p50QueueDuration: stats.sampleCount > 0 ? stats.p50 : undefined,
+    p90QueueDuration: stats.sampleCount > 0 ? stats.p90 : undefined,
+    maxQueueDuration: validQueue.length > 0 ? Math.max(...validQueue) : undefined,
+    shareOverOneHour:
+      validQueue.length > 0 ? (overOneHour / validQueue.length) * 100 : 0,
+    distinctResourceModelCount,
+  };
+}
+
+export function buildQueueDashboardResult(
+  jobRows: JobRow[],
+  cards: QueueCardSet,
+  query: Pick<DashboardQuery, 'page' | 'pageSize' | 'observationLimit'> & {
+    resourceModel?: string;
+  },
+): QueueDashboardResult {
+  // Daily P90 queue per resource model (spec §5.5).
+  const byDateModel = new Map<string, Map<string, number[]>>();
+  for (const j of jobRows) {
+    if (
+      j.queueDurationSeconds == null ||
+      j.queueDurationSeconds < 0 ||
+      !j.resourceModel
+    )
+      continue;
+    if (
+      query.resourceModel &&
+      j.resourceModel !== query.resourceModel
+    )
+      continue;
+    if (!byDateModel.has(j.runDate)) byDateModel.set(j.runDate, new Map());
+    const dm = byDateModel.get(j.runDate)!;
+    const model = j.resourceModel;
+    if (!dm.has(model)) dm.set(model, []);
+    dm.get(model)!.push(j.queueDurationSeconds);
+  }
+  const series: QueueSeriesPoint[] = [];
+  for (const [date, dm] of byDateModel) {
+    for (const [resourceModel, samples] of dm) {
+      series.push({
+        date,
+        resourceModel,
+        p90: percentileOf(samples, 0.9),
+      });
+    }
+  }
+  series.sort((a, b) => b.date.localeCompare(a.date));
+  const boundedSeries = series.slice(0, query.observationLimit);
+  boundedSeries.sort((a, b) =>
+    a.date === b.date
+      ? a.resourceModel.localeCompare(b.resourceModel)
+      : a.date.localeCompare(b.date),
+  );
+
+  // Table: group by (repo, workflow_file, workflow_ref, job_name, resource_model).
+  const groups = new Map<
+    string,
+    {
+      repoKey: string;
+      workflowFile: string;
+      workflowRef: string;
+      jobName: string;
+      resourceModel: string;
+      queues: number[];
+      terminal: number;
+      success: number;
+      latestDate: string;
+      count: number;
+    }
+  >();
+  for (const row of jobRows) {
+    const key = jobGroupKey(row);
+    let g = groups.get(key);
+    if (!g) {
+      g = {
+        repoKey: row.repoKey,
+        workflowFile: row.workflowFile ?? '',
+        workflowRef: row.workflowRef ?? '',
+        jobName: row.jobName,
+        resourceModel: row.resourceModel ?? 'unknown',
+        queues: [],
+        terminal: 0,
+        success: 0,
+        latestDate: '',
+        count: 0,
+      };
+      groups.set(key, g);
+    }
+    g.count += 1;
+    if (
+      row.queueDurationSeconds != null &&
+      row.queueDurationSeconds >= 0
+    ) {
+      g.queues.push(row.queueDurationSeconds);
+    }
+    if (row.jobConclusion && TERMINAL_CONCLUSIONS.has(row.jobConclusion)) {
+      g.terminal += 1;
+      if (row.jobConclusion === 'success') g.success += 1;
+    }
+    if (row.runDate > g.latestDate) g.latestDate = row.runDate;
+  }
+
+  const allRows: QueueTableRow[] = [...groups.values()].map((g) => ({
+    repoKey: g.repoKey,
+    workflowFile: g.workflowFile,
+    workflowRef: g.workflowRef,
+    jobName: g.jobName,
+    resourceModel: g.resourceModel,
+    queueP90: g.queues.length > 0 ? percentileOf(g.queues, 0.9) : undefined,
+    executionCount: g.count,
+    successRate:
+      g.terminal > 0 ? (g.success / g.terminal) * 100 : 0,
+  }));
+  allRows.sort(
+    (a, b) =>
+      (b.queueP90 ?? -1) - (a.queueP90 ?? -1),
+  );
+
+  const observations = allRows.slice(0, query.observationLimit);
+  const truncated = allRows.length > query.observationLimit;
+  const totalRows = observations.length;
+  const pageStart = (query.page - 1) * query.pageSize;
+  const pagedRows = observations.slice(pageStart, pageStart + query.pageSize);
+
+  const unknownResourceSamples = jobRows.filter(
+    (r) =>
+      r.queueDurationSeconds == null || r.queueDurationSeconds < 0,
+  ).length;
+
+  return {
+    tab: 'queue',
+    cards,
+    series: boundedSeries,
+    rows: pagedRows,
+    page: query.page,
+    pageSize: query.pageSize,
+    totalRows,
+    displayedObservationCount: observations.length,
+    truncated,
+    quality: {
+      invalidTimingSamples: unknownResourceSamples,
+      unknownResourceSamples,
+      partialHistorySamples: 0,
+      legacyFallbackSamples: 0,
+    },
+  };
+}
+
+/** Percentile over a sample set (repository convention via dashboard-metrics). */
+function percentileOf(samples: number[], p: number): number {
+  return computeStats(samples)[p === 0.5 ? 'p50' : 'p90'];
+}
+
 /**
  * Server seam entry point. Fetches the filtered population, computes the
  * full-population cards and the bounded observation result. Cached per
@@ -1145,6 +1743,30 @@ export const getDashboardReadModel = cache(
       );
     }
 
+    if (input.tab === 'job' || input.tab === 'queue') {
+      const jobRows = await fetchJobRows(
+        repoRows,
+        input.startDate,
+        input.endDate,
+      );
+      const oneRepo = repoRows.length === 1;
+      if (input.tab === 'job') {
+        const cards = buildJobCards(jobRows, oneRepo);
+        return buildJobDashboardResult(jobRows, cards, oneRepo, {
+          page: input.page,
+          pageSize: input.pageSize,
+          observationLimit: input.observationLimit,
+        });
+      }
+      const cards = buildQueueCards(jobRows);
+      return buildQueueDashboardResult(jobRows, cards, {
+        page: input.page,
+        pageSize: input.pageSize,
+        observationLimit: input.observationLimit,
+        resourceModel: input.resourceModel,
+      });
+    }
+
     // PR tab (slice 1).
     const rawRows = await fetchPrMetricRows(repoRows, input.startDate, input.endDate);
     const enriched = buildEnrichedRows(rawRows, repoRows);
@@ -1175,6 +1797,7 @@ export function parseDashboardQuery(params: URLSearchParams): DashboardQuery {
       ? (tabRaw as DashboardTab)
       : 'pr';
   const repoKey = params.get('repo') || undefined;
+  const resourceModel = params.get('resourceModel') || undefined;
   const startDate = params.get('startDate') || defaultDate(DEFAULT_DAY_WINDOW[tab]);
   const endDate = params.get('endDate') || todayUtc();
   const page = intParam(params, 'page', 1);
@@ -1183,6 +1806,7 @@ export function parseDashboardQuery(params: URLSearchParams): DashboardQuery {
     startDate,
     endDate,
     repoKey,
+    resourceModel,
     page,
     pageSize: DEFAULT_PR_PAGE_SIZE,
     observationLimit: DEFAULT_OBSERVATION_LIMIT,

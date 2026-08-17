@@ -34,7 +34,9 @@ import {
 import type {
   CostDashboardResult,
   DashboardReadResult,
+  JobDashboardResult,
   PrTableRow,
+  QueueDashboardResult,
   WorkflowDashboardResult,
   WorkflowTableRow,
 } from '@/lib/dashboard-read-model';
@@ -890,6 +892,470 @@ function WorkflowDrillDown({
   );
 }
 
+type JobDrilldownAttempt = {
+  runId: number;
+  runAttempt: number;
+  jobId: number;
+  repoKey: string;
+  queueDurationSeconds: number | null;
+  runtimeSeconds: number | null;
+  totalDurationSeconds: number | null;
+  resourceModel: string | null;
+  conclusion: string | null;
+  runDate: string;
+};
+
+/** Job tab body: job cards, daily job-count chart, grouped table (spec §5.4). */
+function JobBody({
+  result,
+  repoOptions,
+}: {
+  result: JobDashboardResult;
+  repoOptions: RepoOption[];
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const urlSearchParams = useSearchParams();
+  const cards = result.cards;
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [drilldown, setDrilldown] = useState<Record<string, JobDrilldownAttempt[]>>({});
+  const [loadingKey, setLoadingKey] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const keysInSeries = useMemo(
+    () => [...new Set(result.series.map((p) => p.key))],
+    [result.series],
+  );
+  const keyColors = useMemo(
+    () =>
+      new Map(
+        keysInSeries.map((key, i) => [key, COST_REPO_COLORS[i % COST_REPO_COLORS.length]]),
+      ),
+    [keysInSeries],
+  );
+  const dailyData = useMemo(() => {
+    const byDate = new Map<string, Record<string, number>>();
+    for (const p of result.series) {
+      const row = byDate.get(p.date) ?? {};
+      row[p.key] = (row[p.key] ?? 0) + p.jobs;
+      byDate.set(p.date, row);
+    }
+    return [...byDate.entries()]
+      .map(([date, values]) => ({ date, ...values }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [result.series]);
+
+  const totalPages = Math.max(1, Math.ceil(result.totalRows / result.pageSize));
+  const currentPage = Math.min(result.page, totalPages);
+  const isOneRepo = Boolean(cards.topJob);
+
+  function pushPage(page: number) {
+    const params = new URLSearchParams(urlSearchParams.toString());
+    params.set('page', String(page));
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  async function loadDrilldown(row: JobTableRowLike) {
+    const key = [row.repoKey, row.workflowFile, row.workflowRef, row.jobName, row.resourceModel].join('\u0001');
+    if (expanded === key) {
+      setExpanded(null);
+      return;
+    }
+    if (drilldown[key]) {
+      setExpanded(key);
+      return;
+    }
+    const repo = repoOptions.find((r) => r.key === row.repoKey);
+    if (!repo) return;
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    setLoadingKey(key);
+    setExpanded(key);
+    try {
+      const attempts = await callApi<JobDrilldownAttempt[]>('fetchJobAttempts', {
+        owner: repo.owner,
+        repo: repo.repo,
+        workflowFile: row.workflowFile,
+        workflowRef: row.workflowRef || null,
+        jobName: row.jobName,
+        resourceModel: row.resourceModel === 'unknown' ? null : row.resourceModel,
+      }, abortRef.current.signal);
+      setDrilldown((cur) => ({ ...cur, [key]: attempts }));
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      console.error('Failed to load job attempts', err);
+    } finally {
+      setLoadingKey((cur) => (cur === key ? null : cur));
+    }
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <CostCard label="Total Jobs" definition="Tracked workflow_jobs in the window (spec §5.4)." value={String(cards.totalJobs)} />
+        <CostCard label="P50 Total" definition="Median Job Total Duration over successful jobs (spec §4)." value={cards.p50TotalDuration !== undefined ? fmtSeconds(cards.p50TotalDuration) : '—'} />
+        <CostCard label="P90 Total" definition="90th-percentile Job Total Duration over successful jobs (spec §4)." value={cards.p90TotalDuration !== undefined ? fmtSeconds(cards.p90TotalDuration) : '—'} />
+        <CostCard label="Success Rate" definition="Successful terminal jobs ÷ all terminal jobs (spec §4)." value={cards.totalJobs > 0 ? `${Math.round(cards.successRate)}%` : '—'} />
+        {isOneRepo ? (
+          <CostCard label="Top Job" definition="Highest-Machine-Hour job in the selected repository." value={cards.topJob?.jobName || '—'} sub={fmtMachineHours(cards.topJob?.machineHours)} />
+        ) : (
+          <CostCard label="Repos" definition="Repositories contributing tracked jobs." value={String(cards.contributingRepoCount)} />
+        )}
+      </div>
+
+      {result.truncated && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+          Showing latest {result.displayedObservationCount} of {result.totalRows} job/resource groups — narrow the date range to see all.
+        </div>
+      )}
+      {result.quality.unknownResourceSamples > 0 && (
+        <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-400">
+          {result.quality.unknownResourceSamples} job(s) without a positive Resource Count / valid runtime are excluded from Machine-Hours (Unknown-Cost).
+        </div>
+      )}
+
+      <div className="rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <h2 className="mb-4 text-lg font-bold">Daily Jobs {isOneRepo ? 'by Job' : 'by Repository'}</h2>
+        {dailyData.length === 0 ? (
+          <div className="flex h-72 items-center justify-center rounded-lg border border-dashed border-neutral-200 text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+            No tracked jobs in the selected range.
+          </div>
+        ) : (
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={dailyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" className="dark:opacity-20" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#888' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
+                <Tooltip />
+                <Legend />
+                {keysInSeries.map((key) => (
+                  <Line key={key} type="monotone" dataKey={key} stroke={keyColors.get(key)} strokeWidth={2} dot={false} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="border-b border-neutral-100 p-4 dark:border-neutral-800">
+          <h2 className="text-lg font-bold">Job &amp; Resource Breakdown</h2>
+          <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
+            {result.displayedObservationCount} group(s){result.truncated ? ' (truncated)' : ''}.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-neutral-50 text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+              <tr>
+                <th className="px-4 py-3">Repo</th>
+                <th className="px-4 py-3">Workflow</th>
+                <th className="px-4 py-3">Job</th>
+                <th className="px-4 py-3">Resource Model</th>
+                <th className="px-4 py-3">Avg Total</th>
+                <th className="px-4 py-3">Execs</th>
+                <th className="px-4 py-3">Success</th>
+                <th className="px-4 py-3">Fail Rate</th>
+                <th className="px-4 py-3">Machine-Hours</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+              {result.rows.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-neutral-400 dark:text-neutral-500">
+                    No tracked jobs in range. Try “All repositories” or a wider range.
+                  </td>
+                </tr>
+              ) : (
+                result.rows.map((row, i) => {
+                  const key = [row.repoKey, row.workflowFile, row.workflowRef, row.jobName, row.resourceModel].join('\u0001');
+                  const isOpen = expanded === key;
+                  const attempts = drilldown[key];
+                  return (
+                    <React.Fragment key={i}>
+                      <tr className="cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-950/60" onClick={() => loadDrilldown(row)}>
+                        <td className="px-4 py-3 text-xs text-neutral-500 dark:text-neutral-400">{row.repoKey}</td>
+                        <td className="px-4 py-3 font-medium" title={row.workflowRef || undefined}>{row.workflowFile || '—'}</td>
+                        <td className="px-4 py-3 font-medium">{isOpen ? <ChevronDown className="mr-1 inline h-3.5 w-3.5" /> : <ChevronRight className="mr-1 inline h-3.5 w-3.5" />}{row.jobName || '—'}</td>
+                        <td className="px-4 py-3 text-xs">{row.resourceModel || '—'}</td>
+                        <td className="px-4 py-3 font-mono text-xs">{fmtSeconds(row.avgJobTotalDuration)}</td>
+                        <td className="px-4 py-3 font-mono text-xs">{row.executionCount}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-emerald-600 dark:text-emerald-400">{row.successCount}</td>
+                        <td className="px-4 py-3 font-mono text-xs">{Math.round(row.failureRate)}%</td>
+                        <td className="px-4 py-3 font-mono text-xs text-blue-600 dark:text-blue-400">{fmtMachineHours(row.machineHours)}</td>
+                      </tr>
+                      {isOpen && (
+                        <tr>
+                          <td colSpan={9} className="bg-neutral-50/50 dark:bg-neutral-950/40">
+                            <JobDrillDown attempts={attempts} loading={loadingKey === key} />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        {result.totalRows > result.pageSize && (
+          <div className="flex items-center justify-between border-t border-neutral-100 px-4 py-3 dark:border-neutral-800">
+            <span className="text-xs text-neutral-500 dark:text-neutral-400">Page {currentPage} of {totalPages} · {result.totalRows} groups</span>
+            <div className="flex gap-2">
+              <button type="button" disabled={currentPage <= 1} onClick={() => pushPage(currentPage - 1)} className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"><ChevronLeft className="h-3.5 w-3.5" /></button>
+              <button type="button" disabled={currentPage >= totalPages} onClick={() => pushPage(currentPage + 1)} className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"><ChevronRight className="h-3.5 w-3.5" /></button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+type JobTableRowLike = {
+  repoKey: string;
+  workflowFile: string;
+  workflowRef: string;
+  jobName: string;
+  resourceModel: string;
+};
+
+/** Stacked queue/runtime chart + job attempt list for an expanded job row (spec §5.4). */
+function JobDrillDown({
+  attempts,
+  loading,
+}: {
+  attempts?: JobDrilldownAttempt[];
+  loading: boolean;
+}) {
+  const chartData = useMemo(
+    () =>
+      (attempts ?? []).map((a) => ({
+        label: `#${a.runId}/${a.runAttempt}/${a.jobId}`,
+        queue: a.queueDurationSeconds ?? 0,
+        runtime: a.runtimeSeconds ?? 0,
+        conclusion: a.conclusion,
+        runDate: a.runDate,
+      })),
+    [attempts],
+  );
+
+  if (loading) {
+    return <div className="px-6 py-4 text-sm text-neutral-500 dark:text-neutral-400">Loading job attempts…</div>;
+  }
+  if (!attempts || attempts.length === 0) {
+    return <div className="px-6 py-4 text-sm text-neutral-500 dark:text-neutral-400">No tracked attempts for this job/resource group.</div>;
+  }
+
+  return (
+    <div className="space-y-3 px-6 py-4">
+      <div className="h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" className="dark:opacity-20" />
+            <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#888' }} tickLine={false} axisLine={false} interval="preserveStartEnd" angle={-30} textAnchor="end" height={50} />
+            <YAxis tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
+            <Tooltip formatter={(value) => fmtSeconds(Number(value))} />
+            <Legend />
+            <Bar dataKey="queue" name="Queue" stackId="a" fill="#60a5fa" />
+            <Bar dataKey="runtime" name="Runtime" stackId="a" fill="#34d399" />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs">
+          <thead className="text-neutral-400 dark:text-neutral-500">
+            <tr>
+              <th className="px-2 py-1">Run/Attempt/Job</th>
+              <th className="px-2 py-1">Date</th>
+              <th className="px-2 py-1">Queue</th>
+              <th className="px-2 py-1">Runtime</th>
+              <th className="px-2 py-1">Model</th>
+              <th className="px-2 py-1">Conclusion</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+            {attempts.map((a) => (
+              <tr key={`${a.runId}:${a.runAttempt}:${a.jobId}`}>
+                <td className="px-2 py-1 font-mono">{a.runId}/{a.runAttempt}/{a.jobId}</td>
+                <td className="px-2 py-1 text-neutral-500 dark:text-neutral-400">{a.runDate}</td>
+                <td className="px-2 py-1 font-mono">{fmtSeconds(a.queueDurationSeconds ?? undefined)}</td>
+                <td className="px-2 py-1 font-mono">{fmtSeconds(a.runtimeSeconds ?? undefined)}</td>
+                <td className="px-2 py-1">{a.resourceModel || '—'}</td>
+                <td className="px-2 py-1"><StatusDot conclusion={a.conclusion ?? ''} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/** Queue tab body: queue cards, daily P90-per-model chart, grouped table (spec §5.5). */
+function QueueBody({
+  result,
+  repoOptions,
+}: {
+  result: QueueDashboardResult;
+  repoOptions: RepoOption[];
+}) {
+  void repoOptions;
+  const router = useRouter();
+  const pathname = usePathname();
+  const urlSearchParams = useSearchParams();
+  const cards = result.cards;
+
+  const modelsInSeries = useMemo(
+    () => [...new Set(result.series.map((p) => p.resourceModel))],
+    [result.series],
+  );
+  const modelColors = useMemo(
+    () => new Map(modelsInSeries.map((m, i) => [m, COST_REPO_COLORS[i % COST_REPO_COLORS.length]])),
+    [modelsInSeries],
+  );
+  const dailyData = useMemo(() => {
+    const byDate = new Map<string, Record<string, number>>();
+    for (const p of result.series) {
+      const row = byDate.get(p.date) ?? {};
+      row[p.resourceModel] = p.p90;
+      byDate.set(p.date, row);
+    }
+    return [...byDate.entries()]
+      .map(([date, values]) => ({ date, ...values }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [result.series]);
+
+  const totalPages = Math.max(1, Math.ceil(result.totalRows / result.pageSize));
+  const currentPage = Math.min(result.page, totalPages);
+
+  function pushPage(page: number) {
+    const params = new URLSearchParams(urlSearchParams.toString());
+    params.set('page', String(page));
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  function setResourceModel(model: string) {
+    const params = new URLSearchParams(urlSearchParams.toString());
+    if (model) params.set('resourceModel', model);
+    else params.delete('resourceModel');
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  const selectedModel = urlSearchParams.get('resourceModel') || '';
+
+  return (
+    <>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <CostCard label="P50 Queue" definition="Median Job Queue Duration over valid queue samples (spec §5.5)." value={cards.p50QueueDuration !== undefined ? fmtSeconds(cards.p50QueueDuration) : '—'} />
+        <CostCard label="P90 Queue" definition="90th-percentile Job Queue Duration over valid samples (spec §5.5)." value={cards.p90QueueDuration !== undefined ? fmtSeconds(cards.p90QueueDuration) : '—'} />
+        <CostCard label="Max Queue" definition="Longest valid Job Queue Duration in the window." value={cards.maxQueueDuration !== undefined ? fmtSeconds(cards.maxQueueDuration) : '—'} />
+        <CostCard label="Share > 1h" definition="Valid queue samples exceeding one hour ÷ all valid samples (spec §5.5)." value={cards.p90QueueDuration !== undefined ? `${Math.round(cards.shareOverOneHour)}%` : '—'} />
+        <CostCard label="Resource Models" definition="Distinct Resource Models contributing queue samples." value={String(cards.distinctResourceModelCount)} />
+      </div>
+
+      {result.truncated && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+          Showing latest {result.displayedObservationCount} of {result.totalRows} job groups — narrow the date range to see all.
+        </div>
+      )}
+      {result.quality.invalidTimingSamples > 0 && (
+        <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-400">
+          {result.quality.invalidTimingSamples} job(s) with invalid/missing queue duration excluded from queue percentiles.
+        </div>
+      )}
+
+      {/* Resource Model filter (Queue secondary filter, spec §3) */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-neutral-500 dark:text-neutral-400">Resource Model:</span>
+        <button type="button" onClick={() => setResourceModel('')} className={`rounded-md border px-2 py-1 text-xs ${!selectedModel ? 'border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/50 dark:text-blue-400' : 'border-neutral-200 bg-white text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400'}`}>All</button>
+        {modelsInSeries.map((m) => (
+          <button key={m} type="button" onClick={() => setResourceModel(m)} className={`rounded-md border px-2 py-1 text-xs ${selectedModel === m ? 'border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/50 dark:text-blue-400' : 'border-neutral-200 bg-white text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400'}`}>{m}</button>
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <h2 className="mb-4 text-lg font-bold">Daily Queue P90 by Resource Model</h2>
+        {dailyData.length === 0 ? (
+          <div className="flex h-72 items-center justify-center rounded-lg border border-dashed border-neutral-200 text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+            No valid queue samples in the selected range.
+          </div>
+        ) : (
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={dailyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" className="dark:opacity-20" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#888' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                <YAxis tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
+                <Tooltip formatter={(value) => fmtSeconds(Number(value))} />
+                <Legend />
+                {modelsInSeries.map((m) => (
+                  <Line key={m} type="monotone" dataKey={m} stroke={modelColors.get(m)} strokeWidth={2} dot={false} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="border-b border-neutral-100 p-4 dark:border-neutral-800">
+          <h2 className="text-lg font-bold">Queue by Job &amp; Resource Model</h2>
+          <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
+            {result.displayedObservationCount} group(s){result.truncated ? ' (truncated)' : ''}.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-neutral-50 text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+              <tr>
+                <th className="px-4 py-3">Repo</th>
+                <th className="px-4 py-3">Workflow</th>
+                <th className="px-4 py-3">Job</th>
+                <th className="px-4 py-3">Resource Model</th>
+                <th className="px-4 py-3">Queue P90</th>
+                <th className="px-4 py-3">Execs</th>
+                <th className="px-4 py-3">Success Rate</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+              {result.rows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-neutral-400 dark:text-neutral-500">
+                    No valid queue samples in range. Try “All repositories” or a wider range.
+                  </td>
+                </tr>
+              ) : (
+                result.rows.map((row, i) => (
+                  <tr key={i} className="hover:bg-neutral-50 dark:hover:bg-neutral-950/60">
+                    <td className="px-4 py-3 text-xs text-neutral-500 dark:text-neutral-400">{row.repoKey}</td>
+                    <td className="px-4 py-3 font-medium" title={row.workflowRef || undefined}>{row.workflowFile || '—'}</td>
+                    <td className="px-4 py-3 font-medium">{row.jobName || '—'}</td>
+                    <td className="px-4 py-3 text-xs">{row.resourceModel || '—'}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{fmtSeconds(row.queueP90)}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{row.executionCount}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{Math.round(row.successRate)}%</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {result.totalRows > result.pageSize && (
+          <div className="flex items-center justify-between border-t border-neutral-100 px-4 py-3 dark:border-neutral-800">
+            <span className="text-xs text-neutral-500 dark:text-neutral-400">Page {currentPage} of {totalPages} · {result.totalRows} groups</span>
+            <div className="flex gap-2">
+              <button type="button" disabled={currentPage <= 1} onClick={() => pushPage(currentPage - 1)} className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"><ChevronLeft className="h-3.5 w-3.5" /></button>
+              <button type="button" disabled={currentPage >= totalPages} onClick={() => pushPage(currentPage + 1)} className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"><ChevronRight className="h-3.5 w-3.5" /></button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 export default function DashboardShell({
   repoOptions,
   result,
@@ -948,7 +1414,7 @@ export default function DashboardShell({
 
   /** Switch the active tab, resetting the date filter to that tab's default. */
   const switchTab = useCallback(
-    (tab: 'pr' | 'cost' | 'workflow') => {
+    (tab: 'pr' | 'cost' | 'workflow' | 'job' | 'queue') => {
       if (tab === activeTab) return;
       const defaultDays = tab === 'pr' ? 1 : 14;
       setUseCustomRange(false);
@@ -1116,14 +1582,19 @@ export default function DashboardShell({
             const enabled =
               tab.key === 'pr' ||
               tab.key === 'cost' ||
-              tab.key === 'workflow';
+              tab.key === 'workflow' ||
+              tab.key === 'job' ||
+              tab.key === 'queue';
             return (
               <button
                 key={tab.key}
                 type="button"
                 disabled={!enabled}
                 onClick={() =>
-                  enabled && switchTab(tab.key as 'pr' | 'cost' | 'workflow')
+                  enabled &&
+                  switchTab(
+                    tab.key as 'pr' | 'cost' | 'workflow' | 'job' | 'queue',
+                  )
                 }
                 className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   active
@@ -1137,7 +1608,11 @@ export default function DashboardShell({
                       ? 'Machine-Hours cost analysis'
                       : tab.key === 'workflow'
                         ? 'Workflow attempt analysis'
-                        : 'Coming in a later slice'
+                        : tab.key === 'job'
+                          ? 'Job-level analysis'
+                          : tab.key === 'queue'
+                            ? 'Queue duration analysis'
+                            : 'Coming in a later slice'
                 }
               >
                 {tab.label}
@@ -1362,6 +1837,14 @@ export default function DashboardShell({
 
         {result.tab === 'workflow' && (
           <WorkflowBody result={result} repoOptions={repoOptions} />
+        )}
+
+        {result.tab === 'job' && (
+          <JobBody result={result} repoOptions={repoOptions} />
+        )}
+
+        {result.tab === 'queue' && (
+          <QueueBody result={result} repoOptions={repoOptions} />
         )}
 
         <footer className="pb-4 text-center text-xs text-neutral-400 dark:text-neutral-600">

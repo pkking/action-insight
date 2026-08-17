@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DashboardShell from './DashboardShell';
 import type {
   CostDashboardResult,
+  JobDashboardResult,
   PrDashboardResult,
+  QueueDashboardResult,
   WorkflowDashboardResult,
 } from '@/lib/dashboard-read-model';
 
@@ -210,6 +212,76 @@ function workflowResult(): WorkflowDashboardResult {
   };
 }
 
+function emptyJobResult(): JobDashboardResult {
+  return {
+    tab: 'job',
+    cards: { totalJobs: 0, successRate: 0, contributingRepoCount: 0 },
+    series: [],
+    rows: [],
+    page: 1,
+    pageSize: 20,
+    totalRows: 0,
+    displayedObservationCount: 0,
+    truncated: false,
+    quality: { invalidTimingSamples: 0, unknownResourceSamples: 0, partialHistorySamples: 0, legacyFallbackSamples: 0 },
+  };
+}
+
+function jobResult(): JobDashboardResult {
+  return {
+    ...emptyJobResult(),
+    cards: {
+      totalJobs: 5,
+      p50TotalDuration: 3600,
+      p90TotalDuration: 5400,
+      successRate: 60,
+      contributingRepoCount: 1,
+    },
+    series: [{ date: '2026-01-01', key: 'owner/repo', jobs: 5 }],
+    rows: [
+      {
+        repoKey: 'owner/repo', workflowFile: 'ci.yml', workflowRef: 'refs/heads/main',
+        jobName: 'build', resourceModel: 'npu-a3', avgJobTotalDuration: 3600,
+        executionCount: 5, successCount: 3, failureRate: 40, machineHours: 8,
+        unknownCostCount: 0, latestDate: '2026-01-01',
+      },
+    ],
+    totalRows: 1,
+    displayedObservationCount: 1,
+  };
+}
+
+function emptyQueueResult(): QueueDashboardResult {
+  return {
+    tab: 'queue',
+    cards: { shareOverOneHour: 0, distinctResourceModelCount: 0 },
+    series: [],
+    rows: [],
+    page: 1,
+    pageSize: 20,
+    totalRows: 0,
+    displayedObservationCount: 0,
+    truncated: false,
+    quality: { invalidTimingSamples: 0, unknownResourceSamples: 0, partialHistorySamples: 0, legacyFallbackSamples: 0 },
+  };
+}
+
+function queueResult(): QueueDashboardResult {
+  return {
+    ...emptyQueueResult(),
+    cards: {
+      p50QueueDuration: 120, p90QueueDuration: 900, maxQueueDuration: 900, shareOverOneHour: 20, distinctResourceModelCount: 1 },
+    series: [{ date: '2026-01-01', resourceModel: 'npu-a3', p90: 900 }],
+    rows: [
+      {
+        repoKey: 'owner/repo', workflowFile: 'ci.yml', workflowRef: 'refs/heads/main',
+        jobName: 'build', resourceModel: 'npu-a3', queueP90: 900, executionCount: 5, successRate: 60,
+      },
+    ],
+    totalRows: 1,
+    displayedObservationCount: 1,
+  };
+}
 
 function mockFetchDetail(jobs: unknown[] = []) {
   vi.spyOn(global, 'fetch').mockImplementation(async (url: string | URL | Request, init?: RequestInit) => {
@@ -366,5 +438,30 @@ describe('DashboardShell', () => {
     render(<DashboardShell repoOptions={repoOptions} result={emptyWorkflowResult()} searchParams={{}} />);
     expect(screen.getByText(/No tracked workflow attempts in range/i)).toBeInTheDocument();
     expect(screen.getByText(/No tracked attempts in the selected range/i)).toBeInTheDocument();
+  });
+
+  it('renders the Job tab cards, chart, and grouped table', () => {
+    render(<DashboardShell repoOptions={repoOptions} result={jobResult()} searchParams={{}} />);
+    expect(screen.getByText('Total Jobs')).toBeInTheDocument();
+    expect(screen.getByText('build')).toBeInTheDocument();
+    expect(screen.getByTestId('cost-chart').getAttribute('data-len')).toBe('1');
+  });
+
+  it('renders the Job empty state', () => {
+    render(<DashboardShell repoOptions={repoOptions} result={emptyJobResult()} searchParams={{}} />);
+    expect(screen.getByText(/No tracked jobs in range/i)).toBeInTheDocument();
+    expect(screen.getByText(/No tracked jobs in the selected range/i)).toBeInTheDocument();
+  });
+
+  it('renders the Queue tab cards, chart, and table', () => {
+    render(<DashboardShell repoOptions={repoOptions} result={queueResult()} searchParams={{}} />);
+    expect(screen.getByText('P50 Queue')).toBeInTheDocument();
+    expect(screen.getByText('Queue P90')).toBeInTheDocument();
+    expect(screen.getByTestId('cost-chart').getAttribute('data-len')).toBe('1');
+  });
+
+  it('renders the Queue empty state', () => {
+    render(<DashboardShell repoOptions={repoOptions} result={emptyQueueResult()} searchParams={{}} />);
+    expect(screen.getByText(/No valid queue samples in range/i)).toBeInTheDocument();
   });
 });
