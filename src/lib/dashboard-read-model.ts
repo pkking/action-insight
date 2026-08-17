@@ -236,6 +236,7 @@ export type QueueTableRow = {
   queueP90?: number;
   executionCount: number;
   successRate: number; // success / terminal (0-100)
+  latestDate: string;
 };
 
 export type QueueDashboardResult = DashboardResult<
@@ -1653,9 +1654,13 @@ export function buildQueueDashboardResult(
     executionCount: g.count,
     successRate:
       g.terminal > 0 ? (g.success / g.terminal) * 100 : 0,
+    latestDate: g.latestDate,
   }));
+  // ponytail: newest-first by run date (spec §3 date anchor), then
+  // worst-queue-first as a stable tiebreaker — matches Job/Workflow/Cost.
   allRows.sort(
     (a, b) =>
+      b.latestDate.localeCompare(a.latestDate) ||
       (b.queueP90 ?? -1) - (a.queueP90 ?? -1),
   );
 
@@ -1665,10 +1670,13 @@ export function buildQueueDashboardResult(
   const pageStart = (query.page - 1) * query.pageSize;
   const pagedRows = observations.slice(pageStart, pageStart + query.pageSize);
 
-  const unknownResourceSamples = jobRows.filter(
-    (r) =>
-      r.queueDurationSeconds == null || r.queueDurationSeconds < 0,
+  const invalidTimingSamples = jobRows.filter(
+    (r) => r.queueDurationSeconds == null || r.queueDurationSeconds < 0,
   ).length;
+  // ponytail: Queue's per-model series skips jobs without a resourceModel;
+  // count those as unknown-resource samples (spec §3 partial state) instead
+  // of duplicating the invalid-timing count into two distinct quality fields.
+  const unknownResourceSamples = jobRows.filter((r) => !r.resourceModel).length;
 
   return {
     tab: 'queue',
@@ -1681,7 +1689,7 @@ export function buildQueueDashboardResult(
     displayedObservationCount: observations.length,
     truncated,
     quality: {
-      invalidTimingSamples: unknownResourceSamples,
+      invalidTimingSamples,
       unknownResourceSamples,
       partialHistorySamples: 0,
       legacyFallbackSamples: 0,

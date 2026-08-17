@@ -265,6 +265,44 @@ describe('buildQueueDashboardResult', () => {
     expect(result.quality.invalidTimingSamples).toBe(2);
   });
 
+  it('counts missing resourceModel in unknownResourceSamples separately from invalid timing', () => {
+    const rows = [
+      job({ resourceModel: 'npu-a3', queueDurationSeconds: 100 }),
+      job({ resourceModel: null, queueDurationSeconds: 200 }), // missing model
+      job({ resourceModel: 'npu-a2', queueDurationSeconds: -1 }), // invalid queue
+    ];
+    const cards = buildQueueCards(rows);
+    const result = buildQueueDashboardResult(rows, cards, {
+      page: 1,
+      pageSize: 20,
+      observationLimit: 500,
+    });
+    // invalid queue durations only (not duplicated into unknownResourceSamples)
+    expect(result.quality.invalidTimingSamples).toBe(1);
+    // jobs missing a resourceModel are excluded from the per-model series
+    expect(result.quality.unknownResourceSamples).toBe(1);
+  });
+
+  it('orders rows by latest run date descending before truncation (spec §3)', () => {
+    const rows = [
+      // older group with the higher queueP90
+      job({ runId: 1, runDate: '2026-01-01', jobName: 'old-high', queueDurationSeconds: 900 }),
+      // newer group with the lower queueP90
+      job({ runId: 2, runDate: '2026-01-02', jobName: 'new-low', queueDurationSeconds: 50 }),
+    ];
+    const cards = buildQueueCards(rows);
+    const result = buildQueueDashboardResult(rows, cards, {
+      page: 1,
+      pageSize: 20,
+      observationLimit: 1, // truncate to the newest 1
+    });
+    expect(result.rows).toHaveLength(1);
+    expect(result.truncated).toBe(true);
+    // the newest-by-date group survives even though it has the lower queueP90
+    expect(result.rows[0].jobName).toBe('new-low');
+    expect(result.rows[0].latestDate).toBe('2026-01-02');
+  });
+
   it('returns an empty result when there are no jobs', () => {
     const cards = buildQueueCards([]);
     const result = buildQueueDashboardResult([], cards, {

@@ -275,7 +275,7 @@ function queueResult(): QueueDashboardResult {
     rows: [
       {
         repoKey: 'owner/repo', workflowFile: 'ci.yml', workflowRef: 'refs/heads/main',
-        jobName: 'build', resourceModel: 'npu-a3', queueP90: 900, executionCount: 5, successRate: 60,
+        jobName: 'build', resourceModel: 'npu-a3', queueP90: 900, executionCount: 5, successRate: 60, latestDate: '2026-01-01',
       },
     ],
     totalRows: 1,
