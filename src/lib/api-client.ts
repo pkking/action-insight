@@ -1,5 +1,3 @@
-type FetchRunsParams = { owner: string; repo: string; startDate: string; endDate: string; includeSteps?: boolean };
-type FetchLatestRunsParams = { owner: string; repo: string; maxFiles?: number };
 type FetchPullRequestDetailParams = { owner: string; repo: string; number: number };
 type FetchWorkflowAttemptsParams = {
   owner: string;
@@ -18,8 +16,6 @@ type FetchJobAttemptsParams = {
   resourceModel?: string | null;
 };
 
-export async function callApi<T>(action: 'fetchRuns', params: FetchRunsParams, signal?: AbortSignal): Promise<T>;
-export async function callApi<T>(action: 'fetchLatestRuns', params: FetchLatestRunsParams, signal?: AbortSignal): Promise<T>;
 export async function callApi<T>(action: 'fetchPullRequestDetail', params: FetchPullRequestDetailParams, signal?: AbortSignal): Promise<T>;
 export async function callApi<T>(action: 'fetchWorkflowAttempts', params: FetchWorkflowAttemptsParams, signal?: AbortSignal): Promise<T>;
 export async function callApi<T>(action: 'fetchJobAttempts', params: FetchJobAttemptsParams, signal?: AbortSignal): Promise<T>;

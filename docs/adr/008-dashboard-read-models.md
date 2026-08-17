@@ -1,7 +1,7 @@
 # ADR-008: Server-side dashboard read models over attempt-scoped data
 
-**Status**: Proposed  
-**Date**: 2026-08-15  
+**Status**: Implemented (five-tab dashboard shipped; superseded client homepage paths removed in the closeout)
+**Date**: 2026-08-15
 **Context**: Production implementation of the approved five-tab dashboard prototype
 
 ## Decision
