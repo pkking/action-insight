@@ -1,6 +1,6 @@
 # ADR-005: Workflow File and Attempt Scoped Collection
 
-**Status**: Accepted  
+**Status**: Implemented
 **Date**: 2026-07-02  
 **Context**: Tracked workflow collection redesign
 

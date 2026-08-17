@@ -1,6 +1,6 @@
 # ADR-006: Raw Collection Window Checkpointing
 
-**Status**: Accepted  
+**Status**: Implemented
 **Date**: 2026-07-04  
 **Context**: Long-running raw ETL backfills
 

@@ -1,6 +1,6 @@
 # ADR-004: SQLite Database Files Stored via Git LFS
 
-**Status**: Accepted, revised 2026-07-03
+**Status**: Implemented, revised 2026-07-03 (LFS storage live; runtime source-of-truth moved from Turso to self-hosted PostgreSQL per ADR-007)
 **Date**: 2026-06-14  
 **Context**: PR #125 (CI collection failures), CI run #27470767070
 
