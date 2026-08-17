@@ -1,3 +1,29 @@
+import { Octokit } from '@octokit/core';
+
+/** Default per-request timeout for GitHub API calls (ms).
+ * Guards against hung TCP connections that would otherwise block the serial
+ * SHA→PR resolution loop indefinitely. 30s is generous; GitHub API calls
+ * normally complete in <1s, so 30s of silence means the socket is dead. */
+const GITHUB_REQUEST_TIMEOUT_MS = Number.parseInt(process.env.GITHUB_REQUEST_TIMEOUT_MS ?? '30000', 10);
+
+/** Wrap the global fetch with an AbortController-based timeout.
+ * Returns a fetch compatible with Octokit's `request.fetch` option. */
+function fetchWithTimeout(): typeof fetch {
+  return (input, init) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), GITHUB_REQUEST_TIMEOUT_MS);
+    return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+  };
+}
+
+/** Create an Octokit client with a per-request timeout.
+ * The timeout ensures hung GitHub connections abort (throwing a request error
+ * that callers catch and treat as retryable) instead of blocking serial loops
+ * forever — e.g. the PR SHA-resolution loop in pr-artifacts.ts. */
+export function createOctokit(token?: string): Octokit {
+  return new Octokit({ auth: token, request: { fetch: fetchWithTimeout() } });
+}
+
 export interface GitHubRequestErrorLike {
   status: number;
   message: string;

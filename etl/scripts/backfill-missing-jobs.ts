@@ -3,6 +3,7 @@ import { format, subDays } from 'date-fns';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createOctokit } from './github';
 
 import { getDatabaseClient } from '../../src/lib/db.ts';
 import { writeWorkflowAttempts } from './pg-storage.ts';
@@ -323,7 +324,7 @@ async function backfillRepo(repo: string, config: ReposConfig, days: number): Pr
     return;
   }
 
-  const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+  const octokit = createOctokit(process.env.GITHUB_TOKEN);
   let completed = 0;
 
   for (const attempt of missingAttempts) {

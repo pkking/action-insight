@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { Octokit } from '@octokit/core';
+import { createOctokit } from './github';
 import { addDays, format, parseISO } from 'date-fns';
 import yaml from 'js-yaml';
 
@@ -421,7 +421,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       console.log(`Rebuilding PR artifacts for ${repoKey} from ${dates[0]} to ${dates[dates.length - 1]} (${dates.length} date(s))`);
       const runs = await fetchRunsFromDatabase(repoKey, dates);
       const token = resolveGitHubToken(repoKey);
-      const octokit = token ? new Octokit({ auth: token }) : undefined;
+      const octokit = token ? createOctokit(token) : undefined;
       if (!octokit) {
         console.warn('No GitHub token is configured; PR metrics rebuild will only use cached or embedded PR associations.');
       }

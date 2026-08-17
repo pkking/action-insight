@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { Octokit } from 'octokit';
+import { Octokit } from '@octokit/core';
+import { createOctokit } from './github';
 
 import { parseReposConfig, type ReposConfig, type RepoConfigEntry } from './repos-config';
 
@@ -121,7 +122,7 @@ async function validateOnline(config: ReposConfig): Promise<string[]> {
     return ['GITHUB_TOKEN is required for online repository validation'];
   }
 
-  const octokit = new Octokit({ auth: token });
+  const octokit = createOctokit(token);
   const errors: string[] = [];
 
   for (const entry of config.repos) {
