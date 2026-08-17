@@ -9,10 +9,20 @@ type FetchWorkflowAttemptsParams = {
   resourceModel?: string | null;
 };
 
+type FetchJobAttemptsParams = {
+  owner: string;
+  repo: string;
+  workflowFile: string;
+  workflowRef?: string | null;
+  jobName: string;
+  resourceModel?: string | null;
+};
+
 export async function callApi<T>(action: 'fetchRuns', params: FetchRunsParams, signal?: AbortSignal): Promise<T>;
 export async function callApi<T>(action: 'fetchLatestRuns', params: FetchLatestRunsParams, signal?: AbortSignal): Promise<T>;
 export async function callApi<T>(action: 'fetchPullRequestDetail', params: FetchPullRequestDetailParams, signal?: AbortSignal): Promise<T>;
 export async function callApi<T>(action: 'fetchWorkflowAttempts', params: FetchWorkflowAttemptsParams, signal?: AbortSignal): Promise<T>;
+export async function callApi<T>(action: 'fetchJobAttempts', params: FetchJobAttemptsParams, signal?: AbortSignal): Promise<T>;
 export async function callApi<T>(action: string, params: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
   const response = await fetch('/api/data', {
     method: 'POST',
