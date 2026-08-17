@@ -48,7 +48,10 @@ export type DashboardResult<TCards, TSeries, TRow> = {
 
 // Discriminated union keyed by the active tab so the shell can narrow the
 // result without casts (spec §6: one seam dispatches by tab).
-export type DashboardReadResult = PrDashboardResult | CostDashboardResult;
+export type DashboardReadResult =
+  | PrDashboardResult
+  | CostDashboardResult
+  | WorkflowDashboardResult;
 
 // ---- PR tab types -------------------------------------------------------
 
@@ -124,6 +127,48 @@ export type CostTableRow = {
 
 export type CostDashboardResult = DashboardResult<CostCardSet, CostSeriesPoint, CostTableRow> & {
   tab: 'cost';
+};
+
+// ---- Workflow tab types (spec §5.3) ------------------------------------
+// ponytail: cards + daily chart are attempt-scoped (workflow_attempts); the
+// table groups jobs by resource_model for Machine-Hours, same grouping key as
+// Cost. Drill-down is lazy and bounded separately.
+
+export type WorkflowCardSet = {
+  totalAttempts: number;
+  p50TotalDuration?: number; // successful attempts only (spec §4)
+  p90TotalDuration?: number;
+  successRate: number; // success / terminal attempts (0-100)
+  contributingRepoCount: number;
+  topWorkflow?: { workflowFile: string; machineHours: number }; // one repo
+};
+
+export type WorkflowSeriesPoint = {
+  date: string; // run date (yyyy-mm-dd)
+  key: string; // repoKey (all) or workflowFile (one repo)
+  attempts: number;
+};
+
+export type WorkflowTableRow = {
+  repoKey: string;
+  workflowFile: string;
+  workflowRef: string;
+  resourceModel: string;
+  avgWorkflowTotalDuration?: number;
+  attemptCount: number;
+  successCount: number;
+  failureRate: number;
+  machineHours: number;
+  unknownCostCount: number;
+  latestDate: string;
+};
+
+export type WorkflowDashboardResult = DashboardResult<
+  WorkflowCardSet,
+  WorkflowSeriesPoint,
+  WorkflowTableRow
+> & {
+  tab: 'workflow';
 };
 
 // ---- Query input validation --------------------------------------------
@@ -706,6 +751,351 @@ function buildCostTableRow(
   };
 }
 
+// ---- Workflow tab read model (spec §5.3) --------------------------------
+
+export type WorkflowAttemptRow = {
+  repoKey: string;
+  runId: number;
+  runAttempt: number;
+  runDate: string; // runs.date — the Workflow tab date anchor
+  workflowFile: string | null;
+  workflowRef: string | null;
+  queueDurationSeconds: number | null;
+  runtimeSeconds: number | null;
+  totalDurationSeconds: number | null;
+  conclusion: string | null;
+  status: string;
+  createdAt: string | null;
+};
+
+/**
+ * Fetch tracked workflow_attempts in the filtered repo/date window. The
+ * Workflow tab is attempt-scoped: cards + daily chart use this population.
+ */
+export async function fetchWorkflowAttemptRows(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<WorkflowAttemptRow[]> {
+  if (repoRows.length === 0) return [];
+  const client = await getDatabaseClient();
+  try {
+    const placeholders = pgPlaceholders(repoRows.length);
+    const { rows } = await client.query(
+      `SELECT r.id AS run_id, r.repo_id, r.date, wa.run_attempt,
+              wa.workflow_file, wa.workflow_ref, wa.status, wa.conclusion,
+              wa.created_at, wa.queue_duration_seconds, wa.runtime_seconds,
+              wa.total_duration_seconds
+       FROM workflow_attempts wa
+       JOIN runs r ON r.id = wa.run_id
+       WHERE r.repo_id IN (${placeholders})
+         AND r.date >= $${repoRows.length + 1}
+         AND r.date <= $${repoRows.length + 2}
+         AND wa.tracked = 1
+       ORDER BY r.date DESC, r.id DESC, wa.run_attempt DESC`,
+      [...repoRows.map((r) => r.id), startDate, endDate],
+    );
+    const idToKey = new Map(repoRows.map((r) => [r.id, r.key]));
+    return rows.map((row) => ({
+      repoKey: idToKey.get(Number(row.repo_id)) ?? 'unknown',
+      runId: Number(row.run_id),
+      runAttempt: Number(row.run_attempt),
+      runDate: String(row.date),
+      workflowFile: (row.workflow_file as string | null) ?? null,
+      workflowRef: (row.workflow_ref as string | null) ?? null,
+      queueDurationSeconds:
+        row.queue_duration_seconds == null
+          ? null
+          : Number(row.queue_duration_seconds),
+      runtimeSeconds:
+        row.runtime_seconds == null ? null : Number(row.runtime_seconds),
+      totalDurationSeconds:
+        row.total_duration_seconds == null
+          ? null
+          : Number(row.total_duration_seconds),
+      conclusion: (row.conclusion as string | null) ?? null,
+      status: String(row.status),
+      createdAt: (row.created_at as string | null) ?? null,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+export function buildWorkflowCards(
+  attempts: WorkflowAttemptRow[],
+  jobRows: CostJobRow[],
+  oneRepo: boolean,
+): WorkflowCardSet {
+  const terminal = attempts.filter((a) =>
+    a.conclusion ? TERMINAL_CONCLUSIONS.has(a.conclusion) : false,
+  );
+  const successCount = terminal.filter(
+    (a) => a.conclusion === 'success',
+  ).length;
+  // Percentiles over successful samples only (spec §4).
+  const successTotals = attempts
+    .filter((a) => a.conclusion === 'success' && a.totalDurationSeconds != null && a.totalDurationSeconds >= 0)
+    .map((a) => a.totalDurationSeconds!);
+  const stats = computeStats(successTotals);
+
+  const contributingRepoCount = new Set(attempts.map((a) => a.repoKey)).size;
+
+  // Highest-Machine-Hour workflow (one repo only). Derived from job rows so
+  // it reflects attributable cost, the same basis as the table.
+  const wfTotals = new Map<string, number>();
+  if (oneRepo) {
+    for (const row of jobRows) {
+      const mh = machineHours(row.runtimeSeconds, row.resourceCount);
+      if (mh !== undefined && row.workflowFile) {
+        wfTotals.set(row.workflowFile, (wfTotals.get(row.workflowFile) ?? 0) + mh);
+      }
+    }
+  }
+  const topWorkflow = [...wfTotals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([workflowFile, machineHours]) => ({ workflowFile, machineHours }))[0];
+
+  return {
+    totalAttempts: attempts.length,
+    p50TotalDuration: stats.sampleCount > 0 ? stats.p50 : undefined,
+    p90TotalDuration: stats.sampleCount > 0 ? stats.p90 : undefined,
+    successRate:
+      terminal.length > 0 ? (successCount / terminal.length) * 100 : 0,
+    contributingRepoCount,
+    topWorkflow,
+  };
+}
+
+export type WorkflowGroup = {
+  repoKey: string;
+  workflowFile: string;
+  workflowRef: string;
+  resourceModel: string;
+  machineHours: number;
+  unknownCostCount: number;
+  attempts: Map<string, { totalDuration?: number; conclusion: string | null }>;
+  latestDate: string;
+};
+
+/**
+ * Pure transformation for the Workflow tab: attempt-scoped cards over the
+ * full population, daily attempt-count series, and a grouped table (one row
+ * per repo/workflow/ref/resource_model) bounded at the newest 500 groups.
+ * Reuses the Cost grouping since the table contract is identical (spec §5.3).
+ */
+export function buildWorkflowDashboardResult(
+  attempts: WorkflowAttemptRow[],
+  jobRows: CostJobRow[],
+  cards: WorkflowCardSet,
+  oneRepo: boolean,
+  query: Pick<DashboardQuery, 'page' | 'pageSize' | 'observationLimit'>,
+): WorkflowDashboardResult {
+  // Daily attempt count: per repo (all) or per workflow file (one repo).
+  const dailyByKey = new Map<string, Map<string, number>>();
+  for (const a of attempts) {
+    const key = oneRepo ? (a.workflowFile ?? '(unknown)') : a.repoKey;
+    if (!dailyByKey.has(key)) dailyByKey.set(key, new Map());
+    const dm = dailyByKey.get(key)!;
+    dm.set(a.runDate, (dm.get(a.runDate) ?? 0) + 1);
+  }
+  const series: WorkflowSeriesPoint[] = [];
+  for (const [key, dm] of dailyByKey) {
+    for (const [date, attempts] of dm) {
+      series.push({ date, key, attempts });
+    }
+  }
+  series.sort((a, b) => b.date.localeCompare(a.date));
+  const boundedSeries = series.slice(0, query.observationLimit);
+  boundedSeries.sort((a, b) =>
+    a.date === b.date
+      ? a.key.localeCompare(b.key)
+      : a.date.localeCompare(b.date),
+  );
+
+  // Group jobs by (repo, workflow_file, workflow_ref, resource_model).
+  const groups = new Map<string, WorkflowGroup>();
+  for (const row of jobRows) {
+    const key = [
+      row.repoKey,
+      row.workflowFile ?? '',
+      row.workflowRef ?? '',
+      row.resourceModel ?? 'unknown',
+    ].join('\u0001');
+    let g = groups.get(key);
+    if (!g) {
+      g = {
+        repoKey: row.repoKey,
+        workflowFile: row.workflowFile ?? '',
+        workflowRef: row.workflowRef ?? '',
+        resourceModel: row.resourceModel ?? 'unknown',
+        machineHours: 0,
+        unknownCostCount: 0,
+        attempts: new Map(),
+        latestDate: '',
+      };
+      groups.set(key, g);
+    }
+    const mh = machineHours(row.runtimeSeconds, row.resourceCount);
+    if (mh !== undefined) g.machineHours += mh;
+    else g.unknownCostCount += 1;
+    const attemptKey = `${row.runId}:${row.runAttempt}`;
+    if (!g.attempts.has(attemptKey)) {
+      g.attempts.set(attemptKey, {
+        totalDuration:
+          row.attemptTotalDurationSeconds == null ||
+          row.attemptTotalDurationSeconds < 0
+            ? undefined
+            : row.attemptTotalDurationSeconds,
+        conclusion: row.attemptConclusion,
+      });
+    }
+    if (row.runDate > g.latestDate) g.latestDate = row.runDate;
+  }
+
+  const allRows: WorkflowTableRow[] = [...groups.values()].map((g) => {
+    const attemptList = [...g.attempts.values()];
+    const terminal = attemptList.filter((a) =>
+      a.conclusion ? TERMINAL_CONCLUSIONS.has(a.conclusion) : false,
+    );
+    const successCount = terminal.filter(
+      (a) => a.conclusion === 'success',
+    ).length;
+    const validDurations = attemptList
+      .map((a) => a.totalDuration)
+      .filter((v): v is number => v !== undefined);
+    return {
+      repoKey: g.repoKey,
+      workflowFile: g.workflowFile,
+      workflowRef: g.workflowRef,
+      resourceModel: g.resourceModel,
+      avgWorkflowTotalDuration:
+        validDurations.length > 0
+          ? validDurations.reduce((s, v) => s + v, 0) / validDurations.length
+          : undefined,
+      attemptCount: attemptList.length,
+      successCount,
+      failureRate:
+        terminal.length > 0
+          ? ((terminal.length - successCount) / terminal.length) * 100
+          : 0,
+      machineHours: g.machineHours,
+      unknownCostCount: g.unknownCostCount,
+      latestDate: g.latestDate,
+    };
+  });
+  allRows.sort(
+    (a, b) =>
+      b.latestDate.localeCompare(a.latestDate) ||
+      b.machineHours - a.machineHours,
+  );
+
+  const observations = allRows.slice(0, query.observationLimit);
+  const truncated = allRows.length > query.observationLimit;
+  const totalRows = observations.length;
+  const pageStart = (query.page - 1) * query.pageSize;
+  const pagedRows = observations.slice(pageStart, pageStart + query.pageSize);
+
+  const unknownResourceSamples = jobRows.filter(
+    (r) => machineHours(r.runtimeSeconds, r.resourceCount) === undefined,
+  ).length;
+
+  return {
+    tab: 'workflow',
+    cards,
+    series: boundedSeries,
+    rows: pagedRows,
+    page: query.page,
+    pageSize: query.pageSize,
+    totalRows,
+    displayedObservationCount: observations.length,
+    truncated,
+    quality: {
+      invalidTimingSamples: 0,
+      unknownResourceSamples,
+      partialHistorySamples: 0,
+      legacyFallbackSamples: 0,
+    },
+  };
+}
+
+/**
+ * Lazy drill-down: tracked workflow_attempts for one (repo, workflow_file,
+ * workflow_ref, resource_model) group, bounded to the newest N. Returns
+ * queue/runtime/conclusion for the stacked chart (spec §5.3). Scoped to
+ * resource_model (when known) so the drill-down matches the row's
+ * Machine-Hours basis. No date window — bounded by LIMIT (spec §6).
+ */
+export async function fetchWorkflowAttemptDrilldown(
+  repoId: number,
+  repoKey: string,
+  workflowFile: string,
+  workflowRef: string | null,
+  resourceModel: string | null,
+  limit = 100,
+): Promise<Array<{
+  runId: number;
+  runAttempt: number;
+  repoKey: string;
+  queueDurationSeconds: number | null;
+  runtimeSeconds: number | null;
+  totalDurationSeconds: number | null;
+  conclusion: string | null;
+  status: string;
+  runDate: string;
+}>> {
+  const client = await getDatabaseClient();
+  try {
+    const params: Array<string | number> = [repoId, workflowFile, limit];
+    let clauses = '';
+    if (workflowRef) {
+      params.push(workflowRef);
+      clauses += ` AND wa.workflow_ref = $${params.length}`;
+    }
+    if (resourceModel && resourceModel !== 'unknown') {
+      params.push(resourceModel);
+      clauses += ` AND EXISTS (
+        SELECT 1 FROM workflow_jobs wj
+        WHERE wj.run_id = wa.run_id AND wj.run_attempt = wa.run_attempt
+          AND wj.resource_model = $${params.length}
+      )`;
+    }
+    const { rows } = await client.query(
+      `SELECT r.id AS run_id, r.date, wa.run_attempt, wa.status, wa.conclusion,
+              wa.queue_duration_seconds, wa.runtime_seconds,
+              wa.total_duration_seconds
+       FROM workflow_attempts wa
+       JOIN runs r ON r.id = wa.run_id
+       WHERE r.repo_id = $1
+         AND wa.tracked = 1
+         AND wa.workflow_file = $2${clauses}
+       ORDER BY r.date DESC, r.id DESC, wa.run_attempt DESC
+       LIMIT $3`,
+      params,
+    );
+    return rows.map((row) => ({
+      runId: Number(row.run_id),
+      runAttempt: Number(row.run_attempt),
+      repoKey,
+      queueDurationSeconds:
+        row.queue_duration_seconds == null
+          ? null
+          : Number(row.queue_duration_seconds),
+      runtimeSeconds:
+        row.runtime_seconds == null ? null : Number(row.runtime_seconds),
+      totalDurationSeconds:
+        row.total_duration_seconds == null
+          ? null
+          : Number(row.total_duration_seconds),
+      conclusion: (row.conclusion as string | null) ?? null,
+      status: String(row.status),
+      runDate: String(row.date),
+    }));
+  } finally {
+    client.release();
+  }
+}
+
 /**
  * Server seam entry point. Fetches the filtered population, computes the
  * full-population cards and the bounded observation result. Cached per
@@ -734,6 +1124,25 @@ export const getDashboardReadModel = cache(
         pageSize: input.pageSize,
         observationLimit: input.observationLimit,
       });
+    }
+
+    if (input.tab === 'workflow') {
+      const [attempts, jobRows] = await Promise.all([
+        fetchWorkflowAttemptRows(repoRows, input.startDate, input.endDate),
+        fetchCostJobRows(repoRows, input.startDate, input.endDate),
+      ]);
+      const cards = buildWorkflowCards(attempts, jobRows, repoRows.length === 1);
+      return buildWorkflowDashboardResult(
+        attempts,
+        jobRows,
+        cards,
+        repoRows.length === 1,
+        {
+          page: input.page,
+          pageSize: input.pageSize,
+          observationLimit: input.observationLimit,
+        },
+      );
     }
 
     // PR tab (slice 1).

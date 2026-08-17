@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { fetchRuns, fetchLatestRuns } from '@/lib/data-fetcher';
 import { fetchPullRequestDetail } from '@/lib/pr-data-fetcher';
 import { getTrackedRepoOptions } from '@/lib/server-homepage-data';
+import { getRepoId } from '@/lib/db';
+import { fetchWorkflowAttemptDrilldown } from '@/lib/dashboard-read-model';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_FILES_LIMIT = 100;
@@ -29,10 +31,20 @@ type FetchPullRequestDetailRequest = {
   number: number;
 };
 
+type FetchWorkflowAttemptsRequest = {
+  action: 'fetchWorkflowAttempts';
+  owner: string;
+  repo: string;
+  workflowFile: string;
+  workflowRef?: string | null;
+  resourceModel?: string | null;
+};
+
 type DataRequest =
   | FetchRunsRequest
   | FetchLatestRunsRequest
-  | FetchPullRequestDetailRequest;
+  | FetchPullRequestDetailRequest
+  | FetchWorkflowAttemptsRequest;
 
 function isSameOrigin(request: Request): boolean {
   const origin = request.headers.get('origin');
@@ -109,6 +121,21 @@ export async function POST(request: Request) {
         }
         const detail = await fetchPullRequestDetail(body.owner, body.repo, body.number);
         return NextResponse.json({ data: detail });
+      }
+
+      case 'fetchWorkflowAttempts': {
+        if (!body.workflowFile || typeof body.workflowFile !== 'string') {
+          return NextResponse.json({ error: 'Missing required field: workflowFile' }, { status: 400 });
+        }
+        const repoId = await getRepoId(body.owner, body.repo);
+        const attempts = await fetchWorkflowAttemptDrilldown(
+          repoId,
+          `${body.owner}/${body.repo}`,
+          body.workflowFile,
+          body.workflowRef ?? null,
+          body.resourceModel ?? null,
+        );
+        return NextResponse.json({ data: attempts });
       }
 
       default:

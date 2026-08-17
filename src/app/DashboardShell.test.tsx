@@ -6,6 +6,7 @@ import DashboardShell from './DashboardShell';
 import type {
   CostDashboardResult,
   PrDashboardResult,
+  WorkflowDashboardResult,
 } from '@/lib/dashboard-read-model';
 
 const replaceMock = vi.fn();
@@ -151,6 +152,65 @@ function costResult(): CostDashboardResult {
 
 const originalFetch = global.fetch;
 
+function emptyWorkflowResult(): WorkflowDashboardResult {
+  return {
+    tab: 'workflow',
+    cards: {
+      totalAttempts: 0,
+      successRate: 0,
+      contributingRepoCount: 0,
+    },
+    series: [],
+    rows: [],
+    page: 1,
+    pageSize: 20,
+    totalRows: 0,
+    displayedObservationCount: 0,
+    truncated: false,
+    quality: {
+      invalidTimingSamples: 0,
+      unknownResourceSamples: 0,
+      partialHistorySamples: 0,
+      legacyFallbackSamples: 0,
+    },
+  };
+}
+
+function workflowResult(): WorkflowDashboardResult {
+  return {
+    ...emptyWorkflowResult(),
+    cards: {
+      totalAttempts: 5,
+      p50TotalDuration: 3600,
+      p90TotalDuration: 5400,
+      successRate: 60,
+      contributingRepoCount: 1,
+    },
+    series: [
+      { date: '2026-01-01', key: 'owner/repo', attempts: 3 },
+      { date: '2026-01-02', key: 'owner/repo', attempts: 2 },
+    ],
+    rows: [
+      {
+        repoKey: 'owner/repo',
+        workflowFile: 'ci.yml',
+        workflowRef: 'refs/heads/main',
+        resourceModel: 'npu-a3',
+        avgWorkflowTotalDuration: 3600,
+        attemptCount: 5,
+        successCount: 3,
+        failureRate: 40,
+        machineHours: 8,
+        unknownCostCount: 0,
+        latestDate: '2026-01-02',
+      },
+    ],
+    totalRows: 1,
+    displayedObservationCount: 1,
+  };
+}
+
+
 function mockFetchDetail(jobs: unknown[] = []) {
   vi.spyOn(global, 'fetch').mockImplementation(async (url: string | URL | Request, init?: RequestInit) => {
     if (url === '/api/data' && init?.method === 'POST') {
@@ -293,5 +353,18 @@ describe('DashboardShell', () => {
     render(<DashboardShell repoOptions={repoOptions} result={emptyCostResult()} searchParams={{}} />);
     expect(screen.getByText(/No tracked workflow jobs in range/i)).toBeInTheDocument();
     expect(screen.getByText(/No attributable jobs in the selected range/i)).toBeInTheDocument();
+  });
+
+  it('renders the Workflow tab cards, chart, and grouped table', () => {
+    render(<DashboardShell repoOptions={repoOptions} result={workflowResult()} searchParams={{}} />);
+    expect(screen.getByText('Total Attempts')).toBeInTheDocument();
+    expect(screen.getByText('ci.yml')).toBeInTheDocument();
+    expect(screen.getByTestId('cost-chart').getAttribute('data-len')).toBe('2');
+  });
+
+  it('renders the Workflow empty state', () => {
+    render(<DashboardShell repoOptions={repoOptions} result={emptyWorkflowResult()} searchParams={{}} />);
+    expect(screen.getByText(/No tracked workflow attempts in range/i)).toBeInTheDocument();
+    expect(screen.getByText(/No tracked attempts in the selected range/i)).toBeInTheDocument();
   });
 });
