@@ -13,7 +13,7 @@ export type MetricStats = {
   sampleCount: number;
 };
 
-/** Repository's existing percentile convention (overview-metrics.ts). */
+/** Repository's existing percentile convention (nearest-rank, see ADR-008). */
 export function percentile(sortedValues: number[], p: number): number {
   if (sortedValues.length === 0) return 0;
   const index = Math.max(0, Math.ceil(sortedValues.length * p) - 1);

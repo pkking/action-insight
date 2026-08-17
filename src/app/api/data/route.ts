@@ -1,28 +1,8 @@
 import { NextResponse } from 'next/server';
-import { fetchRuns, fetchLatestRuns } from '@/lib/data-fetcher';
 import { fetchPullRequestDetail } from '@/lib/pr-data-fetcher';
 import { getTrackedRepoOptions } from '@/lib/server-homepage-data';
 import { getRepoId } from '@/lib/db';
 import { fetchWorkflowAttemptDrilldown, fetchJobAttemptDrilldown } from '@/lib/dashboard-read-model';
-
-const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-const MAX_FILES_LIMIT = 100;
-
-type FetchRunsRequest = {
-  action: 'fetchRuns';
-  owner: string;
-  repo: string;
-  startDate: string;
-  endDate: string;
-  includeSteps?: boolean;
-};
-
-type FetchLatestRunsRequest = {
-  action: 'fetchLatestRuns';
-  owner: string;
-  repo: string;
-  maxFiles?: number;
-};
 
 type FetchPullRequestDetailRequest = {
   action: 'fetchPullRequestDetail';
@@ -51,8 +31,6 @@ type FetchJobAttemptsRequest = {
 };
 
 type DataRequest =
-  | FetchRunsRequest
-  | FetchLatestRunsRequest
   | FetchPullRequestDetailRequest
   | FetchWorkflowAttemptsRequest
   | FetchJobAttemptsRequest;
@@ -102,30 +80,6 @@ export async function POST(request: Request) {
     }
 
     switch (body.action) {
-      case 'fetchRuns': {
-        if (!body.startDate || !body.endDate) {
-          return NextResponse.json({ error: 'Missing required fields: startDate, endDate' }, { status: 400 });
-        }
-        if (!DATE_REGEX.test(body.startDate) || !DATE_REGEX.test(body.endDate)) {
-          return NextResponse.json({ error: 'Invalid date format: use YYYY-MM-DD' }, { status: 400 });
-        }
-        const runs = await fetchRuns(body.owner, body.repo, {
-          startDate: body.startDate,
-          endDate: body.endDate,
-          includeSteps: body.includeSteps,
-        });
-        return NextResponse.json({ data: runs });
-      }
-
-      case 'fetchLatestRuns': {
-        if (body.maxFiles !== undefined && typeof body.maxFiles !== 'number') {
-          return NextResponse.json({ error: 'Invalid field: maxFiles must be a number' }, { status: 400 });
-        }
-        const maxFiles = body.maxFiles !== undefined ? Math.max(1, Math.min(body.maxFiles, MAX_FILES_LIMIT)) : undefined;
-        const runs = await fetchLatestRuns(body.owner, body.repo, maxFiles);
-        return NextResponse.json({ data: runs });
-      }
-
       case 'fetchPullRequestDetail': {
         if (typeof body.number !== "number" || !Number.isInteger(body.number) || body.number <= 0) {
           return NextResponse.json({ error: "Invalid or missing required field: number (must be a positive integer)" }, { status: 400 });
