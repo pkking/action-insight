@@ -1,5 +1,9 @@
 # ADR-007: Migration from Turso (libSQL) to self-hosted PostgreSQL
 
+**Status**: Implemented (Turso removed; `pg` native, `PG_DATABASE_URL`, Docker Compose, SQLite fallback deleted)
+**Date**: 2026-08-07
+**Context**: Turso (libSQL) free/starter-tier write limits repeatedly blocked scheduled CI collection
+
 ## Context
 
 The Action Insight ETL pipeline was using Turso (managed libSQL/SQLite cloud)
