@@ -7,7 +7,7 @@ import { createOctokit } from './github';
 
 import { getDatabaseClient } from '../../src/lib/db.ts';
 import { writeWorkflowAttempts } from './pg-storage.ts';
-import { toPgSql, pgPlaceholders } from './pg-utils.ts';
+import { pgPlaceholders } from './pg-utils.ts';
 import { buildWorkflowAttempts, enrichRunWithWorkflowMetadata } from './workflow-attempts.ts';
 import { parseReposConfig, type RepoConfigEntry, type ReposConfig } from './repos-config.ts';
 import type { Run, Step } from '../../src/lib/types.ts';
@@ -126,7 +126,7 @@ function formatHelp(): string {
   return `
 Usage: npx tsx etl/scripts/backfill-missing-jobs.ts [options]
 
-Backfill jobs for tracked workflow attempts that already exist in SQLite but have no jobs stored yet.
+Backfill jobs for configured workflow attempts that already exist in PostgreSQL but have no jobs stored yet.
 
 Options:
   --repo, -r <owner/repo>   Backfill one repo. Can be repeated.
@@ -240,25 +240,11 @@ async function fetchJobsForRunAttempt(
   });
 }
 
-async function fetchMissingAttempts(
-  repo: string,
-  days: number,
-): Promise<MissingAttemptRow[]> {
-  const client = await getDatabaseClient();
-  try {
-  const [owner, repoName] = repo.split('/');
-  const sinceDate = format(subDays(new Date(), days), 'yyyy-MM-dd');
-
-  const { rows: repoRows } = await client.query(
-    `SELECT id FROM repos WHERE owner = $1 AND repo = $2`,
-    [owner, repoName],
-  );
-
-  if (repoRows.length === 0) return [];
-  const repoId = Number(repoRows[0].id);
-
-  const { rows } = await client.query(
-    toPgSql(`SELECT r.id AS run_id,
+export function buildMissingAttemptsQuery(workflowFiles: string[]): string {
+  const configuredFiles = workflowFiles.length > 0
+    ? ` OR r.workflow_file IN (${pgPlaceholders(workflowFiles.length, 3)})`
+    : '';
+  return `SELECT r.id AS run_id,
                  wa.run_attempt,
                  r.name,
                  r.head_branch,
@@ -275,17 +261,39 @@ async function fetchMissingAttempts(
                  wa.run_started_at
           FROM workflow_attempts wa
           JOIN runs r ON r.id = wa.run_id
-          WHERE r.repo_id = ?
-            AND wa.tracked = 1
-            AND date(r.created_at) >= date(?)
+          WHERE r.repo_id = $1
+            AND (wa.tracked = 1${configuredFiles})
+            AND r.created_at::date >= $2::date
             AND NOT EXISTS (
               SELECT 1
               FROM workflow_jobs wj
               WHERE wj.run_id = wa.run_id
                 AND wj.run_attempt = wa.run_attempt
             )
-          ORDER BY r.created_at DESC, wa.run_id DESC, wa.run_attempt DESC`),
-    [repoId, sinceDate],
+          ORDER BY r.created_at DESC, wa.run_id DESC, wa.run_attempt DESC`;
+}
+
+async function fetchMissingAttempts(
+  repo: string,
+  days: number,
+  workflowFiles: string[],
+): Promise<MissingAttemptRow[]> {
+  const client = await getDatabaseClient();
+  try {
+  const [owner, repoName] = repo.split('/');
+  const sinceDate = format(subDays(new Date(), days), 'yyyy-MM-dd');
+
+  const { rows: repoRows } = await client.query(
+    `SELECT id FROM repos WHERE owner = $1 AND repo = $2`,
+    [owner, repoName],
+  );
+
+  if (repoRows.length === 0) return [];
+  const repoId = Number(repoRows[0].id);
+
+  const { rows } = await client.query(
+    buildMissingAttemptsQuery(workflowFiles),
+    [repoId, sinceDate, ...workflowFiles],
   );
 
   return rows.map((row) => ({
@@ -317,7 +325,8 @@ async function backfillRepo(repo: string, config: ReposConfig, days: number): Pr
   }
 
   const repoConfig = findRepoConfig(config, repo);
-  const missingAttempts = await fetchMissingAttempts(repo, days);
+  const workflowFiles = repoConfig.workflows.map((workflow) => workflow.file);
+  const missingAttempts = await fetchMissingAttempts(repo, days, workflowFiles);
   console.log(`${repo}: ${missingAttempts.length} missing workflow attempts in the last ${days} day(s)`);
 
   if (missingAttempts.length === 0) {
@@ -379,7 +388,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
