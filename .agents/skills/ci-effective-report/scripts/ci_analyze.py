@@ -74,21 +74,35 @@ class PostgresClient:
 
     def __init__(self, db_url: str):
         try:
-            import psycopg
-            from psycopg.rows import dict_row
+            import pg8000.dbapi
         except ImportError:
-            print("[ERROR] 缺少 psycopg；请用 `uv run` 执行本脚本")
+            print("[ERROR] 缺少 pg8000；请用 `uv run` 执行本脚本")
             sys.exit(1)
-        self._psycopg = psycopg
-        self._dict_row = dict_row
+        self._pg8000 = pg8000.dbapi
         self.db_url = db_url
 
-    def query(self, sql: str) -> list[dict]:
+    @staticmethod
+    def _parse_dsn(url: str) -> dict:
+        """解析 postgresql://user:pass@host:port/db 连接串为 pg8000 关键字参数。"""
+        from urllib.parse import urlparse, unquote
+        p = urlparse(url)
+        return {
+            "user": unquote(p.username) if p.username else None,
+            "password": unquote(p.password) if p.password else None,
+            "host": p.hostname or "localhost",
+            "port": p.port or 5432,
+            "database": p.path.lstrip("/") or None,
+        }
+
+    def query(self, sql: str, params: tuple | None = None) -> list[dict]:
         try:
-            with self._psycopg.connect(self.db_url, row_factory=self._dict_row) as conn:
-                conn.execute("SET TRANSACTION READ ONLY")
-                return list(conn.execute(sql).fetchall())
-        except self._psycopg.Error as e:
+            with self._pg8000.connect(**self._parse_dsn(self.db_url)) as conn:
+                cur = conn.cursor()
+                cur.execute("SET TRANSACTION READ ONLY")
+                cur.execute(sql, params or ())
+                cols = [d[0] for d in cur.description] if cur.description else []
+                return [dict(zip(cols, row)) for row in cur.fetchall()]
+        except self._pg8000.Error as e:
             print(f"[ERROR] PostgreSQL query failed: {e}")
             snippet = sql[:200] + "..." if len(sql) > 200 else sql
             print(f"  SQL: {snippet}")

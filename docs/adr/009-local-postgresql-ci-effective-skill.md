@@ -15,7 +15,7 @@ Add the project skill at `.agents/skills/ci-effective-report/` and make `PG_DATA
 ## Trade-offs
 
 - Reports use the same current data as the application and avoid GitHub API cost.
-- `psycopg`, PyYAML, and openpyxl are isolated in the skill's uv environment.
+- `pg8000` (pure-Python, BSD-3-Clause), PyYAML, and openpyxl are isolated in the skill's uv environment; the pure-Python driver keeps the skill self-contained with no compiled wheels and avoids GPL-flagged `psycopg-binary` that the repository's `deny-licenses: GPL-3.0` dependency review rejects.
 - A report cannot fill missing local history automatically; users must run the existing ETL collection or rebuild commands first.
 - Every blank E2E or queue metric carries an `空值判断依据` derived from run/job counts, so an intentional absence is distinguishable from missing ETL data.
 
