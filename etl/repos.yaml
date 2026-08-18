@@ -4,6 +4,14 @@ defaults:
   steps_min_workflow_duration_seconds: 600
 
 repos:
+  - repo: areal-project/AReaL
+    workflows:
+      - file: test-areal.yml
+      - file: nightly.yml
+  - repo: alibaba/ROLL
+    workflows:
+      - file: ci-npu-mindspeed.yml
+      - file: ci-npu-test.yml
   - repo: hiyouga/LlamaFactory
     workflows:
       - file: tests_npu.yml
@@ -16,6 +24,8 @@ repos:
     workflows:
       - file: pr-test-npu.yml
       - file: pr-test.yml
+      - file: nightly-test-npu.yml
+      - file: nightly-test-nvidia.yml
   - repo: tile-ai/tilelang-mlir-ascend
     workflows:
       - file: base_ci.yml
@@ -31,7 +41,8 @@ repos:
   - repo: verl-project/verl
     workflows:
       - file: e2e_ascend.yml
-      - file: e2e_ppo_grpo_trainer_trtllm.yml
+      - file: e2e_ppo_trainer.yml
+      - file: nightly_ascend.yml
   - repo: vllm-project/vllm-ascend
     workflows:
       - file: pr_test.yaml
