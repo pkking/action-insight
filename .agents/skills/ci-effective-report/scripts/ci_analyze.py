@@ -492,21 +492,19 @@ def _timing_causes(rjobs: list[dict]) -> list[dict]:
     return findings
 
 
-def _calc_queue_min(job: dict, run: dict) -> float | None:
-    """重算排队时间 = job.started_at - run.created_at（ADR: 修正 queue_duration_seconds 只算 job 内部等待的问题）。
+def _calc_queue_min(job: dict, _run: dict | None = None) -> float | None:
+    """Job 排队时间 = job.started_at - job.created_at。
 
-    DB 预存的 queue_duration_seconds = job.started_at - job.created_at，只算了 runner 分配等待，
-    漏掉了 run 创建→job 创建的等待（等上游 job）。真实排队应从 run 创建算起。
+    从 workflow run 创建时刻计算会把 `needs` 上游任务的执行时间误报为 runner 排队。
     """
     started = job.get("started_at")
-    run_created = run.get("created_at")
-    if not started or not run_created:
+    created = job.get("created_at")
+    if not started or not created:
         return None
     try:
         s = datetime.fromisoformat(str(started).replace("Z", "+00:00"))
-        r = datetime.fromisoformat(str(run_created).replace("Z", "+00:00"))
-        diff = (s - r).total_seconds()
-        return round(max(0, diff) / 60.0, 3)
+        c = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+        return round(max(0, (s - c).total_seconds()) / 60.0, 3)
     except (ValueError, TypeError):
         return None
 
@@ -815,14 +813,14 @@ def build_pr_details(pr_metrics, pr_workflows, runs, jobs, steps):
             if not run:
                 continue
             wf_dur = sec_to_min(run.get("duration_seconds"))
-            # 工作流排队 = 该 run 下最早 job 的 started_at - run.created_at
+            # 工作流首次调度等待 = 该 run 下最早 job 的 started_at - run.created_at。
             rjobs = run_jobs.get(run_id, [])
             earliest_start = None
             for jj in rjobs:
                 st = jj.get("started_at")
                 if st and (earliest_start is None or st < earliest_start):
                     earliest_start = st
-            wf_queue = _calc_queue_min({"started_at": earliest_start}, run) if earliest_start else None
+            wf_queue = _calc_queue_min({"created_at": run.get("created_at"), "started_at": earliest_start}) if earliest_start else None
             all_rows.append(_base("WORKFLOW", pm, pr_e2e, review) | {
                 "工作流名称": run.get("name"),
                 "工作流运行ID": run_id,
@@ -900,7 +898,7 @@ def analyze_comparison(repos_data: dict[str, dict]) -> list[dict]:
         # Fix 1.4: 使用 sec_to_min() 代替裸 float()，避免空字符串或畸形数据崩溃
         wf_durs = [v for v in (sec_to_min(r.get("duration_seconds")) for r in runs) if v is not None]
         job_durs = [v for v in (sec_to_min(j.get("duration_seconds")) for j in jobs) if v is not None]
-        # 重算排队：job.started_at - run.created_at
+        # Job 排队：job.started_at - job.created_at
         run_map = {r["id"]: r for r in runs}
         job_queues = [v for v in (_calc_queue_min(j, run_map.get(j["run_id"], {})) for j in jobs) if v is not None]
 

@@ -67,6 +67,12 @@ class ConfigTests(unittest.TestCase):
         jobs = [_job(10, 1, "setup", 30, started="2026-07-15T10:05:00Z")]
         self.assertEqual(MODULE.collect_workflow_job_queues(jobs, runs, {1}), [5.0])
 
+    def test_queue_excludes_upstream_job_execution_time(self):
+        run = _run(1, "E2E", 14_400)
+        job = _job(10, 1, "dependent test", 300, started="2026-07-15T14:05:00Z")
+        job["created_at"] = "2026-07-15T14:00:00Z"
+        self.assertEqual(MODULE._calc_queue_min(job, run), 5.0)
+
     def test_overview_distinguishes_total_runs_from_valid_successes(self):
         row = MODULE.build_overview([{
             "repo": "o/r",
