@@ -367,11 +367,21 @@ def safe_div(a: float, b: float) -> float:
     return round(float(a) / float(b), 3) if b else 0.0
 
 
-def _card_hours(job: dict) -> float | None:
-    """NPU card-hours: actual execution hours times resolved accelerator count."""
-    count = job.get("card_count")
-    if not isinstance(count, int) or count <= 0:
+def _resource_type_and_cards(job: dict) -> tuple[str, int] | None:
+    model, count = job.get("card_model"), job.get("card_count")
+    if not isinstance(model, str) or not isinstance(count, int) or count <= 0:
         return None
+    kind = model.removeprefix("linux-aarch64-").upper()
+    kind = "A2" if "A2" in kind else "A3" if "A3" in kind else kind
+    return kind, (count + 1) // 2 if kind == "A3" else count
+
+
+def _card_hours(job: dict) -> float | None:
+    """NPU card-hours, converting A3's two dies per physical card."""
+    resource = _resource_type_and_cards(job)
+    if not resource:
+        return None
+    _, cards = resource
     started, completed = job.get("started_at"), job.get("completed_at")
     if not started or not completed:
         return None
@@ -379,7 +389,7 @@ def _card_hours(job: dict) -> float | None:
         start = datetime.fromisoformat(str(started).replace("Z", "+00:00"))
         end = datetime.fromisoformat(str(completed).replace("Z", "+00:00"))
         seconds = (end - start).total_seconds()
-        return round(seconds / 3600 * count, 6) if seconds >= 0 else None
+        return round(seconds / 3600 * cards, 6) if seconds >= 0 else None
     except (ValueError, TypeError):
         return None
 
@@ -422,11 +432,10 @@ def workflow_resource_summary(jobs: list[dict]) -> str:
     resources_by_run: dict[object, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for job in jobs:
         run_resources = resources_by_run[job.get("run_id")]
-        model, count = job.get("card_model"), job.get("card_count")
-        if isinstance(model, str) and isinstance(count, int) and count > 0:
-            kind = model.removeprefix("linux-aarch64-").upper()
-            kind = "A2" if "A2" in kind else "A3" if "A3" in kind else kind
-            run_resources[kind] += (count + 1) // 2 if kind == "A3" else count
+        resource = _resource_type_and_cards(job)
+        if resource:
+            kind, cards = resource
+            run_resources[kind] += cards
         for label in job.get("labels") or []:
             if not isinstance(label, str):
                 continue
@@ -1317,12 +1326,12 @@ def build_drilldown_data(repos_data: dict, step_map: dict | None = None, min_min
             r["id"]: sum(v for v in (_cpu_hours(j) for j in _jobs_by_run.get(r["id"], [])) if v is not None)
             for r in data.get("runs", [])
         }
-        npu_by_model: dict[str, float] = {}
+        npu_by_resource: dict[str, float] = {}
         for j in data.get("jobs", []):
-            model = j.get("card_model")
-            ch = _card_hours(j)
-            if isinstance(model, str) and ch is not None:
-                npu_by_model[model] = npu_by_model.get(model, 0) + ch
+            resource, ch = _resource_type_and_cards(j), _card_hours(j)
+            if resource and ch is not None:
+                kind, _ = resource
+                npu_by_resource[kind] = npu_by_resource.get(kind, 0) + ch
         stats[repo] = {
             "npu_hours": sum(card_hours_by_run.values()),
             "npu_failure_hours": sum(
@@ -1339,7 +1348,7 @@ def build_drilldown_data(repos_data: dict, step_map: dict | None = None, min_min
             "q_p50": percentile(queues, 0.5),
             "q_p90": percentile(queues, 0.9),
             "pass_rate": safe_div(len(valid) - sum(1 for d in valid if d > min_minutes), len(valid)) if valid else 0,
-            "npu_by_model": npu_by_model,
+            "npu_by_resource": npu_by_resource,
             "valid": len(valid),  # 有效运行数（>10min）
             "over60": sum(1 for d in valid if d > min_minutes),  # > 显示阈值（默认60min）
         }
@@ -1473,7 +1482,7 @@ function renderStats(repo){{
     +'<td class="pass-cell" rowspan="2">'+fmt(s.p50)+'</td><td class="pass-cell" rowspan="2">'+fmt(s.p90)+'</td><td class="pass-cell" rowspan="2">'+fmt(s.q_p50)+'</td><td class="pass-cell" rowspan="2">'+fmt(s.q_p90)+'</td><td class="pass-cell" rowspan="2">'+pct(s.pass_rate)+'</td></tr>'
     +'<tr><td class="row-label">CPU</td><td>'+fmt(s.cpu_hours)+'</td><td>'+fmt(s.cpu_failure_hours)+'</td></tr>'
     +'</tbody></table>'
-    +(s.npu_by_model&&Object.keys(s.npu_by_model).length?'<div class="model-breakdown">型号分布: '+Object.entries(s.npu_by_model).sort((a,b)=>b[1]-a[1]).map(([m,h])=>m+' '+fmt(h)+'卡时').join(' ｜ ')+'</div>':'')
+    +(s.npu_by_resource&&Object.keys(s.npu_by_resource).length?'<div class="model-breakdown">资源卡时: '+Object.entries(s.npu_by_resource).sort((a,b)=>b[1]-a[1]).map(([m,h])=>m+' '+fmt(h)+'卡时').join(' ｜ ')+'</div>':'')
     +'</div>';
 }}
 function renderRows(ri){{

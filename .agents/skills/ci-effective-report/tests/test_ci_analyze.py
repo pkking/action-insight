@@ -278,10 +278,12 @@ class BuildDrilldownDataTests(unittest.TestCase):
 
         data = MODULE.build_drilldown_data(repos, None, min_minutes=DUR_MIN)
         self.assertEqual([r["wf"] for r in data["runs"]], ["long"])
-        # NPU card-hours: 8×55min + 2×55min = 550min; CPU hours: 10min
+        # NPU card-hours: 8×55min + 1×55min (A3 has two dies/card) = 495min; CPU hours: 10min
         stats = data["stats"]["o/r"]
-        self.assertAlmostEqual(stats["npu_hours"], 550 / 60, places=5)
-        self.assertAlmostEqual(stats["npu_failure_hours"], 110 / 60, places=5)
+        self.assertAlmostEqual(stats["npu_hours"], 495 / 60, places=5)
+        self.assertAlmostEqual(stats["npu_failure_hours"], 55 / 60, places=5)
+        self.assertAlmostEqual(stats["npu_by_resource"]["310P"], 440 / 60, places=5)
+        self.assertAlmostEqual(stats["npu_by_resource"]["A3"], 55 / 60, places=5)
         self.assertAlmostEqual(stats["cpu_hours"], 55 / 60, places=5)
         self.assertNotIn("unknown_card_jobs", stats)
         self.assertNotIn("avg", stats)
@@ -335,6 +337,7 @@ class WriteDrilldownHtmlTests(unittest.TestCase):
         self.assertIn("NPU", html)
         self.assertIn("CPU", html)
         self.assertIn("失败机时", html)
+        self.assertIn("资源卡时", html)
         self.assertIn("达标率", html)
         self.assertNotIn("未知卡数 Job", html)
         self.assertNotIn("平均耗时", html)
