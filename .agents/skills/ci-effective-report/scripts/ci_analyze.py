@@ -1361,7 +1361,7 @@ def build_drilldown_data(repos_data: dict, step_map: dict | None = None, min_min
     return {"from": None, "to": None, "min": min_minutes, "validMin": VALID_MIN, "stats": stats, "runs": out, "all_runs": all_runs}
 
 
-def write_drilldown_html(filepath, repos_data, date_from, date_to, step_map, api_info, min_minutes=60):
+def write_drilldown_html(filepath, repos_data, date_from, date_to, step_map, api_info, min_minutes=60, resource_pools=None):
     """输出单文件下钻 HTML：首页 >min 分钟 run 表格，下钻 job 条形图，再下钻 step 明细。
 
     原生 HTML/CSS + 极少 JS（表格展开 + 按需渲染），无外部依赖（ADR-009）。
@@ -1370,6 +1370,8 @@ def write_drilldown_html(filepath, repos_data, date_from, date_to, step_map, api
     payload = build_drilldown_data(repos_data, step_map, min_minutes)
     payload["from"] = date_from
     payload["to"] = date_to
+    pool_summary, pool_timeline = build_resource_pool_rows(repos_data, date_from, date_to, resource_pools or {})
+    payload["resourcePool"] = {"summary": pool_summary, "timeline": pool_timeline}
     n = len(payload["runs"])
     blob = _json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
 
@@ -1469,7 +1471,7 @@ function renderPanels(){{
   const ri=activeRepo;
   let h='<div class="repo-panel" id="panel'+ri+'">';
   h+='<h2>'+esc(REPOS[ri])+' CI效率报告</h2>';
-  h+=renderStats(REPOS[ri]);
+  h+=renderStats(REPOS[ri])+renderResourcePool(REPOS[ri]);
   h+='<div class="table-wrap"><table><thead><tr><th class="toggle"></th><th>代码仓</th><th>提交人</th><th>创建时间</th><th>结束时间</th><th>Workflow</th><th>耗时(min)</th><th>NPU卡时</th><th>CPU耗时</th><th>状态</th><th>Run URL</th></tr></thead><tbody id="rows'+ri+'"></tbody></table>'
   +'<div style="margin:8px 0"><button class="btn-export" onclick="exportCSV('+ri+')">导出 CSV</button></div></div>';
   document.getElementById('panels').innerHTML=h;
@@ -1488,6 +1490,15 @@ function renderStats(repo){{
     +'</tbody></table>'
     +(s.npu_by_resource&&Object.keys(s.npu_by_resource).length?'<div class="model-breakdown">资源卡时: '+Object.entries(s.npu_by_resource).sort((a,b)=>b[1]-a[1]).map(([m,h])=>m+' '+fmt(h)+'卡时').join(' ｜ ')+'</div>':'')
     +'</div>';
+}}
+function renderResourcePool(repo){{
+  const p=DATA.resourcePool||{{}}, rows=(p.summary||[]).filter(r=>r.项目===repo), hours=(p.timeline||[]).filter(r=>r.项目===repo);
+  if(!rows.length)return '';
+  let h='<div class="stats"><h3>资源池利用率</h3><table class="stats-table"><thead><tr><th>资源</th><th>消耗卡时</th><th>有效窗口(h)</th><th>时间校正后总卡时</th><th>利用率</th></tr></thead><tbody>';
+  rows.forEach(r=>{{h+='<tr><td>'+esc(r.资源类型)+'</td><td>'+fmt(r.消耗卡时)+'</td><td>'+fmt(r['有效窗口(小时)'])+'</td><td>'+fmt(r.时间校正后总卡时)+'</td><td>'+((r.利用率||0)*100).toFixed(2)+'%</td></tr>';}});
+  h+='</tbody></table><details><summary>每小时卡时（'+hours.length+' 条）</summary><table><thead><tr><th>小时</th><th>消耗卡时</th></tr></thead><tbody>';
+  hours.forEach(r=>{{h+='<tr><td>'+esc(r.小时)+'</td><td>'+fmt(r.消耗卡时)+'</td></tr>';}});
+  return h+'</tbody></table></details></div>';
 }}
 function renderRows(ri){{
   const runs=BY_REPO[ri];let h='';
@@ -2084,7 +2095,7 @@ def main():
         drill_out = (args.output.replace(".xlsx", "-drilldown.html") if args.output
                      else f"{repo_tag}-drilldown-{date_tag}.html")
         api_info = "数据源：Action Insight 本地 PostgreSQL"
-        write_drilldown_html(drill_out, repos_data, date_from, date_to, step_names_map, api_info, min_minutes=args.drilldown_min)
+        write_drilldown_html(drill_out, repos_data, date_from, date_to, step_names_map, api_info, min_minutes=args.drilldown_min, resource_pools=resource_pools)
 
 
 if __name__ == "__main__":
