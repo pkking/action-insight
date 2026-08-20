@@ -104,6 +104,14 @@ class ConfigTests(unittest.TestCase):
             "总 Run=54，成功 Run=0，E2E 不计算；Jobs=16，成功 Jobs=0，排队不计算",
         )
 
+    def test_resource_pool_usage_is_clipped_to_window_and_hour(self):
+        job = _job(1, 1, "a3", 7_200, started="2026-07-15T00:30:00Z")
+        job.update({"completed_at": "2026-07-15T02:30:00Z", "card_model": "linux-aarch64-a3", "card_count": 4})
+        summary, timeline = MODULE.build_resource_pool_rows({"o/r": {"jobs": [job]}}, "2026-07-15", "2026-07-15", {"A3": 10})
+        self.assertEqual(summary[0]["消耗卡时"], 4.0)
+        self.assertEqual(summary[0]["时间校正后总卡时"], 20.0)
+        self.assertEqual([row["消耗卡时"] for row in timeline], [1.0, 2.0, 1.0])
+
     def test_overview_explains_workflow_with_no_runs(self):
         reason = MODULE.overview_missing_reason(
             {"total_run_count": 0}, [], [],
@@ -130,6 +138,12 @@ class ConfigTests(unittest.TestCase):
         ws = load_workbook(output)["Summary"]
         self.assertEqual(ws["A1"].font.name, "Arial")
         self.assertEqual(ws["A2"].font.name, "Arial")
+
+    def test_resource_pool_sheet_has_pie_chart(self):
+        from openpyxl import load_workbook
+        output = "/tmp/ci-effective-resource-pool.xlsx"
+        MODULE.write_excel(output, {"资源池利用率": [{"项目": "o/r", "资源类型": "A3", "资源池卡数": 10, "消耗卡时": 5}]})
+        self.assertEqual(len(load_workbook(output)["资源池利用率"]._charts), 1)
 
 
 class FetchJobsTests(unittest.TestCase):

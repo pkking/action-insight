@@ -184,6 +184,12 @@ def parse_config_entries(path: str) -> dict[str, list[dict]]:
     }
 
 
+def parse_resource_pools(path: str) -> dict[str, int]:
+    import yaml
+    data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    return {str(kind).upper(): int(cards) for kind, cards in data.get("resource_pools", {}).items() if int(cards) > 0}
+
+
 def parse_config(path: str) -> dict[str, list[str]]:
     """读取项目对比配置，返回 {owner/repo: [workflow display name]}。"""
     return {
@@ -1641,6 +1647,42 @@ def overview_missing_reason(data: dict, durations: list, queues: list) -> str:
     return "；".join(reasons)
 
 
+def build_resource_pool_rows(repos_data: dict, date_from: str, date_to: str, pools: dict[str, int]) -> tuple[list[dict], list[dict]]:
+    start = datetime.fromisoformat(f"{date_from}T00:00:00+00:00")
+    end = datetime.fromisoformat(f"{(datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)).date()}T00:00:00+00:00")
+    usage, bounds, hourly = defaultdict(float), {}, defaultdict(float)
+    for repo, data in repos_data.items():
+        for job in data.get("jobs", []):
+            resource = _resource_type_and_cards(job)
+            if not resource or resource[0] not in pools or not job.get("started_at") or not job.get("completed_at"):
+                continue
+            kind, cards = resource
+            try:
+                left = max(start, datetime.fromisoformat(str(job["started_at"]).replace("Z", "+00:00")))
+                right = min(end, datetime.fromisoformat(str(job["completed_at"]).replace("Z", "+00:00")))
+            except ValueError:
+                continue
+            if right <= left:
+                continue
+            key = (repo, kind)
+            usage[key] += (right - left).total_seconds() / 3600 * cards
+            old = bounds.get(key)
+            bounds[key] = (min(old[0], left), max(old[1], right)) if old else (left, right)
+            cursor = left.replace(minute=0, second=0, microsecond=0)
+            while cursor < right:
+                nxt = cursor + timedelta(hours=1)
+                hourly[(cursor.isoformat(), repo)] += max(0, (min(right, nxt) - max(left, cursor)).total_seconds()) / 3600 * cards
+                cursor = nxt
+    summary = []
+    for (repo, kind), hours in sorted(usage.items()):
+        first, last = bounds[(repo, kind)]
+        active_hours = (last - first).total_seconds() / 3600
+        available = pools[kind] * active_hours
+        summary.append({"项目": repo, "资源类型": kind, "资源池卡数": pools[kind], "消耗卡时": round(hours, 3), "有效窗口(小时)": round(active_hours, 3), "时间校正后总卡时": round(available, 3), "利用率": round(hours / available, 6) if available else 0})
+    timeline = [{"小时": hour, "项目": repo, "消耗卡时": round(hours, 3)} for (hour, repo), hours in sorted(hourly.items())]
+    return summary, timeline
+
+
 def build_overview(overview_data: list[dict]) -> list[dict]:
     """总览页：每个仓库/workflow 一行，分别展示 E2E 和排队分布。"""
     rows = []
@@ -1714,6 +1756,16 @@ def write_excel(filepath: str, sheets: dict[str, list[dict]]):
                 if val:
                     max_len = max(max_len, min(len(str(val)), 50))
             ws.column_dimensions[get_column_letter(ci)].width = min(max_len + 4, 55)
+
+    if "资源池利用率" in wb.sheetnames:
+        from openpyxl.chart import PieChart, Reference
+        ws = wb["资源池利用率"]
+        chart = PieChart()
+        chart.title = "项目/资源消耗卡时"
+        chart.add_data(Reference(ws, min_col=4, min_row=1, max_row=ws.max_row), titles_from_data=True)
+        chart.set_categories(Reference(ws, min_col=1, min_row=2, max_row=ws.max_row))
+        chart.height, chart.width = 8, 14
+        ws.add_chart(chart, "I2")
 
     if "Sheet" in wb.sheetnames:
         del wb["Sheet"]
@@ -1866,6 +1918,7 @@ def main():
         return
 
     configured_entries = parse_config_entries(args.config) if Path(args.config).exists() else {}
+    resource_pools = parse_resource_pools(args.config) if Path(args.config).exists() else {}
     configured_workflows = {
         repo: [workflow["name"] for workflow in workflows]
         for repo, workflows in configured_entries.items()
@@ -1998,6 +2051,11 @@ def main():
 
         pd_rows = build_pr_details(pr_metrics, pr_workflows, runs, jobs, steps)
         sheets[_sp(sheet_prefix, "PR详情")] = pd_rows
+
+    if resource_pools:
+        pool_summary, pool_timeline = build_resource_pool_rows(repos_data, date_from, date_to, resource_pools)
+        sheets["资源池利用率"] = pool_summary
+        sheets["资源池时序"] = pool_timeline
 
     # Write Excel
     if not args.no_excel and sheets:
