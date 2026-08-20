@@ -1460,16 +1460,14 @@ let activeRepo=0;
 function renderTabs(){{let h='';REPOS.forEach((repo,i)=>{{h+='<button class="tab'+(i===activeRepo?' active':'')+'" onclick="selectTab('+i+')">'+esc(repo)+'</button>';}});document.getElementById('tabs').innerHTML=h;}}
 function selectTab(i){{activeRepo=i;renderTabs();renderPanels();}}
 function renderPanels(){{
-  let h='';
-  BY_REPO.forEach((runs,ri)=>{{
-    h+='<div class="repo-panel" id="panel'+ri+'" style="display:'+(ri===activeRepo?'block':'none')+'">';
-    h+='<h2>'+esc(REPOS[ri])+' CI效率报告</h2>';
-    h+=renderStats(REPOS[ri]);
-    h+='<div class="table-wrap"><table><thead><tr><th class="toggle"></th><th>代码仓</th><th>提交人</th><th>创建时间</th><th>结束时间</th><th>Workflow</th><th>耗时(min)</th><th>NPU卡时</th><th>CPU耗时</th><th>状态</th><th>Run URL</th></tr></thead><tbody id="rows'+ri+'"></tbody></table>'
-    +'<div style="margin:8px 0"><button class="btn-export" onclick="exportCSV('+ri+')">导出 CSV</button></div></div>';
-  }});
+  const ri=activeRepo;
+  let h='<div class="repo-panel" id="panel'+ri+'">';
+  h+='<h2>'+esc(REPOS[ri])+' CI效率报告</h2>';
+  h+=renderStats(REPOS[ri]);
+  h+='<div class="table-wrap"><table><thead><tr><th class="toggle"></th><th>代码仓</th><th>提交人</th><th>创建时间</th><th>结束时间</th><th>Workflow</th><th>耗时(min)</th><th>NPU卡时</th><th>CPU耗时</th><th>状态</th><th>Run URL</th></tr></thead><tbody id="rows'+ri+'"></tbody></table>'
+  +'<div style="margin:8px 0"><button class="btn-export" onclick="exportCSV('+ri+')">导出 CSV</button></div></div>';
   document.getElementById('panels').innerHTML=h;
-  BY_REPO.forEach((runs,ri)=>renderRows(ri));
+  renderRows(ri);
 }}
 function renderStats(repo){{
   const s=DATA.stats&&DATA.stats[repo];

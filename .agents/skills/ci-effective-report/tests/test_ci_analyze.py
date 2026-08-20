@@ -367,6 +367,8 @@ class WriteDrilldownHtmlTests(unittest.TestCase):
         # JS groups by repo and renders per-repo panels
         self.assertIn("const REPOS=", html)
         self.assertIn("BY_REPO=", html)
+        self.assertIn("const ri=activeRepo", html)
+        self.assertIn("renderRows(ri);", html)
 
     def test_gantt_timeline_has_queue_and_run_bars(self):
         # renderJobs must emit a shared-axis timeline with orange queue + blue run bars
