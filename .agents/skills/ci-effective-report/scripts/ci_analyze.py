@@ -418,21 +418,30 @@ def _model_summary(jobs: list[dict]) -> dict[str, int]:
 
 
 def workflow_resource_summary(jobs: list[dict]) -> str:
-    """Return distinct per-job runner requirements for a workflow."""
-    resources = set()
+    """Maximum per-run resource requirement, grouped by resource type."""
+    resources_by_run: dict[object, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for job in jobs:
+        run_resources = resources_by_run[job.get("run_id")]
         model, count = job.get("card_model"), job.get("card_count")
         if isinstance(model, str) and isinstance(count, int) and count > 0:
             kind = model.removeprefix("linux-aarch64-").upper()
-            cards = (count + 1) // 2 if "A3" in kind else count
-            resources.add((0, f"{kind} × {cards}卡"))
+            kind = "A2" if "A2" in kind else "A3" if "A3" in kind else kind
+            run_resources[kind] += (count + 1) // 2 if kind == "A3" else count
         for label in job.get("labels") or []:
             if not isinstance(label, str):
                 continue
             match = _re.match(r"^linux-amd64(?:-.+)?-cpu-(\d+)(?:-|$)", label)
             if match:
-                resources.add((1, f"x86 CPU × {match.group(1)}核"))
-    return "；".join(value for _, value in sorted(resources)) or "未识别"
+                run_resources["x86 CPU"] += int(match.group(1))
+                break
+    maximums: dict[str, int] = defaultdict(int)
+    for resources in resources_by_run.values():
+        for kind, count in resources.items():
+            maximums[kind] = max(maximums[kind], count)
+    return "；".join(
+        f"{kind} × {count}{'核' if kind == 'x86 CPU' else '卡'}"
+        for kind, count in sorted(maximums.items())
+    ) or "未识别"
 
 
 def _timing_causes(rjobs: list[dict]) -> list[dict]:

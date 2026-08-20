@@ -73,13 +73,15 @@ class ConfigTests(unittest.TestCase):
         job["created_at"] = "2026-07-15T14:00:00Z"
         self.assertEqual(MODULE._calc_queue_min(job, run), 5.0)
 
-    def test_workflow_resource_summary_converts_a3_dies_to_cards_and_cpu_cores(self):
+    def test_workflow_resource_summary_groups_models_and_uses_maximum_single_run(self):
         jobs = [
-            {"card_model": "linux-aarch64-a3", "card_count": 4},
-            {"card_model": "linux-aarch64-a2b3", "card_count": 1},
-            {"labels": ["linux-amd64-xx-cpu-4"]},
+            {"run_id": 1, "card_model": "linux-aarch64-a3", "card_count": 4},
+            {"run_id": 1, "card_model": "linux-aarch64-a2b3", "card_count": 1},
+            {"run_id": 1, "card_model": "linux-aarch64-a2", "card_count": 2},
+            {"run_id": 1, "labels": ["linux-amd64-xx-cpu-4"]},
+            {"run_id": 2, "card_model": "linux-aarch64-a3", "card_count": 2},
         ]
-        self.assertEqual(MODULE.workflow_resource_summary(jobs), "A2B3 × 1卡；A3 × 2卡；x86 CPU × 4核")
+        self.assertEqual(MODULE.workflow_resource_summary(jobs), "A2 × 3卡；A3 × 2卡；x86 CPU × 4核")
 
     def test_overview_distinguishes_total_runs_from_valid_successes(self):
         row = MODULE.build_overview([{
