@@ -417,6 +417,24 @@ def _model_summary(jobs: list[dict]) -> dict[str, int]:
     return out
 
 
+def workflow_resource_summary(jobs: list[dict]) -> str:
+    """Return distinct per-job runner requirements for a workflow."""
+    resources = set()
+    for job in jobs:
+        model, count = job.get("card_model"), job.get("card_count")
+        if isinstance(model, str) and isinstance(count, int) and count > 0:
+            kind = model.removeprefix("linux-aarch64-").upper()
+            cards = (count + 1) // 2 if "A3" in kind else count
+            resources.add((0, f"{kind} × {cards}卡"))
+        for label in job.get("labels") or []:
+            if not isinstance(label, str):
+                continue
+            match = _re.match(r"^linux-amd64(?:-.+)?-cpu-(\d+)(?:-|$)", label)
+            if match:
+                resources.add((1, f"x86 CPU × {match.group(1)}核"))
+    return "；".join(value for _, value in sorted(resources)) or "未识别"
+
+
 def _timing_causes(rjobs: list[dict]) -> list[dict]:
     """Forensic timing causes computed from already-collected run/job/step data.
 
@@ -1617,6 +1635,7 @@ def build_overview(overview_data: list[dict]) -> list[dict]:
             "仓库": d["repo"],
             "Workflow": d.get("workflow_file", ""),
             "Workflow显示名": d.get("workflow_name", ""),
+            "资源需求": d.get("resource_requirement", "未识别"),
             "总Run数": d.get("total_run_count", len(durs)),
             "成功Run数": d.get("success_run_count", len(durs)),
             "有效成功Run数": len(durs),
@@ -1910,6 +1929,7 @@ def main():
                 "repo": repo_name,
                 "workflow_file": workflow_file,
                 "workflow_name": workflow_name,
+                "resource_requirement": workflow_resource_summary(workflow_jobs),
                 "total_run_count": len(workflow_runs),
                 "success_run_count": len(successful_run_ids),
                 "total_job_count": len(workflow_jobs),
