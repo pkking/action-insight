@@ -1774,7 +1774,7 @@ def write_excel(filepath: str, sheets: dict[str, list[dict]]):
         "资源需求": "当前窗口的最大单次 Run 资源需求；窗口无 Job 时使用最近采集的 runner label，仅用于识别，不计入卡时。",
         "总Run数": "统计窗口内匹配该工作流的全部 Run 数。",
         "成功Run数": "结论为 success 的 Run 数。",
-        "有效成功Run数": "成功且耗时达到报告下限的 Run 数，用于 E2E 统计。",
+        "有效成功Run数": "结论为 success 且 E2E 耗时≥5 分钟的 Run 数；单位为 Run，用于 E2E 统计。",
         "E2E P50(分钟)": "有效成功 Run 的端到端耗时中位数。",
         "E2E 平均(分钟)": "有效成功 Run 的平均端到端耗时。",
         "E2E P90(分钟)": "有效成功 Run 的端到端耗时 P90。",
