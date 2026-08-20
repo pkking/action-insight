@@ -1749,6 +1749,7 @@ def build_overview(overview_data: list[dict]) -> list[dict]:
 def write_excel(filepath: str, sheets: dict[str, list[dict]]):
     try:
         import openpyxl
+        from openpyxl.comments import Comment
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
         from openpyxl.utils import get_column_letter
     except ImportError:
@@ -1766,6 +1767,22 @@ def write_excel(filepath: str, sheets: dict[str, list[dict]]):
         top=Side(style="thin"), bottom=Side(style="thin"),
     )
 
+    overview_comments = {
+        "仓库": "GitHub 仓库，格式为 owner/repo。",
+        "Workflow": "工作流文件名；未配置或不可得时为空。",
+        "Workflow显示名": "报告配置中的工作流显示名称。",
+        "资源需求": "当前窗口的最大单次 Run 资源需求；窗口无 Job 时使用最近采集的 runner label，仅用于识别，不计入卡时。",
+        "总Run数": "统计窗口内匹配该工作流的全部 Run 数。",
+        "成功Run数": "结论为 success 的 Run 数。",
+        "有效成功Run数": "成功且耗时达到报告下限的 Run 数，用于 E2E 统计。",
+        "E2E P50(分钟)": "有效成功 Run 的端到端耗时中位数。",
+        "E2E 平均(分钟)": "有效成功 Run 的平均端到端耗时。",
+        "E2E P90(分钟)": "有效成功 Run 的端到端耗时 P90。",
+        "排队 P50(分钟)": "Job 从创建到启动的排队时长中位数。",
+        "排队 平均(分钟)": "Job 从创建到启动的平均排队时长。",
+        "排队 P90(分钟)": "Job 从创建到启动的排队时长 P90。",
+        "空值判断依据": "E2E 或排队为空时，对应的可核验原因。",
+    }
     for sheet_name, rows in sheets.items():
         if not rows:
             continue
@@ -1778,6 +1795,8 @@ def write_excel(filepath: str, sheets: dict[str, list[dict]]):
             cell.fill = header_fill
             cell.alignment = Alignment(horizontal="center", wrap_text=True)
             cell.border = thin_border
+            if sheet_name == "总览" and h in overview_comments:
+                cell.comment = Comment(overview_comments[h], "Action Insight")
 
         for ri, row_data in enumerate(rows, 2):
             for ci, h in enumerate(headers, 1):

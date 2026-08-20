@@ -139,6 +139,13 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(ws["A1"].font.name, "Arial")
         self.assertEqual(ws["A2"].font.name, "Arial")
 
+    def test_overview_headers_have_metric_comments(self):
+        from openpyxl import load_workbook
+        output = "/tmp/ci-effective-overview.xlsx"
+        MODULE.write_excel(output, {"总览": [{"仓库": "o/r", "E2E P90(分钟)": 10}]})
+        ws = load_workbook(output)["总览"]
+        self.assertIn("P90", ws["B1"].comment.text)
+
     def test_resource_pool_sheet_has_pie_chart(self):
         from openpyxl import load_workbook
         output = "/tmp/ci-effective-resource-pool.xlsx"
