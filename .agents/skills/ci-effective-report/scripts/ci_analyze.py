@@ -279,6 +279,27 @@ def fetch_jobs(client: PostgresClient, run_ids: list[int]) -> list[dict]:
     return all_jobs
 
 
+def fetch_recent_resource_jobs(client: PostgresClient, repo_id: int, entries: list[dict]) -> dict[str, list[dict]]:
+    """Use the latest stored runner labels when the reporting window has no jobs."""
+    hints = {}
+    for entry in entries:
+        name = entry["name"]
+        field, value = ("workflow_file", entry["file"]) if entry.get("file") else ("name", name)
+        escaped = str(value).replace("'", "''")
+        rows = client.query(
+            f"SELECT j.id, j.run_id, j.name, j.labels_json, j.resource_model AS card_model, j.resource_count AS card_count "
+            f"FROM jobs j JOIN runs r ON r.id=j.run_id WHERE r.repo_id={repo_id} AND r.{field}='{escaped}' "
+            f"AND (j.labels_json IS NOT NULL OR j.resource_model IS NOT NULL) ORDER BY r.created_at DESC LIMIT 100"
+        )
+        for job in rows:
+            try:
+                job["labels"] = json.loads(job.get("labels_json") or "[]")
+            except (TypeError, json.JSONDecodeError):
+                job["labels"] = []
+        hints[name] = rows
+    return hints
+
+
 def fetch_steps(client: PostgresClient, job_ids: list[int]) -> list[dict]:
     """Fetch steps for jobs in bounded batches."""
     if not job_ids:
@@ -375,6 +396,12 @@ def safe_div(a: float, b: float) -> float:
 
 def _resource_type_and_cards(job: dict) -> tuple[str, int] | None:
     model, count = job.get("card_model"), job.get("card_count")
+    if not isinstance(model, str) or not isinstance(count, int) or count <= 0:
+        for label in job.get("labels") or []:
+            match = _re.match(r"^linux-aarch64-(.+)-(\d+)$", label) if isinstance(label, str) else None
+            if match:
+                model, count = f"linux-aarch64-{match.group(1)}", int(match.group(2))
+                break
     if not isinstance(model, str) or not isinstance(count, int) or count <= 0:
         return None
     kind = model.removeprefix("linux-aarch64-").upper()
@@ -1980,6 +2007,7 @@ def main():
             workflow_files=wf_files,
         )
         normalize_configured_workflows(data["runs"], entries)
+        data["resource_hints"] = fetch_recent_resource_jobs(client, repo_id, entries)
         repos_data[repo_name] = data
         print(f"  ✅ Runs: {len(data['runs'])}, Jobs: {len(data['jobs'])}, "
               f"Steps: {len(data['steps'])}, PRs: {len(data['pr_metrics'])}")
@@ -2003,13 +2031,14 @@ def main():
             ]
             workflow_jobs = [job for job in data["jobs"] if job["run_id"] in workflow_run_ids]
             successful_jobs = [job for job in workflow_jobs if job.get("conclusion") == "success"]
+            resource_jobs = workflow_jobs or data.get("resource_hints", {}).get(workflow_name, [])
             job_queues = collect_workflow_job_queues(data["jobs"], rm, workflow_run_ids)
             workflow_file = resolve_workflow_file(workflow_name, workflow_runs, entries)
             overview_data.append({
                 "repo": repo_name,
                 "workflow_file": workflow_file,
                 "workflow_name": workflow_name,
-                "resource_requirement": workflow_resource_summary(workflow_jobs),
+                "resource_requirement": workflow_resource_summary(resource_jobs),
                 "total_run_count": len(workflow_runs),
                 "success_run_count": len(successful_run_ids),
                 "total_job_count": len(workflow_jobs),

@@ -147,6 +147,14 @@ class ConfigTests(unittest.TestCase):
 
 
 class FetchJobsTests(unittest.TestCase):
+    def test_recent_resource_hints_use_latest_job_labels(self):
+        class Client:
+            def query(self, _sql):
+                return [{"id": 1, "run_id": 2, "labels_json": '["linux-aarch64-a2-1"]', "card_model": None, "card_count": None}]
+
+        hints = MODULE.fetch_recent_resource_jobs(Client(), 1, [{"name": "CI", "file": "ci.yml"}])
+        self.assertEqual(MODULE.workflow_resource_summary(hints["CI"]), "A2 × 1卡")
+
     def test_fetch_jobs_falls_back_to_attempt_scoped_storage(self):
         class Client:
             sql = ""
