@@ -67,6 +67,22 @@ class ConfigTests(unittest.TestCase):
         jobs = [_job(10, 1, "setup", 30, started="2026-07-15T10:05:00Z")]
         self.assertEqual(MODULE.collect_workflow_job_queues(jobs, runs, {1}), [5.0])
 
+    def test_queue_excludes_upstream_job_execution_time(self):
+        run = _run(1, "E2E", 14_400)
+        job = _job(10, 1, "dependent test", 300, started="2026-07-15T14:05:00Z")
+        job["created_at"] = "2026-07-15T14:00:00Z"
+        self.assertEqual(MODULE._calc_queue_min(job, run), 5.0)
+
+    def test_workflow_resource_summary_groups_models_and_uses_maximum_single_run(self):
+        jobs = [
+            {"run_id": 1, "card_model": "linux-aarch64-a3", "card_count": 4},
+            {"run_id": 1, "card_model": "linux-aarch64-a2b3", "card_count": 1},
+            {"run_id": 1, "card_model": "linux-aarch64-a2", "card_count": 2},
+            {"run_id": 1, "labels": ["linux-amd64-xx-cpu-4"]},
+            {"run_id": 2, "card_model": "linux-aarch64-a3", "card_count": 2},
+        ]
+        self.assertEqual(MODULE.workflow_resource_summary(jobs), "A2 × 3卡；A3 × 2卡；x86 CPU × 4核")
+
     def test_overview_distinguishes_total_runs_from_valid_successes(self):
         row = MODULE.build_overview([{
             "repo": "o/r",
@@ -87,6 +103,14 @@ class ConfigTests(unittest.TestCase):
             row["空值判断依据"],
             "总 Run=54，成功 Run=0，E2E 不计算；Jobs=16，成功 Jobs=0，排队不计算",
         )
+
+    def test_resource_pool_usage_is_clipped_to_window_and_hour(self):
+        job = _job(1, 1, "a3", 7_200, started="2026-07-15T00:30:00Z")
+        job.update({"completed_at": "2026-07-15T02:30:00Z", "card_model": "linux-aarch64-a3", "card_count": 4})
+        summary, timeline = MODULE.build_resource_pool_rows({"o/r": {"jobs": [job]}}, "2026-07-15", "2026-07-15", {"A3": 10})
+        self.assertEqual(summary[0]["消耗卡时"], 4.0)
+        self.assertEqual(summary[0]["时间校正后总卡时"], 20.0)
+        self.assertEqual([row["消耗卡时"] for row in timeline], [1.0, 2.0, 1.0])
 
     def test_overview_explains_workflow_with_no_runs(self):
         reason = MODULE.overview_missing_reason(
@@ -115,8 +139,29 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(ws["A1"].font.name, "Arial")
         self.assertEqual(ws["A2"].font.name, "Arial")
 
+    def test_overview_headers_have_metric_comments(self):
+        from openpyxl import load_workbook
+        output = "/tmp/ci-effective-overview.xlsx"
+        MODULE.write_excel(output, {"总览": [{"仓库": "o/r", "E2E P90(分钟)": 10}]})
+        ws = load_workbook(output)["总览"]
+        self.assertIn("P90", ws["B1"].comment.text)
+
+    def test_resource_pool_sheet_has_pie_chart(self):
+        from openpyxl import load_workbook
+        output = "/tmp/ci-effective-resource-pool.xlsx"
+        MODULE.write_excel(output, {"资源池利用率": [{"项目": "o/r", "资源类型": "A3", "资源池卡数": 10, "消耗卡时": 5}]})
+        self.assertEqual(len(load_workbook(output)["资源池利用率"]._charts), 1)
+
 
 class FetchJobsTests(unittest.TestCase):
+    def test_recent_resource_hints_use_latest_job_labels(self):
+        class Client:
+            def query(self, _sql):
+                return [{"id": 1, "run_id": 2, "labels_json": '["linux-aarch64-a2-1"]', "card_model": None, "card_count": None}]
+
+        hints = MODULE.fetch_recent_resource_jobs(Client(), 1, [{"name": "CI", "file": "ci.yml"}])
+        self.assertEqual(MODULE.workflow_resource_summary(hints["CI"]), "A2 × 1卡")
+
     def test_fetch_jobs_falls_back_to_attempt_scoped_storage(self):
         class Client:
             sql = ""
@@ -262,10 +307,12 @@ class BuildDrilldownDataTests(unittest.TestCase):
 
         data = MODULE.build_drilldown_data(repos, None, min_minutes=DUR_MIN)
         self.assertEqual([r["wf"] for r in data["runs"]], ["long"])
-        # NPU card-hours: 8×55min + 2×55min = 550min; CPU hours: 10min
+        # NPU card-hours: 8×55min + 1×55min (A3 has two dies/card) = 495min; CPU hours: 10min
         stats = data["stats"]["o/r"]
-        self.assertAlmostEqual(stats["npu_hours"], 550 / 60, places=5)
-        self.assertAlmostEqual(stats["npu_failure_hours"], 110 / 60, places=5)
+        self.assertAlmostEqual(stats["npu_hours"], 495 / 60, places=5)
+        self.assertAlmostEqual(stats["npu_failure_hours"], 55 / 60, places=5)
+        self.assertAlmostEqual(stats["npu_by_resource"]["310P"], 440 / 60, places=5)
+        self.assertAlmostEqual(stats["npu_by_resource"]["A3"], 55 / 60, places=5)
         self.assertAlmostEqual(stats["cpu_hours"], 55 / 60, places=5)
         self.assertNotIn("unknown_card_jobs", stats)
         self.assertNotIn("avg", stats)
@@ -319,6 +366,7 @@ class WriteDrilldownHtmlTests(unittest.TestCase):
         self.assertIn("NPU", html)
         self.assertIn("CPU", html)
         self.assertIn("失败机时", html)
+        self.assertIn("资源卡时", html)
         self.assertIn("达标率", html)
         self.assertNotIn("未知卡数 Job", html)
         self.assertNotIn("平均耗时", html)
@@ -348,6 +396,8 @@ class WriteDrilldownHtmlTests(unittest.TestCase):
         # JS groups by repo and renders per-repo panels
         self.assertIn("const REPOS=", html)
         self.assertIn("BY_REPO=", html)
+        self.assertIn("const ri=activeRepo", html)
+        self.assertIn("renderRows(ri);", html)
 
     def test_gantt_timeline_has_queue_and_run_bars(self):
         # renderJobs must emit a shared-axis timeline with orange queue + blue run bars

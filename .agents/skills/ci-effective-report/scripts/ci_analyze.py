@@ -184,6 +184,12 @@ def parse_config_entries(path: str) -> dict[str, list[dict]]:
     }
 
 
+def parse_resource_pools(path: str) -> dict[str, int]:
+    import yaml
+    data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    return {str(kind).upper(): int(cards) for kind, cards in data.get("resource_pools", {}).items() if int(cards) > 0}
+
+
 def parse_config(path: str) -> dict[str, list[str]]:
     """读取项目对比配置，返回 {owner/repo: [workflow display name]}。"""
     return {
@@ -271,6 +277,27 @@ def fetch_jobs(client: PostgresClient, run_ids: list[int]) -> list[dict]:
                 job["labels"] = []
         all_jobs.extend(jobs)
     return all_jobs
+
+
+def fetch_recent_resource_jobs(client: PostgresClient, repo_id: int, entries: list[dict]) -> dict[str, list[dict]]:
+    """Use the latest stored runner labels when the reporting window has no jobs."""
+    hints = {}
+    for entry in entries:
+        name = entry["name"]
+        field, value = ("workflow_file", entry["file"]) if entry.get("file") else ("name", name)
+        escaped = str(value).replace("'", "''")
+        rows = client.query(
+            f"SELECT j.id, j.run_id, j.name, j.labels_json, j.resource_model AS card_model, j.resource_count AS card_count "
+            f"FROM jobs j JOIN runs r ON r.id=j.run_id WHERE r.repo_id={repo_id} AND r.{field}='{escaped}' "
+            f"AND (j.labels_json IS NOT NULL OR j.resource_model IS NOT NULL) ORDER BY r.created_at DESC LIMIT 100"
+        )
+        for job in rows:
+            try:
+                job["labels"] = json.loads(job.get("labels_json") or "[]")
+            except (TypeError, json.JSONDecodeError):
+                job["labels"] = []
+        hints[name] = rows
+    return hints
 
 
 def fetch_steps(client: PostgresClient, job_ids: list[int]) -> list[dict]:
@@ -367,11 +394,27 @@ def safe_div(a: float, b: float) -> float:
     return round(float(a) / float(b), 3) if b else 0.0
 
 
-def _card_hours(job: dict) -> float | None:
-    """NPU card-hours: actual execution hours times resolved accelerator count."""
-    count = job.get("card_count")
-    if not isinstance(count, int) or count <= 0:
+def _resource_type_and_cards(job: dict) -> tuple[str, int] | None:
+    model, count = job.get("card_model"), job.get("card_count")
+    if not isinstance(model, str) or not isinstance(count, int) or count <= 0:
+        for label in job.get("labels") or []:
+            match = _re.match(r"^linux-aarch64-(.+)-(\d+)$", label) if isinstance(label, str) else None
+            if match:
+                model, count = f"linux-aarch64-{match.group(1)}", int(match.group(2))
+                break
+    if not isinstance(model, str) or not isinstance(count, int) or count <= 0:
         return None
+    kind = model.removeprefix("linux-aarch64-").upper()
+    kind = "A2" if "A2" in kind else "A3" if "A3" in kind else kind
+    return kind, (count + 1) // 2 if kind == "A3" else count
+
+
+def _card_hours(job: dict) -> float | None:
+    """NPU card-hours, converting A3's two dies per physical card."""
+    resource = _resource_type_and_cards(job)
+    if not resource:
+        return None
+    _, cards = resource
     started, completed = job.get("started_at"), job.get("completed_at")
     if not started or not completed:
         return None
@@ -379,7 +422,7 @@ def _card_hours(job: dict) -> float | None:
         start = datetime.fromisoformat(str(started).replace("Z", "+00:00"))
         end = datetime.fromisoformat(str(completed).replace("Z", "+00:00"))
         seconds = (end - start).total_seconds()
-        return round(seconds / 3600 * count, 6) if seconds >= 0 else None
+        return round(seconds / 3600 * cards, 6) if seconds >= 0 else None
     except (ValueError, TypeError):
         return None
 
@@ -415,6 +458,32 @@ def _model_summary(jobs: list[dict]) -> dict[str, int]:
         if isinstance(model, str) and isinstance(count, int) and count > 0:
             out[model] = out.get(model, 0) + count
     return out
+
+
+def workflow_resource_summary(jobs: list[dict]) -> str:
+    """Maximum per-run resource requirement, grouped by resource type."""
+    resources_by_run: dict[object, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for job in jobs:
+        run_resources = resources_by_run[job.get("run_id")]
+        resource = _resource_type_and_cards(job)
+        if resource:
+            kind, cards = resource
+            run_resources[kind] += cards
+        for label in job.get("labels") or []:
+            if not isinstance(label, str):
+                continue
+            match = _re.match(r"^linux-amd64(?:-.+)?-cpu-(\d+)(?:-|$)", label)
+            if match:
+                run_resources["x86 CPU"] += int(match.group(1))
+                break
+    maximums: dict[str, int] = defaultdict(int)
+    for resources in resources_by_run.values():
+        for kind, count in resources.items():
+            maximums[kind] = max(maximums[kind], count)
+    return "；".join(
+        f"{kind} × {count}{'核' if kind == 'x86 CPU' else '卡'}"
+        for kind, count in sorted(maximums.items())
+    ) or "未识别"
 
 
 def _timing_causes(rjobs: list[dict]) -> list[dict]:
@@ -492,21 +561,19 @@ def _timing_causes(rjobs: list[dict]) -> list[dict]:
     return findings
 
 
-def _calc_queue_min(job: dict, run: dict) -> float | None:
-    """重算排队时间 = job.started_at - run.created_at（ADR: 修正 queue_duration_seconds 只算 job 内部等待的问题）。
+def _calc_queue_min(job: dict, _run: dict | None = None) -> float | None:
+    """Job 排队时间 = job.started_at - job.created_at。
 
-    DB 预存的 queue_duration_seconds = job.started_at - job.created_at，只算了 runner 分配等待，
-    漏掉了 run 创建→job 创建的等待（等上游 job）。真实排队应从 run 创建算起。
+    从 workflow run 创建时刻计算会把 `needs` 上游任务的执行时间误报为 runner 排队。
     """
     started = job.get("started_at")
-    run_created = run.get("created_at")
-    if not started or not run_created:
+    created = job.get("created_at")
+    if not started or not created:
         return None
     try:
         s = datetime.fromisoformat(str(started).replace("Z", "+00:00"))
-        r = datetime.fromisoformat(str(run_created).replace("Z", "+00:00"))
-        diff = (s - r).total_seconds()
-        return round(max(0, diff) / 60.0, 3)
+        c = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+        return round(max(0, (s - c).total_seconds()) / 60.0, 3)
     except (ValueError, TypeError):
         return None
 
@@ -815,14 +882,14 @@ def build_pr_details(pr_metrics, pr_workflows, runs, jobs, steps):
             if not run:
                 continue
             wf_dur = sec_to_min(run.get("duration_seconds"))
-            # 工作流排队 = 该 run 下最早 job 的 started_at - run.created_at
+            # 工作流首次调度等待 = 该 run 下最早 job 的 started_at - run.created_at。
             rjobs = run_jobs.get(run_id, [])
             earliest_start = None
             for jj in rjobs:
                 st = jj.get("started_at")
                 if st and (earliest_start is None or st < earliest_start):
                     earliest_start = st
-            wf_queue = _calc_queue_min({"started_at": earliest_start}, run) if earliest_start else None
+            wf_queue = _calc_queue_min({"created_at": run.get("created_at"), "started_at": earliest_start}) if earliest_start else None
             all_rows.append(_base("WORKFLOW", pm, pr_e2e, review) | {
                 "工作流名称": run.get("name"),
                 "工作流运行ID": run_id,
@@ -900,7 +967,7 @@ def analyze_comparison(repos_data: dict[str, dict]) -> list[dict]:
         # Fix 1.4: 使用 sec_to_min() 代替裸 float()，避免空字符串或畸形数据崩溃
         wf_durs = [v for v in (sec_to_min(r.get("duration_seconds")) for r in runs) if v is not None]
         job_durs = [v for v in (sec_to_min(j.get("duration_seconds")) for j in jobs) if v is not None]
-        # 重算排队：job.started_at - run.created_at
+        # Job 排队：job.started_at - job.created_at
         run_map = {r["id"]: r for r in runs}
         job_queues = [v for v in (_calc_queue_min(j, run_map.get(j["run_id"], {})) for j in jobs) if v is not None]
 
@@ -1292,12 +1359,12 @@ def build_drilldown_data(repos_data: dict, step_map: dict | None = None, min_min
             r["id"]: sum(v for v in (_cpu_hours(j) for j in _jobs_by_run.get(r["id"], [])) if v is not None)
             for r in data.get("runs", [])
         }
-        npu_by_model: dict[str, float] = {}
+        npu_by_resource: dict[str, float] = {}
         for j in data.get("jobs", []):
-            model = j.get("card_model")
-            ch = _card_hours(j)
-            if isinstance(model, str) and ch is not None:
-                npu_by_model[model] = npu_by_model.get(model, 0) + ch
+            resource, ch = _resource_type_and_cards(j), _card_hours(j)
+            if resource and ch is not None:
+                kind, _ = resource
+                npu_by_resource[kind] = npu_by_resource.get(kind, 0) + ch
         stats[repo] = {
             "npu_hours": sum(card_hours_by_run.values()),
             "npu_failure_hours": sum(
@@ -1314,14 +1381,14 @@ def build_drilldown_data(repos_data: dict, step_map: dict | None = None, min_min
             "q_p50": percentile(queues, 0.5),
             "q_p90": percentile(queues, 0.9),
             "pass_rate": safe_div(len(valid) - sum(1 for d in valid if d > min_minutes), len(valid)) if valid else 0,
-            "npu_by_model": npu_by_model,
+            "npu_by_resource": npu_by_resource,
             "valid": len(valid),  # 有效运行数（>10min）
             "over60": sum(1 for d in valid if d > min_minutes),  # > 显示阈值（默认60min）
         }
     return {"from": None, "to": None, "min": min_minutes, "validMin": VALID_MIN, "stats": stats, "runs": out, "all_runs": all_runs}
 
 
-def write_drilldown_html(filepath, repos_data, date_from, date_to, step_map, api_info, min_minutes=60):
+def write_drilldown_html(filepath, repos_data, date_from, date_to, step_map, api_info, min_minutes=60, resource_pools=None):
     """输出单文件下钻 HTML：首页 >min 分钟 run 表格，下钻 job 条形图，再下钻 step 明细。
 
     原生 HTML/CSS + 极少 JS（表格展开 + 按需渲染），无外部依赖（ADR-009）。
@@ -1330,6 +1397,8 @@ def write_drilldown_html(filepath, repos_data, date_from, date_to, step_map, api
     payload = build_drilldown_data(repos_data, step_map, min_minutes)
     payload["from"] = date_from
     payload["to"] = date_to
+    pool_summary, pool_timeline = build_resource_pool_rows(repos_data, date_from, date_to, resource_pools or {})
+    payload["resourcePool"] = {"summary": pool_summary, "timeline": pool_timeline}
     n = len(payload["runs"])
     blob = _json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
 
@@ -1426,16 +1495,14 @@ let activeRepo=0;
 function renderTabs(){{let h='';REPOS.forEach((repo,i)=>{{h+='<button class="tab'+(i===activeRepo?' active':'')+'" onclick="selectTab('+i+')">'+esc(repo)+'</button>';}});document.getElementById('tabs').innerHTML=h;}}
 function selectTab(i){{activeRepo=i;renderTabs();renderPanels();}}
 function renderPanels(){{
-  let h='';
-  BY_REPO.forEach((runs,ri)=>{{
-    h+='<div class="repo-panel" id="panel'+ri+'" style="display:'+(ri===activeRepo?'block':'none')+'">';
-    h+='<h2>'+esc(REPOS[ri])+' CI效率报告</h2>';
-    h+=renderStats(REPOS[ri]);
-    h+='<div class="table-wrap"><table><thead><tr><th class="toggle"></th><th>代码仓</th><th>提交人</th><th>创建时间</th><th>结束时间</th><th>Workflow</th><th>耗时(min)</th><th>NPU卡时</th><th>CPU耗时</th><th>状态</th><th>Run URL</th></tr></thead><tbody id="rows'+ri+'"></tbody></table>'
-    +'<div style="margin:8px 0"><button class="btn-export" onclick="exportCSV('+ri+')">导出 CSV</button></div></div>';
-  }});
+  const ri=activeRepo;
+  let h='<div class="repo-panel" id="panel'+ri+'">';
+  h+='<h2>'+esc(REPOS[ri])+' CI效率报告</h2>';
+  h+=renderStats(REPOS[ri])+renderResourcePool(REPOS[ri]);
+  h+='<div class="table-wrap"><table><thead><tr><th class="toggle"></th><th>代码仓</th><th>提交人</th><th>创建时间</th><th>结束时间</th><th>Workflow</th><th>耗时(min)</th><th>NPU卡时</th><th>CPU耗时</th><th>状态</th><th>Run URL</th></tr></thead><tbody id="rows'+ri+'"></tbody></table>'
+  +'<div style="margin:8px 0"><button class="btn-export" onclick="exportCSV('+ri+')">导出 CSV</button></div></div>';
   document.getElementById('panels').innerHTML=h;
-  BY_REPO.forEach((runs,ri)=>renderRows(ri));
+  renderRows(ri);
 }}
 function renderStats(repo){{
   const s=DATA.stats&&DATA.stats[repo];
@@ -1448,8 +1515,17 @@ function renderStats(repo){{
     +'<td class="pass-cell" rowspan="2">'+fmt(s.p50)+'</td><td class="pass-cell" rowspan="2">'+fmt(s.p90)+'</td><td class="pass-cell" rowspan="2">'+fmt(s.q_p50)+'</td><td class="pass-cell" rowspan="2">'+fmt(s.q_p90)+'</td><td class="pass-cell" rowspan="2">'+pct(s.pass_rate)+'</td></tr>'
     +'<tr><td class="row-label">CPU</td><td>'+fmt(s.cpu_hours)+'</td><td>'+fmt(s.cpu_failure_hours)+'</td></tr>'
     +'</tbody></table>'
-    +(s.npu_by_model&&Object.keys(s.npu_by_model).length?'<div class="model-breakdown">型号分布: '+Object.entries(s.npu_by_model).sort((a,b)=>b[1]-a[1]).map(([m,h])=>m+' '+fmt(h)+'卡时').join(' ｜ ')+'</div>':'')
+    +(s.npu_by_resource&&Object.keys(s.npu_by_resource).length?'<div class="model-breakdown">资源卡时: '+Object.entries(s.npu_by_resource).sort((a,b)=>b[1]-a[1]).map(([m,h])=>m+' '+fmt(h)+'卡时').join(' ｜ ')+'</div>':'')
     +'</div>';
+}}
+function renderResourcePool(repo){{
+  const p=DATA.resourcePool||{{}}, rows=(p.summary||[]).filter(r=>r.项目===repo), hours=(p.timeline||[]).filter(r=>r.项目===repo);
+  if(!rows.length)return '';
+  let h='<div class="stats"><h3>资源池利用率</h3><table class="stats-table"><thead><tr><th>资源</th><th>消耗卡时</th><th>有效窗口(h)</th><th>时间校正后总卡时</th><th>利用率</th></tr></thead><tbody>';
+  rows.forEach(r=>{{h+='<tr><td>'+esc(r.资源类型)+'</td><td>'+fmt(r.消耗卡时)+'</td><td>'+fmt(r['有效窗口(小时)'])+'</td><td>'+fmt(r.时间校正后总卡时)+'</td><td>'+((r.利用率||0)*100).toFixed(2)+'%</td></tr>';}});
+  h+='</tbody></table><details><summary>每小时卡时（'+hours.length+' 条）</summary><table><thead><tr><th>小时</th><th>消耗卡时</th></tr></thead><tbody>';
+  hours.forEach(r=>{{h+='<tr><td>'+esc(r.小时)+'</td><td>'+fmt(r.消耗卡时)+'</td></tr>';}});
+  return h+'</tbody></table></details></div>';
 }}
 function renderRows(ri){{
   const runs=BY_REPO[ri];let h='';
@@ -1609,6 +1685,42 @@ def overview_missing_reason(data: dict, durations: list, queues: list) -> str:
     return "；".join(reasons)
 
 
+def build_resource_pool_rows(repos_data: dict, date_from: str, date_to: str, pools: dict[str, int]) -> tuple[list[dict], list[dict]]:
+    start = datetime.fromisoformat(f"{date_from}T00:00:00+00:00")
+    end = datetime.fromisoformat(f"{(datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)).date()}T00:00:00+00:00")
+    usage, bounds, hourly = defaultdict(float), {}, defaultdict(float)
+    for repo, data in repos_data.items():
+        for job in data.get("jobs", []):
+            resource = _resource_type_and_cards(job)
+            if not resource or resource[0] not in pools or not job.get("started_at") or not job.get("completed_at"):
+                continue
+            kind, cards = resource
+            try:
+                left = max(start, datetime.fromisoformat(str(job["started_at"]).replace("Z", "+00:00")))
+                right = min(end, datetime.fromisoformat(str(job["completed_at"]).replace("Z", "+00:00")))
+            except ValueError:
+                continue
+            if right <= left:
+                continue
+            key = (repo, kind)
+            usage[key] += (right - left).total_seconds() / 3600 * cards
+            old = bounds.get(key)
+            bounds[key] = (min(old[0], left), max(old[1], right)) if old else (left, right)
+            cursor = left.replace(minute=0, second=0, microsecond=0)
+            while cursor < right:
+                nxt = cursor + timedelta(hours=1)
+                hourly[(cursor.isoformat(), repo)] += max(0, (min(right, nxt) - max(left, cursor)).total_seconds()) / 3600 * cards
+                cursor = nxt
+    summary = []
+    for (repo, kind), hours in sorted(usage.items()):
+        first, last = bounds[(repo, kind)]
+        active_hours = (last - first).total_seconds() / 3600
+        available = pools[kind] * active_hours
+        summary.append({"项目": repo, "资源类型": kind, "资源池卡数": pools[kind], "消耗卡时": round(hours, 3), "有效窗口(小时)": round(active_hours, 3), "时间校正后总卡时": round(available, 3), "利用率": round(hours / available, 6) if available else 0})
+    timeline = [{"小时": hour, "项目": repo, "消耗卡时": round(hours, 3)} for (hour, repo), hours in sorted(hourly.items())]
+    return summary, timeline
+
+
 def build_overview(overview_data: list[dict]) -> list[dict]:
     """总览页：每个仓库/workflow 一行，分别展示 E2E 和排队分布。"""
     rows = []
@@ -1619,6 +1731,7 @@ def build_overview(overview_data: list[dict]) -> list[dict]:
             "仓库": d["repo"],
             "Workflow": d.get("workflow_file", ""),
             "Workflow显示名": d.get("workflow_name", ""),
+            "资源需求": d.get("resource_requirement", "未识别"),
             "总Run数": d.get("total_run_count", len(durs)),
             "成功Run数": d.get("success_run_count", len(durs)),
             "有效成功Run数": len(durs),
@@ -1636,6 +1749,7 @@ def build_overview(overview_data: list[dict]) -> list[dict]:
 def write_excel(filepath: str, sheets: dict[str, list[dict]]):
     try:
         import openpyxl
+        from openpyxl.comments import Comment
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
         from openpyxl.utils import get_column_letter
     except ImportError:
@@ -1653,6 +1767,22 @@ def write_excel(filepath: str, sheets: dict[str, list[dict]]):
         top=Side(style="thin"), bottom=Side(style="thin"),
     )
 
+    overview_comments = {
+        "仓库": "GitHub 仓库，格式为 owner/repo。",
+        "Workflow": "工作流文件名；未配置或不可得时为空。",
+        "Workflow显示名": "报告配置中的工作流显示名称。",
+        "资源需求": "当前窗口的最大单次 Run 资源需求；窗口无 Job 时使用最近采集的 runner label，仅用于识别，不计入卡时。",
+        "总Run数": "统计窗口内匹配该工作流的全部 Run 数。",
+        "成功Run数": "结论为 success 的 Run 数。",
+        "有效成功Run数": "结论为 success 且 E2E 耗时≥5 分钟的 Run 数；单位为 Run，用于 E2E 统计。",
+        "E2E P50(分钟)": "有效成功 Run 的端到端耗时中位数。",
+        "E2E 平均(分钟)": "有效成功 Run 的平均端到端耗时。",
+        "E2E P90(分钟)": "有效成功 Run 的端到端耗时 P90。",
+        "排队 P50(分钟)": "Job 从创建到启动的排队时长中位数。",
+        "排队 平均(分钟)": "Job 从创建到启动的平均排队时长。",
+        "排队 P90(分钟)": "Job 从创建到启动的排队时长 P90。",
+        "空值判断依据": "E2E 或排队为空时，对应的可核验原因。",
+    }
     for sheet_name, rows in sheets.items():
         if not rows:
             continue
@@ -1665,6 +1795,8 @@ def write_excel(filepath: str, sheets: dict[str, list[dict]]):
             cell.fill = header_fill
             cell.alignment = Alignment(horizontal="center", wrap_text=True)
             cell.border = thin_border
+            if sheet_name == "总览" and h in overview_comments:
+                cell.comment = Comment(overview_comments[h], "Action Insight")
 
         for ri, row_data in enumerate(rows, 2):
             for ci, h in enumerate(headers, 1):
@@ -1681,6 +1813,16 @@ def write_excel(filepath: str, sheets: dict[str, list[dict]]):
                 if val:
                     max_len = max(max_len, min(len(str(val)), 50))
             ws.column_dimensions[get_column_letter(ci)].width = min(max_len + 4, 55)
+
+    if "资源池利用率" in wb.sheetnames:
+        from openpyxl.chart import PieChart, Reference
+        ws = wb["资源池利用率"]
+        chart = PieChart()
+        chart.title = "项目/资源消耗卡时"
+        chart.add_data(Reference(ws, min_col=4, min_row=1, max_row=ws.max_row), titles_from_data=True)
+        chart.set_categories(Reference(ws, min_col=1, min_row=2, max_row=ws.max_row))
+        chart.height, chart.width = 8, 14
+        ws.add_chart(chart, "I2")
 
     if "Sheet" in wb.sheetnames:
         del wb["Sheet"]
@@ -1833,6 +1975,7 @@ def main():
         return
 
     configured_entries = parse_config_entries(args.config) if Path(args.config).exists() else {}
+    resource_pools = parse_resource_pools(args.config) if Path(args.config).exists() else {}
     configured_workflows = {
         repo: [workflow["name"] for workflow in workflows]
         for repo, workflows in configured_entries.items()
@@ -1883,6 +2026,7 @@ def main():
             workflow_files=wf_files,
         )
         normalize_configured_workflows(data["runs"], entries)
+        data["resource_hints"] = fetch_recent_resource_jobs(client, repo_id, entries)
         repos_data[repo_name] = data
         print(f"  ✅ Runs: {len(data['runs'])}, Jobs: {len(data['jobs'])}, "
               f"Steps: {len(data['steps'])}, PRs: {len(data['pr_metrics'])}")
@@ -1906,12 +2050,14 @@ def main():
             ]
             workflow_jobs = [job for job in data["jobs"] if job["run_id"] in workflow_run_ids]
             successful_jobs = [job for job in workflow_jobs if job.get("conclusion") == "success"]
+            resource_jobs = workflow_jobs or data.get("resource_hints", {}).get(workflow_name, [])
             job_queues = collect_workflow_job_queues(data["jobs"], rm, workflow_run_ids)
             workflow_file = resolve_workflow_file(workflow_name, workflow_runs, entries)
             overview_data.append({
                 "repo": repo_name,
                 "workflow_file": workflow_file,
                 "workflow_name": workflow_name,
+                "resource_requirement": workflow_resource_summary(resource_jobs),
                 "total_run_count": len(workflow_runs),
                 "success_run_count": len(successful_run_ids),
                 "total_job_count": len(workflow_jobs),
@@ -1965,6 +2111,11 @@ def main():
         pd_rows = build_pr_details(pr_metrics, pr_workflows, runs, jobs, steps)
         sheets[_sp(sheet_prefix, "PR详情")] = pd_rows
 
+    if resource_pools:
+        pool_summary, pool_timeline = build_resource_pool_rows(repos_data, date_from, date_to, resource_pools)
+        sheets["资源池利用率"] = pool_summary
+        sheets["资源池时序"] = pool_timeline
+
     # Write Excel
     if not args.no_excel and sheets:
         if args.output:
@@ -1992,7 +2143,7 @@ def main():
         drill_out = (args.output.replace(".xlsx", "-drilldown.html") if args.output
                      else f"{repo_tag}-drilldown-{date_tag}.html")
         api_info = "数据源：Action Insight 本地 PostgreSQL"
-        write_drilldown_html(drill_out, repos_data, date_from, date_to, step_names_map, api_info, min_minutes=args.drilldown_min)
+        write_drilldown_html(drill_out, repos_data, date_from, date_to, step_names_map, api_info, min_minutes=args.drilldown_min, resource_pools=resource_pools)
 
 
 if __name__ == "__main__":
