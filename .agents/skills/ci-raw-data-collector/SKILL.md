@@ -60,10 +60,23 @@ npm run migrate:supabase
 
 ## 采集 raw runs/jobs
 
-需要 GitHub token。优先使用环境变量；不要读取或打印 token 文件内容：
+需要 GitHub token。可使用两个独立账号的 token 来源：
+
+- `@gh-token.txt`：读取 `/home/lcr/action-insight/gh-token.txt`，只放入环境变量，不打印内容；
+- `gh auth token`：通过 GitHub CLI 获取当前登录账号 token，只放入环境变量，不打印内容。
+
+两者属于不同账号时，可以并行分摊不同仓库的 GitHub API 请求。不要让两个账号同时采集同一个仓库，也不要把 token 写入命令行日志、文件或提交。
 
 ```bash
-export GITHUB_TOKEN="${GITHUB_TOKEN:?GITHUB_TOKEN is required}"
+export GITHUB_TOKEN_FILE="$(tr -d '\r\n' < /home/lcr/action-insight/gh-token.txt)"
+export GITHUB_TOKEN_GH="$(gh auth token)"
+```
+
+若只使用一个来源：
+
+```bash
+export GITHUB_TOKEN="${GITHUB_TOKEN_FILE:?GITHUB_TOKEN is required}"
+# 或： export GITHUB_TOKEN="$GITHUB_TOKEN_GH"
 ```
 
 先查看 CLI，避免使用过时参数：
@@ -80,14 +93,15 @@ GITHUB_TOKEN="$GITHUB_TOKEN" \
 npx tsx etl/scripts/collect.ts --repo owner/repo --days N --reverse
 ```
 
-多个仓库逐个执行，减少失败重试范围：
+多个仓库可按 token 分组并行执行；每个仓库只由一个账号负责：
 
 ```bash
-for repo in owner/repo another/repo; do
-  PG_DATABASE_URL="$PG_DATABASE_URL" GITHUB_TOKEN="$GITHUB_TOKEN" \
-  npx tsx etl/scripts/collect.ts --repo "$repo" --days N --reverse || exit 1
-done
+GITHUB_TOKEN="$GITHUB_TOKEN_FILE" npx tsx etl/scripts/collect.ts --repo owner/repo --days N --reverse &
+GITHUB_TOKEN="$GITHUB_TOKEN_GH"   npx tsx etl/scripts/collect.ts --repo another/repo --days N --reverse &
+wait
 ```
+
+并行前先确认：仓库集合不重叠、两个进程写入同一个 PostgreSQL schema、失败可按仓库单独重试。若 API 限流或数据库写入出现冲突，降级为逐仓库执行；不要盲目增加并发。
 
 约束：
 
