@@ -60,24 +60,24 @@ npm run migrate:supabase
 
 ## 采集 raw runs/jobs
 
-需要 GitHub token。可使用两个独立账号的 token 来源：
-
-- `@gh-token.txt`：读取 `/home/lcr/action-insight/gh-token.txt`，只放入环境变量，不打印内容；
-- `gh auth token`：通过 GitHub CLI 获取当前登录账号 token，只放入环境变量，不打印内容。
-
-两者属于不同账号时，可以并行分摊不同仓库的 GitHub API 请求。不要让两个账号同时采集同一个仓库，也不要把 token 写入命令行日志、文件或提交。
+需要 GitHub token。默认使用当前 GitHub CLI 账号：
 
 ```bash
-export GITHUB_TOKEN_FILE="$(tr -d '\r\n' < /home/lcr/action-insight/gh-token.txt)"
-export GITHUB_TOKEN_GH="$(gh auth token)"
+export GITHUB_TOKEN="$(gh auth token)"
 ```
 
-若只使用一个来源：
+也可以由用户指定额外 token 来源。先询问用户是否有额外 token 文件；只询问**文件路径**，不要让用户把 token 原文粘贴到对话中。用户可通过以下任一方式指定：
+
+- `GITHUB_TOKEN` 环境变量；
+- `GITHUB_TOKEN_FILE=/secure/path/token.txt`；
+- 用户明确提供的 token 文件路径（只读取、不打印）。
 
 ```bash
-export GITHUB_TOKEN="${GITHUB_TOKEN_FILE:?GITHUB_TOKEN is required}"
-# 或： export GITHUB_TOKEN="$GITHUB_TOKEN_GH"
+export GITHUB_TOKEN_FILE="${GITHUB_TOKEN_FILE:?set a token file path}"
+export GITHUB_TOKEN_EXTRA="$(tr -d '\r\n' < "$GITHUB_TOKEN_FILE")"
 ```
+
+如果用户确认额外文件中的账号与 `gh auth token` 是不同账号，可以并行分摊不同仓库的 GitHub API 请求。不要让两个账号同时采集同一个仓库，也不要把 token 写入命令行日志、文件或提交。
 
 先查看 CLI，避免使用过时参数：
 
@@ -96,8 +96,8 @@ npx tsx etl/scripts/collect.ts --repo owner/repo --days N --reverse
 多个仓库可按 token 分组并行执行；每个仓库只由一个账号负责：
 
 ```bash
-GITHUB_TOKEN="$GITHUB_TOKEN_FILE" npx tsx etl/scripts/collect.ts --repo owner/repo --days N --reverse &
-GITHUB_TOKEN="$GITHUB_TOKEN_GH"   npx tsx etl/scripts/collect.ts --repo another/repo --days N --reverse &
+GITHUB_TOKEN="$GITHUB_TOKEN_EXTRA" npx tsx etl/scripts/collect.ts --repo owner/repo --days N --reverse &
+GITHUB_TOKEN="$(gh auth token)"    npx tsx etl/scripts/collect.ts --repo another/repo --days N --reverse &
 wait
 ```
 
