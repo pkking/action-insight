@@ -7,6 +7,10 @@ description: 使用 Action Insight 本地 PostgreSQL 数据生成多个 GitHub �
 
 从本仓库本地 PostgreSQL 的 `repos`、`runs`、`jobs`、`steps`、`pr_metrics`、`pr_workflows` 表生成多项目 CI 对比报告。
 
+## 数据不足时
+
+若本地 PostgreSQL 缺少请求窗口的 runs/jobs/steps，先使用 `ci-raw-data-collector` skill 采集并完成覆盖检查；不要在数据不完整时生成看似完整的报告。
+
 ## 执行
 
 默认读取仓库根目录 `.github-ci-efficiency.yaml`，数据库连接依次取 `--pg-url`、`PG_DATABASE_URL`、仓库 `.env`，最后使用本地 Docker 默认地址。
