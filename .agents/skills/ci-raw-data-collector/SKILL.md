@@ -126,7 +126,7 @@ docker compose exec -T postgres psql \
 SELECT r.owner || '/' || r.repo AS repo,
        count(DISTINCT runs.id) AS runs,
        count(DISTINCT jobs.id) AS jobs,
-       count(DISTINCT steps.id) AS steps
+       count(steps.job_id) AS steps
 FROM repos r
 LEFT JOIN runs ON runs.repo_id = r.id
 LEFT JOIN jobs ON jobs.run_id = runs.id
