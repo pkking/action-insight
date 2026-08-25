@@ -46,11 +46,13 @@ For `daily_diagnostic`, the report should additionally start with a **current pr
 
 ## Prerequisites
 
-The bundled Python script requires `openpyxl`. Install it first if not present:
+The bundled Python script requires `openpyxl` and `pyyaml`. Install them first if not present:
 
 ```bash
-pip install openpyxl
+pip install openpyxl pyyaml
 ```
+
+`pyyaml` is needed to parse workflow YAML files for runner card-requirement analysis (A3 die→card conversion). The script degrades gracefully without it — card-requirement columns are left blank.
 
 A GitHub Personal Access Token (PAT) with `repo` scope is required only when GitHub API backfill is needed. Provide it as `GITHUB_TOKEN` or pass via `--token`.
 
@@ -217,6 +219,7 @@ Recommended minimum columns:
 - runner_arch
 - runner_group
 - runner_labels
+- **resource_requirement** (card type × count, parsed from workflow YAML; A3 labels encode die count so card count = dies ÷ 2)
 - job_matrix
 - job_status
 - job_conclusion
