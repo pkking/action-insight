@@ -278,6 +278,23 @@ async function fetchAllJobPages(fetchPage: (page: number) => Promise<GitHubRunJo
   }
 }
 
+async function fetchTrackedWorkflowIds(octokit: Octokit, owner: string, repo: string, files: string[]): Promise<number[]> {
+  const expected = new Set(files.map(file => file.replace(/^\.github\/workflows\//, '')));
+  const ids: number[] = [];
+  for (let page = 1; ; page += 1) {
+    const response = await withRetry(() => octokit.request('GET /repos/{owner}/{repo}/actions/workflows', {
+      owner, repo, per_page: PER_PAGE, page,
+    }));
+    const workflows = response.data.workflows as Array<{ id: number; path?: string }>;
+    for (const workflow of workflows) {
+      const file = workflow.path?.split('/').pop();
+      if (file && expected.has(file)) ids.push(workflow.id);
+    }
+    if (workflows.length < PER_PAGE) break;
+  }
+  return ids;
+}
+
 export async function fetchJobsForRunAttempt(
   octokit: Octokit,
   owner: string,
@@ -408,6 +425,15 @@ export async function collectRepo(
   let state = await loadRepoState(repo, effectiveDays, now);
   log(`State: latest=${state.latest || '(none)'}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
 
+  const trackedFiles = repoConfig.workflows.map(workflow => workflow.file);
+  const trackedWorkflowIds = trackedFiles.length
+    ? await fetchTrackedWorkflowIds(octokit, owner, repoName, trackedFiles)
+    : [];
+  if (trackedFiles.length && trackedWorkflowIds.length !== trackedFiles.length) {
+    throw new Error(`Unable to resolve all tracked workflows for ${repo}: expected ${trackedFiles.length}, found ${trackedWorkflowIds.length}`);
+  }
+  if (trackedWorkflowIds.length) console.log(`Collecting ${trackedWorkflowIds.length} tracked workflow(s) only.`);
+
   const existingRunIdsWithSteps = await getExistingRunIdsWithSteps(repo);
   const cachedRunIdsWithSteps = options.skipJobs ? new Map<number, string>() : existingRunIdsWithSteps;
   log(`Existing runs with cached steps: ${cachedRunIdsWithSteps.size}`);
@@ -416,7 +442,7 @@ export async function collectRepo(
     return toCreatedRange(window);
   }
 
-  async function fetchRunsForWindow(window: CollectionWindow): Promise<{ runs: Run[]; saturated: boolean }> {
+  async function fetchRunsForWindow(window: CollectionWindow, workflowId?: number): Promise<{ runs: Run[]; saturated: boolean }> {
     const createdParam = toCreatedParam(window);
     log(`Fetching runs with filter: ${createdParam}`);
 
@@ -430,13 +456,10 @@ export async function collectRepo(
       const startTime = Date.now();
       let data;
       try {
-        const response = await withRetry(() => octokit.request('GET /repos/{owner}/{repo}/actions/runs', {
-          owner,
-          repo: repoName,
-          per_page: PER_PAGE,
-          page,
-          created: createdParam,
-        }));
+        const response = await withRetry(() => workflowId
+          ? octokit.request('GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs', { owner, repo: repoName, workflow_id: workflowId, per_page: PER_PAGE, page, created: createdParam })
+          : octokit.request('GET /repos/{owner}/{repo}/actions/runs', { owner, repo: repoName, per_page: PER_PAGE, page, created: createdParam })
+        );
         data = response.data;
       } catch (err) {
         if (isGitHubRateLimitError(err)) {
@@ -606,8 +629,8 @@ export async function collectRepo(
     return { runs: allRuns, saturated: false };
   }
 
-  async function collectRunsForWindow(window: CollectionWindow): Promise<Run[]> {
-    const { runs, saturated } = await fetchRunsForWindow(window);
+  async function collectRunsForWindow(window: CollectionWindow, workflowId?: number): Promise<Run[]> {
+    const { runs, saturated } = await fetchRunsForWindow(window, workflowId);
     if (!saturated) {
       return runs;
     }
@@ -623,7 +646,7 @@ export async function collectRepo(
 
     for (const childWindow of childWindows) {
       try {
-        const childRuns = await collectRunsForWindow(childWindow);
+        const childRuns = await collectRunsForWindow(childWindow, workflowId);
         for (const run of childRuns) {
           mergedRuns.set(runAttemptKey(run.id, run.runAttempt), run);
         }
@@ -662,7 +685,9 @@ export async function collectRepo(
     const window = windows[wi];
     console.log(`Window ${wi + 1}/${windows.length} (${window.start}..${window.end})`);
     try {
-      const windowRuns = await collectRunsForWindow(window);
+      const windowRuns = trackedWorkflowIds.length
+        ? (await Promise.all(trackedWorkflowIds.map(id => collectRunsForWindow(window, id)))).flat()
+        : await collectRunsForWindow(window);
       console.log(`Window ${wi + 1}/${windows.length} done: ${windowRuns.length} run(s)`);
       for (const run of windowRuns) {
         allRunsMap.set(runAttemptKey(run.id, run.runAttempt), run);
