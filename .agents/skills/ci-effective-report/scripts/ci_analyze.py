@@ -460,8 +460,15 @@ def _model_summary(jobs: list[dict]) -> dict[str, int]:
     return out
 
 
-def workflow_resource_summary(jobs: list[dict]) -> str:
-    """Maximum per-run resource requirement, grouped by resource type."""
+def workflow_resource_summary(jobs: list[dict], static_resources: dict[str, int] | None = None) -> str:
+    """Static workflow requirements win; otherwise infer the maximum from job labels."""
+    if static_resources:
+        return "；".join(
+            f"{kind} × {count}{'核' if kind == 'x86 CPU' else '卡'}"
+            for kind, count in sorted(static_resources.items())
+            if isinstance(count, int) and count > 0
+        ) or "未识别"
+
     resources_by_run: dict[object, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for job in jobs:
         run_resources = resources_by_run[job.get("run_id")]
@@ -2053,11 +2060,15 @@ def main():
             resource_jobs = workflow_jobs or data.get("resource_hints", {}).get(workflow_name, [])
             job_queues = collect_workflow_job_queues(data["jobs"], rm, workflow_run_ids)
             workflow_file = resolve_workflow_file(workflow_name, workflow_runs, entries)
+            static_resources = next(
+                (item.get("static_resources") for item in entries if item["name"].lower() == workflow_name.lower()),
+                None,
+            )
             overview_data.append({
                 "repo": repo_name,
                 "workflow_file": workflow_file,
                 "workflow_name": workflow_name,
-                "resource_requirement": workflow_resource_summary(resource_jobs),
+                "resource_requirement": workflow_resource_summary(resource_jobs, static_resources),
                 "total_run_count": len(workflow_runs),
                 "success_run_count": len(successful_run_ids),
                 "total_job_count": len(workflow_jobs),

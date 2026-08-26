@@ -5,6 +5,8 @@
 # repository (NPU/GPU workflows together) or paired base/Ascend repositories.
 # comparison_name groups comparable workflow types, so comparable rows are adjacent.
 # Projects without a real GPU or nightly workflow only include available data.
+# static_resources records the maximum accelerator requirement read from each
+# workflow YAML; reports use it before falling back to collected runner labels.
 
 defaults:
   min_e2e_minutes: 10
@@ -36,12 +38,15 @@ repositories:
       - name: e2e_ascend
         file: e2e_ascend.yml
         comparison_name: PR
+        static_resources: {A2: 8, A3: 4}
       - name: vllm
         file: vllm.yml
         comparison_name: PR
+        static_resources: {L20: 16}
       - name: nightly_ci_ascend
         file: nightly_ascend.yml
         comparison_name: Nightly
+        static_resources: {A2: 72, A3: 16}
 
   - repo: ByteDance-Seed/VeOmni
     comparison_group: veomni
@@ -49,15 +54,19 @@ repositories:
       - name: GPU e2e tests
         file: gpu_e2e_test.yml
         comparison_name: E2E
+        static_resources: {L20: 8}
       - name: NPU e2e tests
         file: npu_e2e_test.yml
         comparison_name: E2E
+        static_resources: {Ascend 910B: 8}
       - name: GPU unit tests
         file: gpu_unit_tests.yml
         comparison_name: Unit
+        static_resources: {L20: 8}
       - name: NPU unit tests
         file: npu_unit_tests.yml
         comparison_name: Unit
+        static_resources: {Ascend 910B: 8}
 
   - repo: vllm-project/vllm-ascend
     comparison_group: vllm

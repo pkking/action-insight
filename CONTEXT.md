@@ -168,6 +168,10 @@ _Avoid_: runner type, resource type
 The positive number of accelerator resources attributed to a job from its runner labels.
 _Avoid_: card count, runner count
 
+**Static Resource Requirement**:
+The maximum accelerator-card topology declared in a tracked workflow's YAML and recorded in analysis configuration. It takes precedence over runner-label inference for report resource requirements.
+_Avoid_: inferred card count
+
 **Machine-Hours**:
 The attributed runner occupancy of a job, computed as **Job Runtime** multiplied by **Resource Count** and converted to hours. It is not device utilization or monetary cost.
 _Avoid_: cost, compute time, NPU hours
@@ -265,6 +269,7 @@ _Avoid_: failure analysis
 - **Job Runtime** is computed from job `started_at` to job `completed_at`
 - UI metrics must explain that **Job Total Duration** equals **Job Queue Duration** plus **Job Runtime**
 - **Machine-Hours** equal **Job Runtime** × **Resource Count** ÷ 3600 and exclude **Job Queue Duration**
+- **Static Resource Requirement** is the primary source for workflow-level report card requirements; runner labels are fallback-only
 - Jobs without a valid **Job Runtime** and positive **Resource Count** are **Unknown-Cost Samples**, excluded from Machine-Hour totals, and counted separately
 - Missing **Resource Model** values are grouped under an explicit unknown bucket rather than guessed from job or workflow names
 - **Forced Merge Indicator** requires both merge and tracked-CI completion timestamps; pull requests with partial CI history are excluded from its rate denominator
