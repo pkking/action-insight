@@ -3,7 +3,7 @@
 # The configuration was checked against the repositories' Actions metadata on
 # 2026-07-18. comparison_group identifies a project family and may contain one
 # repository (NPU/GPU workflows together) or paired base/Ascend repositories.
-# comparison_name is only PR or Nightly, so comparable rows are adjacent.
+# comparison_name groups comparable workflow types, so comparable rows are adjacent.
 # Projects without a real GPU or nightly workflow only include available data.
 
 defaults:
@@ -42,6 +42,22 @@ repositories:
       - name: nightly_ci_ascend
         file: nightly_ascend.yml
         comparison_name: Nightly
+
+  - repo: ByteDance-Seed/VeOmni
+    comparison_group: veomni
+    workflows:
+      - name: GPU e2e tests
+        file: gpu_e2e_test.yml
+        comparison_name: E2E
+      - name: NPU e2e tests
+        file: npu_e2e_test.yml
+        comparison_name: E2E
+      - name: GPU unit tests
+        file: gpu_unit_tests.yml
+        comparison_name: Unit
+      - name: NPU unit tests
+        file: npu_unit_tests.yml
+        comparison_name: Unit
 
   - repo: vllm-project/vllm-ascend
     comparison_group: vllm
