@@ -873,7 +873,11 @@ describe('collect rate limit handling', () => {
     mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
 
     const request = vi.fn().mockImplementation((route: string) => {
-      if (route === 'GET /repos/{owner}/{repo}/actions/runs') {
+      if (route === 'GET /repos/{owner}/{repo}/actions/workflows') {
+        return Promise.resolve({ data: { workflows: [{ id: 1, path: '.github/workflows/ci.yml' }] } });
+      }
+
+      if (route === 'GET /repos/{owner}/{repo}/actions/runs' || route === 'GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs') {
         return Promise.resolve({
           data: {
             workflow_runs: [
