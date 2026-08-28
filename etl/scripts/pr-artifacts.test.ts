@@ -6,6 +6,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./pg-storage.ts', () => ({
+  readMergedPullRequestSnapshots: vi.fn().mockResolvedValue(new Map()),
   readPullRequestResolutionCache: vi.fn().mockResolvedValue(new Map()),
 	  writePullRequestResolutionCache: vi.fn().mockResolvedValue(undefined),
 	  writePrMetrics: vi.fn().mockResolvedValue(undefined),
@@ -15,6 +16,7 @@ vi.mock('./pg-storage.ts', () => ({
 
 import { rebuildPullRequestArtifacts } from './pr-artifacts';
 import {
+  readMergedPullRequestSnapshots,
   readPullRequestResolutionCache,
   writePullRequestResolutionCache,
 	  writePrMetrics,
@@ -25,6 +27,7 @@ import {
 const tempDirs: string[] = [];
 
 afterEach(() => {
+  vi.mocked(readMergedPullRequestSnapshots).mockResolvedValue(new Map());
   vi.mocked(readPullRequestResolutionCache).mockResolvedValue(new Map());
   vi.mocked(writePullRequestResolutionCache).mockClear();
 	  vi.mocked(writePrMetrics).mockClear();

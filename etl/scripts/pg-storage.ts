@@ -4,7 +4,7 @@
  */
 
 import type { PoolClient } from 'pg';
-import type { Step } from '../../src/lib/types.ts';
+import type { PullRequestSnapshot, Step } from '../../src/lib/types.ts';
 import type { WorkflowAttemptRow } from './workflow-attempts.ts';
 import { writeWorkflowAttemptsToClient, writePrWorkflowAttemptsToClient } from './workflow-attempt-writes.ts';
 import { getDatabaseClient, type DbClient } from '../../src/lib/db.ts';
@@ -126,8 +126,6 @@ const PR_RESOLUTION_SOURCE_PRIORITY: Record<string, number> = {
 };
 
 const RUN_UPSERT_BATCH_SIZE = readPositiveIntEnv('RUN_UPSERT_BATCH_SIZE', 200);
-const JOB_UPSERT_BATCH_SIZE = readPositiveIntEnv('JOB_UPSERT_BATCH_SIZE', 500);
-const STEP_UPSERT_BATCH_SIZE = readPositiveIntEnv('STEP_UPSERT_BATCH_SIZE', 500);
 const CACHE_UPSERT_BATCH_SIZE = readPositiveIntEnv('CACHE_UPSERT_BATCH_SIZE', 100);
 const PR_METRIC_UPSERT_BATCH_SIZE = readPositiveIntEnv('PR_METRIC_UPSERT_BATCH_SIZE', 100);
 const PR_WORKFLOW_UPSERT_BATCH_SIZE = readPositiveIntEnv('PR_WORKFLOW_UPSERT_BATCH_SIZE', 500);
@@ -245,98 +243,9 @@ export async function writeRuns(repo: string, runs: RunRow[], date: string): Pro
       }
     }
 
-    // Write jobs
-    const jobRows: {
-      id: number; run_id: number; name: string; status: string;
-      conclusion: string | null; created_at: string; started_at: string;
-      completed_at: string; html_url: string; queue_duration_seconds: number;
-      duration_seconds: number; labels_json: string | null; runner_id: number | null;
-      runner_name: string | null; runner_group_id: number | null; runner_group_name: string | null;
-      resource_model: string | null; resource_count: number | null;
-    }[] = [];
-
-    for (const run of runs) {
-      if (run.jobs) {
-        for (const job of run.jobs) {
-          jobRows.push({
-            id: job.id, run_id: run.id, name: job.name, status: job.status,
-            conclusion: job.conclusion || null, created_at: job.created_at,
-            started_at: job.started_at, completed_at: job.completed_at,
-            html_url: job.html_url, queue_duration_seconds: job.queueDurationInSeconds,
-            duration_seconds: job.durationInSeconds, labels_json: job.labels ? JSON.stringify(job.labels) : null,
-            runner_id: job.runner_id ?? null, runner_name: job.runner_name ?? null,
-            runner_group_id: job.runner_group_id ?? null, runner_group_name: job.runner_group_name ?? null,
-            resource_model: job.resource_model ?? null, resource_count: job.resource_count ?? null,
-          });
-        }
-      }
-    }
-
-    for (const batch of chunkArray(jobRows, JOB_UPSERT_BATCH_SIZE)) {
-      for (const job of batch) {
-        await client.query(
-          `INSERT INTO jobs (id, run_id, name, status, conclusion, created_at, started_at, completed_at, html_url, queue_duration_seconds, duration_seconds, labels_json, runner_id, runner_name, runner_group_id, runner_group_name, resource_model, resource_count)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-           ON CONFLICT(id) DO UPDATE SET
-             status=excluded.status, conclusion=excluded.conclusion,
-             started_at=excluded.started_at, completed_at=excluded.completed_at,
-             html_url=excluded.html_url, queue_duration_seconds=excluded.queue_duration_seconds,
-             duration_seconds=excluded.duration_seconds, labels_json=excluded.labels_json,
-             runner_id=excluded.runner_id, runner_name=excluded.runner_name,
-             runner_group_id=excluded.runner_group_id, runner_group_name=excluded.runner_group_name,
-             resource_model=excluded.resource_model, resource_count=excluded.resource_count`,
-          [
-            job.id, job.run_id, job.name, job.status, job.conclusion,
-            job.created_at, job.started_at, job.completed_at, job.html_url,
-            job.queue_duration_seconds, job.duration_seconds, job.labels_json,
-            job.runner_id, job.runner_name, job.runner_group_id, job.runner_group_name,
-            job.resource_model, job.resource_count,
-          ],
-        );
-      }
-    }
-
-    // Write steps
-    const stepRows: {
-      job_id: number; number: number; name: string; status: string;
-      conclusion: string | null; started_at: string | null;
-      completed_at: string | null; duration_seconds: number;
-    }[] = [];
-
-    for (const run of runs) {
-      if (run.jobs) {
-        for (const job of run.jobs) {
-          if (job.steps) {
-            for (const step of job.steps) {
-              stepRows.push({
-                job_id: job.id, number: step.number, name: step.name,
-                status: step.status, conclusion: step.conclusion || null,
-                started_at: step.started_at || null,
-                completed_at: step.completed_at || null,
-                duration_seconds: step.duration_seconds ?? 0,
-              });
-            }
-          }
-        }
-      }
-    }
-
-    for (const batch of chunkArray(stepRows, STEP_UPSERT_BATCH_SIZE)) {
-      for (const step of batch) {
-        await client.query(
-          `INSERT INTO steps (job_id, number, name, status, conclusion, started_at, completed_at, duration_seconds)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-           ON CONFLICT(job_id, number) DO UPDATE SET
-             status=excluded.status, conclusion=excluded.conclusion,
-             started_at=excluded.started_at, completed_at=excluded.completed_at,
-             duration_seconds=excluded.duration_seconds`,
-          [
-            step.job_id, step.number, step.name, step.status, step.conclusion,
-            step.started_at, step.completed_at, step.duration_seconds,
-          ],
-        );
-      }
-    }
+    // New collection writes execution details only to attempt-scoped tables
+    // via writeWorkflowAttempts. Legacy jobs/steps remain read-only fallback
+    // for pre-migration history.
 
     await client.query('COMMIT');
   } catch (e) {
@@ -404,6 +313,37 @@ export async function getExistingRunIdsWithJobs(repo: string): Promise<Set<numbe
   }
 }
 
+export type CachedWorkflowAttempt = { updatedAt: string; stepPolicyHash: string | null };
+
+/** Completed attempt details are immutable until GitHub updates the attempt or
+ * the configured step policy changes. Cache by run + attempt, not run alone. */
+export async function getCachedWorkflowAttempts(repo: string): Promise<Map<string, CachedWorkflowAttempt>> {
+  const client = await getDatabaseClient();
+  if (!client) return new Map();
+
+  try {
+    const [owner, repoName] = repo.split('/');
+    const repoId = await ensureRepo(client, owner, repoName);
+    const { rows } = await client.query(
+      `SELECT wa.run_id, wa.run_attempt, wa.updated_at, wa.step_policy_hash
+       FROM workflow_attempts wa
+       JOIN runs r ON r.id = wa.run_id
+       WHERE r.repo_id = $1
+         AND wa.status = 'completed'
+         AND wa.jobs_fetched_at IS NOT NULL
+         AND wa.steps_eligibility_checked_at IS NOT NULL`,
+      [repoId],
+    );
+    return new Map(rows.map((row) => [
+      `${Number(row.run_id)}:${Number(row.run_attempt)}`,
+      { updatedAt: row.updated_at as string, stepPolicyHash: row.step_policy_hash as string | null },
+    ]));
+  } finally {
+    client.release();
+  }
+}
+
+/** @deprecated Use getCachedWorkflowAttempts: reruns require attempt identity. */
 export async function getExistingRunIdsWithSteps(repo: string): Promise<Map<number, string>> {
   const client = await getDatabaseClient();
   if (!client) return new Map();
@@ -479,6 +419,44 @@ export async function readPullRequestResolutionCache(
     }
 
     return cached;
+  } finally {
+    client.release();
+  }
+}
+
+export async function readMergedPullRequestSnapshots(
+  repo: string,
+  numbers: number[],
+): Promise<Map<number, PullRequestSnapshot>> {
+  if (numbers.length === 0) return new Map();
+  const client = await getDatabaseClient();
+  if (!client) return new Map();
+
+  try {
+    const [owner, repoName] = repo.split('/');
+    const repoId = await ensureRepo(client, owner, repoName);
+    const snapshots = new Map<number, PullRequestSnapshot>();
+    for (const batch of chunkArray(Array.from(new Set(numbers)), PR_METRIC_UPSERT_BATCH_SIZE)) {
+      const placeholders = pgPlaceholders(batch.length, 2);
+      const { rows } = await client.query(
+        `SELECT pr_number, title, state, created_at, merged_at, html_url, author
+         FROM pr_metrics
+         WHERE repo_id = $1 AND merged_at IS NOT NULL AND pr_number IN (${placeholders})`,
+        [repoId, ...batch],
+      );
+      for (const row of rows) {
+        snapshots.set(Number(row.pr_number), {
+          number: Number(row.pr_number),
+          title: row.title as string,
+          state: row.state as string,
+          created_at: row.created_at as string,
+          merged_at: row.merged_at as string,
+          html_url: row.html_url as string,
+          user: row.author ? { login: row.author as string } : undefined,
+        });
+      }
+    }
+    return snapshots;
   } finally {
     client.release();
   }

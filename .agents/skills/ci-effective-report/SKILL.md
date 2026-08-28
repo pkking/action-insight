@@ -5,7 +5,7 @@ description: 使用 Action Insight 本地 PostgreSQL 数据生成多个 GitHub �
 
 # CI Effective Report
 
-从本仓库本地 PostgreSQL 的 `repos`、`runs`、`jobs`、`steps`、`pr_metrics`、`pr_workflows` 表生成多项目 CI 对比报告。
+从本仓库本地 PostgreSQL 的 `repos`、`runs`、`workflow_attempts`、`workflow_jobs`、`workflow_steps`、`pr_metrics`、`pr_workflow_attempts` 表生成多项目 CI 对比报告。旧 `jobs` / `steps` 仅用于历史兼容回退。
 
 ## 执行
 
