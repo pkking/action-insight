@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -28,6 +29,11 @@ except ImportError:
     sys.exit(1)
 
 try:
+    import yaml
+except ImportError:
+    yaml = None  # ponytail: YAML card-requirement analysis disabled without pyyaml
+
+try:
     from .test_case_counter import compute_test_case_stats, clone_or_update_repo
 except ImportError:
     import sys as _sys
@@ -40,6 +46,96 @@ except ImportError:
 GITHUB_API_BASE = "https://api.github.com"
 PER_PAGE = 100
 SESSION = requests.Session()
+
+
+def parse_runner_card(label: str) -> tuple[str, int] | None:
+    """Parse a runner label into (card_type, card_count).
+
+    Label format: linux-aarch64-<model>-<N>[-]
+    - A2 labels: N is the card count directly.
+    - A3 labels (incl. -800t): N is the die count; each A3 card has 2 dies,
+      so card_count = N // 2.
+    """
+    if not label:
+        return None
+    cleaned = label.rstrip("-")
+    m = re.match(r"^linux-aarch64-(a\d)(?:-(800t))?-(\d+)$", cleaned)
+    if not m:
+        return None
+    card_type = m.group(1).upper()
+    die_count = int(m.group(3))
+    if card_type == "A3":
+        card_count = die_count // 2
+    else:
+        card_count = die_count
+    suffix = "-800t" if m.group(2) else ""
+    return f"{card_type}{suffix}", card_count
+
+
+def fetch_workflow_card_map(token: str, owner: str, repo: str) -> dict[str, tuple[str, int, str]]:
+    """Fetch all workflow YAML files and build a job_name -> (card_type, card_count, label) map.
+
+    Parses each job's runner_config / runner / runs-on to extract the runner label,
+    then converts die count to card count (A3: die // 2).
+    """
+    if yaml is None:
+        return {}
+    card_map: dict[str, tuple[str, int, str]] = {}
+
+    try:
+        listing = github_request(token, f"/repos/{owner}/{repo}/contents/.github/workflows")
+        if not listing or not isinstance(listing, list):
+            return card_map
+    except Exception:
+        return card_map
+
+    for entry in listing:
+        if not isinstance(entry, dict):
+            continue
+        fname = entry.get("name", "")
+        if not (fname.endswith(".yml") or fname.endswith(".yaml")):
+            continue
+        download_url = entry.get("download_url")
+        if not download_url:
+            continue
+        try:
+            resp = SESSION.get(download_url, headers={"Authorization": f"token {token}"}, timeout=30)
+            resp.raise_for_status()
+            workflow = yaml.safe_load(resp.text)
+        except Exception:
+            continue
+        if not isinstance(workflow, dict):
+            continue
+        jobs = workflow.get("jobs") or {}
+        for job_id, job_def in jobs.items():
+            if not isinstance(job_def, dict):
+                continue
+            label = None
+            # reusable workflow: runner_config input
+            with_inputs = job_def.get("with") or {}
+            label = with_inputs.get("runner_config") or with_inputs.get("runner")
+            # direct job: runs-on (string or list)
+            if not label:
+                runs_on = job_def.get("runs-on")
+                if isinstance(runs_on, list):
+                    for item in runs_on:
+                        if isinstance(item, str) and "linux-aarch64" in item:
+                            label = item
+                            break
+                elif isinstance(runs_on, str) and "linux-aarch64" in runs_on:
+                    label = runs_on
+            if not label:
+                continue
+            parsed = parse_runner_card(label)
+            if parsed:
+                card_type, card_count = parsed
+                # Store under job_id AND self_name (if provided) for flexible matching
+                card_map[job_id] = (card_type, card_count, label.rstrip("-"))
+                self_name = with_inputs.get("self_name")
+                if self_name and self_name != job_id:
+                    card_map[self_name] = (card_type, card_count, label.rstrip("-"))
+
+    return card_map
 SUMMARY_SHEET = "Management Summary"
 APPENDIX_SHEET = "Diagnostic Appendix"
 CURRENT_PROBLEMS_SHEET = "Current Problems"
@@ -537,6 +633,7 @@ def build_job_raw_rows(report: dict) -> list[dict]:
                     "runner_arch": job.get("runner_arch"),
                     "runner_group": job.get("runner_group"),
                     "runner_labels": ", ".join(job.get("runner_labels", [])),
+                    "resource_requirement": job.get("resource_requirement", ""),
                     "job_matrix": job.get("job_matrix"),
                     "job_status": job.get("status"),
                     "job_conclusion": job.get("conclusion"),
@@ -612,6 +709,11 @@ def build_management_metrics(repo: str, window: Window, pr_rows: list[dict], rev
 def compute_repo_report(token: str, owner: str, repo: str, window: Window, max_prs: int = 0) -> dict:
     full_repo = f"{owner}/{repo}"
     print(f"\nProcessing {full_repo}...")
+
+    # Fetch YAML-defined card requirements once per repo (job_name -> card info)
+    card_map = fetch_workflow_card_map(token, owner, repo)
+    if card_map:
+        print(f"  Loaded {len(card_map)} job card-requirement mappings from workflow YAMLs")
 
     prs = fetch_merged_prs(token, owner, repo, window)
     if max_prs > 0:
@@ -718,9 +820,25 @@ def compute_repo_report(token: str, owner: str, repo: str, window: Window, max_p
                         "raw_step_index": step_index,
                     })
 
+                job_name = job.get("name", f"job-{job.get('id')}")
+                # Match job to YAML-defined card requirement by name
+                card_req = ""
+                for match_key in [job_name, re.sub(r"\s*\(\d+\)\s*$", "", job_name)]:
+                    if match_key in card_map:
+                        ct, cc, _ = card_map[match_key]
+                        card_req = f"{ct}×{cc}"
+                        break
+                # Fallback: parse runtime runner labels directly
+                if not card_req:
+                    for rl in job.get("labels") or []:
+                        parsed = parse_runner_card(rl)
+                        if parsed:
+                            ct, cc = parsed
+                            card_req = f"{ct}×{cc}"
+                            break
                 job_rows.append({
                     "job_id": job.get("id"),
-                    "name": job.get("name", f"job-{job.get('id')}"),
+                    "name": job_name,
                     "workflow_name": job.get("workflow_name") or run.get("name") or "Unknown Workflow",
                     "check_run_url": job.get("check_run_url"),
                     "runner_id": job.get("runner_id"),
@@ -729,6 +847,7 @@ def compute_repo_report(token: str, owner: str, repo: str, window: Window, max_p
                     "runner_arch": job.get("runner_arch"),
                     "runner_group": job.get("runner_group_name"),
                     "runner_labels": job.get("labels") or [],
+                    "resource_requirement": card_req,
                     "job_matrix": "",
                     "status": job.get("status"),
                     "conclusion": job.get("conclusion"),
@@ -1307,6 +1426,7 @@ def write_raw_data_sheets(wb: openpyxl.Workbook, report: dict) -> None:
         "runner_arch",
         "runner_group",
         "runner_labels",
+        "resource_requirement",
         "job_matrix",
         "job_status",
         "job_conclusion",

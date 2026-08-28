@@ -334,5 +334,30 @@ class CiEfficiencyReportTests(unittest.TestCase):
             self.assertIn("checkout", step_values)
 
 
+class ParseRunnerCardTests(unittest.TestCase):
+    def test_a2_labels_use_number_directly_as_cards(self):
+        self.assertEqual(MODULE.parse_runner_card("linux-aarch64-a2-1"), ("A2", 1))
+        self.assertEqual(MODULE.parse_runner_card("linux-aarch64-a2-2"), ("A2", 2))
+
+    def test_a3_labels_divide_die_count_by_two(self):
+        # A3 labels encode die count; each A3 card has 2 dies → cards = dies // 2
+        self.assertEqual(MODULE.parse_runner_card("linux-aarch64-a3-2-"), ("A3", 1))
+        self.assertEqual(MODULE.parse_runner_card("linux-aarch64-a3-4-"), ("A3", 2))
+        self.assertEqual(MODULE.parse_runner_card("linux-aarch64-a3-8-"), ("A3", 4))
+        self.assertEqual(MODULE.parse_runner_card("linux-aarch64-a3-16-"), ("A3", 8))
+
+    def test_a3_800t_labels_divide_die_count_by_two(self):
+        self.assertEqual(MODULE.parse_runner_card("linux-aarch64-a3-800t-2"), ("A3-800t", 1))
+        self.assertEqual(MODULE.parse_runner_card("linux-aarch64-a3-800t-4"), ("A3-800t", 2))
+        self.assertEqual(MODULE.parse_runner_card("linux-aarch64-a3-800t-8"), ("A3-800t", 4))
+        self.assertEqual(MODULE.parse_runner_card("linux-aarch64-a3-800t-16"), ("A3-800t", 8))
+
+    def test_non_hardware_labels_return_none(self):
+        self.assertIsNone(MODULE.parse_runner_card("ubuntu-latest"))
+        self.assertIsNone(MODULE.parse_runner_card("self-hosted"))
+        self.assertIsNone(MODULE.parse_runner_card(None))
+        self.assertIsNone(MODULE.parse_runner_card(""))
+
+
 if __name__ == "__main__":
     unittest.main()
