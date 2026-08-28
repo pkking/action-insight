@@ -29,7 +29,8 @@ Options:
   -h, --help                    Show this help message
 
 Environment Variables:
-  GITHUB_TOKEN                  GitHub personal access token (required)
+  GITHUB_TOKEN                  GitHub token for CI (optional when gh-token.txt or gh auth is available)
+  GITHUB_TOKEN_FILE             Token file path (default: ./gh-token.txt); combined with gh auth when both exist
   RETENTION_DAYS                Number of days to retain data (default: 90)
   TARGET_REPOS                  Comma-separated list of repos (fallback if repos.yaml missing)
   VERBOSE                       Enable verbose logging (true or 1)

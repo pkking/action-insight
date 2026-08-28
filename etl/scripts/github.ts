@@ -1,4 +1,45 @@
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { Octokit } from '@octokit/core';
+
+/**
+ * Resolve local GitHub credentials without exposing token values in logs.
+ * The checked-in CI path may still provide GITHUB_TOKEN; local ETL prefers a
+ * user-supplied token file and the authenticated GitHub CLI token.
+ */
+export function resolveGitHubTokens({
+  cwd = process.cwd(),
+  env = process.env,
+  readFile = fs.readFileSync,
+  ghAuthToken = () => execFileSync('gh', ['auth', 'token'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }),
+}: {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  readFile?: typeof fs.readFileSync;
+  ghAuthToken?: () => string;
+} = {}): string[] {
+  const tokens: string[] = [];
+  const add = (value?: string) => {
+    const token = value?.trim();
+    if (token && !tokens.includes(token)) tokens.push(token);
+  };
+
+  const tokenFile = env.GITHUB_TOKEN_FILE ?? path.join(cwd, 'gh-token.txt');
+  try {
+    add(readFile(tokenFile, 'utf8').toString());
+  } catch {
+    // Token file is optional; gh auth or CI env can provide credentials.
+  }
+  try {
+    add(ghAuthToken());
+  } catch {
+    // GitHub CLI authentication is optional.
+  }
+  add(env.GITHUB_TOKEN);
+  return tokens;
+}
 
 /** Default per-request timeout for GitHub API calls (ms).
  * Guards against hung TCP connections that would otherwise block the serial

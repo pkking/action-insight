@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createOctokit } from './github';
+import { createOctokit, resolveGitHubTokens } from './github';
 import { addDays, format, parseISO } from 'date-fns';
 import yaml from 'js-yaml';
 
@@ -28,13 +28,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const RUN_SELECT_PAGE_SIZE = 1000;
 
-/** Resolve the GitHub token for a given repo.
- * Priority: per-repo env var (GITHUB_TOKEN_PER_REPO_...) → fallback PAT (triton-lang/triton-ascend).
- * The fallback token ensures newly added repos work even before their dedicated token is configured.
- * Example: vllm-project/vllm-ascend → GITHUB_TOKEN_PER_REPO_VLLM_PROJECT_VLLM_ASCEND */
-function resolveGitHubToken(repoKey: string): string | undefined {
+/** Prefer an explicit per-repository CI secret, then distribute local token sources. */
+function resolveGitHubToken(repoKey: string, tokens: string[], index: number): string | undefined {
   const perRepoKey = `GITHUB_TOKEN_PER_REPO_${repoKey.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
-  return process.env[perRepoKey] ?? process.env.GITHUB_TOKEN_PER_REPO_TRITON_LANG_TRITON_ASCEND;
+  return process.env[perRepoKey] ?? tokens[index % tokens.length];
 }
 
 const CLI_HELP = `Usage: npx tsx etl/scripts/rebuild-pr-artifacts.ts [options]
@@ -61,7 +58,13 @@ function readReposConfig(): string[] {
   const content = fs.readFileSync(reposConfigPath, 'utf8');
   const config = yaml.load(content) as ReposConfig | null;
 
-  return Array.isArray(config?.repos) ? config.repos.filter((entry): entry is string => typeof entry === 'string') : [];
+  return Array.isArray(config?.repos)
+    ? config.repos.flatMap((entry) => typeof entry === 'string'
+      ? [entry]
+      : entry && typeof entry === 'object' && typeof (entry as { repo?: unknown }).repo === 'string'
+        ? [(entry as { repo: string }).repo]
+        : [])
+    : [];
 }
 
 function assertDate(value: string, optionName: string): string {
@@ -402,8 +405,14 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   }
 
   const failures: string[] = [];
+  const tokens = resolveGitHubTokens();
+  if (tokens.length === 0) {
+    console.warn('No GitHub token found; rebuilding only cached or embedded PR associations.');
+  } else {
+    console.log(`GitHub token lanes: ${tokens.length}`);
+  }
 
-  for (const repoKey of options.repos) {
+  for (const [index, repoKey] of options.repos.entries()) {
     const [owner, repo] = repoKey.split('/');
     if (!owner || !repo) {
       console.warn(`Skipping invalid repo key: ${repoKey}`);
@@ -420,7 +429,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 
       console.log(`Rebuilding PR artifacts for ${repoKey} from ${dates[0]} to ${dates[dates.length - 1]} (${dates.length} date(s))`);
       const runs = await fetchRunsFromDatabase(repoKey, dates);
-      const token = resolveGitHubToken(repoKey);
+      const token = tokens.length ? resolveGitHubToken(repoKey, tokens, index) : undefined;
       const octokit = token ? createOctokit(token) : undefined;
       if (!octokit) {
         console.warn('No GitHub token is configured; PR metrics rebuild will only use cached or embedded PR associations.');

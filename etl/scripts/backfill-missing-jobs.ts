@@ -3,7 +3,7 @@ import { format, subDays } from 'date-fns';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createOctokit } from './github';
+import { createOctokit, resolveGitHubTokens } from './github';
 
 import { getDatabaseClient } from '../../src/lib/db.ts';
 import { writeWorkflowAttempts } from './pg-storage.ts';
@@ -318,7 +318,7 @@ async function fetchMissingAttempts(
   }
 }
 
-async function backfillRepo(repo: string, config: ReposConfig, days: number): Promise<void> {
+async function backfillRepo(repo: string, config: ReposConfig, days: number, token: string): Promise<void> {
   const [owner, repoName] = repo.split('/');
   if (!owner || !repoName) {
     throw new Error(`Invalid repo format: ${repo}. Expected owner/repo`);
@@ -333,7 +333,7 @@ async function backfillRepo(repo: string, config: ReposConfig, days: number): Pr
     return;
   }
 
-  const octokit = createOctokit(process.env.GITHUB_TOKEN);
+  const octokit = createOctokit(token);
   let completed = 0;
 
   for (const attempt of missingAttempts) {
@@ -376,16 +376,15 @@ async function main() {
     return;
   }
 
-  if (!process.env.GITHUB_TOKEN) {
-    throw new Error('GITHUB_TOKEN is required');
+  const tokens = resolveGitHubTokens();
+  if (tokens.length === 0) {
+    throw new Error('No GitHub token found. Add gh-token.txt or run gh auth login.');
   }
 
   const config = readReposConfig();
   const targetRepos = args.repos.length > 0 ? args.repos : config.repos.map((entry) => entry.repo);
 
-  for (const repo of targetRepos) {
-    await backfillRepo(repo, config, args.days);
-  }
+  await Promise.all(targetRepos.map((repo, index) => backfillRepo(repo, config, args.days, tokens[index % tokens.length])));
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Octokit } from '@octokit/core';
-import { createOctokit } from './github';
+import { createOctokit, resolveGitHubTokens } from './github';
 
 import { parseReposConfig, type ReposConfig, type RepoConfigEntry } from './repos-config';
 
@@ -117,9 +117,9 @@ async function fetchAllWorkflows(
 }
 
 async function validateOnline(config: ReposConfig): Promise<string[]> {
-  const token = process.env.GITHUB_TOKEN;
+  const token = resolveGitHubTokens()[0];
   if (!token) {
-    return ['GITHUB_TOKEN is required for online repository validation'];
+    return ['No GitHub token found. Add gh-token.txt or run gh auth login.'];
   }
 
   const octokit = createOctokit(token);

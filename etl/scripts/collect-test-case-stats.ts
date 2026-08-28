@@ -24,6 +24,7 @@ import { getDatabaseClient } from '../../src/lib/db.ts';
 import { toPgSql } from './pg-utils.ts';
 import { format, subDays } from 'date-fns';
 import { fileURLToPath } from 'url';
+import { resolveGitHubTokens } from './github.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -159,7 +160,7 @@ function cloneOrUpdateRepo(owner: string, repo: string): string {
     info(`Cloning ${owner}/${repo} to ${repoDir}...`);
     fs.mkdirSync(CACHE_DIR, { recursive: true });
 
-    const githubToken = process.env.GITHUB_TOKEN;
+    const githubToken = resolveGitHubTokens()[0];
     if (githubToken) {
       const authHeader = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${githubToken}`).toString('base64')}`;
       execFileSync('git', ['-c', `http.extraheader=${authHeader}`, 'clone', '--depth', '1', repoUrl, repoDir], { stdio: VERBOSE ? 'inherit' : 'pipe' });
