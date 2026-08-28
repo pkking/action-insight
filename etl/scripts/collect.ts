@@ -12,7 +12,7 @@ import {
   type CollectCliOptions,
 } from './collect-options.ts';
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
-import { createOctokit, isGitHubRateLimitError, getRateLimitDetails, type RateLimitDetails } from './github.ts';
+import { createOctokit, getRateLimitDetails, isGitHubRateLimitError, resolveGitHubTokens, type RateLimitDetails } from './github.ts';
 import {
   writeRuns,
   writeWorkflowAttempts,
@@ -157,6 +157,7 @@ interface RepoCollectionState {
 
 interface RunCollectionOptions {
   token?: string;
+  tokens?: string[];
   retentionDays: number;
   cliOptions: CollectCliOptions;
   targetRepos: string[];
@@ -708,6 +709,7 @@ export async function collectRepo(
 
 export async function runCollection({
   token,
+  tokens,
   retentionDays,
   cliOptions,
   targetRepos,
@@ -715,13 +717,26 @@ export async function runCollection({
   octokit,
   collectRepoImpl = collectRepo,
 }: RunCollectionOptions) {
-  if (!token) throw new Error('GITHUB_TOKEN is required');
+  if (tokens && tokens.length > 1 && !octokit) {
+    await Promise.all(tokens.map((laneToken, index) => runCollection({
+      token: laneToken,
+      retentionDays,
+      cliOptions,
+      targetRepos: targetRepos.filter((_, repoIndex) => repoIndex % tokens.length === index),
+      reposConfig,
+      collectRepoImpl,
+    })));
+    return;
+  }
+
+  const activeToken = tokens?.[0] ?? token;
+  if (!activeToken) throw new Error('No GitHub token found. Add gh-token.txt or run gh auth login.');
   if (targetRepos.length === 0) {
     console.log('No repositories configured. Skipping collection.');
     return;
   }
 
-  const client = octokit ?? createOctokit(token);
+  const client = octokit ?? createOctokit(activeToken);
   const failures: string[] = [];
   let stoppedEarly: RateLimitAbortError | null = null;
 
@@ -797,7 +812,7 @@ export async function main() {
     return;
   }
 
-  const token = process.env.GITHUB_TOKEN;
+  const tokens = resolveGitHubTokens();
   const reposConfig = readReposConfig();
   const targetRepos = resolveTargetRepos(getRepoNames(reposConfig), cliOptions.repoName);
   const retentionDays = parseInt(process.env.RETENTION_DAYS || '90');
@@ -812,9 +827,10 @@ export async function main() {
   log(`Node version: ${process.version}`);
   log(`ETL_DIR: ${ETL_DIR}`);
   log(`State storage: PostgreSQL`);
+  log(`GitHub token lanes: ${tokens.length}`);
 
   await runCollection({
-    token,
+    tokens,
     retentionDays,
     cliOptions,
     targetRepos,
