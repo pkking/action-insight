@@ -48,6 +48,22 @@ repositories:
         comparison_name: Nightly
         static_resources: {A2: 72, A3: 16}
 
+  - repo: ascend/pytorch
+    comparison_group: ascend-pytorch
+    workflows:
+      - name: PyTorch NPU Full Test (v2.7.1)
+        file: npu-full-test.yml
+        comparison_name: Full Test
+      - name: PyTorch NPU Sync Test
+        file: npu-sync-test.yml
+        comparison_name: Sync Test
+      - name: NPU Build and Test
+        file: npu-test.yml
+        comparison_name: Build and Test
+      - name: Torch NPU Upstream v2.7.1 Trigger
+        file: torch-npu-upstream-test-trigger.yml
+        comparison_name: Upstream Test
+
   - repo: ByteDance-Seed/VeOmni
     comparison_group: veomni
     workflows:
