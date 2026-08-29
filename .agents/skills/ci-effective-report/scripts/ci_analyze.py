@@ -51,6 +51,7 @@ SKILL_DIR = SCRIPT_DIR.parent
 REPO_ROOT = SKILL_DIR.parents[2]
 ENV_FILE = REPO_ROOT / ".env"
 DEFAULT_CONFIG = REPO_ROOT / ".github-ci-efficiency.yaml"
+DEFAULT_DRILLDOWN_CONFIG = REPO_ROOT / "config" / "drilldown-workflows.yaml"
 DEFAULT_STEP_NAMES = SKILL_DIR / "references" / "step-names.json"
 DEFAULT_PG_URL = "postgresql://action_insight:action_insight@localhost:5433/action_insight"
 DEFAULT_DAYS = 30
@@ -80,6 +81,7 @@ class PostgresClient:
             sys.exit(1)
         self._pg8000 = pg8000.dbapi
         self.db_url = db_url
+        self._conn = None
 
     @staticmethod
     def _parse_dsn(url: str) -> dict:
@@ -96,17 +98,25 @@ class PostgresClient:
 
     def query(self, sql: str, params: tuple | None = None) -> list[dict]:
         try:
-            with self._pg8000.connect(**self._parse_dsn(self.db_url)) as conn:
-                cur = conn.cursor()
-                cur.execute("SET TRANSACTION READ ONLY")
-                cur.execute(sql, params or ())
-                cols = [d[0] for d in cur.description] if cur.description else []
-                return [dict(zip(cols, row)) for row in cur.fetchall()]
+            if self._conn is None:
+                self._conn = self._pg8000.connect(**self._parse_dsn(self.db_url))
+                cur = self._conn.cursor()
+                cur.execute("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
+                self._conn.commit()
+            cur = self._conn.cursor()
+            cur.execute(sql, params or ())
+            cols = [d[0] for d in cur.description] if cur.description else []
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
         except self._pg8000.Error as e:
             print(f"[ERROR] PostgreSQL query failed: {e}")
             snippet = sql[:200] + "..." if len(sql) > 200 else sql
             print(f"  SQL: {snippet}")
             sys.exit(1)
+
+    def close(self) -> None:
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
 
 
 # ─── 数据获取 ──────────────────────────────────────────────────────────
@@ -257,18 +267,18 @@ def fetch_jobs(client: PostgresClient, run_ids: list[int]) -> list[dict]:
         batch = run_ids[i : i + 500]
         id_list = ",".join(str(x) for x in batch)
         jobs = client.query(
-            f"SELECT id, run_id, name, status, conclusion, "
-            f"created_at, started_at, completed_at, html_url, "
-            f"queue_duration_seconds, duration_seconds, labels_json, "
-            f"resource_model AS card_model, resource_count AS card_count "
-            f"FROM jobs WHERE run_id IN ({id_list}) "
-            f"UNION ALL "
             f"SELECT wj.job_id AS id, wj.run_id, wj.name, wj.status, wj.conclusion, "
             f"wj.created_at, wj.started_at, wj.completed_at, wj.html_url, "
             f"wj.queue_duration_seconds, wj.duration_seconds, wj.labels_json, "
             f"wj.resource_model AS card_model, wj.resource_count AS card_count "
             f"FROM workflow_jobs wj WHERE wj.run_id IN ({id_list}) "
-            f"AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id = wj.job_id)"
+            f"UNION ALL "
+            f"SELECT j.id, j.run_id, j.name, j.status, j.conclusion, "
+            f"j.created_at, j.started_at, j.completed_at, j.html_url, "
+            f"j.queue_duration_seconds, j.duration_seconds, j.labels_json, "
+            f"j.resource_model AS card_model, j.resource_count AS card_count "
+            f"FROM jobs j WHERE j.run_id IN ({id_list}) "
+            f"AND NOT EXISTS (SELECT 1 FROM workflow_jobs wj WHERE wj.job_id = j.id)"
         )
         for job in jobs:
             try:
@@ -301,7 +311,7 @@ def fetch_recent_resource_jobs(client: PostgresClient, repo_id: int, entries: li
 
 
 def fetch_steps(client: PostgresClient, job_ids: list[int]) -> list[dict]:
-    """Fetch steps for jobs in bounded batches."""
+    """Fetch attempt-scoped steps, with legacy rows only as a migration fallback."""
     if not job_ids:
         return []
     all_steps = []
@@ -312,9 +322,14 @@ def fetch_steps(client: PostgresClient, job_ids: list[int]) -> list[dict]:
         batch = job_ids[i : i + batch_size]
         id_list = ",".join(str(x) for x in batch)
         steps = client.query(
-            f"SELECT job_id, number, name, status, conclusion, "
-            f"started_at, completed_at, duration_seconds "
-            f"FROM steps WHERE job_id IN ({id_list})"
+            f"SELECT ws.job_id, ws.step_number AS number, ws.name, ws.status, ws.conclusion, "
+            f"ws.started_at, ws.completed_at, ws.duration_seconds "
+            f"FROM workflow_steps ws WHERE ws.job_id IN ({id_list}) "
+            f"UNION ALL "
+            f"SELECT s.job_id, s.number, s.name, s.status, s.conclusion, "
+            f"s.started_at, s.completed_at, s.duration_seconds "
+            f"FROM steps s WHERE s.job_id IN ({id_list}) "
+            f"AND NOT EXISTS (SELECT 1 FROM workflow_steps ws WHERE ws.job_id=s.job_id AND ws.step_number=s.number)"
         )
         all_steps.extend(steps)
         if (i // batch_size + 1) % 20 == 0 or i + batch_size >= total:
@@ -1895,7 +1910,7 @@ def print_summary(repos_data: dict[str, dict]):
 
 # ─── 主流程 ─────────────────────────────────────────────────────────────
 
-def fetch_all_for_repo(client: PostgresClient, repo_id: int, date_from: str, date_to: str, skip_steps: bool = False, workflow_patterns: list[str] | None = None, workflow_files: list[str] | None = None):
+def fetch_all_for_repo(client: PostgresClient, repo_id: int, date_from: str, date_to: str, skip_steps: bool = False, step_run_ids: set[int] | None = None, workflow_patterns: list[str] | None = None, workflow_files: list[str] | None = None):
     """Fetch all data for a single repo.
 
     传入 workflow_patterns 时，runs 在 DB 层按工作流名过滤；传入 workflow_files 时
@@ -1908,11 +1923,8 @@ def fetch_all_for_repo(client: PostgresClient, repo_id: int, date_from: str, dat
 
     run_ids = [r["id"] for r in runs]
     jobs = fetch_jobs(client, run_ids)
-    job_ids = [j["id"] for j in jobs]
-    if skip_steps:
-        steps = []
-    else:
-        steps = fetch_steps(client, job_ids)
+    job_ids = [j["id"] for j in jobs if step_run_ids is None or j["run_id"] in step_run_ids]
+    steps = [] if skip_steps else fetch_steps(client, job_ids)
 
     pr_metrics = fetch_pr_metrics(client, [repo_id], date_from, date_to)
     pr_ids = [pm["id"] for pm in pr_metrics]
@@ -1945,6 +1957,7 @@ def main():
     parser.add_argument("--skip-steps", action="store_true", help="跳过 steps 数据（加速查询）")
     parser.add_argument("--output", "-o", help="输出 Excel 文件路径（默认自动生成）")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="项目/workflow 对比配置（默认仓库根目录 .github-ci-efficiency.yaml）")
+    parser.add_argument("--drilldown-config", default=str(DEFAULT_DRILLDOWN_CONFIG), help="下钻 workflow 白名单配置；默认 config/drilldown-workflows.yaml")
     parser.add_argument("--pg-url", help="PostgreSQL 连接串；默认读取 PG_DATABASE_URL")
     parser.add_argument("--success-only", action="store_true", help="job/workflow 耗时统计只算 conclusion=success 的样本（目的2 口径，ADR-005）")
     parser.add_argument("--min-duration", type=float, default=5, help="耗时下限(分钟)：低于此值的 run/job/step 不计入统计(avg/p50/p90)与关键路径，默认 5")
@@ -2026,9 +2039,17 @@ def main():
         wf_files = [w["file"] for w in entries if w.get("file")] or None
         selected = args.workflow or [w["name"] for w in entries]
         print(f"\n⏳ 获取 {repo_name} (id={repo_id}) 数据..." + (f" workflow={selected}" if selected else ""))
+        # Terminal-only output has no consumer for step rows. Drill-down only
+        # needs steps belonging to slow runs, not the complete range.
+        no_step_consumer = args.no_excel and args.no_drilldown and not args.insights
+        step_run_ids = None
+        if not no_step_consumer and args.no_excel and not args.insights:
+            preview_runs = fetch_runs(client, [repo_id], date_from, date_to, wf_patterns, wf_files)
+            step_run_ids = {r["id"] for r in preview_runs if sec_to_min(r.get("duration_seconds")) >= args.drilldown_min}
         data = fetch_all_for_repo(
             client, repo_id, date_from, date_to,
-            skip_steps=args.skip_steps,
+            skip_steps=args.skip_steps or no_step_consumer,
+            step_run_ids=step_run_ids,
             workflow_patterns=wf_patterns,
             workflow_files=wf_files,
         )
@@ -2147,14 +2168,36 @@ def main():
             write_html_report(html_out, repo_name, date_from, date_to, runs, jobs, steps,
                               step_names_map, args.success_only, args.min_duration, api_info)
 
-    # 下钻 HTML（默认生成，ADR-009）
+    # 下钻 HTML uses a separate, explicit workflow allowlist. This prevents
+    # scheduled and GPU workflows from entering a PR/NPU diagnostic by name.
     if not args.no_drilldown:
+        drilldown_entries = parse_config_entries(args.drilldown_config)
+        if not drilldown_entries:
+            parser.error(f"下钻 workflow 配置为空或不存在: {args.drilldown_config}")
+        drilldown_repos_data = {}
+        for repo_name in repo_names:
+            entries = drilldown_entries.get(repo_name, [])
+            if not entries:
+                continue
+            _, repo_id = _resolve(repo_name)
+            wf_patterns = [w["name"] for w in entries if not w.get("file")] or None
+            wf_files = [w["file"] for w in entries if w.get("file")] or None
+            preview_runs = fetch_runs(client, [repo_id], date_from, date_to, wf_patterns, wf_files)
+            slow_run_ids = {r["id"] for r in preview_runs if sec_to_min(r.get("duration_seconds")) >= args.drilldown_min}
+            data = fetch_all_for_repo(
+                client, repo_id, date_from, date_to,
+                step_run_ids=slow_run_ids,
+                workflow_patterns=wf_patterns,
+                workflow_files=wf_files,
+            )
+            normalize_configured_workflows(data["runs"], entries)
+            drilldown_repos_data[repo_name] = data
         date_tag = f"{date_from}_to_{date_to}"
         repo_tag = "_vs_".join(r.replace("/", "_") for r in repo_names)
         drill_out = (args.output.replace(".xlsx", "-drilldown.html") if args.output
                      else f"{repo_tag}-drilldown-{date_tag}.html")
-        api_info = "数据源：Action Insight 本地 PostgreSQL"
-        write_drilldown_html(drill_out, repos_data, date_from, date_to, step_names_map, api_info, min_minutes=args.drilldown_min, resource_pools=resource_pools)
+        api_info = "数据源：Action Insight 本地 PostgreSQL；workflow 白名单已排除定时与 GPU 任务"
+        write_drilldown_html(drill_out, drilldown_repos_data, date_from, date_to, step_names_map, api_info, min_minutes=args.drilldown_min, resource_pools=resource_pools)
 
 
 if __name__ == "__main__":

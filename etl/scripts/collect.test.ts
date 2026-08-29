@@ -17,7 +17,7 @@ vi.mock('./pg-storage.ts', async () => {
     writeCollectionState: vi.fn().mockResolvedValue(undefined),
     getCollectedDates: vi.fn().mockResolvedValue([]),
     getExistingRunIds: vi.fn().mockResolvedValue(new Set()),
-	    getExistingRunIdsWithSteps: vi.fn().mockResolvedValue(new Map()),
+	    getCachedWorkflowAttempts: vi.fn().mockResolvedValue(new Map()),
 	    writeRuns: vi.fn().mockResolvedValue(undefined),
 	    writeWorkflowAttempts: vi.fn().mockResolvedValue(undefined),
 	  };
@@ -29,7 +29,7 @@ import {
   writeCollectionState,
   getCollectedDates,
   getExistingRunIds,
-  getExistingRunIdsWithSteps,
+  getCachedWorkflowAttempts,
   writeRuns,
   writeWorkflowAttempts,
 } from './pg-storage';
@@ -85,7 +85,7 @@ describe('collect rate limit handling', () => {
     vi.mocked(readCollectionState).mockResolvedValue(null);
     vi.mocked(getCollectedDates).mockResolvedValue([]);
     vi.mocked(getExistingRunIds).mockResolvedValue(new Set());
-    vi.mocked(getExistingRunIdsWithSteps).mockResolvedValue(new Map());
+    vi.mocked(getCachedWorkflowAttempts).mockResolvedValue(new Map());
     vi.mocked(writeRuns).mockResolvedValue(undefined);
     vi.mocked(writeCollectionState).mockResolvedValue(undefined);
   });
@@ -634,7 +634,7 @@ describe('collect rate limit handling', () => {
     const repo = 'acme/widgets';
     mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
     vi.mocked(getExistingRunIds).mockResolvedValue(new Set([101]));
-    vi.mocked(getExistingRunIdsWithSteps).mockResolvedValue(new Map());
+    vi.mocked(getCachedWorkflowAttempts).mockResolvedValue(new Map());
 
     const request = vi.fn().mockImplementation((route: string, params: Record<string, unknown>) => {
       if (route === 'GET /repos/{owner}/{repo}/actions/runs') {
@@ -696,8 +696,8 @@ describe('collect rate limit handling', () => {
 
     const repo = 'acme/widgets';
     mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
-    vi.mocked(getExistingRunIdsWithSteps).mockResolvedValue(
-      new Map([[101, '2026-04-18T10:05:00Z']])
+    vi.mocked(getCachedWorkflowAttempts).mockResolvedValue(
+      new Map([['101:1', { updatedAt: '2026-04-18T10:05:00Z', stepPolicyHash: null }]])
     );
 
     const request = vi.fn().mockImplementation((route: string, params: Record<string, unknown>) => {
@@ -762,7 +762,7 @@ describe('collect rate limit handling', () => {
     mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
 
     const request = vi.fn().mockImplementation((route: string) => {
-      if (route === 'GET /repos/{owner}/{repo}/actions/runs') {
+      if (route === 'GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs') {
         return Promise.resolve({
           data: {
             workflow_runs: [
@@ -802,8 +802,8 @@ describe('collect rate limit handling', () => {
     }
 
     expect(request).toHaveBeenCalledWith(
-      'GET /repos/{owner}/{repo}/actions/runs',
-      expect.objectContaining({ created: '2026-04-17T00:00:00Z..2026-04-18T23:59:59Z' })
+      'GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs',
+      expect.objectContaining({ workflow_id: 'ci.yml', created: '2026-04-17T00:00:00Z..2026-04-18T23:59:59Z' })
     );
   });
 
@@ -873,11 +873,7 @@ describe('collect rate limit handling', () => {
     mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
 
     const request = vi.fn().mockImplementation((route: string) => {
-      if (route === 'GET /repos/{owner}/{repo}/actions/workflows') {
-        return Promise.resolve({ data: { workflows: [{ id: 1, path: '.github/workflows/ci.yml' }] } });
-      }
-
-      if (route === 'GET /repos/{owner}/{repo}/actions/runs' || route === 'GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs') {
+      if (route === 'GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs') {
         return Promise.resolve({
           data: {
             workflow_runs: [

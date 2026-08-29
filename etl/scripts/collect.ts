@@ -16,7 +16,7 @@ import { createOctokit, getRateLimitDetails, isGitHubRateLimitError, resolveGitH
 import {
   writeRuns,
   writeWorkflowAttempts,
-  getExistingRunIdsWithSteps,
+  getCachedWorkflowAttempts,
   readCollectionState,
   writeCollectionState,
   getCollectedDates,
@@ -279,23 +279,6 @@ async function fetchAllJobPages(fetchPage: (page: number) => Promise<GitHubRunJo
   }
 }
 
-async function fetchTrackedWorkflowIds(octokit: Octokit, owner: string, repo: string, files: string[]): Promise<number[]> {
-  const expected = new Set(files.map(file => file.replace(/^\.github\/workflows\//, '')));
-  const ids: number[] = [];
-  for (let page = 1; ; page += 1) {
-    const response = await withRetry(() => octokit.request('GET /repos/{owner}/{repo}/actions/workflows', {
-      owner, repo, per_page: PER_PAGE, page,
-    }));
-    const workflows = response.data.workflows as Array<{ id: number; path?: string }>;
-    for (const workflow of workflows) {
-      const file = workflow.path?.split('/').pop();
-      if (file && expected.has(file)) ids.push(workflow.id);
-    }
-    if (workflows.length < PER_PAGE) break;
-  }
-  return ids;
-}
-
 export async function fetchJobsForRunAttempt(
   octokit: Octokit,
   owner: string,
@@ -426,24 +409,19 @@ export async function collectRepo(
   let state = await loadRepoState(repo, effectiveDays, now);
   log(`State: latest=${state.latest || '(none)'}, dates=${state.collectedDates.length}, historyComplete=${state.historyComplete}`);
 
-  const trackedFiles = repoConfig.workflows.map(workflow => workflow.file);
-  const trackedWorkflowIds = trackedFiles.length && !options.skipJobs
-    ? await fetchTrackedWorkflowIds(octokit, owner, repoName, trackedFiles)
-    : [];
-  if (!options.skipJobs && trackedFiles.length && trackedWorkflowIds.length !== trackedFiles.length) {
-    throw new Error(`Unable to resolve all tracked workflows for ${repo}: expected ${trackedFiles.length}, found ${trackedWorkflowIds.length}`);
-  }
+  // GitHub accepts a workflow filename in the workflow_id route segment, so
+  // use the configured stable identity directly instead of listing metadata.
+  const trackedWorkflowIds = repoConfig.workflows.map(workflow => workflow.file);
   if (trackedWorkflowIds.length) console.log(`Collecting ${trackedWorkflowIds.length} tracked workflow(s) only.`);
 
-  const existingRunIdsWithSteps = await getExistingRunIdsWithSteps(repo);
-  const cachedRunIdsWithSteps = options.skipJobs ? new Map<number, string>() : existingRunIdsWithSteps;
-  log(`Existing runs with cached steps: ${cachedRunIdsWithSteps.size}`);
+  const cachedWorkflowAttempts = options.skipJobs ? new Map() : await getCachedWorkflowAttempts(repo);
+  log(`Existing cached workflow attempts: ${cachedWorkflowAttempts.size}`);
 
   function toCreatedParam(window: CollectionWindow): string {
     return toCreatedRange(window);
   }
 
-  async function fetchRunsForWindow(window: CollectionWindow, workflowId?: number): Promise<{ runs: Run[]; saturated: boolean }> {
+  async function fetchRunsForWindow(window: CollectionWindow, workflowId?: string): Promise<{ runs: Run[]; saturated: boolean }> {
     const createdParam = toCreatedParam(window);
     log(`Fetching runs with filter: ${createdParam}`);
 
@@ -505,20 +483,21 @@ export async function collectRepo(
         }, reposConfig, repoConfig);
         persistedCount++;
 
-        const cachedUpdatedAt = cachedRunIdsWithSteps.get(runId);
-        const isCachedRunFresh =
-          !!cachedUpdatedAt && Date.parse(cachedUpdatedAt) >= Date.parse(run.updated_at);
+        const cachedAttempt = cachedWorkflowAttempts.get(runAttemptKey(runId, baseRun.runAttempt));
+        const isCachedAttemptFresh =
+          baseRun.status === 'completed' &&
+          cachedAttempt?.stepPolicyHash === baseRun.stepPolicyHash &&
+          Date.parse(cachedAttempt.updatedAt) >= Date.parse(run.updated_at);
         const hasWorkflowRules = repoConfig.workflows.length > 0;
-        const supportsStepsCache = baseRun.runAttempt === 1 && baseRun.status === 'completed';
 
         if (options.skipJobs) {
           log(`Skipping jobs for run #${runId} - workflow-only mode`);
         } else if (hasWorkflowRules && !baseRun.tracked) {
           skippedJobsCount++;
           log(`Skipping jobs for run #${runId} - workflow is not tracked (${baseRun.workflowParseStatus ?? 'unknown'})`);
-        } else if (supportsStepsCache && isCachedRunFresh) {
+        } else if (isCachedAttemptFresh) {
           skippedJobsCount++;
-          log(`Skipping jobs for run #${runId} - already cached with steps`);
+          log(`Skipping jobs for run #${runId} attempt ${baseRun.runAttempt ?? 1} - already cached`);
         } else {
           log(`Fetching jobs for run #${runId} attempt ${baseRun.runAttempt ?? 1} (${run.name})...`);
           const jobsStartTime = Date.now();
@@ -630,7 +609,7 @@ export async function collectRepo(
     return { runs: allRuns, saturated: false };
   }
 
-  async function collectRunsForWindow(window: CollectionWindow, workflowId?: number): Promise<Run[]> {
+  async function collectRunsForWindow(window: CollectionWindow, workflowId?: string): Promise<Run[]> {
     const { runs, saturated } = await fetchRunsForWindow(window, workflowId);
     if (!saturated) {
       return runs;
@@ -681,7 +660,6 @@ export async function collectRepo(
   console.log(`Collecting ${windows.length} window(s) for ${repo} (${rangeStart} → ${rangeEnd})`);
 
   const allRunsMap = new Map<string, Run>();
-  const completedWindows: CollectionWindow[] = [];
   for (let wi = 0; wi < windows.length; wi += 1) {
     const window = windows[wi];
     console.log(`Window ${wi + 1}/${windows.length} (${window.start}..${window.end})`);
@@ -693,16 +671,14 @@ export async function collectRepo(
       for (const run of windowRuns) {
         allRunsMap.set(runAttemptKey(run.id, run.runAttempt), run);
       }
-      completedWindows.push(window);
-
       const checkpointState = await persistCollectedRuns(
         repo,
         state,
-        Array.from(allRunsMap.values()),
+        windowRuns,
         retentionDays,
         reposConfig,
         repoConfig,
-        completedWindows,
+        [window],
         now,
       );
       state = checkpointState;
@@ -715,11 +691,11 @@ export async function collectRepo(
         const persistedState = await persistCollectedRuns(
           repo,
           state,
-          Array.from(allRunsMap.values()),
+          err.partialRuns,
           retentionDays,
           reposConfig,
           repoConfig,
-          completedWindows,
+          [],
           now,
         );
         log(`Persisted partial raw collection state for ${repo}: ${persistedState.collectedDates.length} retained date(s) (${wi + 1}/${windows.length}).`);
@@ -728,9 +704,7 @@ export async function collectRepo(
     }
   }
 
-  const allRuns = Array.from(allRunsMap.values());
-  log(`Total workflow attempts collected: ${allRuns.length}`);
-  await persistCollectedRuns(repo, state, allRuns, retentionDays, reposConfig, repoConfig, completedWindows, now);
+  log(`Total workflow attempts collected: ${allRunsMap.size}`);
 }
 
 export async function runCollection({

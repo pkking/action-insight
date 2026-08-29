@@ -87,6 +87,49 @@ repositories:
         comparison_name: Unit
         static_resources: {Ascend 910B: 8}
 
+  - repo: ascend/pytorch
+    comparison_group: ascend-pytorch
+    workflows:
+      - name: PyTorch NPU Full Test (v2.7.1)
+        file: npu-full-test.yml
+        comparison_name: Full Test
+      - name: PyTorch NPU Sync Test
+        file: npu-sync-test.yml
+        comparison_name: Sync Test
+      - name: NPU Build and Test
+        file: npu-test.yml
+        comparison_name: Build and Test
+      - name: Torch NPU Upstream v2.7.1 Trigger
+        file: torch-npu-upstream-test-trigger.yml
+        comparison_name: Upstream Test
+      - name: PyTorch CI Trigger
+        file: pytorch_ci_trigger.yml
+        comparison_name: PR Trigger
+
+  - repo: ByteDance-Seed/VeOmni
+    comparison_group: veomni
+    workflows:
+      - name: GPU e2e tests
+        file: gpu_e2e_test.yml
+        comparison_name: E2E
+        static_resources:
+          L20: 8
+      - name: NPU e2e tests
+        file: npu_e2e_test.yml
+        comparison_name: E2E
+        static_resources:
+          Ascend 910B: 8
+      - name: GPU unit tests
+        file: gpu_unit_tests.yml
+        comparison_name: Unit
+        static_resources:
+          L20: 8
+      - name: NPU unit tests
+        file: npu_unit_tests.yml
+        comparison_name: Unit
+        static_resources:
+          Ascend 910B: 8
+
   - repo: vllm-project/vllm-ascend
     comparison_group: vllm
     workflows:

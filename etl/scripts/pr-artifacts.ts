@@ -2,6 +2,7 @@ import * as prMetricsModule from '../../src/lib/pr-metrics';
 import type { PullRequestRef, PullRequestSnapshot, Run } from '../../src/lib/types';
 import { isGitHubRateLimitError, checkRateLimitBudget } from './github';
 import {
+  readMergedPullRequestSnapshots,
   readPullRequestResolutionCache,
   type PullRequestResolutionCacheEntry,
   writePrMetrics,
@@ -202,12 +203,15 @@ async function fetchPullRequestSnapshots(
   owner: string,
   repo: string,
   numbers: number[],
+  cachedSnapshots: Map<number, PullRequestSnapshot>,
   warn: (...args: unknown[]) => void
 ): Promise<Map<number, PullRequestSnapshot>> {
-  const snapshots = new Map<number, PullRequestSnapshot>();
+  const snapshots = new Map(cachedSnapshots);
   let rateLimited = false;
 
   for (const number of numbers) {
+    // Merged PR fields are immutable; local metrics are a durable snapshot.
+    if (snapshots.has(number)) continue;
     if (rateLimited) {
       warn(`Skipping PR #${number} fetch: rate limit reached`);
       continue;
@@ -407,9 +411,10 @@ export async function rebuildPullRequestArtifacts({
   }
 
   log(`Building PR artifacts for ${repoKey}: ${prNumbers.length} PRs`);
+  const cachedMergedPullRequests = await readMergedPullRequestSnapshots(repoKey, prNumbers);
   const pullRequests = octokit
-    ? await fetchPullRequestSnapshots(octokit, owner, repo, prNumbers, warn)
-    : new Map<number, PullRequestSnapshot>();
+    ? await fetchPullRequestSnapshots(octokit, owner, repo, prNumbers, cachedMergedPullRequests, warn)
+    : cachedMergedPullRequests;
   const retentionStartDate = collectedDates.sort()[0];
   const result = buildPullRequestIndex({
     repo: repoKey,

@@ -178,7 +178,8 @@ class FetchJobsTests(unittest.TestCase):
         client = Client()
         MODULE.fetch_jobs(client, [1])
         self.assertIn("FROM workflow_jobs", client.sql)
-        self.assertIn("NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id = wj.job_id)", client.sql)
+        self.assertIn("FROM workflow_jobs wj", client.sql)
+        self.assertIn("NOT EXISTS (SELECT 1 FROM workflow_jobs wj WHERE wj.job_id = j.id)", client.sql)
 
 
 class BuildDrilldownDataTests(unittest.TestCase):
