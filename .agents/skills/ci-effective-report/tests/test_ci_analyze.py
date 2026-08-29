@@ -83,6 +83,11 @@ class ConfigTests(unittest.TestCase):
         ]
         self.assertEqual(MODULE.workflow_resource_summary(jobs), "A2 × 3卡；A3 × 2卡；x86 CPU × 4核")
 
+    def test_workflow_resource_summary_prefers_static_workflow_requirements(self):
+        jobs = [{"run_id": 1, "card_model": "linux-aarch64-a3", "card_count": 64}]
+        static = {"L20": 8}
+        self.assertEqual(MODULE.workflow_resource_summary(jobs, static), "L20 × 8卡")
+
     def test_overview_distinguishes_total_runs_from_valid_successes(self):
         row = MODULE.build_overview([{
             "repo": "o/r",
