@@ -1,0 +1,51 @@
+# PR/NPU drill-down allowlist. Workflows absent from this file never appear in
+# drill-down reports: in particular scheduled/nightly and CUDA/GPU workflows.
+repositories:
+  - repo: sgl-project/sglang
+    workflows:
+      - name: PR Test (NPU)
+        file: pr-test-npu.yml
+  - repo: verl-project/verl
+    workflows:
+      - name: e2e_ascend
+        file: e2e_ascend.yml
+      - name: e2e_ppo_trainer
+        file: e2e_ppo_trainer.yml
+  - repo: vllm-project/vllm-ascend
+    workflows:
+      - name: E2E
+        file: pr_test.yaml
+  - repo: areal-project/AReaL
+    workflows:
+      - name: AReaL CI on GCP runner
+        file: test-areal.yml
+  - repo: alibaba/ROLL
+    workflows:
+      - name: MindSpeed NPU Tests
+        file: ci-npu-mindspeed.yml
+      - name: Tests
+        file: ci-npu-test.yml
+  - repo: triton-lang/triton
+    workflows:
+      - name: Integration Tests
+        file: ci.yml
+  - repo: triton-lang/triton-ascend
+    workflows:
+      - name: Integration Tests
+        file: ci.yml
+  - repo: tile-ai/tilelang
+    workflows:
+      - name: CI
+        file: ci.yml
+  - repo: tile-ai/tilelang-mlir-ascend
+    workflows:
+      - name: Base CI
+        file: base_ci.yml
+  - repo: modelscope/ms-swift
+    workflows:
+      - name: citest-npu
+        file: citest_npu.yaml
+  - repo: hiyouga/LlamaFactory
+    workflows:
+      - name: tests_npu
+        file: tests_npu.yml

@@ -51,6 +51,7 @@ SKILL_DIR = SCRIPT_DIR.parent
 REPO_ROOT = SKILL_DIR.parents[2]
 ENV_FILE = REPO_ROOT / ".env"
 DEFAULT_CONFIG = REPO_ROOT / ".github-ci-efficiency.yaml"
+DEFAULT_DRILLDOWN_CONFIG = REPO_ROOT / "config" / "drilldown-workflows.yaml"
 DEFAULT_STEP_NAMES = SKILL_DIR / "references" / "step-names.json"
 DEFAULT_PG_URL = "postgresql://action_insight:action_insight@localhost:5433/action_insight"
 DEFAULT_DAYS = 30
@@ -1949,6 +1950,7 @@ def main():
     parser.add_argument("--skip-steps", action="store_true", help="跳过 steps 数据（加速查询）")
     parser.add_argument("--output", "-o", help="输出 Excel 文件路径（默认自动生成）")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="项目/workflow 对比配置（默认仓库根目录 .github-ci-efficiency.yaml）")
+    parser.add_argument("--drilldown-config", default=str(DEFAULT_DRILLDOWN_CONFIG), help="下钻 workflow 白名单配置；默认 config/drilldown-workflows.yaml")
     parser.add_argument("--pg-url", help="PostgreSQL 连接串；默认读取 PG_DATABASE_URL")
     parser.add_argument("--success-only", action="store_true", help="job/workflow 耗时统计只算 conclusion=success 的样本（目的2 口径，ADR-005）")
     parser.add_argument("--min-duration", type=float, default=5, help="耗时下限(分钟)：低于此值的 run/job/step 不计入统计(avg/p50/p90)与关键路径，默认 5")
@@ -2155,14 +2157,36 @@ def main():
             write_html_report(html_out, repo_name, date_from, date_to, runs, jobs, steps,
                               step_names_map, args.success_only, args.min_duration, api_info)
 
-    # 下钻 HTML（默认生成，ADR-009）
+    # 下钻 HTML uses a separate, explicit workflow allowlist. This prevents
+    # scheduled and GPU workflows from entering a PR/NPU diagnostic by name.
     if not args.no_drilldown:
+        drilldown_entries = parse_config_entries(args.drilldown_config)
+        if not drilldown_entries:
+            parser.error(f"下钻 workflow 配置为空或不存在: {args.drilldown_config}")
+        drilldown_repos_data = {}
+        for repo_name in repo_names:
+            entries = drilldown_entries.get(repo_name, [])
+            if not entries:
+                continue
+            _, repo_id = _resolve(repo_name)
+            wf_patterns = [w["name"] for w in entries if not w.get("file")] or None
+            wf_files = [w["file"] for w in entries if w.get("file")] or None
+            preview_runs = fetch_runs(client, [repo_id], date_from, date_to, wf_patterns, wf_files)
+            slow_run_ids = {r["id"] for r in preview_runs if sec_to_min(r.get("duration_seconds")) >= args.drilldown_min}
+            data = fetch_all_for_repo(
+                client, repo_id, date_from, date_to,
+                step_run_ids=slow_run_ids,
+                workflow_patterns=wf_patterns,
+                workflow_files=wf_files,
+            )
+            normalize_configured_workflows(data["runs"], entries)
+            drilldown_repos_data[repo_name] = data
         date_tag = f"{date_from}_to_{date_to}"
         repo_tag = "_vs_".join(r.replace("/", "_") for r in repo_names)
         drill_out = (args.output.replace(".xlsx", "-drilldown.html") if args.output
                      else f"{repo_tag}-drilldown-{date_tag}.html")
-        api_info = "数据源：Action Insight 本地 PostgreSQL"
-        write_drilldown_html(drill_out, repos_data, date_from, date_to, step_names_map, api_info, min_minutes=args.drilldown_min, resource_pools=resource_pools)
+        api_info = "数据源：Action Insight 本地 PostgreSQL；workflow 白名单已排除定时与 GPU 任务"
+        write_drilldown_html(drill_out, drilldown_repos_data, date_from, date_to, step_names_map, api_info, min_minutes=args.drilldown_min, resource_pools=resource_pools)
 
 
 if __name__ == "__main__":
