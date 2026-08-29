@@ -43,6 +43,19 @@ repos:
       - file: e2e_ascend.yml
       - file: e2e_ppo_trainer.yml
       - file: nightly_ascend.yml
+  - repo: ascend/pytorch
+    workflows:
+      - file: npu-full-test.yml
+      - file: npu-sync-test.yml
+      - file: npu-test.yml
+      - file: torch-npu-upstream-test-trigger.yml
+      - file: pytorch_ci_trigger.yml
+  - repo: ByteDance-Seed/VeOmni
+    workflows:
+      - file: gpu_e2e_test.yml
+      - file: npu_e2e_test.yml
+      - file: gpu_unit_tests.yml
+      - file: npu_unit_tests.yml
   - repo: vllm-project/vllm-ascend
     workflows:
       - file: pr_test.yaml

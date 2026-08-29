@@ -11,6 +11,18 @@ repositories:
         file: e2e_ascend.yml
       - name: e2e_ppo_trainer
         file: e2e_ppo_trainer.yml
+  - repo: ascend/pytorch
+    workflows:
+      - name: NPU Build and Test
+        file: npu-test.yml
+      - name: PyTorch CI Trigger
+        file: pytorch_ci_trigger.yml
+  - repo: ByteDance-Seed/VeOmni
+    workflows:
+      - name: NPU e2e tests
+        file: npu_e2e_test.yml
+      - name: NPU unit tests
+        file: npu_unit_tests.yml
   - repo: vllm-project/vllm-ascend
     workflows:
       - name: E2E
