@@ -18,6 +18,8 @@ vi.mock('./pg-storage.ts', async () => {
     getCollectedDates: vi.fn().mockResolvedValue([]),
     getExistingRunIds: vi.fn().mockResolvedValue(new Set()),
 	    getCachedWorkflowAttempts: vi.fn().mockResolvedValue(new Map()),
+    readRunListValidator: vi.fn().mockResolvedValue(null),
+    writeRunListValidator: vi.fn().mockResolvedValue(undefined),
 	    writeRuns: vi.fn().mockResolvedValue(undefined),
 	    writeWorkflowAttempts: vi.fn().mockResolvedValue(undefined),
 	  };
@@ -30,6 +32,8 @@ import {
   getCollectedDates,
   getExistingRunIds,
   getCachedWorkflowAttempts,
+  readRunListValidator,
+  writeRunListValidator,
   writeRuns,
   writeWorkflowAttempts,
 } from './pg-storage';
@@ -81,11 +85,14 @@ describe('parseRunnerResourceLabels', () => {
 describe('collect rate limit handling', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.clearAllMocks();
     delete process.env.ENABLE_SQLITE_FALLBACK;
     vi.mocked(readCollectionState).mockResolvedValue(null);
     vi.mocked(getCollectedDates).mockResolvedValue([]);
     vi.mocked(getExistingRunIds).mockResolvedValue(new Set());
     vi.mocked(getCachedWorkflowAttempts).mockResolvedValue(new Map());
+    vi.mocked(readRunListValidator).mockResolvedValue(null);
+    vi.mocked(writeRunListValidator).mockResolvedValue(undefined);
     vi.mocked(writeRuns).mockResolvedValue(undefined);
     vi.mocked(writeCollectionState).mockResolvedValue(undefined);
   });
@@ -749,6 +756,78 @@ describe('collect rate limit handling', () => {
     expect(request).toHaveBeenCalledWith(
       'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs',
       expect.objectContaining({ run_id: 101 })
+    );
+  });
+
+  it('skips parse, writes, and jobs when a recent tracked-workflow run list is unchanged', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-18T00:00:00Z'));
+
+    const repo = 'acme/widgets';
+    mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
+    vi.mocked(readRunListValidator).mockResolvedValue('"cached-etag"');
+
+    const request = vi.fn().mockRejectedValue({ status: 304 });
+
+    try {
+      await collectRepo(
+        { request } as never,
+        repo,
+        90,
+        { forceFullBackfill: false, reverse: false },
+        { repos: [{ repo, workflows: [{ file: 'ci.yml' }] }] },
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(request).toHaveBeenCalledWith(
+      'GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs',
+      expect.objectContaining({
+        workflow_id: 'ci.yml',
+        created: '2026-04-17T00:00:00Z..2026-04-18T23:59:59Z',
+        headers: { 'if-none-match': '"cached-etag"' },
+      }),
+    );
+    expect(getCachedWorkflowAttempts).not.toHaveBeenCalled();
+    expect(writeRuns).not.toHaveBeenCalled();
+    expect(writeWorkflowAttempts).not.toHaveBeenCalled();
+    expect(writeCollectionState).not.toHaveBeenCalled();
+    expect(writeRunListValidator).not.toHaveBeenCalled();
+  });
+
+  it('stores a changed recent run-list validator after its checkpoint succeeds', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-18T00:00:00Z'));
+
+    const repo = 'acme/widgets';
+    mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
+    const request = vi.fn().mockResolvedValue({
+      data: { workflow_runs: [] },
+      headers: { etag: '"new-etag"' },
+    });
+
+    try {
+      await collectRepo(
+        { request } as never,
+        repo,
+        90,
+        { forceFullBackfill: false, reverse: false, skipJobs: true },
+        { repos: [{ repo, workflows: [{ file: 'ci.yml' }] }] },
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(writeRunListValidator).toHaveBeenCalledWith(
+      repo,
+      'ci.yml',
+      '2026-04-17',
+      '2026-04-18',
+      '"new-etag"',
+    );
+    expect(vi.mocked(writeCollectionState).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(writeRunListValidator).mock.invocationCallOrder[0],
     );
   });
 
