@@ -137,11 +137,15 @@ describe('collection window helpers', () => {
     ).toEqual(['2026-04-12.json', '2026-04-11.json', '2026-04-10.json']);
   });
 
-  it('splits a saturated window into smaller contiguous windows', () => {
+  it('splits a saturated window without dropping its end date', () => {
     expect(splitCollectionWindow({ start: '2026-04-09', end: '2026-04-10' })).toEqual([
-      { start: '2026-04-09T00:00:00Z', end: '2026-04-09T12:00:00Z' },
-      { start: '2026-04-09T12:00:00Z', end: '2026-04-10T00:00:00Z' },
+      { start: '2026-04-09T00:00:00Z', end: '2026-04-09T23:59:59.500Z' },
+      { start: '2026-04-09T23:59:59.500Z', end: '2026-04-10T23:59:59Z' },
     ]);
+  });
+
+  it('refuses to split a saturated minimum-size window', () => {
+    expect(splitCollectionWindow({ start: '2026-04-09T00:00:00Z', end: '2026-04-09T00:00:30Z' })).toEqual([]);
   });
 
   it('formats a collection window as a raw created-at range', () => {

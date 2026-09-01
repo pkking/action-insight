@@ -143,7 +143,7 @@ describe('collect rate limit handling', () => {
     ).toBe(true);
   });
 
-  it('writes partial results and incomplete-history metadata when rate limit is hit mid-collection', async () => {
+  it('does not checkpoint an incomplete window when rate limited mid-collection', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-14T12:00:00Z'));
     const repo = 'acme/widgets';
@@ -212,10 +212,7 @@ describe('collect rate limit handling', () => {
       collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false })
     ).rejects.toBeInstanceOf(RateLimitAbortError);
 
-    expect(vi.mocked(writeCollectionState)).toHaveBeenCalledWith(repo, expect.objectContaining({
-      latestDate: '2026-04-14',
-      historyComplete: false,
-    }));
+    expect(vi.mocked(writeCollectionState)).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
 
@@ -340,10 +337,7 @@ describe('collect rate limit handling', () => {
         collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false })
       ).rejects.toBeInstanceOf(RateLimitAbortError);
 
-      expect(vi.mocked(writeCollectionState)).toHaveBeenCalledWith(repo, expect.objectContaining({
-        latestDate: '2026-04-12',
-        historyComplete: false,
-      }));
+      expect(vi.mocked(writeCollectionState)).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -447,7 +441,7 @@ describe('collect rate limit handling', () => {
     );
   });
 
-  it('keeps completed sibling subwindows when a later split window hits rate limit', async () => {
+  it('does not checkpoint or fetch jobs before a saturated split completes', async () => {
     vi.spyOn(global, 'setTimeout').mockImplementation(((callback: TimerHandler) => {
       if (typeof callback === 'function') {
         callback();
@@ -564,7 +558,11 @@ describe('collect rate limit handling', () => {
       isolatedCollectRepo(octokit as never, repo, 90, { forceFullBackfill: true, reverse: false })
     ).rejects.toBeInstanceOf(IsolatedRateLimitAbortError);
 
-    expect(vi.mocked(writeCollectionState)).toHaveBeenCalled();
+    expect(vi.mocked(writeCollectionState)).not.toHaveBeenCalled();
+    expect(octokit.request).not.toHaveBeenCalledWith(
+      'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs',
+      expect.anything(),
+    );
   });
 
   it('does not delete expired day files since Turso is source of truth', async () => {
@@ -929,6 +927,10 @@ describe('collect rate limit handling', () => {
       vi.useRealTimers();
     }
 
+    expect(vi.mocked(getCachedWorkflowAttempts)).toHaveBeenCalledWith(repo, [
+      { runId: 101, runAttempt: 1 },
+      { runId: 101, runAttempt: 2 },
+    ]);
     expect(vi.mocked(writeWorkflowAttempts)).toHaveBeenCalledWith(
       repo,
       expect.arrayContaining([
