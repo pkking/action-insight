@@ -6,7 +6,7 @@
 
 ## Decision
 
-The raw Actions collector now persists repository collection state after each completed top-level collection window, not only at the end of the full repository run. The collector still performs a final persistence pass at the end of the run, but intermediate checkpoints are written so partial progress survives interruptions, rate-limit aborts, and long-running window splits.
+The raw Actions collector persists repository collection state after each completed top-level collection window, not only at the end of the full repository run. A saturated window is split and deduplicated before jobs are fetched. Its checkpoint advances only after every child and its bounded persistence succeed; interrupted, rate-limited, or unsplittably saturated windows are deferred without a checkpoint.
 
 ## Rationale
 
@@ -15,8 +15,8 @@ Current backfills can span many windows and several hundred API pages. If state 
 ## Consequences
 
 ### Positive
-- Partial raw backfills become durable earlier.
-- Interrupted runs can resume from newer collection state.
+- Completed raw backfills become durable earlier.
+- Interrupted runs resume from the previous completed work unit without marking gaps complete.
 - Long windows stop acting like a single large failure domain.
 
 ### Negative
@@ -26,5 +26,6 @@ Current backfills can span many windows and several hundred API pages. If state 
 ## Constraints
 
 - Checkpointing must remain idempotent.
-- Partial checkpoints must not invent empty dates for windows that have not finished.
+- Checkpoints must not advance for incomplete, rate-limited, or unsplittably saturated windows.
+- Jobs must not be requested until a saturated window has been fully split and deduplicated.
 - Final end-of-run persistence remains required so the latest merged state is always written.

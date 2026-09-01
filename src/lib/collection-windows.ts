@@ -149,13 +149,13 @@ export function toCreatedRange(window: CollectionWindow): string {
   return `${toCreatedBoundary(window.start, false)}..${toCreatedBoundary(window.end, true)}`;
 }
 
-function parseWindowBoundary(value: string): Date {
-  return new Date(value.includes('T') ? value : `${value}T00:00:00Z`);
+function parseWindowBoundary(value: string, isEnd: boolean): Date {
+  return new Date(value.includes('T') ? value : toCreatedBoundary(value, isEnd));
 }
 
 export function splitCollectionWindow(window: CollectionWindow): CollectionWindow[] {
-  const start = parseWindowBoundary(window.start);
-  const end = parseWindowBoundary(window.end);
+  const start = parseWindowBoundary(window.start, false);
+  const end = parseWindowBoundary(window.end, true);
   const durationMs = end.getTime() - start.getTime();
 
   if (durationMs <= 60_000) {

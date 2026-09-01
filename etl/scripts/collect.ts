@@ -266,6 +266,13 @@ export class RateLimitAbortError extends Error {
   }
 }
 
+export class SaturatedCollectionWindowError extends Error {
+  constructor(window: CollectionWindow) {
+    super(`Collection window ${window.start}..${window.end} remains saturated at the minimum split size`);
+    this.name = 'SaturatedCollectionWindowError';
+  }
+}
+
 function runAttemptKey(runId: number, runAttempt: number | undefined): string {
   return `${runId}:${runAttempt ?? 1}`;
 }
@@ -414,9 +421,6 @@ export async function collectRepo(
   const trackedWorkflowIds = repoConfig.workflows.map(workflow => workflow.file);
   if (trackedWorkflowIds.length) console.log(`Collecting ${trackedWorkflowIds.length} tracked workflow(s) only.`);
 
-  const cachedWorkflowAttempts = options.skipJobs ? new Map() : await getCachedWorkflowAttempts(repo);
-  log(`Existing cached workflow attempts: ${cachedWorkflowAttempts.size}`);
-
   function toCreatedParam(window: CollectionWindow): string {
     return toCreatedRange(window);
   }
@@ -459,137 +463,20 @@ export async function collectRepo(
         break;
       }
 
-      let persistedCount = 0;
-
       for (const run of data.workflow_runs) {
-        const runId = run.id;
-        let jobs: Job[] = [];
-        const baseRun: Run = enrichRunWithWorkflowMetadata({
-          id: run.id,
-          name: run.name ?? 'unknown',
-          head_branch: run.head_branch ?? 'unknown',
+        allRuns.push(enrichRunWithWorkflowMetadata({
+          id: run.id, name: run.name ?? 'unknown', head_branch: run.head_branch ?? 'unknown',
           head_sha: typeof run.head_sha === 'string' ? run.head_sha : undefined,
-          status: run.status ?? 'completed',
-          conclusion: run.conclusion ?? 'unknown',
-          event: run.event ?? 'unknown',
-          created_at: run.created_at,
-          run_started_at: typeof run.run_started_at === 'string' ? run.run_started_at : undefined,
-          updated_at: run.updated_at,
-          html_url: run.html_url,
+          status: run.status ?? 'completed', conclusion: run.conclusion ?? 'unknown', event: run.event ?? 'unknown',
+          created_at: run.created_at, run_started_at: typeof run.run_started_at === 'string' ? run.run_started_at : undefined,
+          updated_at: run.updated_at, html_url: run.html_url,
           durationInSeconds: (new Date(run.updated_at).getTime() - new Date(run.created_at).getTime()) / 1000,
-          pull_requests: readPullRequestsFromPayload(run as GitHubApiPayload),
-          jobs: [],
-          githubPayload: run as GitHubApiPayload,
-        }, reposConfig, repoConfig);
-        persistedCount++;
-
-        const cachedAttempt = cachedWorkflowAttempts.get(runAttemptKey(runId, baseRun.runAttempt));
-        const isCachedAttemptFresh =
-          baseRun.status === 'completed' &&
-          cachedAttempt?.stepPolicyHash === baseRun.stepPolicyHash &&
-          Date.parse(cachedAttempt.updatedAt) >= Date.parse(run.updated_at);
-        const hasWorkflowRules = repoConfig.workflows.length > 0;
-
-        if (options.skipJobs) {
-          log(`Skipping jobs for run #${runId} - workflow-only mode`);
-        } else if (hasWorkflowRules && !baseRun.tracked) {
-          skippedJobsCount++;
-          log(`Skipping jobs for run #${runId} - workflow is not tracked (${baseRun.workflowParseStatus ?? 'unknown'})`);
-        } else if (isCachedAttemptFresh) {
-          skippedJobsCount++;
-          log(`Skipping jobs for run #${runId} attempt ${baseRun.runAttempt ?? 1} - already cached`);
-        } else {
-          log(`Fetching jobs for run #${runId} attempt ${baseRun.runAttempt ?? 1} (${run.name})...`);
-          const jobsStartTime = Date.now();
-          let jobsData: GitHubRunJobsResponse;
-          try {
-            jobsData = await fetchJobsForRunAttempt(octokit, owner, repoName, runId, baseRun.runAttempt ?? 1);
-          } catch (err) {
-            if (isGitHubRateLimitError(err)) {
-              const details = getRateLimitDetails(err);
-              throw new RateLimitAbortError(
-                `GitHub API rate limit reached (remaining=${details.remaining || 'unknown'}, limit=${details.limit || 'unknown'}, reset=${details.reset || 'unknown'})`,
-                allRuns,
-                details
-              );
-            }
-            throw err;
-          }
-          const jobsElapsed = Date.now() - jobsStartTime;
-          log(`Jobs for run #${runId}: ${jobsData.jobs.length} jobs (${jobsElapsed}ms)`);
-
-          jobs = (jobsData.jobs as GitHubJobPayload[]).map(j => {
-            const startedMs = new Date(j.started_at).getTime();
-            const createdMs = j.created_at ? new Date(j.created_at).getTime() : startedMs;
-            const completedMs = j.completed_at ? new Date(j.completed_at).getTime() : startedMs;
-
-            // Extract steps from the job payload
-            const steps: Step[] = [];
-            const rawSteps = (j.steps as Record<string, unknown>[] | undefined);
-            if (Array.isArray(rawSteps)) {
-              for (const [index, rawStep] of rawSteps.entries()) {
-                if (!rawStep || typeof rawStep !== 'object') continue;
-                const s = rawStep as Record<string, unknown>;
-                const stepStartedAt = typeof s.started_at === 'string' ? s.started_at : null;
-                const stepCompletedAt = typeof s.completed_at === 'string' ? s.completed_at : null;
-                let stepDuration = 0;
-                if (stepStartedAt && stepCompletedAt) {
-                  const startMs = new Date(stepStartedAt).getTime();
-                  const completedMs = new Date(stepCompletedAt).getTime();
-                  if (!isNaN(startMs) && !isNaN(completedMs)) {
-                    stepDuration = Math.max(0, Math.floor((completedMs - startMs) / 1000));
-                  }
-                }
-                const stepNumber = typeof s.number === 'number' ? s.number : index + 1;
-                steps.push({
-                  name: (s.name as string) || `Step ${index + 1}`,
-                  status: (s.status as string) || 'unknown',
-                  conclusion: (s.conclusion as string) || 'unknown',
-                  started_at: stepStartedAt || undefined,
-                  completed_at: stepCompletedAt || undefined,
-                  number: stepNumber,
-                  duration_seconds: stepDuration,
-                });
-              }
-            }
-
-            const labels = Array.isArray(j.labels) && j.labels.every((label): label is string => typeof label === 'string')
-              ? j.labels
-              : undefined;
-
-            return {
-              id: j.id,
-              name: j.name,
-              status: j.status,
-              conclusion: j.conclusion ?? 'unknown',
-              created_at: j.created_at ?? new Date().toISOString(),
-              started_at: j.started_at,
-              completed_at: j.completed_at ?? new Date().toISOString(),
-              html_url: j.html_url,
-              queueDurationInSeconds: Math.max(0, (startedMs - createdMs) / 1000),
-              durationInSeconds: Math.max(0, (completedMs - startedMs) / 1000),
-              runtimeInSeconds: Math.max(0, (completedMs - startedMs) / 1000),
-              totalDurationInSeconds: Math.max(0, (completedMs - createdMs) / 1000),
-              labels,
-              runner_id: typeof j.runner_id === 'number' ? j.runner_id : undefined,
-              runner_name: typeof j.runner_name === 'string' ? j.runner_name : undefined,
-              runner_group_id: typeof j.runner_group_id === 'number' ? j.runner_group_id : undefined,
-              runner_group_name: typeof j.runner_group_name === 'string' ? j.runner_group_name : undefined,
-              ...parseRunnerResourceLabels(labels),
-              githubPayload: j,
-              steps: steps.length > 0 ? steps : undefined,
-            };
-          });
-        }
-
-        allRuns.push({
-          ...baseRun,
-          jobs,
-        });
+          pull_requests: readPullRequestsFromPayload(run as GitHubApiPayload), jobs: [], githubPayload: run as GitHubApiPayload,
+        }, reposConfig, repoConfig));
       }
 
       totalFetched += data.workflow_runs.length;
-      log(`Page ${page} summary: ${persistedCount} persisted, ${skippedJobsCount} jobs cached/skipped (total fetched: ${totalFetched})`);
+      log(`Page ${page} summary: ${data.workflow_runs.length} run(s) listed (total fetched: ${totalFetched})`);
 
       if (data.workflow_runs.length < PER_PAGE) {
         log('Last page reached (< per_page)');
@@ -609,6 +496,47 @@ export async function collectRepo(
     return { runs: allRuns, saturated: false };
   }
 
+  function normalizeJobs(jobsData: GitHubRunJobsResponse): Job[] {
+    return jobsData.jobs.map(j => {
+      const startedMs = new Date(j.started_at).getTime();
+      const createdMs = j.created_at ? new Date(j.created_at).getTime() : startedMs;
+      const completedMs = j.completed_at ? new Date(j.completed_at).getTime() : startedMs;
+      const labels = Array.isArray(j.labels) && j.labels.every((label): label is string => typeof label === 'string') ? j.labels : undefined;
+      const steps = Array.isArray(j.steps) ? j.steps.flatMap((rawStep, index) => {
+        if (!rawStep || typeof rawStep !== 'object') return [];
+        const step = rawStep as Record<string, unknown>;
+        const started_at = typeof step.started_at === 'string' ? step.started_at : undefined;
+        const completed_at = typeof step.completed_at === 'string' ? step.completed_at : undefined;
+        return [{ name: typeof step.name === 'string' ? step.name : `Step ${index + 1}`, status: typeof step.status === 'string' ? step.status : 'unknown', conclusion: typeof step.conclusion === 'string' ? step.conclusion : 'unknown', started_at, completed_at, number: typeof step.number === 'number' ? step.number : index + 1, duration_seconds: started_at && completed_at ? Math.max(0, Math.floor((new Date(completed_at).getTime() - new Date(started_at).getTime()) / 1000)) : 0 }];
+      }) : undefined;
+      return { id: j.id, name: j.name, status: j.status, conclusion: j.conclusion ?? 'unknown', created_at: j.created_at ?? new Date().toISOString(), started_at: j.started_at, completed_at: j.completed_at ?? new Date().toISOString(), html_url: j.html_url, queueDurationInSeconds: Math.max(0, (startedMs - createdMs) / 1000), durationInSeconds: Math.max(0, (completedMs - startedMs) / 1000), runtimeInSeconds: Math.max(0, (completedMs - startedMs) / 1000), totalDurationInSeconds: Math.max(0, (completedMs - createdMs) / 1000), labels, runner_id: typeof j.runner_id === 'number' ? j.runner_id : undefined, runner_name: typeof j.runner_name === 'string' ? j.runner_name : undefined, runner_group_id: typeof j.runner_group_id === 'number' ? j.runner_group_id : undefined, runner_group_name: typeof j.runner_group_name === 'string' ? j.runner_group_name : undefined, ...parseRunnerResourceLabels(labels), githubPayload: j, steps: steps?.length ? steps : undefined };
+    });
+  }
+
+  async function hydrateRunsWithJobs(runs: Run[]): Promise<Run[]> {
+    if (options.skipJobs) return runs;
+    const hasWorkflowRules = repoConfig.workflows.length > 0;
+    const candidates = runs.filter(run => !hasWorkflowRules || run.tracked).map(run => ({ runId: run.id, runAttempt: run.runAttempt ?? 1 }));
+    const cached = await getCachedWorkflowAttempts(repo, candidates);
+    log(`Candidate cached workflow attempts: ${cached.size}/${candidates.length}`);
+    for (const run of runs) {
+      if (hasWorkflowRules && !run.tracked) continue;
+      const cachedAttempt = cached.get(runAttemptKey(run.id, run.runAttempt));
+      const fresh = run.status === 'completed' && cachedAttempt?.stepPolicyHash === run.stepPolicyHash && Date.parse(cachedAttempt.updatedAt) >= Date.parse(run.updated_at);
+      if (fresh) continue;
+      try {
+        run.jobs = normalizeJobs(await fetchJobsForRunAttempt(octokit, owner, repoName, run.id, run.runAttempt ?? 1));
+      } catch (err) {
+        if (isGitHubRateLimitError(err)) {
+          const details = getRateLimitDetails(err);
+          throw new RateLimitAbortError(`GitHub API rate limit reached (remaining=${details.remaining || 'unknown'}, limit=${details.limit || 'unknown'}, reset=${details.reset || 'unknown'})`, runs, details);
+        }
+        throw err;
+      }
+    }
+    return runs;
+  }
+
   async function collectRunsForWindow(window: CollectionWindow, workflowId?: string): Promise<Run[]> {
     const { runs, saturated } = await fetchRunsForWindow(window, workflowId);
     if (!saturated) {
@@ -617,8 +545,7 @@ export async function collectRepo(
 
     const childWindows = splitCollectionWindow(window);
     if (childWindows.length === 0) {
-      warn(`Window ${JSON.stringify(window)} cannot be split further; keeping partial result set`);
-      return runs;
+      throw new SaturatedCollectionWindowError(window);
     }
 
     console.log(`Splitting saturated window (${window.start}..${window.end}) into ${childWindows.length} sub-windows`);
@@ -664,9 +591,11 @@ export async function collectRepo(
     const window = windows[wi];
     console.log(`Window ${wi + 1}/${windows.length} (${window.start}..${window.end})`);
     try {
-      const windowRuns = trackedWorkflowIds.length
+      const listedRuns = trackedWorkflowIds.length
         ? (await Promise.all(trackedWorkflowIds.map(id => collectRunsForWindow(window, id)))).flat()
         : await collectRunsForWindow(window);
+      const deduplicatedRuns = Array.from(new Map(listedRuns.map(run => [runAttemptKey(run.id, run.runAttempt), run])).values());
+      const windowRuns = await hydrateRunsWithJobs(deduplicatedRuns);
       console.log(`Window ${wi + 1}/${windows.length} done: ${windowRuns.length} run(s)`);
       for (const run of windowRuns) {
         allRunsMap.set(runAttemptKey(run.id, run.runAttempt), run);
@@ -688,17 +617,7 @@ export async function collectRepo(
         for (const run of err.partialRuns) {
           allRunsMap.set(runAttemptKey(run.id, run.runAttempt), run);
         }
-        const persistedState = await persistCollectedRuns(
-          repo,
-          state,
-          err.partialRuns,
-          retentionDays,
-          reposConfig,
-          repoConfig,
-          [],
-          now,
-        );
-        log(`Persisted partial raw collection state for ${repo}: ${persistedState.collectedDates.length} retained date(s) (${wi + 1}/${windows.length}).`);
+        log(`Deferred incomplete ${repo} window ${wi + 1}/${windows.length}; no checkpoint was advanced.`);
       }
       throw err;
     }

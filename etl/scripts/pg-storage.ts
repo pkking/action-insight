@@ -316,8 +316,12 @@ export async function getExistingRunIdsWithJobs(repo: string): Promise<Set<numbe
 export type CachedWorkflowAttempt = { updatedAt: string; stepPolicyHash: string | null };
 
 /** Completed attempt details are immutable until GitHub updates the attempt or
- * the configured step policy changes. Cache by run + attempt, not run alone. */
-export async function getCachedWorkflowAttempts(repo: string): Promise<Map<string, CachedWorkflowAttempt>> {
+ * the configured step policy changes. Query only attempts listed by this work unit. */
+export async function getCachedWorkflowAttempts(
+  repo: string,
+  candidates: Array<{ runId: number; runAttempt: number }>,
+): Promise<Map<string, CachedWorkflowAttempt>> {
+  if (candidates.length === 0) return new Map();
   const client = await getDatabaseClient();
   if (!client) return new Map();
 
@@ -328,11 +332,13 @@ export async function getCachedWorkflowAttempts(repo: string): Promise<Map<strin
       `SELECT wa.run_id, wa.run_attempt, wa.updated_at, wa.step_policy_hash
        FROM workflow_attempts wa
        JOIN runs r ON r.id = wa.run_id
+       JOIN UNNEST($2::bigint[], $3::integer[]) AS candidate(run_id, run_attempt)
+         ON candidate.run_id = wa.run_id AND candidate.run_attempt = wa.run_attempt
        WHERE r.repo_id = $1
          AND wa.status = 'completed'
          AND wa.jobs_fetched_at IS NOT NULL
          AND wa.steps_eligibility_checked_at IS NOT NULL`,
-      [repoId],
+      [repoId, candidates.map(candidate => candidate.runId), candidates.map(candidate => candidate.runAttempt)],
     );
     return new Map(rows.map((row) => [
       `${Number(row.run_id)}:${Number(row.run_attempt)}`,
