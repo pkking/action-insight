@@ -65,6 +65,14 @@ export function createOctokit(token?: string): Octokit {
   return new Octokit({ auth: token, request: { fetch: fetchWithTimeout() } });
 }
 
+/** GitHub core limits are shared by an authenticated identity, not a token string. */
+export async function getGitHubIdentity(octokit: Octokit): Promise<string> {
+  const response = await octokit.request('GET /user');
+  const data = response.data as { id?: number; login?: string };
+  if (typeof data.id !== 'number') throw new Error('GitHub identity response did not include an id');
+  return `user:${data.id}${data.login ? ` (${data.login})` : ''}`;
+}
+
 export interface GitHubRequestErrorLike {
   status: number;
   message: string;

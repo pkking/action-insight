@@ -12,6 +12,18 @@ _Avoid_: target repo, configured repo
 A workflow whose run, job, and eligible step data is included in detailed analysis by configuration.
 _Avoid_: all workflow, selected workflow
 
+**Collection Window**:
+A bounded created-time range for one Tracked Repository's raw workflow-run collection and durable checkpoint.
+_Avoid_: batch, chunk
+
+**GitHub Identity Lane**:
+The serial collection lane for credentials sharing one authenticated GitHub identity.
+_Avoid_: token lane
+
+**API Budget Reserve**:
+The core-rate-limit requests that a GitHub Identity Lane deliberately leaves unspent while dispatching collection work.
+_Avoid_: spare tokens
+
 **Workflow Match Rule**:
 A configuration rule that matches a GitHub Actions workflow by workflow file basename and, when configured, workflow ref.
 _Avoid_: workflow filter
@@ -231,6 +243,8 @@ _Avoid_: failure analysis
 ## Relationships
 
 - A **Tracked Repository** has zero or more **Tracked Workflows**
+- Each **Collection Window** belongs to one **Tracked Repository** and is dispatched by at most one **GitHub Identity Lane** at a time
+- A **GitHub Identity Lane** completes recent **Collection Windows** across Tracked Repositories before it dispatches history backfill, while preserving its **API Budget Reserve**
 - A **Workflow Match Rule** selects zero or more **Tracked Workflows**
 - **Workflow Match Rules** support workflow file basenames such as `ci.yml` and may scope matches by workflow ref
 - Workflow names and full workflow paths are not supported in **Workflow Match Rules**
