@@ -6,7 +6,9 @@ import {
   parseRunnerResourceLabels,
   RateLimitAbortError,
   runCollection,
+  runSharedCollectionPlan,
 } from './collect';
+import * as github from './github';
 import { isGitHubRateLimitError } from './github';
 
 vi.mock('./pg-storage.ts', async () => {
@@ -1090,5 +1092,38 @@ describe('collect rate limit handling', () => {
         expect.objectContaining({ run_id: 101, run_attempt: 2, status: 'in_progress' }),
       ]),
     );
+  });
+
+  it('shares identity lanes, prioritizes recent windows, and preserves the request reserve', async () => {
+    const requests: string[] = [];
+    const fakeClient = {
+      request: vi.fn(async (route: string) => {
+        requests.push(route);
+        if (route === 'GET /user') return { data: { id: 1, login: 'collector' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 12 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    vi.spyOn(github, 'createOctokit').mockReturnValue(fakeClient as never);
+
+    const collected: string[] = [];
+    await runSharedCollectionPlan({
+      tokens: ['first-token', 'second-token'],
+      work: [
+        { repo: 'acme/a', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 },
+        { repo: 'acme/b', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 },
+        { repo: 'acme/a', window: { start: '2026-04-10', end: '2026-04-16' }, priority: 1 },
+      ],
+      retentionDays: 90,
+      cliOptions: { forceFullBackfill: false, reverse: false },
+      reposConfig: { repos: [] },
+      collectRepoImpl: vi.fn(async (client, repo, _days, _options, _config, windows) => {
+        collected.push(`${repo}:${windows?.[0].start}`);
+        await client.request('GET /work');
+      }) as never,
+    });
+
+    expect(collected.slice(0, 2)).toEqual(['acme/a:2026-04-17', 'acme/b:2026-04-17']);
+    expect(requests.filter(route => route === 'GET /work')).toHaveLength(2);
   });
 });

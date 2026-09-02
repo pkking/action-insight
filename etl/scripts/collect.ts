@@ -12,7 +12,7 @@ import {
   type CollectCliOptions,
 } from './collect-options.ts';
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
-import { createOctokit, getRateLimitDetails, isGitHubRateLimitError, resolveGitHubTokens, type RateLimitDetails } from './github.ts';
+import { createOctokit, getGitHubIdentity, getRateLimitDetails, isGitHubRateLimitError, resolveGitHubTokens, type RateLimitDetails } from './github.ts';
 import {
   writeRuns,
   writeWorkflowAttempts,
@@ -173,6 +173,31 @@ interface RunCollectionOptions {
   reposConfig?: ReposConfig;
   octokit?: Octokit;
   collectRepoImpl?: typeof collectRepo;
+}
+
+interface CollectionWork {
+  repo: string;
+  window: CollectionWindow;
+  priority: number;
+}
+
+const RATE_LIMIT_RESERVE = Number.parseInt(process.env.GITHUB_RATE_LIMIT_RESERVE ?? '10', 10);
+
+function reserveRateLimitBudget(octokit: Octokit, remaining: number): Octokit {
+  let budget = remaining;
+  return {
+    ...octokit,
+    request: async (route: string, parameters?: Record<string, unknown>) => {
+      if (budget <= RATE_LIMIT_RESERVE) {
+        throw new RateLimitAbortError(`GitHub API budget reserve reached (remaining=${budget}, reserve=${RATE_LIMIT_RESERVE})`);
+      }
+      budget -= 1;
+      const response = await octokit.request(route, parameters);
+      const reported = Number(response.headers?.['x-ratelimit-remaining']);
+      if (Number.isFinite(reported)) budget = reported;
+      return response;
+    },
+  } as Octokit;
 }
 
 
@@ -407,6 +432,7 @@ export async function collectRepo(
   retentionDays: number,
   options: CollectCliOptions,
   reposConfig: ReposConfig = { repos: [{ repo, workflows: [] }] },
+  plannedWindows?: CollectionWindow[],
 ) {
   console.log(`Processing ${repo}...`);
   const [owner, repoName] = repo.split('/');
@@ -610,7 +636,7 @@ export async function collectRepo(
     return { runs: Array.from(mergedRuns.values()), unchanged: false, validators };
   }
 
-  const windows = buildCollectionWindows({
+  const windows = plannedWindows ?? buildCollectionWindows({
     latest: state.latest,
     existingFileCount: state.collectedDates.length,
     historyComplete: state.historyComplete,
@@ -628,9 +654,14 @@ export async function collectRepo(
     const window = windows[wi];
     console.log(`Window ${wi + 1}/${windows.length} (${window.start}..${window.end})`);
     try {
-      const results = trackedWorkflowIds.length
-        ? await Promise.all(trackedWorkflowIds.map(id => collectRunsForWindow(window, id)))
-        : [await collectRunsForWindow(window)];
+      const results: Awaited<ReturnType<typeof collectRunsForWindow>>[] = [];
+      if (trackedWorkflowIds.length) {
+        for (const workflowId of trackedWorkflowIds) {
+          results.push(await collectRunsForWindow(window, workflowId));
+        }
+      } else {
+        results.push(await collectRunsForWindow(window));
+      }
       const changedResults = results.filter(result => !result.unchanged);
       if (changedResults.length === 0) {
         console.log(`Window ${wi + 1}/${windows.length} unchanged; skipped writes and jobs.`);
@@ -673,6 +704,100 @@ export async function collectRepo(
   log(`Total workflow attempts collected: ${allRunsMap.size}`);
 }
 
+async function buildCollectionPlan(
+  targetRepos: string[],
+  retentionDays: number,
+  cliOptions: CollectCliOptions,
+): Promise<CollectionWork[]> {
+  const now = new Date();
+  const effectiveDays = cliOptions.collectDays ?? retentionDays;
+  const work: CollectionWork[] = [];
+
+  for (const repo of targetRepos) {
+    const state = await loadRepoState(repo, effectiveDays, now);
+    const windows = buildCollectionWindows({
+      latest: state.latest,
+      existingFileCount: state.collectedDates.length,
+      historyComplete: state.historyComplete,
+      backfillCursor: state.backfillCursor,
+      retentionDays: effectiveDays,
+      forceFullBackfill: cliOptions.forceFullBackfill,
+      reverse: cliOptions.reverse,
+    });
+    const newestWindowEnd = windows.reduce((newest, window) => window.end > newest ? window.end : newest, '');
+    windows.forEach(window => work.push({ repo, window, priority: window.end === newestWindowEnd ? 0 : 1 }));
+  }
+
+  // Fresh work must complete for every Tracked Repository before backfill.
+  return work.sort((a, b) => a.priority - b.priority);
+}
+
+export async function runSharedCollectionPlan({
+  tokens,
+  work,
+  retentionDays,
+  cliOptions,
+  reposConfig,
+  collectRepoImpl,
+}: {
+  tokens: string[];
+  work: CollectionWork[];
+  retentionDays: number;
+  cliOptions: CollectCliOptions;
+  reposConfig: ReposConfig;
+  collectRepoImpl: typeof collectRepo;
+}): Promise<{ failures: string[]; deferred: number }> {
+  const identities = await Promise.all(tokens.map(async token => {
+    const client = createOctokit(token);
+    const identity = await getGitHubIdentity(client);
+    const rateLimit = await client.request('GET /rate_limit');
+    const data = rateLimit.data as { resources?: { core?: { remaining?: number } } };
+    return { client: reserveRateLimitBudget(client, data.resources?.core?.remaining ?? 0), identity };
+  }));
+  const lanes = Array.from(new Map(identities.map(lane => [lane.identity, lane])).values());
+  const pending = [...work];
+  const activeRepos = new Set<string>();
+  let activeRecent = 0;
+  const failures: string[] = [];
+
+  console.log(`GitHub identity lanes: ${lanes.length}; reserve: ${RATE_LIMIT_RESERVE}`);
+  await Promise.all(lanes.map(async ({ client, identity }) => {
+    while (true) {
+      const index = pending.findIndex(unit => unit.priority === 0 && !activeRepos.has(unit.repo));
+      const nextIndex = index >= 0
+        ? index
+        : activeRecent === 0
+          ? pending.findIndex(unit => !activeRepos.has(unit.repo))
+          : -1;
+      if (nextIndex < 0) return;
+      const unit = pending.splice(nextIndex, 1)[0];
+      activeRepos.add(unit.repo);
+      if (unit.priority === 0) activeRecent += 1;
+      try {
+        await collectRepoImpl(client, unit.repo, retentionDays, cliOptions, reposConfig, [unit.window]);
+      } catch (err) {
+        if (err instanceof RateLimitAbortError) {
+          // This identity cannot safely spend its reserve. Leave the unit for another lane.
+          pending.unshift(unit);
+          console.warn(`Identity lane ${identity} deferred at its GitHub rate limit reserve.`);
+          return;
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        failures.push(`${unit.repo}: ${message}`);
+        error(`Failed to collect ${unit.repo}:`, err);
+      } finally {
+        activeRepos.delete(unit.repo);
+        if (unit.priority === 0) activeRecent -= 1;
+      }
+    }
+  }));
+
+  if (pending.length > 0) {
+    console.warn(`Deferred ${pending.length} collection window(s) because no identity lane remained available.`);
+  }
+  return { failures, deferred: pending.length };
+}
+
 export async function runCollection({
   token,
   tokens,
@@ -683,18 +808,6 @@ export async function runCollection({
   octokit,
   collectRepoImpl = collectRepo,
 }: RunCollectionOptions) {
-  if (tokens && tokens.length > 1 && !octokit) {
-    await Promise.all(tokens.map((laneToken, index) => runCollection({
-      token: laneToken,
-      retentionDays,
-      cliOptions,
-      targetRepos: targetRepos.filter((_, repoIndex) => repoIndex % tokens.length === index),
-      reposConfig,
-      collectRepoImpl,
-    })));
-    return;
-  }
-
   const activeToken = tokens?.[0] ?? token;
   if (!activeToken) throw new Error('No GitHub token found. Add gh-token.txt or run gh auth login.');
   if (targetRepos.length === 0) {
@@ -722,6 +835,34 @@ export async function runCollection({
   }
   if (cliOptions.repoName) {
     console.log(`Single repo mode enabled; collecting only ${cliOptions.repoName}.`);
+  }
+
+  if (tokens && !octokit) {
+    const work = await buildCollectionPlan(targetRepos, retentionDays, cliOptions);
+    const scheduled = await runSharedCollectionPlan({
+      tokens,
+      work,
+      retentionDays,
+      cliOptions,
+      reposConfig,
+      collectRepoImpl,
+    });
+    if (scheduled.failures.length > 0) {
+      throw new Error(`Collection failed for ${scheduled.failures.length} repos`);
+    }
+    if (scheduled.deferred > 0) {
+      throw new Error(`Collection deferred for ${scheduled.deferred} window(s); no identity lane remained available`);
+    }
+    for (const repo of targetRepos) {
+      const freshness = await checkEtlFreshness(repo);
+      if (freshness) {
+        const message = formatFreshnessReport(freshness, repo);
+        if (freshness.isStale) console.warn(message);
+        else log(message);
+      }
+    }
+    console.log('Done!');
+    return;
   }
 
   for (const repo of targetRepos) {
