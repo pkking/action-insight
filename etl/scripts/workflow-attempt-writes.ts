@@ -21,10 +21,14 @@ const PR_METRIC_UPSERT_BATCH_SIZE = Number(process.env.PR_METRIC_UPSERT_BATCH_SI
 const PR_WORKFLOW_UPSERT_BATCH_SIZE = Number(process.env.PR_WORKFLOW_UPSERT_BATCH_SIZE) || 500;
 
 /** Upsert workflow attempts + their jobs + eligible steps in one transaction. */
-export async function writeWorkflowAttemptsToClient(client: PoolClient, attempts: WorkflowAttemptRow[]): Promise<void> {
+export async function writeWorkflowAttemptsToClient(
+  client: PoolClient,
+  attempts: WorkflowAttemptRow[],
+  { transaction = true }: { transaction?: boolean } = {},
+): Promise<void> {
   if (attempts.length === 0) return;
 
-  await client.query('BEGIN');
+  if (transaction) await client.query('BEGIN');
   try {
     for (const batch of chunkArray(attempts, WORKFLOW_ATTEMPT_UPSERT_BATCH_SIZE)) {
       for (const attempt of batch) {
@@ -120,9 +124,9 @@ export async function writeWorkflowAttemptsToClient(client: PoolClient, attempts
       }
     }
 
-    await client.query('COMMIT');
+    if (transaction) await client.query('COMMIT');
   } catch (e) {
-    await client.query('ROLLBACK');
+    if (transaction) await client.query('ROLLBACK');
     throw e;
   }
 }

@@ -35,7 +35,7 @@ interface JobRow {
   steps?: Step[];
 }
 
-interface RunRow {
+export interface RunRow {
   id: number;
   name: string;
   head_branch: string;
@@ -103,6 +103,12 @@ export interface CollectionState {
   latestDate: string | null;
   retentionDays: number;
   lastUpdated: string | null;
+}
+
+export interface CollectionWindowPersistenceBatch {
+  date: string;
+  runs: RunRow[];
+  attempts: WorkflowAttemptRow[];
 }
 
 export interface EtlFreshnessReport {
@@ -210,17 +216,8 @@ function shouldWritePrResolutionCacheEntry(
 /*  Public API                                                         */
 /* ------------------------------------------------------------------ */
 
-export async function writeRuns(repo: string, runs: RunRow[], date: string): Promise<void> {
-  if (runs.length === 0) return;
-
-  const client = await requireClient(repo);
-  const repoId = await ensureRepo(client, repo.split('/')[0], repo.split('/')[1]);
-
-  try {
-    await client.query('BEGIN');
-
-    // Write runs
-    for (const batch of chunkArray(runs, RUN_UPSERT_BATCH_SIZE)) {
+async function writeRunsToClient(client: PoolClient, repoId: number, runs: RunRow[], date: string): Promise<void> {
+  for (const batch of chunkArray(runs, RUN_UPSERT_BATCH_SIZE)) {
       for (const run of batch) {
         await client.query(
           `INSERT INTO runs (id, repo_id, name, head_branch, head_sha, status, conclusion, event, created_at, updated_at, html_url, duration_seconds, date, steps_checked_at, workflow_file, workflow_ref, workflow_path, workflow_parse_status)
@@ -243,10 +240,19 @@ export async function writeRuns(repo: string, runs: RunRow[], date: string): Pro
       }
     }
 
-    // New collection writes execution details only to attempt-scoped tables
-    // via writeWorkflowAttempts. Legacy jobs/steps remain read-only fallback
-    // for pre-migration history.
+  // New collection writes execution details only to attempt-scoped tables
+  // via writeWorkflowAttempts. Legacy jobs/steps remain read-only fallback
+  // for pre-migration history.
+}
 
+export async function writeRuns(repo: string, runs: RunRow[], date: string): Promise<void> {
+  if (runs.length === 0) return;
+
+  const client = await requireClient(repo);
+  const repoId = await ensureRepo(client, repo.split('/')[0], repo.split('/')[1]);
+  try {
+    await client.query('BEGIN');
+    await writeRunsToClient(client, repoId, runs, date);
     await client.query('COMMIT');
   } catch (e) {
     await client.query('ROLLBACK');
@@ -776,29 +782,57 @@ export async function readCollectionState(repo: string): Promise<CollectionState
   }
 }
 
+async function writeCollectionStateToClient(client: PoolClient, repoId: number, state: CollectionState): Promise<void> {
+  await client.query(
+    `INSERT INTO collection_state (repo_id, backfill_cursor, history_complete, latest_date, retention_days, last_updated)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT(repo_id) DO UPDATE SET
+       backfill_cursor=excluded.backfill_cursor,
+       history_complete=excluded.history_complete,
+       latest_date=excluded.latest_date,
+       retention_days=excluded.retention_days,
+       last_updated=excluded.last_updated`,
+    [
+      repoId,
+      state.backfillCursor,
+      state.historyComplete ? 1 : 0,
+      state.latestDate,
+      state.retentionDays,
+      state.lastUpdated ?? new Date().toISOString(),
+    ],
+  );
+}
+
 export async function writeCollectionState(repo: string, state: CollectionState): Promise<void> {
   const client = await requireClient(repo);
   const repoId = await ensureRepo(client, repo.split('/')[0], repo.split('/')[1]);
-
   try {
-    await client.query(
-      `INSERT INTO collection_state (repo_id, backfill_cursor, history_complete, latest_date, retention_days, last_updated)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT(repo_id) DO UPDATE SET
-         backfill_cursor=excluded.backfill_cursor,
-         history_complete=excluded.history_complete,
-         latest_date=excluded.latest_date,
-         retention_days=excluded.retention_days,
-         last_updated=excluded.last_updated`,
-      [
-        repoId,
-        state.backfillCursor,
-        state.historyComplete ? 1 : 0,
-        state.latestDate,
-        state.retentionDays,
-        state.lastUpdated ?? new Date().toISOString(),
-      ],
-    );
+    await writeCollectionStateToClient(client, repoId, state);
+  } finally {
+    client.release();
+  }
+}
+
+/** Atomically persist a fully split and deduplicated Collection Window and its checkpoint. */
+export async function persistCollectionWindow(
+  repo: string,
+  batches: CollectionWindowPersistenceBatch[],
+  state: CollectionState,
+): Promise<void> {
+  const client = await requireClient(repo);
+  const [owner, repoName] = repo.split('/');
+  const repoId = await ensureRepo(client, owner, repoName);
+  try {
+    await client.query('BEGIN');
+    for (const batch of batches) {
+      await writeRunsToClient(client, repoId, batch.runs, batch.date);
+      await writeWorkflowAttemptsToClient(client, batch.attempts, { transaction: false });
+    }
+    await writeCollectionStateToClient(client, repoId, state);
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
   } finally {
     client.release();
   }

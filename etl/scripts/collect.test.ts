@@ -17,6 +17,7 @@ vi.mock('./pg-storage.ts', async () => {
     ...actual,
     readCollectionState: vi.fn().mockResolvedValue(null),
     writeCollectionState: vi.fn().mockResolvedValue(undefined),
+    persistCollectionWindow: vi.fn().mockResolvedValue(undefined),
     getCollectedDates: vi.fn().mockResolvedValue([]),
     getExistingRunIds: vi.fn().mockResolvedValue(new Set()),
 	    getCachedWorkflowAttempts: vi.fn().mockResolvedValue(new Map()),
@@ -31,6 +32,7 @@ vi.mock('./pg-storage.ts', async () => {
 import {
   readCollectionState,
   writeCollectionState,
+  persistCollectionWindow,
   getCollectedDates,
   getExistingRunIds,
   getCachedWorkflowAttempts,
@@ -97,6 +99,7 @@ describe('collect rate limit handling', () => {
     vi.mocked(writeRunListValidator).mockResolvedValue(undefined);
     vi.mocked(writeRuns).mockResolvedValue(undefined);
     vi.mocked(writeCollectionState).mockResolvedValue(undefined);
+    vi.mocked(persistCollectionWindow).mockResolvedValue(undefined);
   });
 
   it('recognizes GitHub rate limit errors from response headers', () => {
@@ -221,8 +224,60 @@ describe('collect rate limit handling', () => {
       collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false })
     ).rejects.toBeInstanceOf(RateLimitAbortError);
 
-    expect(vi.mocked(writeCollectionState)).not.toHaveBeenCalled();
+    expect(vi.mocked(persistCollectionWindow)).not.toHaveBeenCalled();
     vi.useRealTimers();
+  });
+
+  it('resumes after a checkpointed empty Collection Window instead of re-querying it', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-13T00:00:00Z'));
+
+    const repo = 'acme/widgets';
+    let persistedState: Awaited<ReturnType<typeof readCollectionState>> = {
+      backfillCursor: '2026-04-11',
+      historyComplete: false,
+      latestDate: '2026-04-13',
+      retentionDays: 2,
+      lastUpdated: null,
+    };
+    vi.mocked(readCollectionState).mockImplementation(async () => persistedState);
+    vi.mocked(getCollectedDates).mockResolvedValue(['2026-04-13']);
+    vi.mocked(persistCollectionWindow).mockImplementation(async (_repo, _batches, state) => {
+      persistedState = state;
+    });
+
+    try {
+      await collectRepo(
+        { request: vi.fn().mockResolvedValue({ data: { workflow_runs: [] } }) } as never,
+        repo,
+        2,
+        { forceFullBackfill: false, reverse: false, skipJobs: true },
+        undefined,
+        [{ start: '2026-04-11', end: '2026-04-11' }],
+      );
+
+      expect(persistedState).toMatchObject({ backfillCursor: '2026-04-12', historyComplete: false });
+
+      const requestedWindows: string[] = [];
+      const request = vi.fn().mockImplementation((_route, params: Record<string, unknown>) => {
+        requestedWindows.push(String(params.created));
+        if (requestedWindows.length === 1) return Promise.resolve({ data: { workflow_runs: [] } });
+        return Promise.reject({
+          status: 403,
+          response: { headers: { 'x-ratelimit-remaining': '0' } },
+        });
+      });
+      await expect(
+        collectRepo({ request } as never, repo, 2, { forceFullBackfill: false, reverse: false, skipJobs: true }),
+      ).rejects.toBeInstanceOf(RateLimitAbortError);
+
+      expect(requestedWindows).toEqual([
+        '2026-04-13T00:00:00Z..2026-04-13T23:59:59Z',
+        '2026-04-12T00:00:00Z..2026-04-12T23:59:59Z',
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('refreshes the latest range first when history is marked incomplete', async () => {
@@ -567,7 +622,7 @@ describe('collect rate limit handling', () => {
       isolatedCollectRepo(octokit as never, repo, 90, { forceFullBackfill: true, reverse: false })
     ).rejects.toBeInstanceOf(IsolatedRateLimitAbortError);
 
-    expect(vi.mocked(writeCollectionState)).not.toHaveBeenCalled();
+    expect(vi.mocked(persistCollectionWindow)).not.toHaveBeenCalled();
     expect(octokit.request).not.toHaveBeenCalledWith(
       'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs',
       expect.anything(),
@@ -701,7 +756,7 @@ describe('collect rate limit handling', () => {
 
       await collectRepo(octokit as never, repo, 2, { forceFullBackfill: false, reverse: false });
 
-      expect(vi.mocked(writeCollectionState)).toHaveBeenCalled();
+      expect(vi.mocked(persistCollectionWindow)).toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -871,6 +926,66 @@ describe('collect rate limit handling', () => {
     expect(writeRunListValidator).not.toHaveBeenCalled();
   });
 
+  it('persists a deduplicated Collection Window and checkpoint before its validator', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-18T00:00:00Z'));
+
+    const repo = 'acme/widgets';
+    mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
+    const request = vi.fn().mockResolvedValue({
+      data: {
+        workflow_runs: [
+          {
+            id: 101,
+            run_attempt: 1,
+            name: 'CI',
+            head_branch: 'main',
+            status: 'completed',
+            conclusion: 'success',
+            created_at: '2026-04-18T10:00:00Z',
+            updated_at: '2026-04-18T10:10:00Z',
+            html_url: 'https://example.com/runs/101',
+            path: '.github/workflows/ci.yml@main',
+          },
+          {
+            id: 101,
+            run_attempt: 1,
+            name: 'CI duplicate',
+            head_branch: 'main',
+            status: 'completed',
+            conclusion: 'success',
+            created_at: '2026-04-18T10:00:00Z',
+            updated_at: '2026-04-18T10:10:00Z',
+            html_url: 'https://example.com/runs/101',
+            path: '.github/workflows/ci.yml@main',
+          },
+        ],
+      },
+      headers: { etag: '"new-etag"' },
+    });
+
+    try {
+      await collectRepo(
+        { request } as never,
+        repo,
+        90,
+        { forceFullBackfill: false, reverse: false, skipJobs: true },
+        { repos: [{ repo, workflows: [{ file: 'ci.yml' }] }] },
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(persistCollectionWindow).toHaveBeenCalledWith(
+      repo,
+      [expect.objectContaining({ date: '2026-04-18', runs: [expect.objectContaining({ id: 101 })] })],
+      expect.objectContaining({ latestDate: '2026-04-18' }),
+    );
+    expect(vi.mocked(persistCollectionWindow).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(writeRunListValidator).mock.invocationCallOrder[0],
+    );
+  });
+
   it('stores a changed recent run-list validator after its checkpoint succeeds', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-18T00:00:00Z'));
@@ -901,7 +1016,7 @@ describe('collect rate limit handling', () => {
       '2026-04-18',
       '"new-etag"',
     );
-    expect(vi.mocked(writeCollectionState).mock.invocationCallOrder[0]).toBeLessThan(
+    expect(vi.mocked(persistCollectionWindow).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(writeRunListValidator).mock.invocationCallOrder[0],
     );
   });
@@ -1011,7 +1126,7 @@ describe('collect rate limit handling', () => {
 
       await collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false });
 
-      expect(vi.mocked(writeCollectionState)).toHaveBeenCalled();
+      expect(vi.mocked(persistCollectionWindow)).toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -1085,12 +1200,15 @@ describe('collect rate limit handling', () => {
       { runId: 101, runAttempt: 1 },
       { runId: 101, runAttempt: 2 },
     ]);
-    expect(vi.mocked(writeWorkflowAttempts)).toHaveBeenCalledWith(
+    expect(vi.mocked(persistCollectionWindow)).toHaveBeenCalledWith(
       repo,
-      expect.arrayContaining([
-        expect.objectContaining({ run_id: 101, run_attempt: 1, status: 'completed' }),
-        expect.objectContaining({ run_id: 101, run_attempt: 2, status: 'in_progress' }),
-      ]),
+      [expect.objectContaining({
+        attempts: expect.arrayContaining([
+          expect.objectContaining({ run_id: 101, run_attempt: 1, status: 'completed' }),
+          expect.objectContaining({ run_id: 101, run_attempt: 2, status: 'in_progress' }),
+        ]),
+      })],
+      expect.anything(),
     );
   });
 
