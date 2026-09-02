@@ -18,6 +18,8 @@ vi.mock('./pg-storage.ts', async () => {
     getCollectedDates: vi.fn().mockResolvedValue([]),
     getExistingRunIds: vi.fn().mockResolvedValue(new Set()),
 	    getCachedWorkflowAttempts: vi.fn().mockResolvedValue(new Map()),
+    readRunListValidator: vi.fn().mockResolvedValue(null),
+    writeRunListValidator: vi.fn().mockResolvedValue(undefined),
 	    writeRuns: vi.fn().mockResolvedValue(undefined),
 	    writeWorkflowAttempts: vi.fn().mockResolvedValue(undefined),
 	  };
@@ -30,6 +32,8 @@ import {
   getCollectedDates,
   getExistingRunIds,
   getCachedWorkflowAttempts,
+  readRunListValidator,
+  writeRunListValidator,
   writeRuns,
   writeWorkflowAttempts,
 } from './pg-storage';
@@ -81,11 +85,14 @@ describe('parseRunnerResourceLabels', () => {
 describe('collect rate limit handling', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.clearAllMocks();
     delete process.env.ENABLE_SQLITE_FALLBACK;
     vi.mocked(readCollectionState).mockResolvedValue(null);
     vi.mocked(getCollectedDates).mockResolvedValue([]);
     vi.mocked(getExistingRunIds).mockResolvedValue(new Set());
     vi.mocked(getCachedWorkflowAttempts).mockResolvedValue(new Map());
+    vi.mocked(readRunListValidator).mockResolvedValue(null);
+    vi.mocked(writeRunListValidator).mockResolvedValue(undefined);
     vi.mocked(writeRuns).mockResolvedValue(undefined);
     vi.mocked(writeCollectionState).mockResolvedValue(undefined);
   });
@@ -565,6 +572,79 @@ describe('collect rate limit handling', () => {
     );
   });
 
+  it('persists validators only for unsaturated child windows', async () => {
+    vi.spyOn(global, 'setTimeout').mockImplementation(((callback: TimerHandler) => {
+      if (typeof callback === 'function') callback();
+      return 0 as never;
+    }) as typeof setTimeout);
+
+    vi.resetModules();
+    vi.doMock('../../src/lib/collection-windows.ts', () => {
+      const actual = vi.importActual<typeof import('../../src/lib/collection-windows')>(
+        '../../src/lib/collection-windows.ts'
+      );
+
+      return actual.then(mod => ({
+        ...mod,
+        default: {
+          ...mod.default,
+          buildCollectionWindows: () => [{ start: '2026-04-01', end: '2026-04-15' }],
+          splitCollectionWindow: () => [
+            { start: '2026-04-01', end: '2026-04-08' },
+            { start: '2026-04-08', end: '2026-04-15' },
+          ],
+        },
+      }));
+    });
+
+    const { collectRepo: isolatedCollectRepo } = await import('./collect');
+    const repo = 'acme/widgets';
+    mockRepoState({ latest: '2026-04-01', dates: ['2026-04-01'], historyComplete: true });
+
+    const request = vi.fn().mockImplementation((_route, params: Record<string, unknown>) => {
+      const created = String(params.created);
+      if (created === '2026-04-01T00:00:00Z..2026-04-15T23:59:59Z') {
+        return Promise.resolve({
+          data: {
+            workflow_runs: new Array(100).fill(null).map((_, index) => ({
+              id: index + 1,
+              name: `CI ${index + 1}`,
+              head_branch: 'main',
+              status: 'completed',
+              conclusion: 'success',
+              created_at: '2026-04-14T10:00:00Z',
+              updated_at: '2026-04-14T10:10:00Z',
+              html_url: `https://example.com/runs/${index + 1}`,
+            })),
+          },
+          headers: { etag: '"saturated-parent"' },
+        });
+      }
+
+      return Promise.resolve({
+        data: { workflow_runs: [] },
+        headers: { etag: `"${created}"` },
+      });
+    });
+
+    await isolatedCollectRepo(
+      { request } as never,
+      repo,
+      90,
+      { forceFullBackfill: false, reverse: false, skipJobs: true },
+      { repos: [{ repo, workflows: [{ file: 'ci.yml' }] }] },
+    );
+
+    expect(writeRunListValidator).not.toHaveBeenCalledWith(
+      repo,
+      'ci.yml',
+      '2026-04-01',
+      '2026-04-15',
+      '"saturated-parent"',
+    );
+    expect(writeRunListValidator).toHaveBeenCalledTimes(2);
+  });
+
   it('does not delete expired day files since Turso is source of truth', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-16T00:00:00Z'));
@@ -749,6 +829,78 @@ describe('collect rate limit handling', () => {
     expect(request).toHaveBeenCalledWith(
       'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs',
       expect.objectContaining({ run_id: 101 })
+    );
+  });
+
+  it('skips parse, writes, and jobs when a recent tracked-workflow run list is unchanged', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-18T00:00:00Z'));
+
+    const repo = 'acme/widgets';
+    mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
+    vi.mocked(readRunListValidator).mockResolvedValue('"cached-etag"');
+
+    const request = vi.fn().mockRejectedValue({ status: 304 });
+
+    try {
+      await collectRepo(
+        { request } as never,
+        repo,
+        90,
+        { forceFullBackfill: false, reverse: false },
+        { repos: [{ repo, workflows: [{ file: 'ci.yml' }] }] },
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(request).toHaveBeenCalledWith(
+      'GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs',
+      expect.objectContaining({
+        workflow_id: 'ci.yml',
+        created: '2026-04-17T00:00:00Z..2026-04-18T23:59:59Z',
+        headers: { 'if-none-match': '"cached-etag"' },
+      }),
+    );
+    expect(getCachedWorkflowAttempts).not.toHaveBeenCalled();
+    expect(writeRuns).not.toHaveBeenCalled();
+    expect(writeWorkflowAttempts).not.toHaveBeenCalled();
+    expect(writeCollectionState).not.toHaveBeenCalled();
+    expect(writeRunListValidator).not.toHaveBeenCalled();
+  });
+
+  it('stores a changed recent run-list validator after its checkpoint succeeds', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-18T00:00:00Z'));
+
+    const repo = 'acme/widgets';
+    mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
+    const request = vi.fn().mockResolvedValue({
+      data: { workflow_runs: [] },
+      headers: { etag: '"new-etag"' },
+    });
+
+    try {
+      await collectRepo(
+        { request } as never,
+        repo,
+        90,
+        { forceFullBackfill: false, reverse: false, skipJobs: true },
+        { repos: [{ repo, workflows: [{ file: 'ci.yml' }] }] },
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(writeRunListValidator).toHaveBeenCalledWith(
+      repo,
+      'ci.yml',
+      '2026-04-17',
+      '2026-04-18',
+      '"new-etag"',
+    );
+    expect(vi.mocked(writeCollectionState).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(writeRunListValidator).mock.invocationCallOrder[0],
     );
   });
 

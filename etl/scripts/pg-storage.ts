@@ -687,6 +687,67 @@ export async function writePrMetrics(repo: string, prs: PrMetricsSummary[]): Pro
   }
 }
 
+let runListValidatorsTableReady: Promise<void> | undefined;
+
+async function ensureRunListValidatorsTable(client: PoolClient): Promise<void> {
+  runListValidatorsTableReady ??= client.query(
+    `CREATE TABLE IF NOT EXISTS run_list_validators (
+       repo_id INTEGER NOT NULL REFERENCES repos(id),
+       workflow_file TEXT NOT NULL,
+       window_start TEXT NOT NULL,
+       window_end TEXT NOT NULL,
+       etag TEXT NOT NULL,
+       validated_at TEXT NOT NULL DEFAULT (NOW()::TEXT),
+       PRIMARY KEY (repo_id, workflow_file, window_start, window_end)
+     )`,
+  ).then(() => undefined);
+  await runListValidatorsTableReady;
+}
+
+export async function readRunListValidator(
+  repo: string,
+  workflowFile: string,
+  windowStart: string,
+  windowEnd: string,
+): Promise<string | null> {
+  const client = await requireClient(repo);
+  try {
+    const repoId = await ensureRepo(client, repo.split('/')[0], repo.split('/')[1]);
+    await ensureRunListValidatorsTable(client);
+    const { rows } = await client.query(
+      `SELECT etag FROM run_list_validators
+       WHERE repo_id = $1 AND workflow_file = $2 AND window_start = $3 AND window_end = $4`,
+      [repoId, workflowFile, windowStart, windowEnd],
+    );
+    return rows[0]?.etag as string | null ?? null;
+  } finally {
+    client.release();
+  }
+}
+
+export async function writeRunListValidator(
+  repo: string,
+  workflowFile: string,
+  windowStart: string,
+  windowEnd: string,
+  etag: string,
+): Promise<void> {
+  const client = await requireClient(repo);
+  try {
+    const repoId = await ensureRepo(client, repo.split('/')[0], repo.split('/')[1]);
+    await ensureRunListValidatorsTable(client);
+    await client.query(
+      `INSERT INTO run_list_validators (repo_id, workflow_file, window_start, window_end, etag, validated_at)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT(repo_id, workflow_file, window_start, window_end) DO UPDATE SET
+         etag=excluded.etag, validated_at=excluded.validated_at`,
+      [repoId, workflowFile, windowStart, windowEnd, etag, new Date().toISOString()],
+    );
+  } finally {
+    client.release();
+  }
+}
+
 export async function readCollectionState(repo: string): Promise<CollectionState | null> {
   const client = await getDatabaseClient();
   if (!client) return null;

@@ -17,6 +17,8 @@ import {
   writeRuns,
   writeWorkflowAttempts,
   getCachedWorkflowAttempts,
+  readRunListValidator,
+  writeRunListValidator,
   readCollectionState,
   writeCollectionState,
   getCollectedDates,
@@ -136,6 +138,13 @@ interface GitHubJobPayload extends GitHubApiPayload {
 
 interface GitHubRunJobsResponse {
   jobs: GitHubJobPayload[];
+}
+
+interface RunListValidator {
+  workflowFile: string;
+  windowStart: string;
+  windowEnd: string;
+  etag: string;
 }
 
 /** Extract the NPU model and card count from the repository's runner-label convention. */
@@ -425,14 +434,23 @@ export async function collectRepo(
     return toCreatedRange(window);
   }
 
-  async function fetchRunsForWindow(window: CollectionWindow, workflowId?: string): Promise<{ runs: Run[]; saturated: boolean }> {
+  const initialLatest = state.latest;
+
+  function isRecentWindow(window: CollectionWindow): boolean {
+    return Boolean(initialLatest) && !options.forceFullBackfill && window.end.slice(0, 10) >= initialLatest;
+  }
+
+  async function fetchRunsForWindow(window: CollectionWindow, workflowId?: string): Promise<{ runs: Run[]; saturated: boolean; unchanged: boolean; validator?: RunListValidator }> {
     const createdParam = toCreatedParam(window);
     log(`Fetching runs with filter: ${createdParam}`);
 
     const allRuns: Run[] = [];
     let page = 1;
     let totalFetched = 0;
-    let skippedJobsCount = 0;
+    let validator: RunListValidator | undefined;
+    const cachedEtag = workflowId && isRecentWindow(window)
+      ? await readRunListValidator(repo, workflowId, window.start, window.end)
+      : null;
 
     while (true) {
       log(`Fetching page ${page} for ${createdParam}...`);
@@ -440,11 +458,28 @@ export async function collectRepo(
       let data;
       try {
         const response = await withRetry(() => workflowId
-          ? octokit.request('GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs', { owner, repo: repoName, workflow_id: workflowId, per_page: PER_PAGE, page, created: createdParam })
+          ? octokit.request('GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs', {
+            owner,
+            repo: repoName,
+            workflow_id: workflowId,
+            per_page: PER_PAGE,
+            page,
+            created: createdParam,
+            ...(page === 1 && cachedEtag ? { headers: { 'if-none-match': cachedEtag } } : {}),
+          })
           : octokit.request('GET /repos/{owner}/{repo}/actions/runs', { owner, repo: repoName, per_page: PER_PAGE, page, created: createdParam })
         );
         data = response.data;
+        const etag = page === 1 && typeof response.headers?.etag === 'string' ? response.headers.etag : undefined;
+        if (workflowId && etag) {
+          validator = { workflowFile: workflowId, windowStart: window.start, windowEnd: window.end, etag };
+        }
       } catch (err) {
+        const status = typeof err === 'object' && err !== null ? (err as { status?: number }).status : undefined;
+        if (status === 304 && page === 1 && cachedEtag) {
+          log(`Run list unchanged for ${workflowId} ${createdParam}`);
+          return { runs: [], saturated: false, unchanged: true };
+        }
         if (isGitHubRateLimitError(err)) {
           const details = getRateLimitDetails(err);
           throw new RateLimitAbortError(
@@ -485,7 +520,7 @@ export async function collectRepo(
 
       if (page >= MAX_RESULTS_PER_QUERY / PER_PAGE) {
         warn(`Window ${createdParam} appears capped at ${MAX_RESULTS_PER_QUERY} results`);
-        return { runs: allRuns, saturated: true };
+        return { runs: allRuns, saturated: true, unchanged: false, validator };
       }
 
       page++;
@@ -493,7 +528,7 @@ export async function collectRepo(
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
-    return { runs: allRuns, saturated: false };
+    return { runs: allRuns, saturated: false, unchanged: false, validator };
   }
 
   function normalizeJobs(jobsData: GitHubRunJobsResponse): Job[] {
@@ -537,10 +572,10 @@ export async function collectRepo(
     return runs;
   }
 
-  async function collectRunsForWindow(window: CollectionWindow, workflowId?: string): Promise<Run[]> {
-    const { runs, saturated } = await fetchRunsForWindow(window, workflowId);
+  async function collectRunsForWindow(window: CollectionWindow, workflowId?: string): Promise<{ runs: Run[]; unchanged: boolean; validators: RunListValidator[] }> {
+    const { runs, saturated, unchanged, validator } = await fetchRunsForWindow(window, workflowId);
     if (!saturated) {
-      return runs;
+      return { runs, unchanged, validators: validator ? [validator] : [] };
     }
 
     const childWindows = splitCollectionWindow(window);
@@ -550,11 +585,13 @@ export async function collectRepo(
 
     console.log(`Splitting saturated window (${window.start}..${window.end}) into ${childWindows.length} sub-windows`);
     const mergedRuns = new Map<string, Run>();
+    const validators: RunListValidator[] = [];
 
     for (const childWindow of childWindows) {
       try {
-        const childRuns = await collectRunsForWindow(childWindow, workflowId);
-        for (const run of childRuns) {
+        const childResult = await collectRunsForWindow(childWindow, workflowId);
+        validators.push(...childResult.validators);
+        for (const run of childResult.runs) {
           mergedRuns.set(runAttemptKey(run.id, run.runAttempt), run);
         }
       } catch (err) {
@@ -570,7 +607,7 @@ export async function collectRepo(
       }
     }
 
-    return Array.from(mergedRuns.values());
+    return { runs: Array.from(mergedRuns.values()), unchanged: false, validators };
   }
 
   const windows = buildCollectionWindows({
@@ -591,9 +628,16 @@ export async function collectRepo(
     const window = windows[wi];
     console.log(`Window ${wi + 1}/${windows.length} (${window.start}..${window.end})`);
     try {
-      const listedRuns = trackedWorkflowIds.length
-        ? (await Promise.all(trackedWorkflowIds.map(id => collectRunsForWindow(window, id)))).flat()
-        : await collectRunsForWindow(window);
+      const results = trackedWorkflowIds.length
+        ? await Promise.all(trackedWorkflowIds.map(id => collectRunsForWindow(window, id)))
+        : [await collectRunsForWindow(window)];
+      const changedResults = results.filter(result => !result.unchanged);
+      if (changedResults.length === 0) {
+        console.log(`Window ${wi + 1}/${windows.length} unchanged; skipped writes and jobs.`);
+        continue;
+      }
+
+      const listedRuns = changedResults.flatMap(result => result.runs);
       const deduplicatedRuns = Array.from(new Map(listedRuns.map(run => [runAttemptKey(run.id, run.runAttempt), run])).values());
       const windowRuns = await hydrateRunsWithJobs(deduplicatedRuns);
       console.log(`Window ${wi + 1}/${windows.length} done: ${windowRuns.length} run(s)`);
@@ -611,6 +655,9 @@ export async function collectRepo(
         now,
       );
       state = checkpointState;
+      for (const validator of changedResults.flatMap(result => result.validators)) {
+        await writeRunListValidator(repo, validator.workflowFile, validator.windowStart, validator.windowEnd, validator.etag);
+      }
       console.log(`Checkpointed ${repo}: ${checkpointState.collectedDates.length} retained date(s), latest=${checkpointState.latest || '(none)'} (${wi + 1}/${windows.length})`);
     } catch (err) {
       if (err instanceof RateLimitAbortError) {
