@@ -224,7 +224,7 @@ describe('collect rate limit handling', () => {
       collectRepo(octokit as never, repo, 90, { forceFullBackfill: false, reverse: false })
     ).rejects.toBeInstanceOf(RateLimitAbortError);
 
-    expect(vi.mocked(writeCollectionState)).not.toHaveBeenCalled();
+    expect(vi.mocked(persistCollectionWindow)).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
 
@@ -570,7 +570,7 @@ describe('collect rate limit handling', () => {
       isolatedCollectRepo(octokit as never, repo, 90, { forceFullBackfill: true, reverse: false })
     ).rejects.toBeInstanceOf(IsolatedRateLimitAbortError);
 
-    expect(vi.mocked(writeCollectionState)).not.toHaveBeenCalled();
+    expect(vi.mocked(persistCollectionWindow)).not.toHaveBeenCalled();
     expect(octokit.request).not.toHaveBeenCalledWith(
       'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs',
       expect.anything(),
