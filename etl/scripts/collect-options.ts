@@ -33,7 +33,7 @@ Environment Variables:
   GITHUB_TOKEN_FILE             Token file path (default: ./gh-token.txt); combined with gh auth when both exist
   RETENTION_DAYS                Number of days to retain data (default: 90)
   TARGET_REPOS                  Comma-separated list of repos (fallback if repos.yaml missing)
-  COLLECTION_HEARTBEAT_SECONDS  Shared-collection heartbeat interval (default: 60; <=0 disables)
+  COLLECTION_HEARTBEAT_SECONDS  Shared heartbeat seconds (default: 60; 1..2147483, otherwise disabled)
   VERBOSE                       Enable verbose logging (true or 1)
 
 Examples:

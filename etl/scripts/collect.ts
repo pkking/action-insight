@@ -180,7 +180,15 @@ interface CollectionWork {
 }
 
 const RATE_LIMIT_RESERVE = Number.parseInt(process.env.GITHUB_RATE_LIMIT_RESERVE ?? '10', 10);
-const COLLECTION_HEARTBEAT_MS = Number.parseInt(process.env.COLLECTION_HEARTBEAT_SECONDS ?? '60', 10) * 1000;
+const MAX_TIMER_MS = 2_147_483_647;
+const MAX_HEARTBEAT_SECONDS = Math.floor(MAX_TIMER_MS / 1000);
+
+export function resolveCollectionHeartbeatMs(value = process.env.COLLECTION_HEARTBEAT_SECONDS): number {
+  const seconds = Number(value ?? '60');
+  return Number.isInteger(seconds) && seconds > 0 && seconds <= MAX_HEARTBEAT_SECONDS ? seconds * 1000 : 0;
+}
+
+const COLLECTION_HEARTBEAT_MS = resolveCollectionHeartbeatMs();
 
 function reserveRateLimitBudget(octokit: Octokit, remaining: number): Octokit {
   let budget = remaining;

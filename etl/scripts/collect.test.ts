@@ -4,6 +4,7 @@ import {
   collectRepo,
   fetchJobsForRunAttempt,
   parseRunnerResourceLabels,
+  resolveCollectionHeartbeatMs,
   RateLimitAbortError,
   runCollection,
   runSharedCollectionPlan,
@@ -70,6 +71,14 @@ describe('fetchJobsForRunAttempt', () => {
     await expect(fetchJobsForRunAttempt({ request } as never, 'acme', 'widgets', 42, 1)).resolves.toMatchObject({ jobs });
     expect(request).toHaveBeenNthCalledWith(1, 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', expect.objectContaining({ page: 1, per_page: 100 }));
     expect(request).toHaveBeenNthCalledWith(2, 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', expect.objectContaining({ page: 2, per_page: 100 }));
+  });
+});
+
+describe('resolveCollectionHeartbeatMs', () => {
+  it('rejects values that would overflow Node timers', () => {
+    expect(resolveCollectionHeartbeatMs('2147483')).toBe(2_147_483_000);
+    expect(resolveCollectionHeartbeatMs('2147484')).toBe(0);
+    expect(resolveCollectionHeartbeatMs('999999999999')).toBe(0);
   });
 });
 

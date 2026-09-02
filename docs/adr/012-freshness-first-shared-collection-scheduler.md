@@ -29,4 +29,4 @@ The shared scheduler emits a `COLLECTION_HEARTBEAT_SECONDS` heartbeat (default `
 - The reserve is enforced for requests issued by the collector after the lane is initialized; identity and rate-limit discovery occur before wrapping the lane.
 - Deferred units are not successful collection results and remain recoverable from durable checkpoints.
 - Transaction batching is a separate rollout slice.
-- A disabled or invalid non-positive `COLLECTION_HEARTBEAT_SECONDS` value suppresses heartbeats but not terminal summaries.
+- `COLLECTION_HEARTBEAT_SECONDS` accepts whole seconds from `1` through `2147483`; any other value suppresses heartbeats but not terminal summaries, avoiding Node timer overflow.
