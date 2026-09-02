@@ -259,9 +259,14 @@ async function loadRepoState(repo: string, collectDays: number, now: Date): Prom
   let historyComplete = dbState?.historyComplete ?? false;
 
   if (!historyComplete) {
-    const result = computeBackfillCursor(retainedDates, retentionStart, today);
-    backfillCursor = result.backfillCursor;
-    historyComplete = result.historyComplete;
+    const savedCursor = dbState?.backfillCursor;
+    if (savedCursor && savedCursor >= retentionStart && savedCursor <= today) {
+      backfillCursor = savedCursor;
+    } else {
+      const result = computeBackfillCursor(retainedDates, retentionStart, today);
+      backfillCursor = result.backfillCursor;
+      historyComplete = result.historyComplete;
+    }
   }
 
   return {

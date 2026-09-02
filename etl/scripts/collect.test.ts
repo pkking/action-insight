@@ -228,6 +228,58 @@ describe('collect rate limit handling', () => {
     vi.useRealTimers();
   });
 
+  it('resumes after a checkpointed empty Collection Window instead of re-querying it', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-13T00:00:00Z'));
+
+    const repo = 'acme/widgets';
+    let persistedState: Awaited<ReturnType<typeof readCollectionState>> = {
+      backfillCursor: '2026-04-11',
+      historyComplete: false,
+      latestDate: '2026-04-13',
+      retentionDays: 2,
+      lastUpdated: null,
+    };
+    vi.mocked(readCollectionState).mockImplementation(async () => persistedState);
+    vi.mocked(getCollectedDates).mockResolvedValue(['2026-04-13']);
+    vi.mocked(persistCollectionWindow).mockImplementation(async (_repo, _batches, state) => {
+      persistedState = state;
+    });
+
+    try {
+      await collectRepo(
+        { request: vi.fn().mockResolvedValue({ data: { workflow_runs: [] } }) } as never,
+        repo,
+        2,
+        { forceFullBackfill: false, reverse: false, skipJobs: true },
+        undefined,
+        [{ start: '2026-04-11', end: '2026-04-11' }],
+      );
+
+      expect(persistedState).toMatchObject({ backfillCursor: '2026-04-12', historyComplete: false });
+
+      const requestedWindows: string[] = [];
+      const request = vi.fn().mockImplementation((_route, params: Record<string, unknown>) => {
+        requestedWindows.push(String(params.created));
+        if (requestedWindows.length === 1) return Promise.resolve({ data: { workflow_runs: [] } });
+        return Promise.reject({
+          status: 403,
+          response: { headers: { 'x-ratelimit-remaining': '0' } },
+        });
+      });
+      await expect(
+        collectRepo({ request } as never, repo, 2, { forceFullBackfill: false, reverse: false, skipJobs: true }),
+      ).rejects.toBeInstanceOf(RateLimitAbortError);
+
+      expect(requestedWindows).toEqual([
+        '2026-04-13T00:00:00Z..2026-04-13T23:59:59Z',
+        '2026-04-12T00:00:00Z..2026-04-12T23:59:59Z',
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('refreshes the latest range first when history is marked incomplete', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-13T00:00:00Z'));
