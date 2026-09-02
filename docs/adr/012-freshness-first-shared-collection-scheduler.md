@@ -13,16 +13,20 @@ Build a collection plan from the durable checkpoint state. The first (recent) **
 
 Token strings are resolved to the authenticated GitHub identity and duplicate identities share one lane. Before dispatch, each lane reads its core budget and stops dispatching when its remaining requests reach `GITHUB_RATE_LIMIT_RESERVE` (default `10`). A rate-limited lane returns its current work unit to the shared queue so another identity can claim it. A unit retains the existing split, deduplication, jobs, checkpoint, and validator ordering.
 
+The shared scheduler emits a `COLLECTION_HEARTBEAT_SECONDS` heartbeat (default `60`) while work is active, plus terminal messages for completed or deferred windows and one collection summary. These are console-only operational signals: no collection state advances on failure or deferral, and no external telemetry is introduced.
+
 ## Consequences
 
 - Recent tracked-workflow collection completes across repositories before history backfill starts.
 - Repositories are no longer permanently assigned to a token string.
 - A duplicate token cannot overspend a shared identity budget through concurrent lanes.
 - Identity discovery and one rate-limit read add a small fixed cost per supplied credential.
+- Long-running collection remains observable without adding a durable liveness data model or external telemetry dependency.
 
 ## Constraints
 
 - A Collection Window remains the persistence/checkpoint unit; split children must still finish before jobs are fetched.
 - The reserve is enforced for requests issued by the collector after the lane is initialized; identity and rate-limit discovery occur before wrapping the lane.
 - Deferred units are not successful collection results and remain recoverable from durable checkpoints.
-- Transaction batching and detailed liveness reporting are separate rollout slices.
+- Transaction batching is a separate rollout slice.
+- `COLLECTION_HEARTBEAT_SECONDS` accepts whole seconds from `1` through `2147483`; any other value suppresses heartbeats but not terminal summaries, avoiding Node timer overflow.
