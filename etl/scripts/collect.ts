@@ -14,13 +14,11 @@ import {
 import collectionWindows, { type CollectionWindow } from '../../src/lib/collection-windows.ts';
 import { createOctokit, getGitHubIdentity, getRateLimitDetails, isGitHubRateLimitError, resolveGitHubTokens, type RateLimitDetails } from './github.ts';
 import {
-  writeRuns,
-  writeWorkflowAttempts,
+  persistCollectionWindow,
   getCachedWorkflowAttempts,
   readRunListValidator,
   writeRunListValidator,
   readCollectionState,
-  writeCollectionState,
   getCollectedDates,
   checkEtlFreshness,
   formatFreshnessReport,
@@ -275,18 +273,6 @@ async function loadRepoState(repo: string, collectDays: number, now: Date): Prom
   };
 }
 
-async function saveRepoState(repo: string, state: RepoCollectionState): Promise<void> {
-  const statePayload = {
-    backfillCursor: state.backfillCursor ?? null,
-    historyComplete: state.historyComplete,
-    latestDate: state.latest || null,
-    retentionDays: state.retentionDays,
-    lastUpdated: new Date().toISOString(),
-  };
-
-  await writeCollectionState(repo, statePayload);
-}
-
 
 export class RateLimitAbortError extends Error {
   partialRuns: Run[];
@@ -396,15 +382,15 @@ async function persistCollectedRuns(
 
   const allDates = Array.from(new Set([...state.collectedDates, ...dates, ...emptyDates])).sort().reverse();
 
-  for (const date of dates) {
-    const runCount = runsByDate[date].length;
-    console.log(`  Writing ${date} (${runCount} runs)`);
-
-    await writeRuns(repo, runsByDate[date], date);
-
-    const attempts = buildWorkflowAttempts(runsByDate[date], reposConfig, repoConfig);
-    await writeWorkflowAttempts(repo, attempts);
-  }
+  const batches = dates.map((date) => {
+    const runsForDate = runsByDate[date];
+    console.log(`  Writing ${date} (${runsForDate.length} runs)`);
+    return {
+      date,
+      runs: runsForDate,
+      attempts: buildWorkflowAttempts(runsForDate, reposConfig, repoConfig),
+    };
+  });
 
   const cutoffDate = startOfDay(subDays(now, retentionDays));
   const retainedDates = allDates.filter(d => !isBefore(parseISO(d), cutoffDate));
@@ -421,7 +407,13 @@ async function persistCollectedRuns(
     retentionDays,
   };
 
-  await saveRepoState(repo, newState);
+  await persistCollectionWindow(repo, batches, {
+    backfillCursor: newState.backfillCursor ?? null,
+    historyComplete: newState.historyComplete,
+    latestDate: newState.latest || null,
+    retentionDays: newState.retentionDays,
+    lastUpdated: new Date().toISOString(),
+  });
   console.log(`  State updated: ${retainedDates.length} dates, latest: ${newState.latest}`);
   return newState;
 }
