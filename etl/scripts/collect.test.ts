@@ -572,6 +572,79 @@ describe('collect rate limit handling', () => {
     );
   });
 
+  it('persists validators only for unsaturated child windows', async () => {
+    vi.spyOn(global, 'setTimeout').mockImplementation(((callback: TimerHandler) => {
+      if (typeof callback === 'function') callback();
+      return 0 as never;
+    }) as typeof setTimeout);
+
+    vi.resetModules();
+    vi.doMock('../../src/lib/collection-windows.ts', () => {
+      const actual = vi.importActual<typeof import('../../src/lib/collection-windows')>(
+        '../../src/lib/collection-windows.ts'
+      );
+
+      return actual.then(mod => ({
+        ...mod,
+        default: {
+          ...mod.default,
+          buildCollectionWindows: () => [{ start: '2026-04-01', end: '2026-04-15' }],
+          splitCollectionWindow: () => [
+            { start: '2026-04-01', end: '2026-04-08' },
+            { start: '2026-04-08', end: '2026-04-15' },
+          ],
+        },
+      }));
+    });
+
+    const { collectRepo: isolatedCollectRepo } = await import('./collect');
+    const repo = 'acme/widgets';
+    mockRepoState({ latest: '2026-04-01', dates: ['2026-04-01'], historyComplete: true });
+
+    const request = vi.fn().mockImplementation((_route, params: Record<string, unknown>) => {
+      const created = String(params.created);
+      if (created === '2026-04-01T00:00:00Z..2026-04-15T23:59:59Z') {
+        return Promise.resolve({
+          data: {
+            workflow_runs: new Array(100).fill(null).map((_, index) => ({
+              id: index + 1,
+              name: `CI ${index + 1}`,
+              head_branch: 'main',
+              status: 'completed',
+              conclusion: 'success',
+              created_at: '2026-04-14T10:00:00Z',
+              updated_at: '2026-04-14T10:10:00Z',
+              html_url: `https://example.com/runs/${index + 1}`,
+            })),
+          },
+          headers: { etag: '"saturated-parent"' },
+        });
+      }
+
+      return Promise.resolve({
+        data: { workflow_runs: [] },
+        headers: { etag: `"${created}"` },
+      });
+    });
+
+    await isolatedCollectRepo(
+      { request } as never,
+      repo,
+      90,
+      { forceFullBackfill: false, reverse: false, skipJobs: true },
+      { repos: [{ repo, workflows: [{ file: 'ci.yml' }] }] },
+    );
+
+    expect(writeRunListValidator).not.toHaveBeenCalledWith(
+      repo,
+      'ci.yml',
+      '2026-04-01',
+      '2026-04-15',
+      '"saturated-parent"',
+    );
+    expect(writeRunListValidator).toHaveBeenCalledTimes(2);
+  });
+
   it('does not delete expired day files since Turso is source of truth', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-16T00:00:00Z'));

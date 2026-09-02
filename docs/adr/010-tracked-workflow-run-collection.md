@@ -12,7 +12,7 @@ The collector configured jobs and steps only for tracked workflows, but enumerat
 
 When `etl/repos.yaml` configures workflow files for a repository, pass each configured filename directly to GitHub's workflow-specific runs endpoint. Continue using repository-wide run listing only for repositories without workflow rules.
 
-Conditionally validate recent tracked-workflow collection windows with a durable ETag keyed by repository, workflow file, and exact window. A `304 Not Modified` response skips response parsing, persistence, and jobs collection for that workflow window. Store a new ETag only after the changed window's data and collection checkpoint succeed; incomplete work must not publish a validator that could hide missing writes on the next cycle.
+Conditionally validate recent tracked-workflow collection windows with a durable ETag keyed by repository, workflow file, and exact window. A `304 Not Modified` response skips response parsing, persistence, and jobs collection for that workflow window. Store a new ETag only after the changed window's data and collection checkpoint succeed; incomplete work must not publish a validator that could hide missing writes on the next cycle. Do not store the first-page ETag of a saturated parent window because it cannot validate later pages; store only the recursively split, unsaturated child-window validators.
 
 ## Consequences
 

@@ -585,7 +585,7 @@ export async function collectRepo(
 
     console.log(`Splitting saturated window (${window.start}..${window.end}) into ${childWindows.length} sub-windows`);
     const mergedRuns = new Map<string, Run>();
-    const validators = validator ? [validator] : [];
+    const validators: RunListValidator[] = [];
 
     for (const childWindow of childWindows) {
       try {
