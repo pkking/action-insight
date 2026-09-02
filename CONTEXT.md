@@ -24,6 +24,14 @@ _Avoid_: token lane
 The core-rate-limit requests that a GitHub Identity Lane deliberately leaves unspent while dispatching collection work.
 _Avoid_: spare tokens
 
+**Collection Heartbeat**:
+The periodic console-only status line for shared Collection Window dispatch, reporting completed, failed, pending, and active work.
+_Avoid_: telemetry, progress record
+
+**Collection Summary**:
+The console-only terminal count of completed, failed, and deferred Collection Windows for one shared collection plan.
+_Avoid_: collection checkpoint, success report
+
 **Workflow Match Rule**:
 A configuration rule that matches a GitHub Actions workflow by workflow file basename and, when configured, workflow ref.
 _Avoid_: workflow filter

@@ -180,6 +180,7 @@ interface CollectionWork {
 }
 
 const RATE_LIMIT_RESERVE = Number.parseInt(process.env.GITHUB_RATE_LIMIT_RESERVE ?? '10', 10);
+const COLLECTION_HEARTBEAT_MS = Number.parseInt(process.env.COLLECTION_HEARTBEAT_SECONDS ?? '60', 10) * 1000;
 
 function reserveRateLimitBudget(octokit: Octokit, remaining: number): Octokit {
   let budget = remaining;
@@ -754,11 +755,20 @@ export async function runSharedCollectionPlan({
   const lanes = Array.from(new Map(identities.map(lane => [lane.identity, lane])).values());
   const pending = [...work];
   const activeRepos = new Set<string>();
+  const activeWork = new Map<string, CollectionWindow>();
   let activeRecent = 0;
+  let completed = 0;
   const failures: string[] = [];
 
   console.log(`GitHub identity lanes: ${lanes.length}; reserve: ${RATE_LIMIT_RESERVE}`);
-  await Promise.all(lanes.map(async ({ client, identity }) => {
+  const heartbeat = COLLECTION_HEARTBEAT_MS > 0 ? setInterval(() => {
+    const active = Array.from(activeWork, ([repo, window]) => `${repo} (${window.start}..${window.end})`).join(', ') || 'none';
+    console.log(`Collection heartbeat: completed=${completed}, failures=${failures.length}, pending=${pending.length}, active=${active}`);
+  }, COLLECTION_HEARTBEAT_MS) : undefined;
+  heartbeat?.unref?.();
+
+  try {
+    await Promise.all(lanes.map(async ({ client, identity }) => {
     while (true) {
       const index = pending.findIndex(unit => unit.priority === 0 && !activeRepos.has(unit.repo));
       const nextIndex = index >= 0
@@ -769,29 +779,37 @@ export async function runSharedCollectionPlan({
       if (nextIndex < 0) return;
       const unit = pending.splice(nextIndex, 1)[0];
       activeRepos.add(unit.repo);
+      activeWork.set(unit.repo, unit.window);
       if (unit.priority === 0) activeRecent += 1;
       try {
         await collectRepoImpl(client, unit.repo, retentionDays, cliOptions, reposConfig, [unit.window]);
+        completed += 1;
+        console.log(`Collection window completed: ${unit.repo} (${unit.window.start}..${unit.window.end})`);
       } catch (err) {
         if (err instanceof RateLimitAbortError) {
           // This identity cannot safely spend its reserve. Leave the unit for another lane.
           pending.unshift(unit);
-          console.warn(`Identity lane ${identity} deferred at its GitHub rate limit reserve.`);
+          console.warn(`Collection window deferred: ${unit.repo} (${unit.window.start}..${unit.window.end}); identity lane ${identity} reached its GitHub rate limit reserve.`);
           return;
         }
         const message = err instanceof Error ? err.message : String(err);
-        failures.push(`${unit.repo}: ${message}`);
-        error(`Failed to collect ${unit.repo}:`, err);
+        failures.push(`${unit.repo} (${unit.window.start}..${unit.window.end}): ${message}`);
+        error(`Failed collection window ${unit.repo} (${unit.window.start}..${unit.window.end}):`, err);
       } finally {
         activeRepos.delete(unit.repo);
+        activeWork.delete(unit.repo);
         if (unit.priority === 0) activeRecent -= 1;
       }
     }
-  }));
+    }));
+  } finally {
+    if (heartbeat) clearInterval(heartbeat);
+  }
 
   if (pending.length > 0) {
     console.warn(`Deferred ${pending.length} collection window(s) because no identity lane remained available.`);
   }
+  console.log(`Collection summary: completed=${completed}, failures=${failures.length}, deferred=${pending.length}`);
   return { failures, deferred: pending.length };
 }
 

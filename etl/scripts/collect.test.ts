@@ -1212,6 +1212,68 @@ describe('collect rate limit handling', () => {
     );
   });
 
+  it('reports shared-collection heartbeats and terminal counts', async () => {
+    vi.useFakeTimers();
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const fakeClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 1, login: 'collector' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 12 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    vi.spyOn(github, 'createOctokit').mockReturnValue(fakeClient as never);
+    let finishCollection!: () => void;
+    const collectionFinished = new Promise<void>(resolve => { finishCollection = resolve; });
+
+    try {
+      const scheduled = runSharedCollectionPlan({
+        tokens: ['token'],
+        work: [{ repo: 'acme/a', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 }],
+        retentionDays: 90,
+        cliOptions: { forceFullBackfill: false, reverse: false },
+        reposConfig: { repos: [] },
+        collectRepoImpl: vi.fn(() => collectionFinished) as never,
+      });
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(logSpy).toHaveBeenCalledWith(
+        'Collection heartbeat: completed=0, failures=0, pending=0, active=acme/a (2026-04-17..2026-04-18)',
+      );
+
+      finishCollection();
+      await scheduled;
+      expect(logSpy).toHaveBeenCalledWith('Collection summary: completed=1, failures=0, deferred=0');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('identifies failed windows in the shared terminal summary', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fakeClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 1, login: 'collector' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 12 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    vi.spyOn(github, 'createOctokit').mockReturnValue(fakeClient as never);
+
+    const result = await runSharedCollectionPlan({
+      tokens: ['token'],
+      work: [{ repo: 'acme/a', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 }],
+      retentionDays: 90,
+      cliOptions: { forceFullBackfill: false, reverse: false },
+      reposConfig: { repos: [] },
+      collectRepoImpl: vi.fn().mockRejectedValue(new Error('network failed')) as never,
+    });
+
+    expect(result).toEqual({ failures: ['acme/a (2026-04-17..2026-04-18): network failed'], deferred: 0 });
+    expect(logSpy).toHaveBeenCalledWith('Collection summary: completed=0, failures=1, deferred=0');
+  });
+
   it('shares identity lanes, prioritizes recent windows, and preserves the request reserve', async () => {
     const requests: string[] = [];
     const fakeClient = {
