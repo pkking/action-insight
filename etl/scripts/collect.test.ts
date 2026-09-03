@@ -19,23 +19,25 @@ import {
 } from './collect';
 import * as github from './github';
 import { isGitHubRateLimitError } from './github';
+import { checkEtlFreshness } from './pg-storage';
 
 vi.mock('./pg-storage.ts', async () => {
   const actual = await vi.importActual<typeof import('./pg-storage')>('./pg-storage');
   return {
     ...actual,
+    checkEtlFreshness: vi.fn().mockResolvedValue(null),
     readCollectionState: vi.fn().mockResolvedValue(null),
     writeCollectionState: vi.fn().mockResolvedValue(undefined),
     persistCollectionWindow: vi.fn().mockResolvedValue(undefined),
     getCollectedDates: vi.fn().mockResolvedValue([]),
     getExistingRunIds: vi.fn().mockResolvedValue(new Set()),
-	    getCachedWorkflowAttempts: vi.fn().mockResolvedValue(new Map()),
+    getCachedWorkflowAttempts: vi.fn().mockResolvedValue(new Map()),
     readRunListValidator: vi.fn().mockResolvedValue(null),
     writeRunListValidator: vi.fn().mockResolvedValue(undefined),
-	    writeRuns: vi.fn().mockResolvedValue(undefined),
-	    writeWorkflowAttempts: vi.fn().mockResolvedValue(undefined),
-	  };
-	});
+    writeRuns: vi.fn().mockResolvedValue(undefined),
+    writeWorkflowAttempts: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 
 import {
@@ -1620,5 +1622,34 @@ describe('collect rate limit handling', () => {
     })).resolves.toBeUndefined();
 
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Collection ended partial: completed=0/'));
+    expect(checkEtlFreshness).toHaveBeenCalledWith('acme/a');
+  });
+
+  it('tolerates post-collection freshness lookup errors without crashing', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.mocked(checkEtlFreshness).mockRejectedValueOnce(new Error('pg connection lost'));
+    const fakeClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 1, login: 'collector' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 50 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    vi.spyOn(github, 'createOctokit').mockReturnValue(fakeClient as never);
+
+    await expect(runCollection({
+      tokens: ['token'],
+      retentionDays: 90,
+      cliOptions: { forceFullBackfill: false, reverse: false },
+      targetRepos: ['acme/a'],
+      reposConfig: { repos: [{ repo: 'acme/a', workflows: [] }] },
+      collectRepoImpl: vi.fn().mockResolvedValue(undefined),
+    })).resolves.toBeUndefined();
+
+    expect(checkEtlFreshness).toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to check ETL freshness for acme/a:',
+      expect.any(Error),
+    );
   });
 });

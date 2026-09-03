@@ -915,6 +915,21 @@ export async function runSharedCollectionPlan({
   };
 }
 
+async function reportTargetFreshness(targetRepos: string[]): Promise<void> {
+  for (const repo of targetRepos) {
+    try {
+      const freshness = await checkEtlFreshness(repo);
+      if (freshness) {
+        const message = formatFreshnessReport(freshness, repo);
+        if (freshness.isStale) console.warn(message);
+        else log(message);
+      }
+    } catch (err) {
+      console.warn(`Failed to check ETL freshness for ${repo}:`, err);
+    }
+  }
+}
+
 export async function runCollection({
   token,
   tokens,
@@ -967,25 +982,10 @@ export async function runCollection({
     if (scheduled.failures.length > 0) {
       throw new Error(`Collection failed for ${scheduled.failures.length} repos`);
     }
+    await reportTargetFreshness(targetRepos);
     if (scheduled.deferred > 0) {
       console.log(`Collection ended partial: completed=${scheduled.completed}/${scheduled.total}, deferred=${scheduled.deferred} window(s) recoverable next cycle.`);
-      for (const repo of targetRepos) {
-        const freshness = await checkEtlFreshness(repo);
-        if (freshness) {
-          const message = formatFreshnessReport(freshness, repo);
-          if (freshness.isStale) console.warn(message);
-          else log(message);
-        }
-      }
       return;
-    }
-    for (const repo of targetRepos) {
-      const freshness = await checkEtlFreshness(repo);
-      if (freshness) {
-        const message = formatFreshnessReport(freshness, repo);
-        if (freshness.isStale) console.warn(message);
-        else log(message);
-      }
     }
     console.log('Done!');
     return;
@@ -1022,17 +1022,7 @@ export async function runCollection({
     return;
   }
 
-  for (const repo of targetRepos) {
-    const freshness = await checkEtlFreshness(repo);
-    if (freshness) {
-      const message = formatFreshnessReport(freshness, repo);
-      if (freshness.isStale) {
-        console.warn(message);
-      } else {
-        log(message);
-      }
-    }
-  }
+  await reportTargetFreshness(targetRepos);
 
   console.log('Done!');
 }
