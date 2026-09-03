@@ -540,9 +540,10 @@ export async function collectRepo(
   }
 
   const initialLatest = state.latest;
+  const retentionStart = format(subDays(now, effectiveDays), 'yyyy-MM-dd');
 
   function isRecentWindow(window: CollectionWindow): boolean {
-    return Boolean(initialLatest) && !options.forceFullBackfill && window.end.slice(0, 10) >= initialLatest;
+    return Boolean(initialLatest) && !options.forceFullBackfill && window.end.slice(0, 10) >= retentionStart;
   }
 
   async function fetchRunsForWindow(window: CollectionWindow, workflowId?: string): Promise<{ runs: Run[]; saturated: boolean; unchanged: boolean; validator?: RunListValidator }> {

@@ -22,6 +22,7 @@ The shared scheduler emits a `COLLECTION_HEARTBEAT_SECONDS` heartbeat (default `
 - A duplicate token cannot overspend a shared identity budget through concurrent lanes.
 - Identity discovery and one rate-limit read add a small fixed cost per supplied credential.
 - Long-running collection remains observable without adding a durable liveness data model or external telemetry dependency.
+- Warm reruns achieve >= 50% fewer GitHub Actions REST requests and >= 2x faster wall-clock completion across tracked repositories while preserving complete identity sets for runs, attempts, jobs, and steps.
 
 ## Constraints
 
@@ -33,3 +34,4 @@ The shared scheduler emits a `COLLECTION_HEARTBEAT_SECONDS` heartbeat (default `
 - Incomplete collection cycles with deferred windows end partial with explicit coverage reporting and do not fail the process when partial results were saved.
 - Transaction batching is a separate rollout slice.
 - `COLLECTION_HEARTBEAT_SECONDS` and `COLLECTION_SLOW_OPERATION_SECONDS` accept whole seconds from `1` through `2147483`; any other value suppresses heartbeats or alerts but not terminal summaries, avoiding Node timer overflow.
+- Performance acceptance requires >= 50% warm REST-request reduction and >= 2x warm wall-clock speedup while maintaining 100% identity completeness across runs, attempts, tracked jobs, and eligible steps.
