@@ -25,11 +25,11 @@ The core-rate-limit requests that a GitHub Identity Lane deliberately leaves uns
 _Avoid_: spare tokens
 
 **Collection Heartbeat**:
-The periodic console-only status line for shared Collection Window dispatch, reporting completed, failed, pending, and active work.
+The periodic console-only status line for shared Collection Window dispatch, reporting progress counters, budget reserves, and active lane/unit details.
 _Avoid_: telemetry, progress record
 
 **Collection Summary**:
-The console-only terminal count of completed, failed, deferred, and retried operations for one shared collection plan.
+The console-only terminal aggregation of completed, failed, deferred, and retried operations, cache statistics, and timing for one shared collection plan by repository and identity lane.
 _Avoid_: collection checkpoint, success report
 
 **Workflow Match Rule**:

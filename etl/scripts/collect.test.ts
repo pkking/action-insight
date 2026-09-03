@@ -10,6 +10,7 @@ import {
   rateLimitCooldown,
   resetSharedRetryCount,
   resolveCollectionHeartbeatMs,
+  resolveCollectionSlowOperationMs,
   reserveRateLimitBudget,
   RateLimitAbortError,
   runCollection,
@@ -85,10 +86,28 @@ describe('fetchJobsForRunAttempt', () => {
 });
 
 describe('resolveCollectionHeartbeatMs', () => {
+  it('defaults to 30 seconds', () => {
+    expect(resolveCollectionHeartbeatMs(undefined)).toBe(30_000);
+    expect(resolveCollectionHeartbeatMs('')).toBe(0);
+  });
+
   it('rejects values that would overflow Node timers', () => {
     expect(resolveCollectionHeartbeatMs('2147483')).toBe(2_147_483_000);
     expect(resolveCollectionHeartbeatMs('2147484')).toBe(0);
     expect(resolveCollectionHeartbeatMs('999999999999')).toBe(0);
+  });
+});
+
+describe('resolveCollectionSlowOperationMs', () => {
+  it('defaults to 30 seconds', () => {
+    expect(resolveCollectionSlowOperationMs(undefined)).toBe(30_000);
+    expect(resolveCollectionSlowOperationMs('')).toBe(0);
+  });
+
+  it('rejects values that would overflow Node timers', () => {
+    expect(resolveCollectionSlowOperationMs('2147483')).toBe(2_147_483_000);
+    expect(resolveCollectionSlowOperationMs('2147484')).toBe(0);
+    expect(resolveCollectionSlowOperationMs('999999999999')).toBe(0);
   });
 });
 
@@ -1366,14 +1385,16 @@ describe('collect rate limit handling', () => {
         collectRepoImpl: vi.fn(() => collectionFinished) as never,
       });
 
-      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(30_000);
       expect(logSpy).toHaveBeenCalledWith(
-        'Collection heartbeat: completed=0, failures=0, pending=0, active=acme/a (2026-04-17..2026-04-18)',
+        'Collection heartbeat: completed=0, failures=0, pending=0, retries=0, active=lane=user:1 (collector) repo=acme/a workflow=all window=2026-04-17..2026-04-18 phase=running budget=12',
       );
 
       finishCollection();
       await scheduled;
       expect(logSpy).toHaveBeenCalledWith('Collection summary: completed=1, failures=0, deferred=0, retries=0');
+      expect(logSpy).toHaveBeenCalledWith('Repository summary: repo=acme/a completed=1 failures=0 deferred=0 total=1 cachedAttempts=0 retries=0 duration=30s');
+      expect(logSpy).toHaveBeenCalledWith('Identity lane summary: lane=user:1 (collector) completed=1 failures=0 deferred=0 retries=0 remainingBudget=12 duration=30s');
     } finally {
       vi.useRealTimers();
     }
@@ -1400,7 +1421,7 @@ describe('collect rate limit handling', () => {
       collectRepoImpl: vi.fn().mockRejectedValue(new Error('network failed')) as never,
     });
 
-    expect(result).toEqual({ completed: 0, total: 1, failures: ['acme/a (2026-04-17..2026-04-18): network failed'], deferred: 0, retries: 0 });
+    expect(result).toMatchObject({ completed: 0, total: 1, failures: ['acme/a (2026-04-17..2026-04-18): network failed'], deferred: 0, retries: 0 });
     expect(logSpy).toHaveBeenCalledWith('Collection summary: completed=0, failures=1, deferred=0, retries=0');
   });
 
@@ -1474,7 +1495,7 @@ describe('collect rate limit handling', () => {
       });
 
       await vi.advanceTimersByTimeAsync(60_000);
-      await expect(scheduled).resolves.toEqual({ completed: 1, total: 1, failures: [], deferred: 0, retries: 0 });
+      await expect(scheduled).resolves.toMatchObject({ completed: 1, total: 1, failures: [], deferred: 0, retries: 0 });
       expect(collectRepoImpl).toHaveBeenCalledTimes(2);
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('cooldown=60s.'));
     } finally {
@@ -1500,7 +1521,7 @@ describe('collect rate limit handling', () => {
       cliOptions: { forceFullBackfill: false, reverse: false },
       reposConfig: { repos: [] },
       collectRepoImpl: vi.fn().mockRejectedValue(new RateLimitAbortError('primary limit', [], { remaining: '0' })) as never,
-    })).resolves.toEqual({ completed: 0, total: 1, failures: [], deferred: 1, retries: 0 });
+    })).resolves.toMatchObject({ completed: 0, total: 1, failures: [], deferred: 1, retries: 0 });
 
     expect(warnSpy).toHaveBeenCalledWith('Collection windows deferred: acme/a (2026-04-17..2026-04-18)');
   });
@@ -1568,7 +1589,7 @@ describe('collect rate limit handling', () => {
       }) as never,
     });
 
-    expect(result).toEqual({ completed: 1, total: 1, failures: [], deferred: 0, retries: 1 });
+    expect(result).toMatchObject({ completed: 1, total: 1, failures: [], deferred: 0, retries: 1 });
     expect(logSpy).toHaveBeenCalledWith('Collection summary: completed=1, failures=0, deferred=0, retries=1');
   });
 
@@ -1650,6 +1671,163 @@ describe('collect rate limit handling', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       'Failed to check ETL freshness for acme/a:',
       expect.any(Error),
+    );
+  });
+
+  it('emits slow-operation warnings when a unit exceeds the slow threshold', async () => {
+    vi.useFakeTimers();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fakeClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 1, login: 'collector' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 50 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    vi.spyOn(github, 'createOctokit').mockReturnValue(fakeClient as never);
+
+    let finishWork!: () => void;
+    const workPromise = new Promise<void>(resolve => { finishWork = resolve; });
+
+    const scheduled = runSharedCollectionPlan({
+      tokens: ['token'],
+      work: [{ repo: 'acme/slow-repo', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 }],
+      retentionDays: 90,
+      cliOptions: { forceFullBackfill: false, reverse: false },
+      reposConfig: { repos: [{ repo: 'acme/slow-repo', workflows: [{ workflow: 'ci', file: 'ci.yml', runs: 0, tracked: true }] }] },
+      collectRepoImpl: vi.fn(async (_client, _repo, _days, _opts, _cfg, _windows, onPhaseChange) => {
+        onPhaseChange?.('jobs');
+        await workPromise;
+      }) as never,
+    });
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Collection slow-operation: lane=user:1 (collector) repo=acme/slow-repo window=2026-04-17..2026-04-18 phase=jobs elapsed=30s',
+    );
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Collection slow-operation: lane=user:1 (collector) repo=acme/slow-repo window=2026-04-17..2026-04-18 phase=jobs elapsed=60s',
+    );
+
+    finishWork();
+    await scheduled;
+    vi.useRealTimers();
+  });
+
+  it('emits concise stable key=value unit start, done, and failed events', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fakeClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 1, login: 'collector' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 50 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    vi.spyOn(github, 'createOctokit').mockReturnValue(fakeClient as never);
+
+    await runSharedCollectionPlan({
+      tokens: ['token'],
+      work: [
+        { repo: 'acme/ok', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 },
+        { repo: 'acme/fail', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 1 },
+      ],
+      retentionDays: 90,
+      cliOptions: { forceFullBackfill: false, reverse: false },
+      reposConfig: { repos: [] },
+      collectRepoImpl: vi.fn(async (_client, repo) => {
+        if (repo === 'acme/fail') throw new Error('disk full');
+      }) as never,
+    });
+
+    expect(logSpy).toHaveBeenCalledWith(
+      'Collection unit start: lane=user:1 (collector) repo=acme/ok window=2026-04-17..2026-04-18 priority=0',
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/^Collection unit done: lane=user:1 \(collector\) repo=acme\/ok window=2026-04-17\.\.2026-04-18 duration=\d+ms$/),
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      'Collection unit start: lane=user:1 (collector) repo=acme/fail window=2026-04-17..2026-04-18 priority=1',
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/^Collection unit failed: lane=user:1 \(collector\) repo=acme\/fail window=2026-04-17\.\.2026-04-18 duration=\d+ms error="disk full"$/),
+    );
+  });
+
+  it('aggregates per-repository and per-lane terminal metrics across multi-repo runs', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const fakeClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 10, login: 'lane-a' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 100 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    vi.spyOn(github, 'createOctokit').mockReturnValue(fakeClient as never);
+
+    const result = await runSharedCollectionPlan({
+      tokens: ['token-a'],
+      work: [
+        { repo: 'acme/first', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 },
+        { repo: 'acme/first', window: { start: '2026-04-10', end: '2026-04-16' }, priority: 1 },
+        { repo: 'acme/second', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 },
+      ],
+      retentionDays: 90,
+      cliOptions: { forceFullBackfill: false, reverse: false },
+      reposConfig: { repos: [] },
+      collectRepoImpl: vi.fn(async (_client, repo, _days, _opts, _cfg, windows) => {
+        if (repo === 'acme/first' && windows?.[0].start === '2026-04-17') {
+          return { cachedAttempts: 5, collectedRuns: 10 };
+        }
+        return { cachedAttempts: 2, collectedRuns: 4 };
+      }) as never,
+    });
+
+    expect(result.completed).toBe(3);
+    expect(result.failures).toHaveLength(0);
+    expect(result.deferred).toBe(0);
+
+    expect(result.repositories['acme/first']).toMatchObject({
+      repo: 'acme/first',
+      completed: 2,
+      failures: 0,
+      deferred: 0,
+      total: 2,
+      cachedAttempts: 7,
+      retries: 0,
+      durationMs: expect.any(Number),
+    });
+    expect(result.repositories['acme/second']).toMatchObject({
+      repo: 'acme/second',
+      completed: 1,
+      failures: 0,
+      deferred: 0,
+      total: 1,
+      cachedAttempts: 2,
+      retries: 0,
+      durationMs: expect.any(Number),
+    });
+
+    expect(result.lanes['user:10 (lane-a)']).toMatchObject({
+      identity: 'user:10 (lane-a)',
+      completed: 3,
+      failures: 0,
+      deferred: 0,
+      retries: 0,
+      remainingBudget: 100,
+      durationMs: expect.any(Number),
+    });
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/^Repository summary: repo=acme\/first completed=2 failures=0 deferred=0 total=2 cachedAttempts=7 retries=0 duration=\d+s$/),
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/^Repository summary: repo=acme\/second completed=1 failures=0 deferred=0 total=1 cachedAttempts=2 retries=0 duration=\d+s$/),
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/^Identity lane summary: lane=user:10 \(lane-a\) completed=3 failures=0 deferred=0 retries=0 remainingBudget=100 duration=\d+s$/),
     );
   });
 });
