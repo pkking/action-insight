@@ -3,33 +3,41 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   collectRepo,
   fetchJobsForRunAttempt,
+  getSharedRetryCount,
+  isTransientError,
   jitteredRetryDelayMs,
   parseRunnerResourceLabels,
   rateLimitCooldown,
+  resetSharedRetryCount,
   resolveCollectionHeartbeatMs,
+  reserveRateLimitBudget,
   RateLimitAbortError,
   runCollection,
   runSharedCollectionPlan,
+  withRetry,
+  RETRYABLE_POSTGRES_CODES,
 } from './collect';
 import * as github from './github';
 import { isGitHubRateLimitError } from './github';
+import { checkEtlFreshness } from './pg-storage';
 
 vi.mock('./pg-storage.ts', async () => {
   const actual = await vi.importActual<typeof import('./pg-storage')>('./pg-storage');
   return {
     ...actual,
+    checkEtlFreshness: vi.fn().mockResolvedValue(null),
     readCollectionState: vi.fn().mockResolvedValue(null),
     writeCollectionState: vi.fn().mockResolvedValue(undefined),
     persistCollectionWindow: vi.fn().mockResolvedValue(undefined),
     getCollectedDates: vi.fn().mockResolvedValue([]),
     getExistingRunIds: vi.fn().mockResolvedValue(new Set()),
-	    getCachedWorkflowAttempts: vi.fn().mockResolvedValue(new Map()),
+    getCachedWorkflowAttempts: vi.fn().mockResolvedValue(new Map()),
     readRunListValidator: vi.fn().mockResolvedValue(null),
     writeRunListValidator: vi.fn().mockResolvedValue(undefined),
-	    writeRuns: vi.fn().mockResolvedValue(undefined),
-	    writeWorkflowAttempts: vi.fn().mockResolvedValue(undefined),
-	  };
-	});
+    writeRuns: vi.fn().mockResolvedValue(undefined),
+    writeWorkflowAttempts: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 
 import {
@@ -81,6 +89,101 @@ describe('resolveCollectionHeartbeatMs', () => {
     expect(resolveCollectionHeartbeatMs('2147483')).toBe(2_147_483_000);
     expect(resolveCollectionHeartbeatMs('2147484')).toBe(0);
     expect(resolveCollectionHeartbeatMs('999999999999')).toBe(0);
+  });
+});
+
+describe('isTransientError', () => {
+  it('classifies network error codes as transient', () => {
+    expect(isTransientError({ code: 'ECONNRESET' })).toBe(true);
+    expect(isTransientError({ code: 'ECONNREFUSED' })).toBe(true);
+    expect(isTransientError({ code: 'ETIMEDOUT' })).toBe(true);
+    expect(isTransientError({ code: 'EAI_AGAIN' })).toBe(true);
+    expect(isTransientError({ code: 'ERR_SOCKET_TIMEOUT' })).toBe(true);
+  });
+
+  it('classifies HTTP 5xx responses as transient', () => {
+    expect(isTransientError({ status: 500 })).toBe(true);
+    expect(isTransientError({ status: 502 })).toBe(true);
+    expect(isTransientError({ status: 503 })).toBe(true);
+    expect(isTransientError({ status: 504 })).toBe(true);
+    expect(isTransientError({ status: 404 })).toBe(false);
+    expect(isTransientError({ status: 400 })).toBe(false);
+  });
+
+  it('classifies retryable PostgreSQL error codes as transient', () => {
+    for (const code of RETRYABLE_POSTGRES_CODES) {
+      expect(isTransientError({ code })).toBe(true);
+    }
+  });
+
+  it('rejects non-retryable PostgreSQL error codes and other values', () => {
+    expect(isTransientError({ code: '23505' })).toBe(false); // unique_violation
+    expect(isTransientError({ code: '42601' })).toBe(false); // syntax_error
+    expect(isTransientError(null)).toBe(false);
+    expect(isTransientError('error string')).toBe(false);
+    expect(isTransientError({})).toBe(false);
+  });
+});
+
+describe('withRetry', () => {
+  beforeEach(() => {
+    resetSharedRetryCount();
+  });
+
+  it('retries on retryable PostgreSQL errors and increments shared retry count', async () => {
+    let attempts = 0;
+    const fn = vi.fn(async () => {
+      attempts += 1;
+      if (attempts < 3) {
+        const err = new Error('serialization failure') as Error & { code: string };
+        err.code = '40001';
+        throw err;
+      }
+      return 'success';
+    });
+
+    const result = await withRetry(fn, 3, 1);
+    expect(result).toBe('success');
+    expect(attempts).toBe(3);
+    expect(getSharedRetryCount()).toBe(2);
+  });
+
+  it('throws immediately on non-transient errors without retry', async () => {
+    const fn = vi.fn(async () => {
+      const err = new Error('syntax error') as Error & { code: string };
+      err.code = '42601';
+      throw err;
+    });
+
+    await expect(withRetry(fn, 3, 1)).rejects.toThrow('syntax error');
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(getSharedRetryCount()).toBe(0);
+  });
+});
+
+describe('reserveRateLimitBudget', () => {
+  it('tracks initial reset timestamp and header updates when throwing RateLimitAbortError', async () => {
+    const octokit = {
+      request: vi.fn(async () => ({
+        headers: {
+          'x-ratelimit-remaining': '9',
+          'x-ratelimit-reset': '1712345678',
+        },
+      })),
+    };
+    const wrapped = reserveRateLimitBudget(octokit as never, 11, 1700000000);
+
+    // First request drops remaining to 9 (below reserve 10) and captures new reset header
+    await wrapped.request('GET /test');
+
+    // Next request hits budget reserve and carries the updated reset timestamp
+    await expect(wrapped.request('GET /test')).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(RateLimitAbortError);
+      const rle = err as RateLimitAbortError;
+      expect(rle.details.remaining).toBe('9');
+      expect(rle.details.reset).toBe('1712345678');
+      return true;
+    });
   });
 });
 
@@ -1270,7 +1373,7 @@ describe('collect rate limit handling', () => {
 
       finishCollection();
       await scheduled;
-      expect(logSpy).toHaveBeenCalledWith('Collection summary: completed=1, failures=0, deferred=0');
+      expect(logSpy).toHaveBeenCalledWith('Collection summary: completed=1, failures=0, deferred=0, retries=0');
     } finally {
       vi.useRealTimers();
     }
@@ -1297,8 +1400,8 @@ describe('collect rate limit handling', () => {
       collectRepoImpl: vi.fn().mockRejectedValue(new Error('network failed')) as never,
     });
 
-    expect(result).toEqual({ failures: ['acme/a (2026-04-17..2026-04-18): network failed'], deferred: 0 });
-    expect(logSpy).toHaveBeenCalledWith('Collection summary: completed=0, failures=1, deferred=0');
+    expect(result).toEqual({ completed: 0, total: 1, failures: ['acme/a (2026-04-17..2026-04-18): network failed'], deferred: 0, retries: 0 });
+    expect(logSpy).toHaveBeenCalledWith('Collection summary: completed=0, failures=1, deferred=0, retries=0');
   });
 
   it('reassigns a rate-limited window and reports its cooldown', async () => {
@@ -1371,7 +1474,7 @@ describe('collect rate limit handling', () => {
       });
 
       await vi.advanceTimersByTimeAsync(60_000);
-      await expect(scheduled).resolves.toEqual({ failures: [], deferred: 0 });
+      await expect(scheduled).resolves.toEqual({ completed: 1, total: 1, failures: [], deferred: 0, retries: 0 });
       expect(collectRepoImpl).toHaveBeenCalledTimes(2);
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('cooldown=60s.'));
     } finally {
@@ -1397,7 +1500,7 @@ describe('collect rate limit handling', () => {
       cliOptions: { forceFullBackfill: false, reverse: false },
       reposConfig: { repos: [] },
       collectRepoImpl: vi.fn().mockRejectedValue(new RateLimitAbortError('primary limit', [], { remaining: '0' })) as never,
-    })).resolves.toEqual({ failures: [], deferred: 1 });
+    })).resolves.toEqual({ completed: 0, total: 1, failures: [], deferred: 1, retries: 0 });
 
     expect(warnSpy).toHaveBeenCalledWith('Collection windows deferred: acme/a (2026-04-17..2026-04-18)');
   });
@@ -1433,5 +1536,120 @@ describe('collect rate limit handling', () => {
 
     expect(collected.slice(0, 2)).toEqual(['acme/a:2026-04-17', 'acme/b:2026-04-17']);
     expect(requests.filter(route => route === 'GET /work')).toHaveLength(2);
+  });
+
+  it('counts retries and reports them in the shared terminal summary', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const fakeClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 1, login: 'collector' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 12 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    vi.spyOn(github, 'createOctokit').mockReturnValue(fakeClient as never);
+
+    let attempts = 0;
+    const result = await runSharedCollectionPlan({
+      tokens: ['token'],
+      work: [{ repo: 'acme/a', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 }],
+      retentionDays: 90,
+      cliOptions: { forceFullBackfill: false, reverse: false },
+      reposConfig: { repos: [] },
+      collectRepoImpl: vi.fn(async () => {
+        await withRetry(async () => {
+          attempts += 1;
+          if (attempts === 1) {
+            const err = new Error('deadlock') as Error & { code: string };
+            err.code = '40P01';
+            throw err;
+          }
+        }, 3, 1);
+      }) as never,
+    });
+
+    expect(result).toEqual({ completed: 1, total: 1, failures: [], deferred: 0, retries: 1 });
+    expect(logSpy).toHaveBeenCalledWith('Collection summary: completed=1, failures=0, deferred=0, retries=1');
+  });
+
+  it('reports reset cooldown when identity lane depletes its budget reserve', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fakeClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 1, login: 'collector' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 10, reset: 1712345678 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    vi.spyOn(github, 'createOctokit').mockReturnValue(fakeClient as never);
+
+    const result = await runSharedCollectionPlan({
+      tokens: ['token'],
+      work: [{ repo: 'acme/a', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 }],
+      retentionDays: 90,
+      cliOptions: { forceFullBackfill: false, reverse: false },
+      reposConfig: { repos: [] },
+      collectRepoImpl: vi.fn(async (client) => {
+        await client.request('GET /any');
+      }) as never,
+    });
+
+    expect(result.deferred).toBe(1);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('cooldown=until=2024-04-05T19:34:38.000Z.'));
+  });
+
+  it('ends partial with coverage reporting when collection windows are deferred', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fakeClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 1, login: 'collector' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 10, reset: 1712345678 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    vi.spyOn(github, 'createOctokit').mockReturnValue(fakeClient as never);
+
+    await expect(runCollection({
+      tokens: ['token'],
+      retentionDays: 90,
+      cliOptions: { forceFullBackfill: false, reverse: false },
+      targetRepos: ['acme/a'],
+      reposConfig: { repos: [{ repo: 'acme/a', workflows: [] }] },
+      collectRepoImpl: vi.fn(async (client) => {
+        await client.request('GET /exhaust');
+      }) as never,
+    })).resolves.toBeUndefined();
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Collection ended partial: completed=0/'));
+    expect(checkEtlFreshness).toHaveBeenCalledWith('acme/a');
+  });
+
+  it('tolerates post-collection freshness lookup errors without crashing', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.mocked(checkEtlFreshness).mockRejectedValueOnce(new Error('pg connection lost'));
+    const fakeClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 1, login: 'collector' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 50 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    vi.spyOn(github, 'createOctokit').mockReturnValue(fakeClient as never);
+
+    await expect(runCollection({
+      tokens: ['token'],
+      retentionDays: 90,
+      cliOptions: { forceFullBackfill: false, reverse: false },
+      targetRepos: ['acme/a'],
+      reposConfig: { repos: [{ repo: 'acme/a', workflows: [] }] },
+      collectRepoImpl: vi.fn().mockResolvedValue(undefined),
+    })).resolves.toBeUndefined();
+
+    expect(checkEtlFreshness).toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to check ETL freshness for acme/a:',
+      expect.any(Error),
+    );
   });
 });

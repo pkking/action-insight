@@ -29,7 +29,7 @@ The periodic console-only status line for shared Collection Window dispatch, rep
 _Avoid_: telemetry, progress record
 
 **Collection Summary**:
-The console-only terminal count of completed, failed, and deferred Collection Windows for one shared collection plan.
+The console-only terminal count of completed, failed, deferred, and retried operations for one shared collection plan.
 _Avoid_: collection checkpoint, success report
 
 **Workflow Match Rule**:
