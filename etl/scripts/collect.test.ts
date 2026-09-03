@@ -1379,6 +1379,29 @@ describe('collect rate limit handling', () => {
     }
   });
 
+  it('reports only terminally deferred Collection Windows', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fakeClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 1, login: 'collector' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 12 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    vi.spyOn(github, 'createOctokit').mockReturnValue(fakeClient as never);
+
+    await expect(runSharedCollectionPlan({
+      tokens: ['token'],
+      work: [{ repo: 'acme/a', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 }],
+      retentionDays: 90,
+      cliOptions: { forceFullBackfill: false, reverse: false },
+      reposConfig: { repos: [] },
+      collectRepoImpl: vi.fn().mockRejectedValue(new RateLimitAbortError('primary limit', [], { remaining: '0' })) as never,
+    })).resolves.toEqual({ failures: [], deferred: 1 });
+
+    expect(warnSpy).toHaveBeenCalledWith('Collection windows deferred: acme/a (2026-04-17..2026-04-18)');
+  });
+
   it('shares identity lanes, prioritizes recent windows, and preserves the request reserve', async () => {
     const requests: string[] = [];
     const fakeClient = {

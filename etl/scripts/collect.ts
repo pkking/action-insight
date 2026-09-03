@@ -818,7 +818,7 @@ export async function runSharedCollectionPlan({
           // This identity cannot safely spend its reserve. Leave the unit for another lane.
           pending.unshift(unit);
           const cooldownMs = secondaryCooldownMs(err.details);
-          console.warn(`Collection window deferred: ${unit.repo} (${unit.window.start}..${unit.window.end}); identity lane ${identity} cooldown=${rateLimitCooldown(err.details)}.`);
+          console.warn(`Collection window released: ${unit.repo} (${unit.window.start}..${unit.window.end}); identity lane ${identity} cooldown=${rateLimitCooldown(err.details)}.`);
           if (cooldownMs > 0) {
             if (pending.length === 0) return;
             await new Promise(resolve => setTimeout(resolve, cooldownMs));
@@ -842,7 +842,7 @@ export async function runSharedCollectionPlan({
   }
 
   if (pending.length > 0) {
-    console.warn(`Deferred ${pending.length} collection window(s) because no identity lane remained available.`);
+    console.warn(`Collection windows deferred: ${pending.map(unit => `${unit.repo} (${unit.window.start}..${unit.window.end})`).join(', ')}`);
   }
   console.log(`Collection summary: completed=${completed}, failures=${failures.length}, deferred=${pending.length}`);
   return { failures, deferred: pending.length };
