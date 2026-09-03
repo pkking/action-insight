@@ -160,7 +160,7 @@ async function execQuery(client: { query: PoolClient['query'] }, sql: string, ar
   return client.query(toPgSql(sql), args);
 }
 
-async function ensureRepo(client: PoolClient, owner: string, repo: string): Promise<number> {
+export async function ensureRepo(client: PoolClient, owner: string, repo: string): Promise<number> {
   await client.query(
     `INSERT INTO repos (owner, repo) VALUES ($1, $2)
      ON CONFLICT(owner, repo) DO NOTHING`,
