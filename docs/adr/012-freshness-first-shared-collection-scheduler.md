@@ -1,6 +1,6 @@
 # ADR-012: Schedule raw collection by freshness before backfill
 
-**Status**: Accepted  
+**Status**: Implemented
 **Date**: 2026-09-02
 
 ## Context
