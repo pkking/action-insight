@@ -226,11 +226,17 @@ const MAX_TIMER_MS = 2_147_483_647;
 const MAX_HEARTBEAT_SECONDS = Math.floor(MAX_TIMER_MS / 1000);
 
 export function resolveCollectionHeartbeatMs(value = process.env.COLLECTION_HEARTBEAT_SECONDS): number {
-  const seconds = Number(value ?? '60');
+  const seconds = Number(value ?? '30');
+  return Number.isInteger(seconds) && seconds > 0 && seconds <= MAX_HEARTBEAT_SECONDS ? seconds * 1000 : 0;
+}
+
+export function resolveCollectionSlowOperationMs(value = process.env.COLLECTION_SLOW_OPERATION_SECONDS): number {
+  const seconds = Number(value ?? '30');
   return Number.isInteger(seconds) && seconds > 0 && seconds <= MAX_HEARTBEAT_SECONDS ? seconds * 1000 : 0;
 }
 
 const COLLECTION_HEARTBEAT_MS = resolveCollectionHeartbeatMs();
+const COLLECTION_SLOW_OPERATION_MS = resolveCollectionSlowOperationMs();
 
 export function rateLimitCooldown(details: RateLimitDetails): string {
   const retryAfter = Number(details.retryAfter);
@@ -247,7 +253,7 @@ function secondaryCooldownMs(details: RateLimitDetails): number {
     : 0;
 }
 
-export function reserveRateLimitBudget(octokit: Octokit, remaining: number, initialReset?: number): Octokit {
+export function reserveRateLimitBudget(octokit: Octokit, remaining: number, initialReset?: number): Octokit & { getBudget: () => number } {
   let budget = remaining;
   let resetTimestamp = initialReset !== undefined ? String(initialReset) : undefined;
   return {
@@ -268,7 +274,8 @@ export function reserveRateLimitBudget(octokit: Octokit, remaining: number, init
       if (reportedReset) resetTimestamp = String(reportedReset);
       return response;
     },
-  } as Octokit;
+    getBudget: () => budget,
+  } as Octokit & { getBudget: () => number };
 }
 
 
@@ -503,7 +510,9 @@ export async function collectRepo(
   options: CollectCliOptions,
   reposConfig: ReposConfig = { repos: [{ repo, workflows: [] }] },
   plannedWindows?: CollectionWindow[],
-) {
+  onPhaseChange?: (phase: 'listing' | 'jobs' | 'persisting') => void,
+  onRetry?: (err: unknown, attempt: number) => void,
+): Promise<{ cachedAttempts: number; collectedRuns: number }> {
   console.log(`Processing ${repo}...`);
   const [owner, repoName] = repo.split('/');
   if (!owner || !repoName) {
@@ -644,11 +653,14 @@ export async function collectRepo(
     });
   }
 
+  let totalCachedAttempts = 0;
+
   async function hydrateRunsWithJobs(runs: Run[]): Promise<Run[]> {
     if (options.skipJobs) return runs;
     const hasWorkflowRules = repoConfig.workflows.length > 0;
     const candidates = runs.filter(run => !hasWorkflowRules || run.tracked).map(run => ({ runId: run.id, runAttempt: run.runAttempt ?? 1 }));
-    const cached = await withRetry(() => getCachedWorkflowAttempts(repo, candidates));
+    const cached = await withRetry(() => getCachedWorkflowAttempts(repo, candidates), 3, 2000, onRetry);
+    totalCachedAttempts += cached.size;
     log(`Candidate cached workflow attempts: ${cached.size}/${candidates.length}`);
     for (const run of runs) {
       if (hasWorkflowRules && !run.tracked) continue;
@@ -724,6 +736,7 @@ export async function collectRepo(
     const window = windows[wi];
     console.log(`Window ${wi + 1}/${windows.length} (${window.start}..${window.end})`);
     try {
+      onPhaseChange?.('listing');
       const results: Awaited<ReturnType<typeof collectRunsForWindow>>[] = [];
       if (trackedWorkflowIds.length) {
         for (const workflowId of trackedWorkflowIds) {
@@ -740,11 +753,13 @@ export async function collectRepo(
 
       const listedRuns = changedResults.flatMap(result => result.runs);
       const deduplicatedRuns = Array.from(new Map(listedRuns.map(run => [runAttemptKey(run.id, run.runAttempt), run])).values());
+      onPhaseChange?.('jobs');
       const windowRuns = await hydrateRunsWithJobs(deduplicatedRuns);
       console.log(`Window ${wi + 1}/${windows.length} done: ${windowRuns.length} run(s)`);
       for (const run of windowRuns) {
         allRunsMap.set(runAttemptKey(run.id, run.runAttempt), run);
       }
+      onPhaseChange?.('persisting');
       const checkpointState = await persistCollectedRuns(
         repo,
         state,
@@ -757,7 +772,7 @@ export async function collectRepo(
       );
       state = checkpointState;
       for (const validator of changedResults.flatMap(result => result.validators)) {
-        await withRetry(() => writeRunListValidator(repo, validator.workflowFile, validator.windowStart, validator.windowEnd, validator.etag));
+        await withRetry(() => writeRunListValidator(repo, validator.workflowFile, validator.windowStart, validator.windowEnd, validator.etag), 3, 2000, onRetry);
       }
       console.log(`Checkpointed ${repo}: ${checkpointState.collectedDates.length} retained date(s), latest=${checkpointState.latest || '(none)'} (${wi + 1}/${windows.length})`);
     } catch (err) {
@@ -772,6 +787,7 @@ export async function collectRepo(
   }
 
   log(`Total workflow attempts collected: ${allRunsMap.size}`);
+  return { cachedAttempts: totalCachedAttempts, collectedRuns: allRunsMap.size };
 }
 
 async function buildCollectionPlan(
@@ -802,12 +818,35 @@ async function buildCollectionPlan(
   return work.sort((a, b) => a.priority - b.priority);
 }
 
+export interface RepositoryCollectionSummary {
+  repo: string;
+  completed: number;
+  failures: number;
+  deferred: number;
+  total: number;
+  cachedAttempts: number;
+  retries: number;
+  durationMs: number;
+}
+
+export interface LaneCollectionSummary {
+  identity: string;
+  completed: number;
+  failures: number;
+  deferred: number;
+  retries: number;
+  remainingBudget: number;
+  durationMs: number;
+}
+
 export interface CollectionPlanResult {
   completed: number;
   total: number;
   failures: string[];
   deferred: number;
   retries: number;
+  repositories: Record<string, RepositoryCollectionSummary>;
+  lanes: Record<string, LaneCollectionSummary>;
 }
 
 export async function runSharedCollectionPlan({
@@ -843,62 +882,191 @@ export async function runSharedCollectionPlan({
   const lanes = Array.from(new Map(identities.map(lane => [lane.identity, lane])).values());
   const pending = [...work];
   const activeRepos = new Set<string>();
-  const activeWork = new Map<string, CollectionWindow>();
+  const activeWork = new Map<string, {
+    lane: string;
+    repo: string;
+    workflow: string;
+    window: CollectionWindow;
+    phase: string;
+    budget: () => number;
+  }>();
   let activeRecent = 0;
   let completed = 0;
   const failures: string[] = [];
 
+  const repoSummaries = new Map<string, RepositoryCollectionSummary>();
+  for (const item of work) {
+    if (!repoSummaries.has(item.repo)) {
+      repoSummaries.set(item.repo, {
+        repo: item.repo,
+        completed: 0,
+        failures: 0,
+        deferred: 0,
+        total: 0,
+        cachedAttempts: 0,
+        retries: 0,
+        durationMs: 0,
+      });
+    }
+    repoSummaries.get(item.repo)!.total += 1;
+  }
+
+  const laneSummaries = new Map<string, LaneCollectionSummary>();
+  for (const lane of lanes) {
+    laneSummaries.set(lane.identity, {
+      identity: lane.identity,
+      completed: 0,
+      failures: 0,
+      deferred: 0,
+      retries: 0,
+      remainingBudget: (lane.client as { getBudget?: () => number }).getBudget?.() ?? 0,
+      durationMs: 0,
+    });
+  }
+
   console.log(`GitHub identity lanes: ${lanes.length}; reserve: ${RATE_LIMIT_RESERVE}`);
   const heartbeat = COLLECTION_HEARTBEAT_MS > 0 ? setInterval(() => {
-    const active = Array.from(activeWork, ([repo, window]) => `${repo} (${window.start}..${window.end})`).join(', ') || 'none';
-    console.log(`Collection heartbeat: completed=${completed}, failures=${failures.length}, pending=${pending.length}, active=${active}`);
+    const active = activeWork.size > 0
+      ? Array.from(activeWork.values())
+          .map(info => `lane=${info.lane} repo=${info.repo} workflow=${info.workflow} window=${info.window.start}..${info.window.end} phase=${info.phase} budget=${info.budget()}`)
+          .join('; ')
+      : 'none';
+    console.log(`Collection heartbeat: completed=${completed}, failures=${failures.length}, pending=${pending.length}, retries=${getSharedRetryCount() - initialRetryCount}, active=${active}`);
   }, COLLECTION_HEARTBEAT_MS) : undefined;
   heartbeat?.unref?.();
 
   try {
     await Promise.all(lanes.map(async ({ client, identity }) => {
-    while (true) {
-      const index = pending.findIndex(unit => unit.priority === 0 && !activeRepos.has(unit.repo));
-      const nextIndex = index >= 0
-        ? index
-        : activeRecent === 0
-          ? pending.findIndex(unit => !activeRepos.has(unit.repo))
-          : -1;
-      if (nextIndex < 0) return;
-      const unit = pending.splice(nextIndex, 1)[0];
-      activeRepos.add(unit.repo);
-      activeWork.set(unit.repo, unit.window);
-      if (unit.priority === 0) activeRecent += 1;
-      try {
-        await collectRepoImpl(client, unit.repo, retentionDays, cliOptions, reposConfig, [unit.window]);
-        completed += 1;
-        console.log(`Collection window completed: ${unit.repo} (${unit.window.start}..${unit.window.end})`);
-      } catch (err) {
-        if (err instanceof RateLimitAbortError) {
-          // This identity cannot safely spend its reserve. Leave the unit for another lane.
-          pending.unshift(unit);
-          const cooldownMs = secondaryCooldownMs(err.details);
-          console.warn(`Collection window released: ${unit.repo} (${unit.window.start}..${unit.window.end}); identity lane ${identity} cooldown=${rateLimitCooldown(err.details)}.`);
-          if (cooldownMs > 0) {
-            if (pending.length === 0) return;
-            await new Promise(resolve => setTimeout(resolve, cooldownMs));
-            console.log(`Collection lane resumed: identity=${identity}, cooldown=${rateLimitCooldown(err.details)}`);
-            continue;
+      while (true) {
+        const index = pending.findIndex(unit => unit.priority === 0 && !activeRepos.has(unit.repo));
+        const nextIndex = index >= 0
+          ? index
+          : activeRecent === 0
+            ? pending.findIndex(unit => !activeRepos.has(unit.repo))
+            : -1;
+        if (nextIndex < 0) return;
+        const unit = pending.splice(nextIndex, 1)[0];
+        const repoConfig = findRepoConfig(reposConfig, unit.repo);
+        const workflow = repoConfig.workflows.map(w => w.file || w.workflow).filter(Boolean).join(',') || 'all';
+        let currentPhase = 'running';
+        const unitStartTime = Date.now();
+        const retriesBefore = getSharedRetryCount();
+        let unitRetried = 0;
+        const onRetry = () => { unitRetried += 1; };
+
+        activeRepos.add(unit.repo);
+        activeWork.set(unit.repo, {
+          lane: identity,
+          repo: unit.repo,
+          workflow,
+          window: unit.window,
+          get phase() { return currentPhase; },
+          budget: () => (client as { getBudget?: () => number }).getBudget?.() ?? 0,
+        });
+        if (unit.priority === 0) activeRecent += 1;
+
+        console.log(`Collection unit start: lane=${identity} repo=${unit.repo} window=${unit.window.start}..${unit.window.end} priority=${unit.priority}`);
+
+        const slowTimer = COLLECTION_SLOW_OPERATION_MS > 0 ? setInterval(() => {
+          const elapsedSeconds = Math.floor((Date.now() - unitStartTime) / 1000);
+          console.warn(`Collection slow-operation: lane=${identity} repo=${unit.repo} window=${unit.window.start}..${unit.window.end} phase=${currentPhase} elapsed=${elapsedSeconds}s`);
+        }, COLLECTION_SLOW_OPERATION_MS) : undefined;
+        slowTimer?.unref?.();
+
+        try {
+          const stats = (await collectRepoImpl(
+            client,
+            unit.repo,
+            retentionDays,
+            cliOptions,
+            reposConfig,
+            [unit.window],
+            (phase: 'listing' | 'jobs' | 'persisting') => { currentPhase = phase; },
+            onRetry,
+          )) as { cachedAttempts?: number } | undefined;
+          completed += 1;
+          const durationMs = Date.now() - unitStartTime;
+          const deltaRetries = Math.max(unitRetried, getSharedRetryCount() - retriesBefore);
+          console.log(`Collection unit done: lane=${identity} repo=${unit.repo} window=${unit.window.start}..${unit.window.end} duration=${durationMs}ms`);
+
+          const rSummary = repoSummaries.get(unit.repo);
+          if (rSummary) {
+            rSummary.completed += 1;
+            rSummary.cachedAttempts += stats?.cachedAttempts ?? 0;
+            rSummary.retries += deltaRetries;
+            rSummary.durationMs += durationMs;
           }
-          return;
+          const lSummary = laneSummaries.get(identity);
+          if (lSummary) {
+            lSummary.completed += 1;
+            lSummary.retries += deltaRetries;
+            lSummary.remainingBudget = (client as { getBudget?: () => number }).getBudget?.() ?? 0;
+            lSummary.durationMs += durationMs;
+          }
+        } catch (err) {
+          const durationMs = Date.now() - unitStartTime;
+          const deltaRetries = Math.max(unitRetried, getSharedRetryCount() - retriesBefore);
+          if (err instanceof RateLimitAbortError) {
+            // This identity cannot safely spend its reserve. Leave the unit for another lane.
+            pending.unshift(unit);
+            const cooldownMs = secondaryCooldownMs(err.details);
+            const lSummary = laneSummaries.get(identity);
+            if (lSummary) {
+              lSummary.deferred += 1;
+              lSummary.retries += deltaRetries;
+              lSummary.remainingBudget = (client as { getBudget?: () => number }).getBudget?.() ?? 0;
+              lSummary.durationMs += durationMs;
+            }
+            console.warn(`Collection window released: ${unit.repo} (${unit.window.start}..${unit.window.end}); identity lane ${identity} cooldown=${rateLimitCooldown(err.details)}.`);
+            if (cooldownMs > 0) {
+              if (pending.length === 0) return;
+              await new Promise(resolve => setTimeout(resolve, cooldownMs));
+              console.log(`Collection lane resumed: identity=${identity}, cooldown=${rateLimitCooldown(err.details)}`);
+              continue;
+            }
+            return;
+          }
+          const message = err instanceof Error ? err.message : String(err);
+          failures.push(`${unit.repo} (${unit.window.start}..${unit.window.end}): ${message}`);
+          console.error(`Collection unit failed: lane=${identity} repo=${unit.repo} window=${unit.window.start}..${unit.window.end} duration=${durationMs}ms error="${message}"`);
+          error(`Failed collection window ${unit.repo} (${unit.window.start}..${unit.window.end}):`, err);
+
+          const rSummary = repoSummaries.get(unit.repo);
+          if (rSummary) {
+            rSummary.failures += 1;
+            rSummary.retries += deltaRetries;
+            rSummary.durationMs += durationMs;
+          }
+          const lSummary = laneSummaries.get(identity);
+          if (lSummary) {
+            lSummary.failures += 1;
+            lSummary.retries += deltaRetries;
+            lSummary.remainingBudget = (client as { getBudget?: () => number }).getBudget?.() ?? 0;
+            lSummary.durationMs += durationMs;
+          }
+        } finally {
+          if (slowTimer) clearInterval(slowTimer);
+          activeRepos.delete(unit.repo);
+          activeWork.delete(unit.repo);
+          if (unit.priority === 0) activeRecent -= 1;
         }
-        const message = err instanceof Error ? err.message : String(err);
-        failures.push(`${unit.repo} (${unit.window.start}..${unit.window.end}): ${message}`);
-        error(`Failed collection window ${unit.repo} (${unit.window.start}..${unit.window.end}):`, err);
-      } finally {
-        activeRepos.delete(unit.repo);
-        activeWork.delete(unit.repo);
-        if (unit.priority === 0) activeRecent -= 1;
       }
-    }
     }));
   } finally {
     if (heartbeat) clearInterval(heartbeat);
+  }
+
+  for (const unit of pending) {
+    const rSummary = repoSummaries.get(unit.repo);
+    if (rSummary) {
+      rSummary.deferred += 1;
+    }
+  }
+  for (const lane of lanes) {
+    const lSummary = laneSummaries.get(lane.identity);
+    if (lSummary) {
+      lSummary.remainingBudget = (lane.client as { getBudget?: () => number }).getBudget?.() ?? 0;
+    }
   }
 
   const retries = getSharedRetryCount() - initialRetryCount;
@@ -906,12 +1074,23 @@ export async function runSharedCollectionPlan({
     console.warn(`Collection windows deferred: ${pending.map(unit => `${unit.repo} (${unit.window.start}..${unit.window.end})`).join(', ')}`);
   }
   console.log(`Collection summary: completed=${completed}, failures=${failures.length}, deferred=${pending.length}, retries=${retries}`);
+  for (const repo of Array.from(repoSummaries.keys()).sort()) {
+    const r = repoSummaries.get(repo)!;
+    console.log(`Repository summary: repo=${r.repo} completed=${r.completed} failures=${r.failures} deferred=${r.deferred} total=${r.total} cachedAttempts=${r.cachedAttempts} retries=${r.retries} duration=${Math.round(r.durationMs / 1000)}s`);
+  }
+  for (const identity of Array.from(laneSummaries.keys()).sort()) {
+    const l = laneSummaries.get(identity)!;
+    console.log(`Identity lane summary: lane=${l.identity} completed=${l.completed} failures=${l.failures} deferred=${l.deferred} retries=${l.retries} remainingBudget=${l.remainingBudget} duration=${Math.round(l.durationMs / 1000)}s`);
+  }
+
   return {
     completed,
     total: work.length,
     failures,
     deferred: pending.length,
     retries,
+    repositories: Object.fromEntries(repoSummaries),
+    lanes: Object.fromEntries(laneSummaries),
   };
 }
 
