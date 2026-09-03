@@ -1335,14 +1335,48 @@ describe('collect rate limit handling', () => {
       collectRepoImpl: vi.fn(async (_client, repo) => {
         if (limitOnce) {
           limitOnce = false;
-          throw new RateLimitAbortError('secondary limit', [], { retryAfter: '60' });
+          throw new RateLimitAbortError('primary limit', [], { remaining: '0', reset: '1712345678' });
         }
         collected.push(repo);
       }) as never,
     });
 
     expect(collected).toEqual(expect.arrayContaining(['acme/a', 'acme/b']));
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('identity lane user:1 (first) cooldown=60s.'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('identity lane user:1 (first) cooldown=until=2024-04-05T19:34:38.000Z.'));
+  });
+
+  it('retries a secondary-limited lane after Retry-After expires', async () => {
+    vi.useFakeTimers();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fakeClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 1, login: 'collector' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 12 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    vi.spyOn(github, 'createOctokit').mockReturnValue(fakeClient as never);
+    const collectRepoImpl = vi.fn()
+      .mockRejectedValueOnce(new RateLimitAbortError('secondary limit', [], { remaining: '12', retryAfter: '60' }))
+      .mockResolvedValueOnce(undefined);
+
+    try {
+      const scheduled = runSharedCollectionPlan({
+        tokens: ['token'],
+        work: [{ repo: 'acme/a', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 }],
+        retentionDays: 90,
+        cliOptions: { forceFullBackfill: false, reverse: false },
+        reposConfig: { repos: [] },
+        collectRepoImpl: collectRepoImpl as never,
+      });
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      await expect(scheduled).resolves.toEqual({ failures: [], deferred: 0 });
+      expect(collectRepoImpl).toHaveBeenCalledTimes(2);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('cooldown=60s.'));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('shares identity lanes, prioritizes recent windows, and preserves the request reserve', async () => {
