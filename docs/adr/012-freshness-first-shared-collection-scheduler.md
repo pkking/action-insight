@@ -13,7 +13,7 @@ Build a collection plan from the durable checkpoint state. The first (recent) **
 
 Token strings are resolved to the authenticated GitHub identity and duplicate identities share one lane. Before dispatch, each lane reads its core budget and stops dispatching when its remaining requests reach `GITHUB_RATE_LIMIT_RESERVE` (default `10`). A rate-limited lane returns its current work unit to the shared queue so another identity can claim it. A unit retains the existing split, deduplication, jobs, checkpoint, and validator ordering.
 
-The shared scheduler emits a `COLLECTION_HEARTBEAT_SECONDS` heartbeat (default `60`) while work is active, plus terminal messages for completed or deferred windows and one collection summary. These are console-only operational signals: no collection state advances on failure or deferral, and no external telemetry is introduced. Transient GitHub request failures retry at most three times with exponential backoff and 50–150% jitter. A rate-limited identity lane returns its current work unit for another lane to claim, stops issuing requests for the rest of the cycle, and logs `Retry-After`, reset, or next-cycle cooldown context.
+The shared scheduler emits a `COLLECTION_HEARTBEAT_SECONDS` heartbeat (default `60`) while work is active, plus terminal messages for completed or deferred windows and one collection summary. These are console-only operational signals: no collection state advances on failure or deferral, and no external telemetry is introduced. Transient GitHub request failures retry at most three times with exponential backoff and 50–150% jitter. A rate-limited identity lane returns its current work unit for another lane to claim. A secondary limit with a positive `Retry-After` keeps that lane inactive until the interval ends, then resumes it only when work remains; a depleted lane stops for the current cycle. The scheduler logs `Retry-After`, reset, or next-cycle cooldown context.
 
 ## Consequences
 
@@ -28,6 +28,7 @@ The shared scheduler emits a `COLLECTION_HEARTBEAT_SECONDS` heartbeat (default `
 - A Collection Window remains the persistence/checkpoint unit; split children must still finish before jobs are fetched.
 - The reserve is enforced for requests issued by the collector after the lane is initialized; identity and rate-limit discovery occur before wrapping the lane.
 - Deferred units are not successful collection results and remain recoverable from durable checkpoints.
-- A rate-limited lane must not retry a work unit directly; it releases the unit before stopping so another identity can claim it.
+- A rate-limited lane must not retry a work unit directly; it releases the unit before waiting or stopping so another identity can claim it.
+- Only an explicit positive `Retry-After` on a non-depleted lane schedules an in-cycle resume; reset-only and depleted lanes end for the current cycle.
 - Transaction batching is a separate rollout slice.
 - `COLLECTION_HEARTBEAT_SECONDS` accepts whole seconds from `1` through `2147483`; any other value suppresses heartbeats but not terminal summaries, avoiding Node timer overflow.

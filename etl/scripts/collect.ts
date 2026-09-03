@@ -203,6 +203,13 @@ export function rateLimitCooldown(details: RateLimitDetails): string {
   return 'until=next-cycle';
 }
 
+function secondaryCooldownMs(details: RateLimitDetails): number {
+  const retryAfter = Number(details.retryAfter);
+  return details.remaining !== '0' && Number.isFinite(retryAfter) && retryAfter > 0
+    ? Math.ceil(retryAfter * 1000)
+    : 0;
+}
+
 function reserveRateLimitBudget(octokit: Octokit, remaining: number): Octokit {
   let budget = remaining;
   return {
@@ -810,7 +817,14 @@ export async function runSharedCollectionPlan({
         if (err instanceof RateLimitAbortError) {
           // This identity cannot safely spend its reserve. Leave the unit for another lane.
           pending.unshift(unit);
+          const cooldownMs = secondaryCooldownMs(err.details);
           console.warn(`Collection window deferred: ${unit.repo} (${unit.window.start}..${unit.window.end}); identity lane ${identity} cooldown=${rateLimitCooldown(err.details)}.`);
+          if (cooldownMs > 0) {
+            if (pending.length === 0) return;
+            await new Promise(resolve => setTimeout(resolve, cooldownMs));
+            console.log(`Collection lane resumed: identity=${identity}, cooldown=${rateLimitCooldown(err.details)}`);
+            continue;
+          }
           return;
         }
         const message = err instanceof Error ? err.message : String(err);
