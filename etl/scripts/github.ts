@@ -86,6 +86,7 @@ export interface RateLimitDetails {
   limit?: string;
   remaining?: string;
   reset?: string;
+  retryAfter?: string;
 }
 
 export function getRateLimitDetails(error: GitHubRequestErrorLike): RateLimitDetails {
@@ -93,6 +94,7 @@ export function getRateLimitDetails(error: GitHubRequestErrorLike): RateLimitDet
     limit: String(error.response?.headers?.['x-ratelimit-limit'] ?? ''),
     remaining: String(error.response?.headers?.['x-ratelimit-remaining'] ?? ''),
     reset: String(error.response?.headers?.['x-ratelimit-reset'] ?? ''),
+    retryAfter: String(error.response?.headers?.['retry-after'] ?? ''),
   };
 }
 

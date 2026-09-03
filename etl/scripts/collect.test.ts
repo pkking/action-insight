@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   collectRepo,
   fetchJobsForRunAttempt,
+  jitteredRetryDelayMs,
   parseRunnerResourceLabels,
+  rateLimitCooldown,
   resolveCollectionHeartbeatMs,
   RateLimitAbortError,
   runCollection,
@@ -79,6 +81,22 @@ describe('resolveCollectionHeartbeatMs', () => {
     expect(resolveCollectionHeartbeatMs('2147483')).toBe(2_147_483_000);
     expect(resolveCollectionHeartbeatMs('2147484')).toBe(0);
     expect(resolveCollectionHeartbeatMs('999999999999')).toBe(0);
+  });
+});
+
+describe('jitteredRetryDelayMs', () => {
+  it('bounds exponential retry delays with jitter', () => {
+    expect(jitteredRetryDelayMs(2_000, () => 0)).toBe(1_000);
+    expect(jitteredRetryDelayMs(2_000, () => 0.5)).toBe(2_000);
+    expect(jitteredRetryDelayMs(2_000, () => 1)).toBe(3_000);
+  });
+});
+
+describe('rateLimitCooldown', () => {
+  it('reports Retry-After before a primary-rate reset', () => {
+    expect(rateLimitCooldown({ retryAfter: '60', reset: '0' })).toBe('60s');
+    expect(rateLimitCooldown({ reset: '1712345678' })).toBe('until=2024-04-05T19:34:38.000Z');
+    expect(rateLimitCooldown({})).toBe('until=next-cycle');
   });
 });
 
@@ -1281,6 +1299,50 @@ describe('collect rate limit handling', () => {
 
     expect(result).toEqual({ failures: ['acme/a (2026-04-17..2026-04-18): network failed'], deferred: 0 });
     expect(logSpy).toHaveBeenCalledWith('Collection summary: completed=0, failures=1, deferred=0');
+  });
+
+  it('reassigns a rate-limited window and reports its cooldown', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const firstClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 1, login: 'first' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 12 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    const secondClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 2, login: 'second' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 12 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    vi.spyOn(github, 'createOctokit')
+      .mockReturnValueOnce(firstClient as never)
+      .mockReturnValueOnce(secondClient as never);
+    const collected: string[] = [];
+    let limitOnce = true;
+
+    await runSharedCollectionPlan({
+      tokens: ['first-token', 'second-token'],
+      work: [
+        { repo: 'acme/a', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 },
+        { repo: 'acme/b', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 },
+      ],
+      retentionDays: 90,
+      cliOptions: { forceFullBackfill: false, reverse: false },
+      reposConfig: { repos: [] },
+      collectRepoImpl: vi.fn(async (_client, repo) => {
+        if (limitOnce) {
+          limitOnce = false;
+          throw new RateLimitAbortError('secondary limit', [], { retryAfter: '60' });
+        }
+        collected.push(repo);
+      }) as never,
+    });
+
+    expect(collected).toEqual(expect.arrayContaining(['acme/a', 'acme/b']));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('identity lane user:1 (first) cooldown=60s.'));
   });
 
   it('shares identity lanes, prioritizes recent windows, and preserves the request reserve', async () => {
