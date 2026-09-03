@@ -63,6 +63,10 @@ function isTransientError(err: unknown): boolean {
   return false;
 }
 
+export function jitteredRetryDelayMs(delay: number, random = Math.random): number {
+  return Math.round(delay * (0.5 + random()));
+}
+
 async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelayMs = 2000): Promise<T> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -72,8 +76,9 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelayMs = 
       lastErr = err;
       if (!isTransientError(err) || attempt === maxRetries) throw err;
       const delay = baseDelayMs * 2 ** attempt;
-      warn(`Transient API error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`, err);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      const jitteredDelay = jitteredRetryDelayMs(delay);
+      warn(`Transient API error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${jitteredDelay}ms...`, err);
+      await new Promise(resolve => setTimeout(resolve, jitteredDelay));
     }
   }
   throw lastErr;
@@ -189,6 +194,14 @@ export function resolveCollectionHeartbeatMs(value = process.env.COLLECTION_HEAR
 }
 
 const COLLECTION_HEARTBEAT_MS = resolveCollectionHeartbeatMs();
+
+export function rateLimitCooldown(details: RateLimitDetails): string {
+  const retryAfter = Number(details.retryAfter);
+  if (Number.isFinite(retryAfter) && retryAfter > 0) return `${Math.ceil(retryAfter)}s`;
+  const reset = Number(details.reset);
+  if (Number.isFinite(reset) && reset > 0) return `until=${new Date(reset * 1000).toISOString()}`;
+  return 'until=next-cycle';
+}
 
 function reserveRateLimitBudget(octokit: Octokit, remaining: number): Octokit {
   let budget = remaining;
@@ -797,7 +810,7 @@ export async function runSharedCollectionPlan({
         if (err instanceof RateLimitAbortError) {
           // This identity cannot safely spend its reserve. Leave the unit for another lane.
           pending.unshift(unit);
-          console.warn(`Collection window deferred: ${unit.repo} (${unit.window.start}..${unit.window.end}); identity lane ${identity} reached its GitHub rate limit reserve.`);
+          console.warn(`Collection window deferred: ${unit.repo} (${unit.window.start}..${unit.window.end}); identity lane ${identity} cooldown=${rateLimitCooldown(err.details)}.`);
           return;
         }
         const message = err instanceof Error ? err.message : String(err);
