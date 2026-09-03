@@ -1,6 +1,6 @@
 # ADR-011: Write execution details only at workflow-attempt scope
 
-**Status**: Accepted  
+**Status**: Implemented
 **Date**: 2026-08-28
 
 ## Context
