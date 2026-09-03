@@ -53,13 +53,33 @@ function error(...args: unknown[]) {
   console.error(`[${new Date().toISOString()}] ERROR:`, ...args);
 }
 
-function isTransientError(err: unknown): boolean {
+export const RETRYABLE_POSTGRES_CODES = new Set([
+  '08000',
+  '08001',
+  '08003',
+  '08004',
+  '08006',
+  '08007',
+  '40001',
+  '40P01',
+  '53300',
+  '57P01',
+  '57P02',
+  '57P03',
+]);
+
+export function isTransientError(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
   const e = err as Record<string, unknown>;
   const status = e.status as number | undefined;
   if (status !== undefined && status >= 500 && status < 600) return true;
   const code = e.code as string | undefined;
-  if (code && ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ERR_SOCKET_TIMEOUT'].includes(code)) return true;
+  if (code && (
+    ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ERR_SOCKET_TIMEOUT'].includes(code) ||
+    RETRYABLE_POSTGRES_CODES.has(code)
+  )) {
+    return true;
+  }
   return false;
 }
 
@@ -67,7 +87,22 @@ export function jitteredRetryDelayMs(delay: number, random = Math.random): numbe
   return Math.round(delay * (0.5 + random()));
 }
 
-async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelayMs = 2000): Promise<T> {
+let sharedRetryCount = 0;
+
+export function getSharedRetryCount(): number {
+  return sharedRetryCount;
+}
+
+export function resetSharedRetryCount(): void {
+  sharedRetryCount = 0;
+}
+
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+  baseDelayMs = 2000,
+  onRetry?: (err: unknown, attempt: number) => void,
+): Promise<T> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -75,6 +110,8 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelayMs = 
     } catch (err) {
       lastErr = err;
       if (!isTransientError(err) || attempt === maxRetries) throw err;
+      sharedRetryCount += 1;
+      onRetry?.(err, attempt + 1);
       const delay = baseDelayMs * 2 ** attempt;
       const jitteredDelay = jitteredRetryDelayMs(delay);
       warn(`Transient API error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${jitteredDelay}ms...`, err);
@@ -210,18 +247,25 @@ function secondaryCooldownMs(details: RateLimitDetails): number {
     : 0;
 }
 
-function reserveRateLimitBudget(octokit: Octokit, remaining: number): Octokit {
+export function reserveRateLimitBudget(octokit: Octokit, remaining: number, initialReset?: number): Octokit {
   let budget = remaining;
+  let resetTimestamp = initialReset !== undefined ? String(initialReset) : undefined;
   return {
     ...octokit,
     request: async (route: string, parameters?: Record<string, unknown>) => {
       if (budget <= RATE_LIMIT_RESERVE) {
-        throw new RateLimitAbortError(`GitHub API budget reserve reached (remaining=${budget}, reserve=${RATE_LIMIT_RESERVE})`);
+        throw new RateLimitAbortError(
+          `GitHub API budget reserve reached (remaining=${budget}, reserve=${RATE_LIMIT_RESERVE})`,
+          [],
+          { remaining: String(budget), reset: resetTimestamp },
+        );
       }
       budget -= 1;
       const response = await octokit.request(route, parameters);
       const reported = Number(response.headers?.['x-ratelimit-remaining']);
       if (Number.isFinite(reported)) budget = reported;
+      const reportedReset = response.headers?.['x-ratelimit-reset'];
+      if (reportedReset) resetTimestamp = String(reportedReset);
       return response;
     },
   } as Octokit;
@@ -279,8 +323,8 @@ async function loadRepoState(repo: string, collectDays: number, now: Date): Prom
   const retentionStart = format(subDays(now, collectDays), 'yyyy-MM-dd');
   const today = format(now, 'yyyy-MM-dd');
 
-  const dbState = await readCollectionState(repo);
-  const collectedDates = await getCollectedDates(repo);
+  const dbState = await withRetry(() => readCollectionState(repo));
+  const collectedDates = await withRetry(() => getCollectedDates(repo));
 
   const retainedDates = collectedDates.filter(d => d >= retentionStart);
 
@@ -441,13 +485,13 @@ async function persistCollectedRuns(
     retentionDays,
   };
 
-  await persistCollectionWindow(repo, batches, {
+  await withRetry(() => persistCollectionWindow(repo, batches, {
     backfillCursor: newState.backfillCursor ?? null,
     historyComplete: newState.historyComplete,
     latestDate: newState.latest || null,
     retentionDays: newState.retentionDays,
     lastUpdated: new Date().toISOString(),
-  });
+  }));
   console.log(`  State updated: ${retainedDates.length} dates, latest: ${newState.latest}`);
   return newState;
 }
@@ -501,7 +545,7 @@ export async function collectRepo(
     let totalFetched = 0;
     let validator: RunListValidator | undefined;
     const cachedEtag = workflowId && isRecentWindow(window)
-      ? await readRunListValidator(repo, workflowId, window.start, window.end)
+      ? await withRetry(() => readRunListValidator(repo, workflowId, window.start, window.end))
       : null;
 
     while (true) {
@@ -604,7 +648,7 @@ export async function collectRepo(
     if (options.skipJobs) return runs;
     const hasWorkflowRules = repoConfig.workflows.length > 0;
     const candidates = runs.filter(run => !hasWorkflowRules || run.tracked).map(run => ({ runId: run.id, runAttempt: run.runAttempt ?? 1 }));
-    const cached = await getCachedWorkflowAttempts(repo, candidates);
+    const cached = await withRetry(() => getCachedWorkflowAttempts(repo, candidates));
     log(`Candidate cached workflow attempts: ${cached.size}/${candidates.length}`);
     for (const run of runs) {
       if (hasWorkflowRules && !run.tracked) continue;
@@ -713,7 +757,7 @@ export async function collectRepo(
       );
       state = checkpointState;
       for (const validator of changedResults.flatMap(result => result.validators)) {
-        await writeRunListValidator(repo, validator.workflowFile, validator.windowStart, validator.windowEnd, validator.etag);
+        await withRetry(() => writeRunListValidator(repo, validator.workflowFile, validator.windowStart, validator.windowEnd, validator.etag));
       }
       console.log(`Checkpointed ${repo}: ${checkpointState.collectedDates.length} retained date(s), latest=${checkpointState.latest || '(none)'} (${wi + 1}/${windows.length})`);
     } catch (err) {
@@ -758,6 +802,14 @@ async function buildCollectionPlan(
   return work.sort((a, b) => a.priority - b.priority);
 }
 
+export interface CollectionPlanResult {
+  completed: number;
+  total: number;
+  failures: string[];
+  deferred: number;
+  retries: number;
+}
+
 export async function runSharedCollectionPlan({
   tokens,
   work,
@@ -772,13 +824,21 @@ export async function runSharedCollectionPlan({
   cliOptions: CollectCliOptions;
   reposConfig: ReposConfig;
   collectRepoImpl: typeof collectRepo;
-}): Promise<{ failures: string[]; deferred: number }> {
+}): Promise<CollectionPlanResult> {
+  const initialRetryCount = getSharedRetryCount();
   const identities = await Promise.all(tokens.map(async token => {
     const client = createOctokit(token);
     const identity = await getGitHubIdentity(client);
     const rateLimit = await client.request('GET /rate_limit');
-    const data = rateLimit.data as { resources?: { core?: { remaining?: number } } };
-    return { client: reserveRateLimitBudget(client, data.resources?.core?.remaining ?? 0), identity };
+    const data = rateLimit.data as { resources?: { core?: { remaining?: number; reset?: number } } };
+    return {
+      client: reserveRateLimitBudget(
+        client,
+        data.resources?.core?.remaining ?? 0,
+        data.resources?.core?.reset,
+      ),
+      identity,
+    };
   }));
   const lanes = Array.from(new Map(identities.map(lane => [lane.identity, lane])).values());
   const pending = [...work];
@@ -841,11 +901,18 @@ export async function runSharedCollectionPlan({
     if (heartbeat) clearInterval(heartbeat);
   }
 
+  const retries = getSharedRetryCount() - initialRetryCount;
   if (pending.length > 0) {
     console.warn(`Collection windows deferred: ${pending.map(unit => `${unit.repo} (${unit.window.start}..${unit.window.end})`).join(', ')}`);
   }
-  console.log(`Collection summary: completed=${completed}, failures=${failures.length}, deferred=${pending.length}`);
-  return { failures, deferred: pending.length };
+  console.log(`Collection summary: completed=${completed}, failures=${failures.length}, deferred=${pending.length}, retries=${retries}`);
+  return {
+    completed,
+    total: work.length,
+    failures,
+    deferred: pending.length,
+    retries,
+  };
 }
 
 export async function runCollection({
@@ -901,7 +968,16 @@ export async function runCollection({
       throw new Error(`Collection failed for ${scheduled.failures.length} repos`);
     }
     if (scheduled.deferred > 0) {
-      throw new Error(`Collection deferred for ${scheduled.deferred} window(s); no identity lane remained available`);
+      console.log(`Collection ended partial: completed=${scheduled.completed}/${scheduled.total}, deferred=${scheduled.deferred} window(s) recoverable next cycle.`);
+      for (const repo of targetRepos) {
+        const freshness = await checkEtlFreshness(repo);
+        if (freshness) {
+          const message = formatFreshnessReport(freshness, repo);
+          if (freshness.isStale) console.warn(message);
+          else log(message);
+        }
+      }
+      return;
     }
     for (const repo of targetRepos) {
       const freshness = await checkEtlFreshness(repo);
