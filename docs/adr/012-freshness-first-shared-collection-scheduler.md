@@ -17,7 +17,7 @@ The shared scheduler emits a `COLLECTION_HEARTBEAT_SECONDS` heartbeat (default `
 
 ## Consequences
 
-- Recent tracked-workflow collection completes across repositories before history backfill starts.
+- Recent tracked-workflow collection is claimed before backfill whenever an eligible recent window exists; an otherwise idle identity lane may process a backfill window for a different repository while a long-running recent window is active.
 - Repositories are no longer permanently assigned to a token string.
 - A duplicate token cannot overspend a shared identity budget through concurrent lanes.
 - Identity discovery and one rate-limit read add a small fixed cost per supplied credential.
@@ -27,6 +27,7 @@ The shared scheduler emits a `COLLECTION_HEARTBEAT_SECONDS` heartbeat (default `
 ## Constraints
 
 - A Collection Window remains the persistence/checkpoint unit; split children must still finish before jobs are fetched.
+- A repository has at most one active window, including when an idle lane falls back to backfill work.
 - The reserve is enforced for requests issued by the collector after the lane is initialized; identity and rate-limit discovery occur before wrapping the lane.
 - Deferred units are not successful collection results and remain recoverable from durable checkpoints.
 - A rate-limited lane must not retry a work unit directly; it releases the unit before waiting or stopping so another identity can claim it.
