@@ -27,6 +27,7 @@ The shared scheduler emits a `COLLECTION_HEARTBEAT_SECONDS` heartbeat (default `
 ## Constraints
 
 - A Collection Window remains the persistence/checkpoint unit; split children must still finish before jobs are fetched.
+- Within one window a lane fetches jobs with bounded concurrency (`JOBS_FETCH_CONCURRENCY`, default 4, clamp 1..8) so total in-flight requests scale with the number of distinct identities while each identity's shared budget stays exclusive to its single lane.
 - The reserve is enforced for requests issued by the collector after the lane is initialized; identity and rate-limit discovery occur before wrapping the lane.
 - Deferred units are not successful collection results and remain recoverable from durable checkpoints.
 - A rate-limited lane must not retry a work unit directly; it releases the unit before waiting or stopping so another identity can claim it.
