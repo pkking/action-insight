@@ -1281,6 +1281,70 @@ describe('collect rate limit handling', () => {
     }
   });
 
+  it('fetches jobs for a window with bounded per-lane concurrency', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-18T12:00:00Z'));
+
+    const repo = 'acme/widgets';
+    mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
+
+    let active = 0;
+    let peak = 0;
+    const request = vi.fn().mockImplementation((route: string) => {
+      if (route === 'GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs') {
+        return Promise.resolve({
+          data: {
+            workflow_runs: [101, 102].map(id => ({
+              id,
+              run_attempt: 1,
+              name: 'CI',
+              head_branch: 'main',
+              status: 'completed',
+              conclusion: 'success',
+              created_at: '2026-04-18T09:00:00Z',
+              updated_at: '2026-04-18T09:10:00Z',
+              html_url: `https://example.com/runs/${id}`,
+              path: '.github/workflows/ci.yml@main',
+            })),
+          },
+        });
+      }
+
+      const trackJobsRequest = () => {
+        active += 1;
+        peak = Math.max(peak, active);
+        return new Promise(resolve => {
+          setTimeout(() => {
+            active -= 1;
+            resolve({ data: { jobs: [] } });
+          }, 10);
+        });
+      };
+
+      if (route === 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs'
+        || route === 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs') {
+        return trackJobsRequest();
+      }
+
+      throw new Error(`Unexpected request: ${route}`);
+    });
+
+    try {
+      const collection = collectRepo(
+        { request } as never,
+        repo,
+        90,
+        { forceFullBackfill: false, reverse: false },
+        { repos: [{ repo, workflows: [{ file: 'ci.yml' }] }] },
+      );
+      await vi.advanceTimersByTimeAsync(50);
+      await collection;
+      expect(peak).toBeGreaterThan(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('preserves separate attempts for the same run id and keeps non-terminal attempts', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-18T12:00:00Z'));

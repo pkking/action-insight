@@ -35,6 +35,18 @@ const __dirname = path.dirname(__filename);
 
 const VERBOSE = process.env.VERBOSE === 'true' || process.env.VERBOSE === '1';
 const PER_PAGE = 100;
+
+/** Max concurrent jobs fetches per identity lane. Total in-flight scales with token
+ * count (lanes × this cap); duplicate tokens dedupe to one identity so the shared
+ * per-account budget cannot be overspent. Rate-limit aborts and unit retries still apply.
+ * ponytail: fixed cap instead of budget-derived concurrency; raise JOBS_FETCH_CONCURRENCY if a
+ * single huge window still underuses the combined token budget. */
+function resolveJobsFetchConcurrency(raw: string | undefined): number {
+  const parsed = Number.parseInt(raw ?? '', 10);
+  if (!Number.isFinite(parsed)) return 4;
+  return Math.min(8, Math.max(1, parsed));
+}
+const JOBS_FETCH_CONCURRENCY = resolveJobsFetchConcurrency(process.env.JOBS_FETCH_CONCURRENCY);
 const MAX_RESULTS_PER_QUERY = 1000;
 
 function log(...args: unknown[]) {
@@ -663,11 +675,14 @@ export async function collectRepo(
     const cached = await withRetry(() => getCachedWorkflowAttempts(repo, candidates), 3, 2000, onRetry);
     totalCachedAttempts += cached.size;
     log(`Candidate cached workflow attempts: ${cached.size}/${candidates.length}`);
-    for (const run of runs) {
-      if (hasWorkflowRules && !run.tracked) continue;
+    const pending = runs.filter(run => {
+      if (hasWorkflowRules && !run.tracked) return false;
       const cachedAttempt = cached.get(runAttemptKey(run.id, run.runAttempt));
       const fresh = run.status === 'completed' && cachedAttempt?.stepPolicyHash === run.stepPolicyHash && Date.parse(cachedAttempt.updatedAt) >= Date.parse(run.updated_at);
-      if (fresh) continue;
+      return !fresh;
+    });
+    let cursor = 0;
+    const fetchOne = async (run: Run): Promise<void> => {
       try {
         run.jobs = normalizeJobs(await fetchJobsForRunAttempt(octokit, owner, repoName, run.id, run.runAttempt ?? 1));
       } catch (err) {
@@ -677,7 +692,17 @@ export async function collectRepo(
         }
         throw err;
       }
-    }
+    };
+    // ponytail: per-lane worker pool; a mid-pool failure re-collects the whole window on retry
+    // (cached-attempt freshness still skips re-fetches after a checkpointed persist).
+    const workers = Array.from({ length: Math.min(JOBS_FETCH_CONCURRENCY, pending.length) }, async () => {
+      while (cursor < pending.length) {
+        const run = pending[cursor];
+        cursor += 1;
+        await fetchOne(run);
+      }
+    });
+    await Promise.all(workers);
     return runs;
   }
 
@@ -925,7 +950,7 @@ export async function runSharedCollectionPlan({
     });
   }
 
-  console.log(`GitHub identity lanes: ${lanes.length}; reserve: ${RATE_LIMIT_RESERVE}`);
+  console.log(`GitHub identity lanes: ${lanes.length}; reserve: ${RATE_LIMIT_RESERVE}; jobs concurrency per lane: ${JOBS_FETCH_CONCURRENCY}`);
   const heartbeat = COLLECTION_HEARTBEAT_MS > 0 ? setInterval(() => {
     const active = activeWork.size > 0
       ? Array.from(activeWork.values())
