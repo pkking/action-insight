@@ -476,7 +476,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
-  void main().catch((error) => {
+  void main().then(() => {
+    process.exit(0);
+  }).catch((error) => {
     console.error(error);
     process.exit(1);
   });

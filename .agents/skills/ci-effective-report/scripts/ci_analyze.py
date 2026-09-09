@@ -246,14 +246,30 @@ def fetch_runs(client: PostgresClient, repo_ids: list[int], date_from: str, date
     # Fix 2.2: 使用独占上界范围查询，允许查询优化器使用索引扫描
     date_to_next = (datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
     return client.query(
-        f"SELECT id, repo_id, name, head_branch, head_sha, event, "
-        f"status, conclusion, created_at, updated_at, html_url, "
-        f"duration_seconds, date, workflow_file "
-        f"FROM runs "
-        f"WHERE repo_id IN ({repo_id_list}) "
-        f"AND date >= '{date_from}' AND date < '{date_to_next}'"
+        f"SELECT r.id, r.repo_id, r.name, r.head_branch, r.head_sha, r.event, "
+        f"r.status, r.conclusion, r.created_at, r.updated_at, r.html_url, "
+        f"COALESCE("
+        f"  CASE "
+        f"    WHEN wa.run_attempt > 1 AND wa.runtime_seconds IS NOT NULL AND wa.runtime_seconds > 0 "
+        f"    THEN ROUND(wa.runtime_seconds + COALESCE("
+        f"      (SELECT MAX(wj.queue_duration_seconds) FROM workflow_jobs wj WHERE wj.run_id = r.id AND wj.run_attempt = wa.run_attempt), "
+        f"      0"
+        f"    ))::int "
+        f"    ELSE r.duration_seconds "
+        f"  END, "
+        f"  r.duration_seconds"
+        f") AS duration_seconds, "
+        f"r.date, r.workflow_file "
+        f"FROM runs r "
+        f"LEFT JOIN ("
+        f"  SELECT DISTINCT ON (run_id) run_id, run_attempt, runtime_seconds "
+        f"  FROM workflow_attempts "
+        f"  ORDER BY run_id, run_attempt DESC"
+        f") wa ON wa.run_id = r.id "
+        f"WHERE r.repo_id IN ({repo_id_list}) "
+        f"AND r.date >= '{date_from}' AND r.date < '{date_to_next}'"
         f"{wf_clause} "
-        f"ORDER BY created_at DESC"
+        f"ORDER BY r.created_at DESC"
     )
 
 
