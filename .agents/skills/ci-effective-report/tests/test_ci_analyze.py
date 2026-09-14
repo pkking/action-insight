@@ -488,6 +488,14 @@ class ReportModeTests(unittest.TestCase):
         workbook = load_workbook(output, read_only=True)
         self.assertTrue({"Management Summary", "Diagnostic Appendix", "Workflow Raw", "Job Raw", "Step Raw"}.issubset(workbook.sheetnames))
 
+    def test_report_mode_raw_resource_requirement_prefers_static_configuration(self):
+        monthly = MODULE.build_report_mode_sheets(
+            self._repos_data(),
+            "monthly_summary",
+            {"o/r": [{"name": "E2E", "static_resources": {"L20": 8}}]},
+        )
+        self.assertEqual(monthly["Job Raw"][0]["resource_requirement"], "L20 × 8卡")
+
     def test_daily_mode_starts_with_current_problems_and_classifies_drag(self):
         data = self._repos_data()
         # Three executions make the job a frequent drag rather than a rare outlier.

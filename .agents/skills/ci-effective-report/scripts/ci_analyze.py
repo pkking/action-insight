@@ -1795,7 +1795,7 @@ def _report_pr_by_run(data: dict) -> dict[int, dict]:
     }
 
 
-def build_report_mode_data(repos_data: dict[str, dict]) -> dict[str, list[dict]]:
+def build_report_mode_data(repos_data: dict[str, dict], configured_entries: dict[str, list[dict]] | None = None) -> dict[str, list[dict]]:
     """Build monthly/daily report views exclusively from the existing query result.
 
     Raw appendix rows deliberately start from runs (rather than PR links), so every
@@ -1803,7 +1803,13 @@ def build_report_mode_data(repos_data: dict[str, dict]) -> dict[str, list[dict]]
     and scheduled workflows that do not have a PR artifact.
     """
     workflow_raw, job_raw, step_raw, pr_rows = [], [], [], []
+    configured_entries = configured_entries or {}
     for repo, data in repos_data.items():
+        static_resources_by_workflow = {
+            entry["name"].lower(): entry["static_resources"]
+            for entry in configured_entries.get(repo, [])
+            if entry.get("name") and entry.get("static_resources")
+        }
         run_by_id = {run["id"]: run for run in data.get("runs", [])}
         pr_by_run = _report_pr_by_run(data)
         jobs_by_run, steps_by_job = defaultdict(list), defaultdict(list)
@@ -1837,7 +1843,9 @@ def build_report_mode_data(repos_data: dict[str, dict]) -> dict[str, list[dict]]
                     "head_sha": run.get("head_sha", ""), "event": run.get("event", ""), "job_id": job["id"],
                     "job_name": job.get("name", ""), "job_status": job.get("status", ""),
                     "job_conclusion": job.get("conclusion", ""), "runner_labels": ", ".join(job.get("labels", [])),
-                    "resource_requirement": workflow_resource_summary([job]), "created_at": job.get("created_at", ""),
+                    "resource_requirement": workflow_resource_summary(
+                        [job], static_resources_by_workflow.get(str(run.get("name", "")).lower())
+                    ), "created_at": job.get("created_at", ""),
                     "started_at": job.get("started_at", ""), "completed_at": job.get("completed_at", ""),
                     "queue_minutes": queue, "execution_minutes": sec_to_min(job.get("duration_seconds")),
                     "html_url": job.get("html_url", ""),
@@ -1895,9 +1903,9 @@ def build_report_mode_data(repos_data: dict[str, dict]) -> dict[str, list[dict]]
             "Longest Job Summary": job_rank, "Step Hotspots": step_rank}
 
 
-def build_report_mode_sheets(repos_data: dict[str, dict], report_mode: str) -> dict[str, list[dict]]:
+def build_report_mode_sheets(repos_data: dict[str, dict], report_mode: str, configured_entries: dict[str, list[dict]] | None = None) -> dict[str, list[dict]]:
     """Presentation-only views; timing calculations remain the ADR-009 query contract."""
-    data = build_report_mode_data(repos_data)
+    data = build_report_mode_data(repos_data, configured_entries)
     common = {name: data[name] or [{"说明": "窗口内无可用数据；原始附录仍保留。"}]
               for name in ("CI E2E Distribution", "Workflow Drag Ranking", "Longest Job Summary", "Step Hotspots")}
     raw = {name: data[name] or [{"说明": "窗口内无原始记录。"}]
@@ -2293,7 +2301,7 @@ def main():
 
     # Report modes reuse the already fetched local PostgreSQL rows; they never collect or clone.
     if args.report_mode:
-        sheets |= build_report_mode_sheets(repos_data, args.report_mode)
+        sheets |= build_report_mode_sheets(repos_data, args.report_mode, configured_entries)
 
     # Write Excel
     if not args.no_excel and sheets:
