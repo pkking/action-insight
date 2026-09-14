@@ -30,6 +30,7 @@ Options:
 
 Environment Variables:
   GITHUB_TOKEN                  GitHub token for CI (optional when gh-token.txt or gh auth is available)
+  JOBS_FETCH_CONCURRENCY        Max concurrent jobs fetches per identity lane (default: 4, clamp 1..8)
   GITHUB_TOKEN_FILE             Token file path (default: ./gh-token.txt); combined with gh auth when both exist
   RETENTION_DAYS                Number of days to retain data (default: 90)
   TARGET_REPOS                  Comma-separated list of repos (fallback if repos.yaml missing)
