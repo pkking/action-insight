@@ -891,7 +891,6 @@ export async function runSharedCollectionPlan({
     phase: string;
     budget: () => number;
   }>();
-  let activeRecent = 0;
   let completed = 0;
   const failures: string[] = [];
 
@@ -942,9 +941,7 @@ export async function runSharedCollectionPlan({
         const index = pending.findIndex(unit => unit.priority === 0 && !activeRepos.has(unit.repo));
         const nextIndex = index >= 0
           ? index
-          : activeRecent === 0
-            ? pending.findIndex(unit => !activeRepos.has(unit.repo))
-            : -1;
+          : pending.findIndex(unit => !activeRepos.has(unit.repo));
         if (nextIndex < 0) return;
         const unit = pending.splice(nextIndex, 1)[0];
         const repoConfig = findRepoConfig(reposConfig, unit.repo);
@@ -964,7 +961,6 @@ export async function runSharedCollectionPlan({
           get phase() { return currentPhase; },
           budget: () => (client as { getBudget?: () => number }).getBudget?.() ?? 0,
         });
-        if (unit.priority === 0) activeRecent += 1;
 
         console.log(`Collection unit start: lane=${identity} repo=${unit.repo} window=${unit.window.start}..${unit.window.end} priority=${unit.priority}`);
 
@@ -1049,7 +1045,6 @@ export async function runSharedCollectionPlan({
           if (slowTimer) clearInterval(slowTimer);
           activeRepos.delete(unit.repo);
           activeWork.delete(unit.repo);
-          if (unit.priority === 0) activeRecent -= 1;
         }
       }
     }));

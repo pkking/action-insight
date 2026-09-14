@@ -1559,6 +1559,48 @@ describe('collect rate limit handling', () => {
     expect(requests.filter(route => route === 'GET /work')).toHaveLength(2);
   });
 
+  it('uses an idle lane for another repository backfill while a recent window runs', async () => {
+    const firstClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 1, login: 'first' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 12 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    const secondClient = {
+      request: vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 2, login: 'second' }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 12 } } }, headers: {} };
+        return { data: {}, headers: {} };
+      }),
+    };
+    vi.spyOn(github, 'createOctokit')
+      .mockReturnValueOnce(firstClient as never)
+      .mockReturnValueOnce(secondClient as never);
+
+    let releaseRecent!: () => void;
+    const recentRunning = new Promise<void>(resolve => { releaseRecent = resolve; });
+    const collected: string[] = [];
+    const scheduled = runSharedCollectionPlan({
+      tokens: ['first-token', 'second-token'],
+      work: [
+        { repo: 'acme/a', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 },
+        { repo: 'acme/b', window: { start: '2026-04-10', end: '2026-04-16' }, priority: 1 },
+      ],
+      retentionDays: 90,
+      cliOptions: { forceFullBackfill: false, reverse: false },
+      reposConfig: { repos: [] },
+      collectRepoImpl: vi.fn(async (_client, repo) => {
+        collected.push(repo);
+        if (repo === 'acme/a') await recentRunning;
+      }) as never,
+    });
+
+    await vi.waitFor(() => expect(collected).toEqual(expect.arrayContaining(['acme/a', 'acme/b'])));
+    releaseRecent();
+    await expect(scheduled).resolves.toMatchObject({ completed: 2, failures: [] });
+  });
+
   it('counts retries and reports them in the shared terminal summary', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const fakeClient = {
