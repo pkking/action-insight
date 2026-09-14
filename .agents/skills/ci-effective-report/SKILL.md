@@ -1,49 +1,53 @@
 ---
 name: ci-effective-report
-description: 使用 Action Insight 本地 PostgreSQL 数据生成多个 GitHub 项目的 CI 效率对比 Excel 和 HTML 报告。用户提到 CI 效率、CI 耗时、项目对比、workflow 排队或执行耗时时使用；不调用 GitHub API。
+description: 使用 Action Insight 本地 PostgreSQL 数据生成 CI 对比、管理月报和每日诊断 Excel/HTML 报告；绝不调用 GitHub API。
 ---
 
 # CI Effective Report
 
-从本仓库本地 PostgreSQL 的 `repos`、`runs`、`workflow_attempts`、`workflow_jobs`、`workflow_steps`、`pr_metrics`、`pr_workflow_attempts` 表生成多项目 CI 对比报告。旧 `jobs` / `steps` 仅用于历史兼容回退。
+唯一的报告出口。只读本地 PostgreSQL 的 `repos`、`runs`、`workflow_attempts`、`workflow_jobs`、`workflow_steps`、`pr_metrics` 与 `pr_workflows`；旧 `jobs`/`steps` 仅作历史回退。队列指标固定为 job `created_at → started_at`，不以 run 创建时间代替。
 
 ## 数据不足时
 
-若本地 PostgreSQL 缺少请求窗口的 runs/jobs/steps，先使用 `ci-raw-data-collector` skill 采集并完成覆盖检查；不要在数据不完整时生成看似完整的报告。
+报告技能不得补采或调用 GitHub API。窗口缺少 runs/jobs/steps 时，先使用 `ci-raw-data-collector` 收集并检查覆盖；PR artifact 缺失时使用 `npm run rebuild:pr-artifacts`。`etl/repos.yaml` 是分析目标的唯一来源。
 
 ## 执行
-
-默认读取仓库根目录 `.github-ci-efficiency.yaml`，数据库连接依次取 `--pg-url`、`PG_DATABASE_URL`、仓库 `.env`，最后使用本地 Docker 默认地址。
 
 ```bash
 cd .agents/skills/ci-effective-report
 uv run scripts/ci_analyze.py --from 2026-07-01 --to 2026-07-31
 ```
 
-临时选择项目或 workflow：
+单仓库管理月报：
 
 ```bash
 uv run scripts/ci_analyze.py \
   --repo vllm-project/vllm-ascend \
-  --workflow E2E \
-  --from 2026-07-01 --to 2026-07-31
+  --from 2026-07-01 --to 2026-07-31 \
+  --report-mode monthly_summary
+```
+
+每日技术诊断：
+
+```bash
+uv run scripts/ci_analyze.py \
+  --repo vllm-project/vllm-ascend \
+  --from 2026-07-31 --to 2026-07-31 \
+  --report-mode daily_diagnostic
 ```
 
 常用参数：
 
-- `--config PATH`：项目/workflow 对比配置。
-- `--repo OWNER/REPO`：可重复；覆盖配置中的项目集合。
-- `--workflow NAME`：可重复；覆盖所选项目的配置 workflow。
-- `--list-repos`：列出本地 PostgreSQL 已采集项目。
-- `--skip-steps`：跳过 step，缩短大范围查询时间。
-- `--no-excel` / `--no-drilldown`：按需关闭输出。
+- `--config PATH`、`--repo OWNER/REPO`、`--workflow NAME`：选择已有本地数据。
+- `--report-mode monthly_summary|daily_diagnostic`：生成管理摘要或以当前问题为首的日诊断。
+- `--skip-steps`：缩短查询，但会在 step 附录中明确没有可用记录。
+- `--no-excel` / `--no-drilldown`：关闭相应产物。
 
-## 数据规则
+## 报告契约
 
-- 只使用本地 PostgreSQL，不回退 GitHub API、Turso 或 SQLite。
-- 配置优先用 `workflow.file` 稳定匹配，并将动态 `run-name` 归一为配置显示名；未配置 `file` 时才按名称精确匹配。
-- 总览每个 workflow 一行，分别显示总 Run、成功 Run、有效成功 Run；E2E 使用有效成功 runs，排队使用该 workflow 的成功 jobs（即使整个 run 最终失败）。
-- **空值诊断步骤（必做）**：生成后扫描总览的 E2E/排队列。任何空值都必须在同一行 `空值判断依据` 中写明可核验计数，例如窗口内无 Run、成功 Run=0、Jobs=0、成功 Jobs=0，或时间戳缺失；最终回复同时概括这些依据，禁止只写“无数据”。
-- 多项目报告包含仓库对比，以及每个项目的 workflow/job/step/PR 统计。
-- 用户给出相对日期时，执行前先明确解析后的绝对日期。
-- 数据为空或时间覆盖不足时明确报告，不伪装成完整结果。
+- 报告模式包含 CI E2E 四档分布（`<60m`、`60-120m`、`120-240m`、`>240m`）、按总耗时和运行次数排序的 workflow drag、最长 job 与 step 热点。
+- Excel 必含 `Workflow Raw`、`Job Raw`、`Step Raw`，保存窗口内所有可用 run/job/step 行及可追溯标识；非 PR workflow 也不得遗漏。
+- 月报包含 `Management Summary` 和 `Diagnostic Appendix`；日诊断以 `Current Problems` 开始，并区分高频拖慢项、偶发长尾与待观察项。
+- 默认总览中任一 E2E/排队空值必须带同一行的 `空值判断依据`，包含可核验计数；不得只写“无数据”。
+- `workflow.file` 优先于显示名，动态 `run-name` 必须归一为配置显示名；`static_resources` 优先于 runner label 推断。
+- 测试用例统计由 `etl/scripts/collect-test-case-stats.ts` 统一写入 PostgreSQL；报告不会 clone 仓库或自行计数。

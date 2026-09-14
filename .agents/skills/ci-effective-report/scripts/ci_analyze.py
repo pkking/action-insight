@@ -1784,6 +1784,132 @@ def build_overview(overview_data: list[dict]) -> list[dict]:
     return rows
 
 
+
+def _report_pr_by_run(data: dict) -> dict[int, dict]:
+    """Map an in-scope run to its PR metric when the ETL resolved the link."""
+    metrics = {metric["id"]: metric for metric in data.get("pr_metrics", [])}
+    return {
+        link["run_id"]: metrics[link["pr_metric_id"]]
+        for link in data.get("pr_workflows", [])
+        if link.get("pr_metric_id") in metrics
+    }
+
+
+def build_report_mode_data(repos_data: dict[str, dict]) -> dict[str, list[dict]]:
+    """Build monthly/daily report views exclusively from the existing query result.
+
+    Raw appendix rows deliberately start from runs (rather than PR links), so every
+    collected execution in the selected window remains traceable, including push
+    and scheduled workflows that do not have a PR artifact.
+    """
+    workflow_raw, job_raw, step_raw, pr_rows = [], [], [], []
+    for repo, data in repos_data.items():
+        run_by_id = {run["id"]: run for run in data.get("runs", [])}
+        pr_by_run = _report_pr_by_run(data)
+        jobs_by_run, steps_by_job = defaultdict(list), defaultdict(list)
+        for job in data.get("jobs", []):
+            jobs_by_run[job["run_id"]].append(job)
+        for step in data.get("steps", []):
+            steps_by_job[step["job_id"]].append(step)
+
+        for run in data.get("runs", []):
+            pr = pr_by_run.get(run["id"], {})
+            jobs = jobs_by_run.get(run["id"], [])
+            queues = [_calc_queue_min(job, run) for job in jobs]
+            queues = [value for value in queues if value is not None]
+            workflow_raw.append({
+                "repository": repo, "pr_number": pr.get("pr_number"), "pr_title": pr.get("title", ""),
+                "pr_url": pr.get("html_url", ""), "pr_created_at": pr.get("created_at", ""),
+                "pr_merged_at": pr.get("merged_at", ""), "workflow_run_id": run["id"],
+                "workflow_name": run.get("name", ""), "workflow_status": run.get("status", ""),
+                "workflow_conclusion": run.get("conclusion", ""), "branch": run.get("head_branch", ""),
+                "head_sha": run.get("head_sha", ""), "event": run.get("event", ""),
+                "created_at": run.get("created_at", ""), "completed_at": run.get("updated_at", ""),
+                "run_e2e_minutes": sec_to_min(run.get("duration_seconds")),
+                "max_job_queue_minutes": max(queues) if queues else None, "workflow_url": run.get("html_url", ""),
+            })
+            for job in jobs:
+                queue = _calc_queue_min(job, run)
+                job_raw.append({
+                    "repository": repo, "pr_number": pr.get("pr_number"), "pr_title": pr.get("title", ""),
+                    "pr_url": pr.get("html_url", ""), "workflow_run_id": run["id"],
+                    "workflow_name": run.get("name", ""), "branch": run.get("head_branch", ""),
+                    "head_sha": run.get("head_sha", ""), "event": run.get("event", ""), "job_id": job["id"],
+                    "job_name": job.get("name", ""), "job_status": job.get("status", ""),
+                    "job_conclusion": job.get("conclusion", ""), "runner_labels": ", ".join(job.get("labels", [])),
+                    "resource_requirement": workflow_resource_summary([job]), "created_at": job.get("created_at", ""),
+                    "started_at": job.get("started_at", ""), "completed_at": job.get("completed_at", ""),
+                    "queue_minutes": queue, "execution_minutes": sec_to_min(job.get("duration_seconds")),
+                    "html_url": job.get("html_url", ""),
+                })
+                for index, step in enumerate(steps_by_job.get(job["id"], []), 1):
+                    step_raw.append({
+                        "repository": repo, "pr_number": pr.get("pr_number"), "workflow_run_id": run["id"],
+                        "workflow_name": run.get("name", ""), "job_id": job["id"], "job_name": job.get("name", ""),
+                        "step_number": step.get("number"), "step_name": step.get("name", ""),
+                        "step_status": step.get("status", ""), "step_conclusion": step.get("conclusion", ""),
+                        "started_at": step.get("started_at", ""), "completed_at": step.get("completed_at", ""),
+                        "execution_minutes": sec_to_min(step.get("duration_seconds")), "raw_step_index": index,
+                        "step_timing_missing": step.get("duration_seconds") is None,
+                    })
+
+        # Distribution is per PR, taking the largest linked workflow duration.
+        runs_by_pr = defaultdict(list)
+        for run_id, pr in pr_by_run.items():
+            if run_id in run_by_id:
+                runs_by_pr[pr["id"]].append(run_by_id[run_id])
+        for pr in data.get("pr_metrics", []):
+            durations = [sec_to_min(run.get("duration_seconds")) for run in runs_by_pr.get(pr["id"], [])]
+            durations = [value for value in durations if value is not None]
+            if durations:
+                pr_rows.append({"repository": repo, "pr_number": pr.get("pr_number"), "ci_e2e_minutes": max(durations)})
+
+    def rank(rows, keys, value_key):
+        grouped = defaultdict(list)
+        for row in rows:
+            value = row.get(value_key)
+            if value is not None:
+                grouped[tuple(row.get(key, "") for key in keys)].append(value)
+        return [
+            dict(zip(keys, key)) | {"run_count": len(values), "max_runtime_minutes": round(max(values), 3),
+                                    "avg_runtime_minutes": round(sum(values) / len(values), 3),
+                                    "total_runtime_minutes": round(sum(values), 3),
+                                    "drag_type": "高频拖慢项" if len(values) >= 3 and sum(values) / len(values) >= 30 else ("偶发长尾" if len(values) <= 2 and max(values) >= 60 else "需要观察")}
+            for key, values in grouped.items()
+        ]
+
+    workflow_rank = rank(workflow_raw, ["repository", "workflow_name"], "run_e2e_minutes")
+    job_rank = rank(job_raw, ["repository", "workflow_name", "job_name"], "execution_minutes")
+    step_rank = rank(step_raw, ["repository", "workflow_name", "job_name", "step_name"], "execution_minutes")
+    for rows in (workflow_rank, job_rank, step_rank):
+        rows.sort(key=lambda row: (row["total_runtime_minutes"], row["max_runtime_minutes"]), reverse=True)
+
+    buckets = [("<60m", lambda value: value < 60), ("60-120m", lambda value: 60 <= value < 120),
+               ("120-240m", lambda value: 120 <= value < 240), (">240m", lambda value: value >= 240)]
+    distribution = []
+    for label, predicate in buckets:
+        matched = [row for row in pr_rows if predicate(row["ci_e2e_minutes"])]
+        distribution.append({"bucket": label, "pr_count": len(matched), "percentage": round(safe_div(len(matched) * 100, len(pr_rows)), 1)})
+    return {"Workflow Raw": workflow_raw, "Job Raw": job_raw, "Step Raw": step_raw,
+            "CI E2E Distribution": distribution, "Workflow Drag Ranking": workflow_rank,
+            "Longest Job Summary": job_rank, "Step Hotspots": step_rank}
+
+
+def build_report_mode_sheets(repos_data: dict[str, dict], report_mode: str) -> dict[str, list[dict]]:
+    """Presentation-only views; timing calculations remain the ADR-009 query contract."""
+    data = build_report_mode_data(repos_data)
+    common = {name: data[name] or [{"说明": "窗口内无可用数据；原始附录仍保留。"}]
+              for name in ("CI E2E Distribution", "Workflow Drag Ranking", "Longest Job Summary", "Step Hotspots")}
+    raw = {name: data[name] or [{"说明": "窗口内无原始记录。"}]
+           for name in ("Workflow Raw", "Job Raw", "Step Raw")}
+    if report_mode == "monthly_summary":
+        return {"Management Summary": common["CI E2E Distribution"], "Diagnostic Appendix": common["Workflow Drag Ranking"],
+                "Longest Job Summary": common["Longest Job Summary"], "Step Hotspots": common["Step Hotspots"]} | raw
+    # Daily mode begins with actionable, run-count-aware hotspots.
+    current = (common["Workflow Drag Ranking"] + common["Longest Job Summary"] + common["Step Hotspots"])
+    return {"Current Problems": current or [{"说明": "窗口内无当前问题。"}], "Daily Drill-down": common["Workflow Drag Ranking"],
+            "Longest Job Summary": common["Longest Job Summary"], "Step Hotspots": common["Step Hotspots"]} | raw
+
 def write_excel(filepath: str, sheets: dict[str, list[dict]]):
     try:
         import openpyxl
@@ -1978,6 +2104,7 @@ def main():
     parser.add_argument("--success-only", action="store_true", help="job/workflow 耗时统计只算 conclusion=success 的样本（目的2 口径，ADR-005）")
     parser.add_argument("--min-duration", type=float, default=5, help="耗时下限(分钟)：低于此值的 run/job/step 不计入统计(avg/p50/p90)与关键路径，默认 5")
     parser.add_argument("--insights", action="store_true", help="额外输出 HTML 洞察报告（Top 问题+证据，ADR-005）")
+    parser.add_argument("--report-mode", choices=["monthly_summary", "daily_diagnostic"], help="单一报告出口的管理月报或每日诊断模式")
     parser.add_argument("--no-drilldown", action="store_true", help="跳过下钻 HTML 报告（默认生成：>阈值分钟 run 列表 → job 条形图 → step 明细，ADR-009）")
     parser.add_argument("--drilldown-min", type=float, default=60, help="下钻报告的 run 耗时阈值(分钟)，默认 60")
     # 配置文件用于批量项目对比；--repo 可用于临时选择单个或多个仓库。
@@ -2163,6 +2290,10 @@ def main():
         pool_summary, pool_timeline = build_resource_pool_rows(repos_data, date_from, date_to, resource_pools)
         sheets["资源池利用率"] = pool_summary
         sheets["资源池时序"] = pool_timeline
+
+    # Report modes reuse the already fetched local PostgreSQL rows; they never collect or clone.
+    if args.report_mode:
+        sheets |= build_report_mode_sheets(repos_data, args.report_mode)
 
     # Write Excel
     if not args.no_excel and sheets:

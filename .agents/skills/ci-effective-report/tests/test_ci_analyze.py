@@ -462,5 +462,42 @@ class WriteDrilldownHtmlTests(unittest.TestCase):
         self.assertIn("const open=det.style.display==='table-row'", html)
 
 
+class ReportModeTests(unittest.TestCase):
+    def _repos_data(self):
+        run = _run(1, "E2E", 90 * 60)
+        job = _job(10, 1, "integration", 70 * 60)
+        step = _step(10, 1, "Run tests", 60 * 60)
+        pr = {"id": 99, "pr_number": 7, "title": "test PR", "html_url": "https://example/pr/7", "created_at": "2026-07-15T09:00:00Z", "merged_at": "2026-07-15T12:00:00Z"}
+        return {"o/r": {"runs": [run], "jobs": [job], "steps": [step], "pr_metrics": [pr], "pr_workflows": [{"pr_metric_id": 99, "run_id": 1}]}}
+
+    def test_report_modes_use_local_rows_and_include_all_raw_appendices(self):
+        repos_data = self._repos_data()
+        # Scheduled/push work has no PR link but must remain in the raw appendix.
+        repos_data["o/r"]["runs"].append(_run(2, "Nightly", 30 * 60, event="schedule"))
+        monthly = MODULE.build_report_mode_sheets(repos_data, "monthly_summary")
+        self.assertIn("Management Summary", monthly)
+        self.assertIn("Diagnostic Appendix", monthly)
+        self.assertEqual({row["workflow_run_id"] for row in monthly["Workflow Raw"]}, {1, 2})
+        self.assertEqual(monthly["Workflow Raw"][0]["workflow_run_id"], 1)
+        self.assertEqual(monthly["Job Raw"][0]["job_id"], 10)
+        self.assertEqual(monthly["Step Raw"][0]["step_name"], "Run tests")
+        self.assertEqual([row["bucket"] for row in monthly["Management Summary"]], ["<60m", "60-120m", "120-240m", ">240m"])
+        output = "/tmp/ci-effective-monthly-mode.xlsx"
+        MODULE.write_excel(output, monthly)
+        from openpyxl import load_workbook
+        workbook = load_workbook(output, read_only=True)
+        self.assertTrue({"Management Summary", "Diagnostic Appendix", "Workflow Raw", "Job Raw", "Step Raw"}.issubset(workbook.sheetnames))
+
+    def test_daily_mode_starts_with_current_problems_and_classifies_drag(self):
+        data = self._repos_data()
+        # Three executions make the job a frequent drag rather than a rare outlier.
+        for index in (2, 3):
+            data["o/r"]["runs"].append(_run(index, "E2E", 90 * 60))
+            data["o/r"]["jobs"].append(_job(index * 10, index, "integration", 70 * 60))
+        daily = MODULE.build_report_mode_sheets(data, "daily_diagnostic")
+        self.assertEqual(next(iter(daily)), "Current Problems")
+        self.assertIn("高频拖慢项", [row.get("drag_type") for row in daily["Current Problems"]])
+
+
 if __name__ == "__main__":
     unittest.main()
