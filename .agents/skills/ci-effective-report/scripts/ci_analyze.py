@@ -869,6 +869,7 @@ def analyze_pr_stats(pr_metrics, pr_workflows):
             "CI完成时间": pm.get("ci_completed_at") or "",
             # Fix 4.1: 使用 merged_at - created_at 计算完整 PR 生命周期
             "PR E2E(分钟)": _calc_pr_e2e_min(pm),
+            "CI E2E(分钟)": sec_to_min(pm.get("ci_duration_seconds")),
             "CI后评审(分钟)": _calc_review_min(pm),
             "工作流数量": wf_count,
             "链接": pm.get("html_url", ""),
@@ -891,7 +892,7 @@ def build_pr_details(pr_metrics, pr_workflows, runs, jobs, steps):
 
     _COMMON_KEYS = [
         "层级", "PR编号", "PR标题", "PR作者", "PR创建时间", "PR合并时间",
-        "PR E2E(分钟)", "CI后评审(分钟)",
+        "PR E2E(分钟)", "CI E2E(分钟)", "CI后评审(分钟)",
         "工作流名称", "工作流运行ID", "工作流状态", "工作流结论",
         "工作流创建时间", "工作流开始时间", "工作流完成时间", "工作流耗时(分钟)", "工作流排队(分钟)",
         "任务名称", "任务ID", "任务状态", "任务结论",
@@ -911,6 +912,7 @@ def build_pr_details(pr_metrics, pr_workflows, runs, jobs, steps):
             "PR创建时间": pm.get("created_at", ""),
             "PR合并时间": pm.get("merged_at") or "",
             "PR E2E(分钟)": pr_e2e,
+            "CI E2E(分钟)": sec_to_min(pm.get("ci_duration_seconds")),
             "CI后评审(分钟)": review,
         }
 
@@ -1804,17 +1806,17 @@ def _report_pr_by_run(data: dict) -> dict[int, dict]:
     }
 
 
-def _management_metrics_rows(pr_rows: list[dict], job_raw: list[dict], distribution: list[dict]) -> list[dict]:
+def _management_metrics_rows(pr_count: int, e2e_samples: list[float], job_raw: list[dict], distribution: list[dict]) -> list[dict]:
     """月报管理摘要行；任何空指标都带可核验原因（ADR-009 空值契约）。
 
     判定口径迁移自原效率技能：达标率>=80 且 >240m 占比<=5 为达标，
     达标率<50 或 >240m 占比>=10 为长尾严重；排队/执行 P90 对比定瓶颈。
-    排队/执行均保持 job 级口径（ADR-009）。
+    Workflow E2E 达标率/分布按 run 计数（成功且达到有效阈值的 Run，ADR-013 修订）；
+    排队/执行保持 job 级口径（ADR-009）。
     """
-    ci_values = [row["ci_e2e_minutes"] for row in pr_rows if row.get("ci_e2e_minutes") is not None]
     queues = [row["queue_minutes"] for row in job_raw if row.get("queue_minutes") is not None]
     executions = [row["execution_minutes"] for row in job_raw if row.get("execution_minutes") is not None]
-    sla = round(sum(1 for value in ci_values if value < 60) / len(ci_values) * 100, 1) if ci_values else None
+    sla = round(sum(1 for value in e2e_samples if value < 60) / len(e2e_samples) * 100, 1) if e2e_samples else None
     severe = next((bucket for bucket in distribution if bucket["bucket"] == ">240m"), None)
     severe_pct = severe["percentage"] if severe else 0.0
     q_p90, e_p90 = percentile(queues, 0.9), percentile(executions, 0.9)
@@ -1823,13 +1825,15 @@ def _management_metrics_rows(pr_rows: list[dict], job_raw: list[dict], distribut
         return {"数值": value if value is not None else "", "说明": reason if value is None else ""}
 
     rows = [
-        {"指标": "统计PR数", **cell(len(pr_rows), "")},
-        {"指标": "CI E2E 达标率(%)", **cell(sla, "窗口内无已关联 PR 的 E2E 样本，达标率不计算")},
-        {"指标": "CI E2E P50(分钟)", **cell(percentile(ci_values, 0.5), "窗口内无 PR E2E 样本")},
-        {"指标": "CI E2E P90(分钟)", **cell(percentile(ci_values, 0.9), "窗口内无 PR E2E 样本")},
+        {"指标": "统计PR数", **cell(pr_count, "")},
+        {"指标": "成功Run数(有效)", "数值": len(e2e_samples), "说明": "成功且耗时≥有效阈值的 Run 数"},
+        {"指标": "Workflow E2E 达标率(%)", "数值": sla if sla is not None else "",
+         "说明": "按成功 Run 计数" if sla is not None else "按成功 Run 计数；窗口内无成功 Run 样本，达标率不计算"},
+        {"指标": "Workflow E2E P50(分钟)", **cell(percentile(e2e_samples, 0.5), "窗口内无成功 Run 样本")},
+        {"指标": "Workflow E2E P90(分钟)", **cell(percentile(e2e_samples, 0.9), "窗口内无成功 Run 样本")},
         {"指标": "排队 P90(分钟)", **cell(q_p90, "窗口内无可用 Job 排队样本")},
         {"指标": "执行 P90(分钟)", **cell(e_p90, "窗口内无可用 Job 执行样本")},
-        {"指标": ">240m 长尾占比(%)", "数值": severe_pct, "说明": ""},
+        {"指标": ">240m 长尾占比(%)", "数值": severe_pct, "说明": "按成功 Run 计数"},
     ]
 
     if sla is None:
@@ -1848,7 +1852,7 @@ def _management_metrics_rows(pr_rows: list[dict], job_raw: list[dict], distribut
 
     anomalies = []
     if sla is not None and sla < 80:
-        anomalies.append(f"CI E2E 达标率仅 {sla}%，低于 60 分钟目标")
+        anomalies.append(f"Workflow E2E 达标率仅 {sla}%，低于 60 分钟目标")
     if severe_pct >= 10:
         anomalies.append(f">240 分钟长尾占比达到 {severe_pct}%，长尾问题明显")
     if q_p90 is not None and q_p90 >= 30:
@@ -1857,19 +1861,19 @@ def _management_metrics_rows(pr_rows: list[dict], job_raw: list[dict], distribut
         anomalies.append(f"CI 执行时长 P90 为 {e_p90} 分钟，主要瓶颈仍在执行阶段")
     rows.extend({"指标": "异常", "数值": "", "说明": finding} for finding in anomalies)
 
-    rows.extend({"指标": f"E2E分布 {bucket['bucket']}", "数值": bucket["pr_count"],
+    rows.extend({"指标": f"Workflow E2E分布 {bucket['bucket']}", "数值": bucket["run_count"],
                  "说明": f"{bucket['percentage']}%"} for bucket in distribution)
     return rows
 
 
-def build_report_mode_data(repos_data: dict[str, dict], configured_entries: dict[str, list[dict]] | None = None) -> dict[str, list[dict]]:
+def build_report_mode_data(repos_data: dict[str, dict], configured_entries: dict[str, list[dict]] | None = None, min_duration: float = 5.0) -> dict[str, list[dict]]:
     """Build monthly/daily report views exclusively from the existing query result.
 
     Raw appendix rows deliberately start from runs (rather than PR links), so every
     collected execution in the selected window remains traceable, including push
     and scheduled workflows that do not have a PR artifact.
     """
-    workflow_raw, job_raw, step_raw, pr_rows = [], [], [], []
+    workflow_raw, job_raw, step_raw = [], [], []
     configured_entries = configured_entries or {}
     for repo, data in repos_data.items():
         static_resources_by_workflow = {
@@ -1877,7 +1881,6 @@ def build_report_mode_data(repos_data: dict[str, dict], configured_entries: dict
             for entry in configured_entries.get(repo, [])
             if entry.get("name") and entry.get("static_resources")
         }
-        run_by_id = {run["id"]: run for run in data.get("runs", [])}
         pr_by_run = _report_pr_by_run(data)
         jobs_by_run, steps_by_job = defaultdict(list), defaultdict(list)
         for job in data.get("jobs", []):
@@ -1928,17 +1931,6 @@ def build_report_mode_data(repos_data: dict[str, dict], configured_entries: dict
                         "step_timing_missing": step.get("duration_seconds") is None,
                     })
 
-        # Distribution is per PR, taking the largest linked workflow duration.
-        runs_by_pr = defaultdict(list)
-        for run_id, pr in pr_by_run.items():
-            if run_id in run_by_id:
-                runs_by_pr[pr["id"]].append(run_by_id[run_id])
-        for pr in data.get("pr_metrics", []):
-            durations = [sec_to_min(run.get("duration_seconds")) for run in runs_by_pr.get(pr["id"], [])]
-            durations = [value for value in durations if value is not None]
-            if durations:
-                pr_rows.append({"repository": repo, "pr_number": pr.get("pr_number"), "ci_e2e_minutes": max(durations)})
-
     def rank(rows, keys, value_key):
         grouped = defaultdict(list)
         for row in rows:
@@ -1959,21 +1951,33 @@ def build_report_mode_data(repos_data: dict[str, dict], configured_entries: dict
     for rows in (workflow_rank, job_rank, step_rank):
         rows.sort(key=lambda row: (row["total_runtime_minutes"], row["max_runtime_minutes"]), reverse=True)
 
+    # Workflow E2E distribution: one counting unit per successful run (run-level,
+    # attempt-aware, validity-thresholded); the PR-side CI E2E stays the
+    # pr_metrics.ci_duration_seconds envelope in PR statistics views (ADR-013).
+    e2e_samples = [
+        value
+        for data in repos_data.values()
+        for run in data.get("runs", [])
+        for value in [sec_to_min(run.get("duration_seconds"))]
+        if run.get("conclusion") == "success" and value is not None and value >= min_duration
+    ]
+    pr_count = sum(len(data.get("pr_metrics", [])) for data in repos_data.values())
+
     buckets = [("<60m", lambda value: value < 60), ("60-120m", lambda value: 60 <= value < 120),
                ("120-240m", lambda value: 120 <= value < 240), (">240m", lambda value: value >= 240)]
     distribution = []
     for label, predicate in buckets:
-        matched = [row for row in pr_rows if predicate(row["ci_e2e_minutes"])]
-        distribution.append({"bucket": label, "pr_count": len(matched), "percentage": round(safe_div(len(matched) * 100, len(pr_rows)), 1)})
+        matched = [value for value in e2e_samples if predicate(value)]
+        distribution.append({"bucket": label, "run_count": len(matched), "percentage": round(safe_div(len(matched) * 100, len(e2e_samples)), 1)})
     return {"Workflow Raw": workflow_raw, "Job Raw": job_raw, "Step Raw": step_raw,
-            "CI E2E Distribution": distribution, "Workflow Drag Ranking": workflow_rank,
+            "Workflow E2E Distribution": distribution, "Workflow Drag Ranking": workflow_rank,
             "Longest Job Summary": job_rank, "Step Hotspots": step_rank,
-            "Management Metrics": _management_metrics_rows(pr_rows, job_raw, distribution)}
+            "Management Metrics": _management_metrics_rows(pr_count, e2e_samples, job_raw, distribution)}
 
 
-def build_report_mode_sheets(repos_data: dict[str, dict], report_mode: str, configured_entries: dict[str, list[dict]] | None = None) -> dict[str, list[dict]]:
+def build_report_mode_sheets(repos_data: dict[str, dict], report_mode: str, configured_entries: dict[str, list[dict]] | None = None, min_duration: float = 5.0) -> dict[str, list[dict]]:
     """Presentation-only views; timing calculations remain the ADR-009 query contract."""
-    data = build_report_mode_data(repos_data, configured_entries)
+    data = build_report_mode_data(repos_data, configured_entries, min_duration)
     common = {name: data[name] or [{"说明": "窗口内无可用数据；原始附录仍保留。"}]
               for name in ("Workflow Drag Ranking", "Longest Job Summary", "Step Hotspots")}
     raw = {name: data[name] or [{"说明": "窗口内无原始记录。"}]
@@ -2371,7 +2375,7 @@ def main():
     # Report-mode sheets lead the workbook (monthly starts with Management Summary,
     # daily starts with Current Problems, per ADR-013).
     if args.report_mode:
-        report_sheets = build_report_mode_sheets(repos_data, args.report_mode, configured_entries)
+        report_sheets = build_report_mode_sheets(repos_data, args.report_mode, configured_entries, args.min_duration)
         sheets = {**report_sheets, **sheets}
 
     # Write Excel

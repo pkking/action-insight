@@ -45,7 +45,7 @@ uv run scripts/ci_analyze.py \
 
 ## 报告契约
 
-- 报告模式包含 CI E2E 四档分布（`<60m`、`60-120m`、`120-240m`、`>240m`）、按总耗时和运行次数排序的 workflow drag、最长 job 与 step 热点。
+- 报告模式包含 Workflow E2E 四档分布（run 级计数：成功且达到有效阈值的 Run；`<60m`、`60-120m`、`120-240m`、`>240m`）、按总耗时和运行次数排序的 workflow drag、最长 job 与 step 热点。PR 侧 CI E2E 使用 `pr_metrics.ci_duration_seconds` 包络口径（最早 run 创建 → 最晚 run 结束），仅用于 PR 统计，不与 run 级分布混用。
 - Excel 必含 `Workflow Raw`、`Job Raw`、`Step Raw`，保存窗口内所有可用 run/job/step 行及可追溯标识；非 PR workflow 也不得遗漏。
 - 月报包含 `Management Summary`（核心指标、E2E 四档分布、月度判定与异常清单，空指标带可核验原因）和 `Diagnostic Appendix`；日诊断以 `Current Problems` 开始，并区分高频拖慢项、偶发长尾与待观察项。
 - 默认总览中任一 E2E/排队空值必须带同一行的 `空值判断依据`，包含可核验计数；不得只写“无数据”。

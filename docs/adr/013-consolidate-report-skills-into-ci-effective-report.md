@@ -28,7 +28,7 @@ Consolidate to two skills with a strict division of labor:
 `ci-efficiency-report` is retired after its unique value is migrated:
 
 1. `monthly_summary` and `daily_diagnostic` become `--report-mode` values on `ci_analyze.py`, including the management summary, current-problem list, and "fix first vs keep tracking" interpretations.
-2. CI E2E distribution buckets (`<60m`, `60-120m`, `120-240m`, `>240m`), workflow drag ranking (run-count aware, distinguishing frequent drag from rare outliers), and the longest-job summary move into `ci_analyze.py` outputs.
+2. CI E2E distribution buckets (`<60m`, `60-120m`, `120-240m`, `>240m`), workflow drag ranking (run-count aware, distinguishing frequent drag from rare outliers), and the longest-job summary move into `ci_analyze.py` outputs. The migrated distribution counts each workflow run as one Workflow E2E unit (successful runs within the validity threshold, attempt-aware) instead of a per-PR aggregate; the PR-side CI E2E metric stays `pr_metrics.ci_duration_seconds` (earliest run creation to latest run completion envelope) and is surfaced only in PR statistics views. No per-PR average or sum of run durations is defined.
 3. The mandatory raw appendix (Workflow Raw / Job Raw / Step Raw worksheets preserving all in-scope rows with traceable identifiers) becomes part of the `ci_analyze.py` Excel output.
 4. Test case statistics are unified on the ETL path (`etl/scripts/collect-test-case-stats.ts` writing to PostgreSQL); the repo-cloning `test_case_counter.py` is dropped.
 

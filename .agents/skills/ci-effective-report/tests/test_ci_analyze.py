@@ -493,7 +493,7 @@ class ReportModeTests(unittest.TestCase):
         run = _run(1, "E2E", 90 * 60)
         job = _job(10, 1, "integration", 70 * 60)
         step = _step(10, 1, "Run tests", 60 * 60)
-        pr = {"id": 99, "pr_number": 7, "title": "test PR", "html_url": "https://example/pr/7", "created_at": "2026-07-15T09:00:00Z", "merged_at": "2026-07-15T12:00:00Z"}
+        pr = {"id": 99, "pr_number": 7, "title": "test PR", "html_url": "https://example/pr/7", "created_at": "2026-07-15T09:00:00Z", "merged_at": "2026-07-15T12:00:00Z", "ci_duration_seconds": 5400}
         return {"o/r": {"runs": [run], "jobs": [job], "steps": [step], "pr_metrics": [pr], "pr_workflows": [{"pr_metric_id": 99, "run_id": 1}]}}
 
     def test_report_modes_use_local_rows_and_include_all_raw_appendices(self):
@@ -507,9 +507,9 @@ class ReportModeTests(unittest.TestCase):
         self.assertEqual(monthly["Workflow Raw"][0]["workflow_run_id"], 1)
         self.assertEqual(monthly["Job Raw"][0]["job_id"], 10)
         self.assertEqual(monthly["Step Raw"][0]["step_name"], "Run tests")
-        self.assertEqual([row["数值"] for row in monthly["Management Summary"] if str(row["指标"]).startswith("E2E分布")], [0, 1, 0, 0])
+        self.assertEqual([row["数值"] for row in monthly["Management Summary"] if str(row["指标"]).startswith("Workflow E2E分布")], [1, 1, 0, 0])
         judgment = next(row for row in monthly["Management Summary"] if row["指标"] == "月度判定")
-        self.assertEqual(judgment["数值"], "长尾严重")  # 达标率 0% < 50%
+        self.assertEqual(judgment["数值"], "不达标")  # run 级达标率 50%（90min + 30min 成功 run）
         self.assertEqual(judgment["说明"], "主要矛盾在执行阶段")
         self.assertIn("异常", [row["指标"] for row in monthly["Management Summary"]])
         output = "/tmp/ci-effective-monthly-mode.xlsx"
@@ -517,6 +517,23 @@ class ReportModeTests(unittest.TestCase):
         from openpyxl import load_workbook
         workbook = load_workbook(output, read_only=True)
         self.assertTrue({"Management Summary", "Diagnostic Appendix", "Workflow Raw", "Job Raw", "Step Raw"}.issubset(workbook.sheetnames))
+
+    def test_workflow_e2e_distribution_counts_success_runs_per_run(self):
+        repos_data = self._repos_data()
+        repos_data["o/r"]["runs"].append(_run(2, "E2E", 30 * 60))                          # success 30min -> <60m
+        repos_data["o/r"]["runs"].append(_run(3, "E2E", 200 * 60, conclusion="failure"))  # failed runs excluded
+        repos_data["o/r"]["runs"].append(_run(4, "E2E", 2 * 60))                           # below validity threshold
+        monthly = MODULE.build_report_mode_sheets(repos_data, "monthly_summary")
+        summary = {row["指标"]: row for row in monthly["Management Summary"]}
+        self.assertEqual([summary[f"Workflow E2E分布 {b}"]["数值"] for b in ("<60m", "60-120m", "120-240m", ">240m")], [1, 1, 0, 0])
+        self.assertEqual(summary["Workflow E2E 达标率(%)"].get("数值"), 50.0)
+
+    def test_pr_stats_uses_envelope_ci_e2e_from_pr_metrics(self):
+        pr = {"id": 5, "pr_number": 1, "title": "t", "author": "a", "created_at": "2026-07-15T09:00:00Z",
+              "merged_at": "2026-07-15T12:00:00Z", "html_url": "", "conclusion": "success", "ci_duration_seconds": 5400}
+        rows = MODULE.analyze_pr_stats([pr], [])
+        self.assertEqual(rows[0]["CI E2E(分钟)"], 90.0)
+        self.assertEqual(rows[0]["PR E2E(分钟)"], 180.0)
 
     def test_report_mode_raw_resource_requirement_prefers_static_configuration(self):
         monthly = MODULE.build_report_mode_sheets(
