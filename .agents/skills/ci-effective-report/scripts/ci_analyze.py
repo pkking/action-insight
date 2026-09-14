@@ -2368,8 +2368,11 @@ def main():
         sheets["资源池时序"] = pool_timeline
 
     # Report modes reuse the already fetched local PostgreSQL rows; they never collect or clone.
+    # Report-mode sheets lead the workbook (monthly starts with Management Summary,
+    # daily starts with Current Problems, per ADR-013).
     if args.report_mode:
-        sheets |= build_report_mode_sheets(repos_data, args.report_mode, configured_entries)
+        report_sheets = build_report_mode_sheets(repos_data, args.report_mode, configured_entries)
+        sheets = {**report_sheets, **sheets}
 
     # Write Excel
     if not args.no_excel and sheets:
