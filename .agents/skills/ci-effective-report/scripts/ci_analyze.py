@@ -371,8 +371,10 @@ def fetch_pr_metrics(client: PostgresClient, repo_ids: list[int], date_from: str
 
 
 def fetch_pr_workflows(client: PostgresClient, pr_metric_ids: list[int], run_id_filter: set[int] | None = None) -> list[dict]:
-    """Fetch PR-workflow links.
+    """Fetch PR-workflow links, attempt-scoped first (ADR-008/011).
 
+    pr_workflow_attempts 是 attempt 级主来源，rerun 行保留；run 级 pr_workflows 仅在
+    无 attempt 链接时回退，避免同一 (pr, run) 重复计数。
     run_id_filter: 若指定，则在 SQL 层过滤 run_id，避免 Python 端冗余过滤大量数据（Fix 2.3）。
     """
     if not pr_metric_ids:
@@ -388,8 +390,13 @@ def fetch_pr_workflows(client: PostgresClient, pr_metric_ids: list[int], run_id_
             run_ids_sql = ",".join(str(x) for x in run_id_filter)
             run_filter = f" AND run_id IN ({run_ids_sql})"
         links = client.query(
-            f"SELECT pr_metric_id, run_id "
-            f"FROM pr_workflows WHERE pr_metric_id IN ({id_list}){run_filter}"
+            f"SELECT pr_metric_id, run_id, run_attempt "
+            f"FROM pr_workflow_attempts WHERE pr_metric_id IN ({id_list}){run_filter} "
+            f"UNION ALL "
+            f"SELECT pr_metric_id, run_id, NULL AS run_attempt "
+            f"FROM pr_workflows WHERE pr_metric_id IN ({id_list}){run_filter} "
+            f"AND NOT EXISTS (SELECT 1 FROM pr_workflow_attempts pa "
+            f"WHERE pa.pr_metric_id = pr_workflows.pr_metric_id AND pa.run_id = pr_workflows.run_id)"
         )
         all_links.extend(links)
     return all_links
@@ -845,6 +852,7 @@ def _calc_pr_e2e_min(pm):
 
 
 def analyze_pr_stats(pr_metrics, pr_workflows):
+    # attempt 级链接：rerun 计入工作流数量（ADR-005）
     pr_wf_map = defaultdict(list)
     for pw in pr_workflows:
         pr_wf_map[pw["pr_metric_id"]].append(pw["run_id"])
@@ -911,7 +919,8 @@ def build_pr_details(pr_metrics, pr_workflows, runs, jobs, steps):
         # Fix 4.1: 使用 merged_at - created_at 计算完整 PR 生命周期
         pr_e2e = _calc_pr_e2e_min(pm)
         review = _calc_review_min(pm)
-        wf_run_ids = pr_wf_map.get(pm["id"], [])
+        # attempt 级链接下同一 run 可能命中多次（rerun）；run 级明细按 run 去重
+        wf_run_ids = list(dict.fromkeys(pr_wf_map.get(pm["id"], [])))
 
         all_rows.append(_base("PR", pm, pr_e2e, review) | {"链接": pm.get("html_url", "")})
 
@@ -1795,6 +1804,64 @@ def _report_pr_by_run(data: dict) -> dict[int, dict]:
     }
 
 
+def _management_metrics_rows(pr_rows: list[dict], job_raw: list[dict], distribution: list[dict]) -> list[dict]:
+    """月报管理摘要行；任何空指标都带可核验原因（ADR-009 空值契约）。
+
+    判定口径迁移自原效率技能：达标率>=80 且 >240m 占比<=5 为达标，
+    达标率<50 或 >240m 占比>=10 为长尾严重；排队/执行 P90 对比定瓶颈。
+    排队/执行均保持 job 级口径（ADR-009）。
+    """
+    ci_values = [row["ci_e2e_minutes"] for row in pr_rows if row.get("ci_e2e_minutes") is not None]
+    queues = [row["queue_minutes"] for row in job_raw if row.get("queue_minutes") is not None]
+    executions = [row["execution_minutes"] for row in job_raw if row.get("execution_minutes") is not None]
+    sla = round(sum(1 for value in ci_values if value < 60) / len(ci_values) * 100, 1) if ci_values else None
+    severe = next((bucket for bucket in distribution if bucket["bucket"] == ">240m"), None)
+    severe_pct = severe["percentage"] if severe else 0.0
+    q_p90, e_p90 = percentile(queues, 0.9), percentile(executions, 0.9)
+
+    def cell(value, reason):
+        return {"数值": value if value is not None else "", "说明": reason if value is None else ""}
+
+    rows = [
+        {"指标": "统计PR数", **cell(len(pr_rows), "")},
+        {"指标": "CI E2E 达标率(%)", **cell(sla, "窗口内无已关联 PR 的 E2E 样本，达标率不计算")},
+        {"指标": "CI E2E P50(分钟)", **cell(percentile(ci_values, 0.5), "窗口内无 PR E2E 样本")},
+        {"指标": "CI E2E P90(分钟)", **cell(percentile(ci_values, 0.9), "窗口内无 PR E2E 样本")},
+        {"指标": "排队 P90(分钟)", **cell(q_p90, "窗口内无可用 Job 排队样本")},
+        {"指标": "执行 P90(分钟)", **cell(e_p90, "窗口内无可用 Job 执行样本")},
+        {"指标": ">240m 长尾占比(%)", "数值": severe_pct, "说明": ""},
+    ]
+
+    if sla is None:
+        health, health_note = "无法判定", "窗口内无 PR E2E 样本"
+    elif sla >= 80 and severe_pct <= 5:
+        health, health_note = "达标", ""
+    elif sla < 50 or severe_pct >= 10:
+        health, health_note = "长尾严重", ""
+    else:
+        health, health_note = "不达标", ""
+    bottleneck = ""
+    if q_p90 is not None or e_p90 is not None:
+        bottleneck = "排队" if (q_p90 or 0) >= (e_p90 or 0) else "执行"
+    rows.append({"指标": "月度判定", "数值": health,
+                 "说明": f"主要矛盾在{bottleneck}阶段" if bottleneck else health_note})
+
+    anomalies = []
+    if sla is not None and sla < 80:
+        anomalies.append(f"CI E2E 达标率仅 {sla}%，低于 60 分钟目标")
+    if severe_pct >= 10:
+        anomalies.append(f">240 分钟长尾占比达到 {severe_pct}%，长尾问题明显")
+    if q_p90 is not None and q_p90 >= 30:
+        anomalies.append(f"排队耗时 P90 为 {q_p90} 分钟，runner 等待已影响体验")
+    if e_p90 is not None and e_p90 >= 120:
+        anomalies.append(f"CI 执行时长 P90 为 {e_p90} 分钟，主要瓶颈仍在执行阶段")
+    rows.extend({"指标": "异常", "数值": "", "说明": finding} for finding in anomalies)
+
+    rows.extend({"指标": f"E2E分布 {bucket['bucket']}", "数值": bucket["pr_count"],
+                 "说明": f"{bucket['percentage']}%"} for bucket in distribution)
+    return rows
+
+
 def build_report_mode_data(repos_data: dict[str, dict], configured_entries: dict[str, list[dict]] | None = None) -> dict[str, list[dict]]:
     """Build monthly/daily report views exclusively from the existing query result.
 
@@ -1900,18 +1967,19 @@ def build_report_mode_data(repos_data: dict[str, dict], configured_entries: dict
         distribution.append({"bucket": label, "pr_count": len(matched), "percentage": round(safe_div(len(matched) * 100, len(pr_rows)), 1)})
     return {"Workflow Raw": workflow_raw, "Job Raw": job_raw, "Step Raw": step_raw,
             "CI E2E Distribution": distribution, "Workflow Drag Ranking": workflow_rank,
-            "Longest Job Summary": job_rank, "Step Hotspots": step_rank}
+            "Longest Job Summary": job_rank, "Step Hotspots": step_rank,
+            "Management Metrics": _management_metrics_rows(pr_rows, job_raw, distribution)}
 
 
 def build_report_mode_sheets(repos_data: dict[str, dict], report_mode: str, configured_entries: dict[str, list[dict]] | None = None) -> dict[str, list[dict]]:
     """Presentation-only views; timing calculations remain the ADR-009 query contract."""
     data = build_report_mode_data(repos_data, configured_entries)
     common = {name: data[name] or [{"说明": "窗口内无可用数据；原始附录仍保留。"}]
-              for name in ("CI E2E Distribution", "Workflow Drag Ranking", "Longest Job Summary", "Step Hotspots")}
+              for name in ("Workflow Drag Ranking", "Longest Job Summary", "Step Hotspots")}
     raw = {name: data[name] or [{"说明": "窗口内无原始记录。"}]
            for name in ("Workflow Raw", "Job Raw", "Step Raw")}
     if report_mode == "monthly_summary":
-        return {"Management Summary": common["CI E2E Distribution"], "Diagnostic Appendix": common["Workflow Drag Ranking"],
+        return {"Management Summary": data["Management Metrics"], "Diagnostic Appendix": common["Workflow Drag Ranking"],
                 "Longest Job Summary": common["Longest Job Summary"], "Step Hotspots": common["Step Hotspots"]} | raw
     # Daily mode begins with actionable, run-count-aware hotspots.
     current = (common["Workflow Drag Ranking"] + common["Longest Job Summary"] + common["Step Hotspots"])

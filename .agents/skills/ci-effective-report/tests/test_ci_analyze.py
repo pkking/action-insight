@@ -182,6 +182,32 @@ class FetchJobsTests(unittest.TestCase):
         self.assertIn("NOT EXISTS (SELECT 1 FROM workflow_jobs wj WHERE wj.job_id = j.id)", client.sql)
 
 
+class FetchPrWorkflowsTests(unittest.TestCase):
+    def test_sql_prefers_attempt_scoped_links_with_legacy_fallback(self):
+        class Client:
+            sql = ""
+
+            def query(self, sql):
+                self.sql = sql
+                return []
+
+        client = Client()
+        MODULE.fetch_pr_workflows(client, [1, 2], run_id_filter={3})
+        self.assertIn("FROM pr_workflow_attempts", client.sql)
+        self.assertIn("FROM pr_workflows", client.sql)
+        self.assertIn("NOT EXISTS (SELECT 1 FROM pr_workflow_attempts pa", client.sql)
+        # UNION 两侧都要应用 run_id 过滤
+        self.assertEqual(client.sql.count("run_id IN (3)"), 2)
+
+    def test_pr_details_dedupe_rerun_attempt_links(self):
+        pr = {"id": 5, "pr_number": 1, "title": "t", "author": "a", "created_at": "2026-07-15T09:00:00Z",
+              "merged_at": "", "html_url": "", "conclusion": "success"}
+        runs = [_run(1, "E2E", 60 * 60)]
+        links = [{"pr_metric_id": 5, "run_id": 1}, {"pr_metric_id": 5, "run_id": 1}]
+        rows = MODULE.build_pr_details([pr], links, runs, [], [])
+        self.assertEqual([row["层级"] for row in rows], ["PR", "WORKFLOW"])
+
+
 class BuildDrilldownDataTests(unittest.TestCase):
     def _repos_data(self):
         # run1: 90min keep; run2: 40min drop; run3: 120min keep (schedule, no PR author)
@@ -481,7 +507,11 @@ class ReportModeTests(unittest.TestCase):
         self.assertEqual(monthly["Workflow Raw"][0]["workflow_run_id"], 1)
         self.assertEqual(monthly["Job Raw"][0]["job_id"], 10)
         self.assertEqual(monthly["Step Raw"][0]["step_name"], "Run tests")
-        self.assertEqual([row["bucket"] for row in monthly["Management Summary"]], ["<60m", "60-120m", "120-240m", ">240m"])
+        self.assertEqual([row["数值"] for row in monthly["Management Summary"] if str(row["指标"]).startswith("E2E分布")], [0, 1, 0, 0])
+        judgment = next(row for row in monthly["Management Summary"] if row["指标"] == "月度判定")
+        self.assertEqual(judgment["数值"], "长尾严重")  # 达标率 0% < 50%
+        self.assertEqual(judgment["说明"], "主要矛盾在执行阶段")
+        self.assertIn("异常", [row["指标"] for row in monthly["Management Summary"]])
         output = "/tmp/ci-effective-monthly-mode.xlsx"
         MODULE.write_excel(output, monthly)
         from openpyxl import load_workbook
