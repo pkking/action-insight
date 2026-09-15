@@ -371,8 +371,10 @@ def fetch_pr_metrics(client: PostgresClient, repo_ids: list[int], date_from: str
 
 
 def fetch_pr_workflows(client: PostgresClient, pr_metric_ids: list[int], run_id_filter: set[int] | None = None) -> list[dict]:
-    """Fetch PR-workflow links.
+    """Fetch PR-workflow links, attempt-scoped first (ADR-008/011).
 
+    pr_workflow_attempts 是 attempt 级主来源，rerun 行保留；run 级 pr_workflows 仅在
+    无 attempt 链接时回退，避免同一 (pr, run) 重复计数。
     run_id_filter: 若指定，则在 SQL 层过滤 run_id，避免 Python 端冗余过滤大量数据（Fix 2.3）。
     """
     if not pr_metric_ids:
@@ -388,8 +390,13 @@ def fetch_pr_workflows(client: PostgresClient, pr_metric_ids: list[int], run_id_
             run_ids_sql = ",".join(str(x) for x in run_id_filter)
             run_filter = f" AND run_id IN ({run_ids_sql})"
         links = client.query(
-            f"SELECT pr_metric_id, run_id "
-            f"FROM pr_workflows WHERE pr_metric_id IN ({id_list}){run_filter}"
+            f"SELECT pr_metric_id, run_id, run_attempt "
+            f"FROM pr_workflow_attempts WHERE pr_metric_id IN ({id_list}){run_filter} "
+            f"UNION ALL "
+            f"SELECT pr_metric_id, run_id, NULL AS run_attempt "
+            f"FROM pr_workflows WHERE pr_metric_id IN ({id_list}){run_filter} "
+            f"AND NOT EXISTS (SELECT 1 FROM pr_workflow_attempts pa "
+            f"WHERE pa.pr_metric_id = pr_workflows.pr_metric_id AND pa.run_id = pr_workflows.run_id)"
         )
         all_links.extend(links)
     return all_links
@@ -845,6 +852,7 @@ def _calc_pr_e2e_min(pm):
 
 
 def analyze_pr_stats(pr_metrics, pr_workflows):
+    # attempt 级链接：rerun 计入工作流数量（ADR-005）
     pr_wf_map = defaultdict(list)
     for pw in pr_workflows:
         pr_wf_map[pw["pr_metric_id"]].append(pw["run_id"])
@@ -861,6 +869,7 @@ def analyze_pr_stats(pr_metrics, pr_workflows):
             "CI完成时间": pm.get("ci_completed_at") or "",
             # Fix 4.1: 使用 merged_at - created_at 计算完整 PR 生命周期
             "PR E2E(分钟)": _calc_pr_e2e_min(pm),
+            "CI E2E(分钟)": sec_to_min(pm.get("ci_duration_seconds")),
             "CI后评审(分钟)": _calc_review_min(pm),
             "工作流数量": wf_count,
             "链接": pm.get("html_url", ""),
@@ -883,7 +892,7 @@ def build_pr_details(pr_metrics, pr_workflows, runs, jobs, steps):
 
     _COMMON_KEYS = [
         "层级", "PR编号", "PR标题", "PR作者", "PR创建时间", "PR合并时间",
-        "PR E2E(分钟)", "CI后评审(分钟)",
+        "PR E2E(分钟)", "CI E2E(分钟)", "CI后评审(分钟)",
         "工作流名称", "工作流运行ID", "工作流状态", "工作流结论",
         "工作流创建时间", "工作流开始时间", "工作流完成时间", "工作流耗时(分钟)", "工作流排队(分钟)",
         "任务名称", "任务ID", "任务状态", "任务结论",
@@ -903,6 +912,7 @@ def build_pr_details(pr_metrics, pr_workflows, runs, jobs, steps):
             "PR创建时间": pm.get("created_at", ""),
             "PR合并时间": pm.get("merged_at") or "",
             "PR E2E(分钟)": pr_e2e,
+            "CI E2E(分钟)": sec_to_min(pm.get("ci_duration_seconds")),
             "CI后评审(分钟)": review,
         }
 
@@ -911,7 +921,8 @@ def build_pr_details(pr_metrics, pr_workflows, runs, jobs, steps):
         # Fix 4.1: 使用 merged_at - created_at 计算完整 PR 生命周期
         pr_e2e = _calc_pr_e2e_min(pm)
         review = _calc_review_min(pm)
-        wf_run_ids = pr_wf_map.get(pm["id"], [])
+        # attempt 级链接下同一 run 可能命中多次（rerun）；run 级明细按 run 去重
+        wf_run_ids = list(dict.fromkeys(pr_wf_map.get(pm["id"], [])))
 
         all_rows.append(_base("PR", pm, pr_e2e, review) | {"链接": pm.get("html_url", "")})
 
@@ -1784,6 +1795,201 @@ def build_overview(overview_data: list[dict]) -> list[dict]:
     return rows
 
 
+
+def _report_pr_by_run(data: dict) -> dict[int, dict]:
+    """Map an in-scope run to its PR metric when the ETL resolved the link."""
+    metrics = {metric["id"]: metric for metric in data.get("pr_metrics", [])}
+    return {
+        link["run_id"]: metrics[link["pr_metric_id"]]
+        for link in data.get("pr_workflows", [])
+        if link.get("pr_metric_id") in metrics
+    }
+
+
+def _management_metrics_rows(pr_count: int, e2e_samples: list[float], job_raw: list[dict], distribution: list[dict]) -> list[dict]:
+    """月报管理摘要行；任何空指标都带可核验原因（ADR-009 空值契约）。
+
+    判定口径迁移自原效率技能：达标率>=80 且 >240m 占比<=5 为达标，
+    达标率<50 或 >240m 占比>=10 为长尾严重；排队/执行 P90 对比定瓶颈。
+    Workflow E2E 达标率/分布按 run 计数（成功且达到有效阈值的 Run，ADR-013 修订）；
+    排队/执行保持 job 级口径（ADR-009）。
+    """
+    queues = [row["queue_minutes"] for row in job_raw if row.get("queue_minutes") is not None]
+    executions = [row["execution_minutes"] for row in job_raw if row.get("execution_minutes") is not None]
+    sla = round(sum(1 for value in e2e_samples if value < 60) / len(e2e_samples) * 100, 1) if e2e_samples else None
+    severe = next((bucket for bucket in distribution if bucket["bucket"] == ">240m"), None)
+    severe_pct = severe["percentage"] if severe else 0.0
+    q_p90, e_p90 = percentile(queues, 0.9), percentile(executions, 0.9)
+
+    def cell(value, reason):
+        return {"数值": value if value is not None else "", "说明": reason if value is None else ""}
+
+    rows = [
+        {"指标": "统计PR数", **cell(pr_count, "")},
+        {"指标": "成功Run数(有效)", "数值": len(e2e_samples), "说明": "成功且耗时≥有效阈值的 Run 数"},
+        {"指标": "Workflow E2E 达标率(%)", "数值": sla if sla is not None else "",
+         "说明": "按成功 Run 计数" if sla is not None else "按成功 Run 计数；窗口内无成功 Run 样本，达标率不计算"},
+        {"指标": "Workflow E2E P50(分钟)", **cell(percentile(e2e_samples, 0.5), "窗口内无成功 Run 样本")},
+        {"指标": "Workflow E2E P90(分钟)", **cell(percentile(e2e_samples, 0.9), "窗口内无成功 Run 样本")},
+        {"指标": "排队 P90(分钟)", **cell(q_p90, "窗口内无可用 Job 排队样本")},
+        {"指标": "执行 P90(分钟)", **cell(e_p90, "窗口内无可用 Job 执行样本")},
+        {"指标": ">240m 长尾占比(%)", "数值": severe_pct, "说明": "按成功 Run 计数"},
+    ]
+
+    if sla is None:
+        health, health_note = "无法判定", "窗口内无 PR E2E 样本"
+    elif sla >= 80 and severe_pct <= 5:
+        health, health_note = "达标", ""
+    elif sla < 50 or severe_pct >= 10:
+        health, health_note = "长尾严重", ""
+    else:
+        health, health_note = "不达标", ""
+    bottleneck = ""
+    if q_p90 is not None or e_p90 is not None:
+        bottleneck = "排队" if (q_p90 or 0) >= (e_p90 or 0) else "执行"
+    rows.append({"指标": "月度判定", "数值": health,
+                 "说明": f"主要矛盾在{bottleneck}阶段" if bottleneck else health_note})
+
+    anomalies = []
+    if sla is not None and sla < 80:
+        anomalies.append(f"Workflow E2E 达标率仅 {sla}%，低于 60 分钟目标")
+    if severe_pct >= 10:
+        anomalies.append(f">240 分钟长尾占比达到 {severe_pct}%，长尾问题明显")
+    if q_p90 is not None and q_p90 >= 30:
+        anomalies.append(f"排队耗时 P90 为 {q_p90} 分钟，runner 等待已影响体验")
+    if e_p90 is not None and e_p90 >= 120:
+        anomalies.append(f"CI 执行时长 P90 为 {e_p90} 分钟，主要瓶颈仍在执行阶段")
+    rows.extend({"指标": "异常", "数值": "", "说明": finding} for finding in anomalies)
+
+    rows.extend({"指标": f"Workflow E2E分布 {bucket['bucket']}", "数值": bucket["run_count"],
+                 "说明": f"{bucket['percentage']}%"} for bucket in distribution)
+    return rows
+
+
+def build_report_mode_data(repos_data: dict[str, dict], configured_entries: dict[str, list[dict]] | None = None, min_duration: float = 5.0) -> dict[str, list[dict]]:
+    """Build monthly/daily report views exclusively from the existing query result.
+
+    Raw appendix rows deliberately start from runs (rather than PR links), so every
+    collected execution in the selected window remains traceable, including push
+    and scheduled workflows that do not have a PR artifact.
+    """
+    workflow_raw, job_raw, step_raw = [], [], []
+    configured_entries = configured_entries or {}
+    for repo, data in repos_data.items():
+        static_resources_by_workflow = {
+            entry["name"].lower(): entry["static_resources"]
+            for entry in configured_entries.get(repo, [])
+            if entry.get("name") and entry.get("static_resources")
+        }
+        pr_by_run = _report_pr_by_run(data)
+        jobs_by_run, steps_by_job = defaultdict(list), defaultdict(list)
+        for job in data.get("jobs", []):
+            jobs_by_run[job["run_id"]].append(job)
+        for step in data.get("steps", []):
+            steps_by_job[step["job_id"]].append(step)
+
+        for run in data.get("runs", []):
+            pr = pr_by_run.get(run["id"], {})
+            jobs = jobs_by_run.get(run["id"], [])
+            queues = [_calc_queue_min(job, run) for job in jobs]
+            queues = [value for value in queues if value is not None]
+            workflow_raw.append({
+                "repository": repo, "pr_number": pr.get("pr_number"), "pr_title": pr.get("title", ""),
+                "pr_url": pr.get("html_url", ""), "pr_created_at": pr.get("created_at", ""),
+                "pr_merged_at": pr.get("merged_at", ""), "workflow_run_id": run["id"],
+                "workflow_name": run.get("name", ""), "workflow_status": run.get("status", ""),
+                "workflow_conclusion": run.get("conclusion", ""), "branch": run.get("head_branch", ""),
+                "head_sha": run.get("head_sha", ""), "event": run.get("event", ""),
+                "created_at": run.get("created_at", ""), "completed_at": run.get("updated_at", ""),
+                "run_e2e_minutes": sec_to_min(run.get("duration_seconds")),
+                "max_job_queue_minutes": max(queues) if queues else None, "workflow_url": run.get("html_url", ""),
+            })
+            for job in jobs:
+                queue = _calc_queue_min(job, run)
+                job_raw.append({
+                    "repository": repo, "pr_number": pr.get("pr_number"), "pr_title": pr.get("title", ""),
+                    "pr_url": pr.get("html_url", ""), "workflow_run_id": run["id"],
+                    "workflow_name": run.get("name", ""), "branch": run.get("head_branch", ""),
+                    "head_sha": run.get("head_sha", ""), "event": run.get("event", ""), "job_id": job["id"],
+                    "job_name": job.get("name", ""), "job_status": job.get("status", ""),
+                    "job_conclusion": job.get("conclusion", ""), "runner_labels": ", ".join(job.get("labels", [])),
+                    "resource_requirement": workflow_resource_summary(
+                        [job], static_resources_by_workflow.get(str(run.get("name", "")).lower())
+                    ), "created_at": job.get("created_at", ""),
+                    "started_at": job.get("started_at", ""), "completed_at": job.get("completed_at", ""),
+                    "queue_minutes": queue, "execution_minutes": sec_to_min(job.get("duration_seconds")),
+                    "html_url": job.get("html_url", ""),
+                })
+                for index, step in enumerate(steps_by_job.get(job["id"], []), 1):
+                    step_raw.append({
+                        "repository": repo, "pr_number": pr.get("pr_number"), "workflow_run_id": run["id"],
+                        "workflow_name": run.get("name", ""), "job_id": job["id"], "job_name": job.get("name", ""),
+                        "step_number": step.get("number"), "step_name": step.get("name", ""),
+                        "step_status": step.get("status", ""), "step_conclusion": step.get("conclusion", ""),
+                        "started_at": step.get("started_at", ""), "completed_at": step.get("completed_at", ""),
+                        "execution_minutes": sec_to_min(step.get("duration_seconds")), "raw_step_index": index,
+                        "step_timing_missing": step.get("duration_seconds") is None,
+                    })
+
+    def rank(rows, keys, value_key):
+        grouped = defaultdict(list)
+        for row in rows:
+            value = row.get(value_key)
+            if value is not None:
+                grouped[tuple(row.get(key, "") for key in keys)].append(value)
+        return [
+            dict(zip(keys, key)) | {"run_count": len(values), "max_runtime_minutes": round(max(values), 3),
+                                    "avg_runtime_minutes": round(sum(values) / len(values), 3),
+                                    "total_runtime_minutes": round(sum(values), 3),
+                                    "drag_type": "高频拖慢项" if len(values) >= 3 and sum(values) / len(values) >= 30 else ("偶发长尾" if len(values) <= 2 and max(values) >= 60 else "需要观察")}
+            for key, values in grouped.items()
+        ]
+
+    workflow_rank = rank(workflow_raw, ["repository", "workflow_name"], "run_e2e_minutes")
+    job_rank = rank(job_raw, ["repository", "workflow_name", "job_name"], "execution_minutes")
+    step_rank = rank(step_raw, ["repository", "workflow_name", "job_name", "step_name"], "execution_minutes")
+    for rows in (workflow_rank, job_rank, step_rank):
+        rows.sort(key=lambda row: (row["total_runtime_minutes"], row["max_runtime_minutes"]), reverse=True)
+
+    # Workflow E2E distribution: one counting unit per successful run (run-level,
+    # attempt-aware, validity-thresholded); the PR-side CI E2E stays the
+    # pr_metrics.ci_duration_seconds envelope in PR statistics views (ADR-013).
+    e2e_samples = [
+        value
+        for data in repos_data.values()
+        for run in data.get("runs", [])
+        for value in [sec_to_min(run.get("duration_seconds"))]
+        if run.get("conclusion") == "success" and value is not None and value >= min_duration
+    ]
+    pr_count = sum(len(data.get("pr_metrics", [])) for data in repos_data.values())
+
+    buckets = [("<60m", lambda value: value < 60), ("60-120m", lambda value: 60 <= value < 120),
+               ("120-240m", lambda value: 120 <= value < 240), (">240m", lambda value: value >= 240)]
+    distribution = []
+    for label, predicate in buckets:
+        matched = [value for value in e2e_samples if predicate(value)]
+        distribution.append({"bucket": label, "run_count": len(matched), "percentage": round(safe_div(len(matched) * 100, len(e2e_samples)), 1)})
+    return {"Workflow Raw": workflow_raw, "Job Raw": job_raw, "Step Raw": step_raw,
+            "Workflow E2E Distribution": distribution, "Workflow Drag Ranking": workflow_rank,
+            "Longest Job Summary": job_rank, "Step Hotspots": step_rank,
+            "Management Metrics": _management_metrics_rows(pr_count, e2e_samples, job_raw, distribution)}
+
+
+def build_report_mode_sheets(repos_data: dict[str, dict], report_mode: str, configured_entries: dict[str, list[dict]] | None = None, min_duration: float = 5.0) -> dict[str, list[dict]]:
+    """Presentation-only views; timing calculations remain the ADR-009 query contract."""
+    data = build_report_mode_data(repos_data, configured_entries, min_duration)
+    common = {name: data[name] or [{"说明": "窗口内无可用数据；原始附录仍保留。"}]
+              for name in ("Workflow Drag Ranking", "Longest Job Summary", "Step Hotspots")}
+    raw = {name: data[name] or [{"说明": "窗口内无原始记录。"}]
+           for name in ("Workflow Raw", "Job Raw", "Step Raw")}
+    if report_mode == "monthly_summary":
+        return {"Management Summary": data["Management Metrics"], "Diagnostic Appendix": common["Workflow Drag Ranking"],
+                "Longest Job Summary": common["Longest Job Summary"], "Step Hotspots": common["Step Hotspots"]} | raw
+    # Daily mode begins with actionable, run-count-aware hotspots.
+    current = (common["Workflow Drag Ranking"] + common["Longest Job Summary"] + common["Step Hotspots"])
+    return {"Current Problems": current or [{"说明": "窗口内无当前问题。"}], "Daily Drill-down": common["Workflow Drag Ranking"],
+            "Longest Job Summary": common["Longest Job Summary"], "Step Hotspots": common["Step Hotspots"]} | raw
+
 def write_excel(filepath: str, sheets: dict[str, list[dict]]):
     try:
         import openpyxl
@@ -1978,6 +2184,7 @@ def main():
     parser.add_argument("--success-only", action="store_true", help="job/workflow 耗时统计只算 conclusion=success 的样本（目的2 口径，ADR-005）")
     parser.add_argument("--min-duration", type=float, default=5, help="耗时下限(分钟)：低于此值的 run/job/step 不计入统计(avg/p50/p90)与关键路径，默认 5")
     parser.add_argument("--insights", action="store_true", help="额外输出 HTML 洞察报告（Top 问题+证据，ADR-005）")
+    parser.add_argument("--report-mode", choices=["monthly_summary", "daily_diagnostic"], help="单一报告出口的管理月报或每日诊断模式")
     parser.add_argument("--no-drilldown", action="store_true", help="跳过下钻 HTML 报告（默认生成：>阈值分钟 run 列表 → job 条形图 → step 明细，ADR-009）")
     parser.add_argument("--drilldown-min", type=float, default=60, help="下钻报告的 run 耗时阈值(分钟)，默认 60")
     # 配置文件用于批量项目对比；--repo 可用于临时选择单个或多个仓库。
@@ -2163,6 +2370,13 @@ def main():
         pool_summary, pool_timeline = build_resource_pool_rows(repos_data, date_from, date_to, resource_pools)
         sheets["资源池利用率"] = pool_summary
         sheets["资源池时序"] = pool_timeline
+
+    # Report modes reuse the already fetched local PostgreSQL rows; they never collect or clone.
+    # Report-mode sheets lead the workbook (monthly starts with Management Summary,
+    # daily starts with Current Problems, per ADR-013).
+    if args.report_mode:
+        report_sheets = build_report_mode_sheets(repos_data, args.report_mode, configured_entries, args.min_duration)
+        sheets = {**report_sheets, **sheets}
 
     # Write Excel
     if not args.no_excel and sheets:

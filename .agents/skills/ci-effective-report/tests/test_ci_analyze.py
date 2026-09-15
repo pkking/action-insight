@@ -182,6 +182,32 @@ class FetchJobsTests(unittest.TestCase):
         self.assertIn("NOT EXISTS (SELECT 1 FROM workflow_jobs wj WHERE wj.job_id = j.id)", client.sql)
 
 
+class FetchPrWorkflowsTests(unittest.TestCase):
+    def test_sql_prefers_attempt_scoped_links_with_legacy_fallback(self):
+        class Client:
+            sql = ""
+
+            def query(self, sql):
+                self.sql = sql
+                return []
+
+        client = Client()
+        MODULE.fetch_pr_workflows(client, [1, 2], run_id_filter={3})
+        self.assertIn("FROM pr_workflow_attempts", client.sql)
+        self.assertIn("FROM pr_workflows", client.sql)
+        self.assertIn("NOT EXISTS (SELECT 1 FROM pr_workflow_attempts pa", client.sql)
+        # UNION 两侧都要应用 run_id 过滤
+        self.assertEqual(client.sql.count("run_id IN (3)"), 2)
+
+    def test_pr_details_dedupe_rerun_attempt_links(self):
+        pr = {"id": 5, "pr_number": 1, "title": "t", "author": "a", "created_at": "2026-07-15T09:00:00Z",
+              "merged_at": "", "html_url": "", "conclusion": "success"}
+        runs = [_run(1, "E2E", 60 * 60)]
+        links = [{"pr_metric_id": 5, "run_id": 1}, {"pr_metric_id": 5, "run_id": 1}]
+        rows = MODULE.build_pr_details([pr], links, runs, [], [])
+        self.assertEqual([row["层级"] for row in rows], ["PR", "WORKFLOW"])
+
+
 class BuildDrilldownDataTests(unittest.TestCase):
     def _repos_data(self):
         # run1: 90min keep; run2: 40min drop; run3: 120min keep (schedule, no PR author)
@@ -460,6 +486,72 @@ class WriteDrilldownHtmlTests(unittest.TestCase):
         # showing must set an explicit display that beats the .detail{display:none} rule
         self.assertIn("table-row", html)
         self.assertIn("const open=det.style.display==='table-row'", html)
+
+
+class ReportModeTests(unittest.TestCase):
+    def _repos_data(self):
+        run = _run(1, "E2E", 90 * 60)
+        job = _job(10, 1, "integration", 70 * 60)
+        step = _step(10, 1, "Run tests", 60 * 60)
+        pr = {"id": 99, "pr_number": 7, "title": "test PR", "html_url": "https://example/pr/7", "created_at": "2026-07-15T09:00:00Z", "merged_at": "2026-07-15T12:00:00Z", "ci_duration_seconds": 5400}
+        return {"o/r": {"runs": [run], "jobs": [job], "steps": [step], "pr_metrics": [pr], "pr_workflows": [{"pr_metric_id": 99, "run_id": 1}]}}
+
+    def test_report_modes_use_local_rows_and_include_all_raw_appendices(self):
+        repos_data = self._repos_data()
+        # Scheduled/push work has no PR link but must remain in the raw appendix.
+        repos_data["o/r"]["runs"].append(_run(2, "Nightly", 30 * 60, event="schedule"))
+        monthly = MODULE.build_report_mode_sheets(repos_data, "monthly_summary")
+        self.assertIn("Management Summary", monthly)
+        self.assertIn("Diagnostic Appendix", monthly)
+        self.assertEqual({row["workflow_run_id"] for row in monthly["Workflow Raw"]}, {1, 2})
+        self.assertEqual(monthly["Workflow Raw"][0]["workflow_run_id"], 1)
+        self.assertEqual(monthly["Job Raw"][0]["job_id"], 10)
+        self.assertEqual(monthly["Step Raw"][0]["step_name"], "Run tests")
+        self.assertEqual([row["数值"] for row in monthly["Management Summary"] if str(row["指标"]).startswith("Workflow E2E分布")], [1, 1, 0, 0])
+        judgment = next(row for row in monthly["Management Summary"] if row["指标"] == "月度判定")
+        self.assertEqual(judgment["数值"], "不达标")  # run 级达标率 50%（90min + 30min 成功 run）
+        self.assertEqual(judgment["说明"], "主要矛盾在执行阶段")
+        self.assertIn("异常", [row["指标"] for row in monthly["Management Summary"]])
+        output = "/tmp/ci-effective-monthly-mode.xlsx"
+        MODULE.write_excel(output, monthly)
+        from openpyxl import load_workbook
+        workbook = load_workbook(output, read_only=True)
+        self.assertTrue({"Management Summary", "Diagnostic Appendix", "Workflow Raw", "Job Raw", "Step Raw"}.issubset(workbook.sheetnames))
+
+    def test_workflow_e2e_distribution_counts_success_runs_per_run(self):
+        repos_data = self._repos_data()
+        repos_data["o/r"]["runs"].append(_run(2, "E2E", 30 * 60))                          # success 30min -> <60m
+        repos_data["o/r"]["runs"].append(_run(3, "E2E", 200 * 60, conclusion="failure"))  # failed runs excluded
+        repos_data["o/r"]["runs"].append(_run(4, "E2E", 2 * 60))                           # below validity threshold
+        monthly = MODULE.build_report_mode_sheets(repos_data, "monthly_summary")
+        summary = {row["指标"]: row for row in monthly["Management Summary"]}
+        self.assertEqual([summary[f"Workflow E2E分布 {b}"]["数值"] for b in ("<60m", "60-120m", "120-240m", ">240m")], [1, 1, 0, 0])
+        self.assertEqual(summary["Workflow E2E 达标率(%)"].get("数值"), 50.0)
+
+    def test_pr_stats_uses_envelope_ci_e2e_from_pr_metrics(self):
+        pr = {"id": 5, "pr_number": 1, "title": "t", "author": "a", "created_at": "2026-07-15T09:00:00Z",
+              "merged_at": "2026-07-15T12:00:00Z", "html_url": "", "conclusion": "success", "ci_duration_seconds": 5400}
+        rows = MODULE.analyze_pr_stats([pr], [])
+        self.assertEqual(rows[0]["CI E2E(分钟)"], 90.0)
+        self.assertEqual(rows[0]["PR E2E(分钟)"], 180.0)
+
+    def test_report_mode_raw_resource_requirement_prefers_static_configuration(self):
+        monthly = MODULE.build_report_mode_sheets(
+            self._repos_data(),
+            "monthly_summary",
+            {"o/r": [{"name": "E2E", "static_resources": {"L20": 8}}]},
+        )
+        self.assertEqual(monthly["Job Raw"][0]["resource_requirement"], "L20 × 8卡")
+
+    def test_daily_mode_starts_with_current_problems_and_classifies_drag(self):
+        data = self._repos_data()
+        # Three executions make the job a frequent drag rather than a rare outlier.
+        for index in (2, 3):
+            data["o/r"]["runs"].append(_run(index, "E2E", 90 * 60))
+            data["o/r"]["jobs"].append(_job(index * 10, index, "integration", 70 * 60))
+        daily = MODULE.build_report_mode_sheets(data, "daily_diagnostic")
+        self.assertEqual(next(iter(daily)), "Current Problems")
+        self.assertIn("高频拖慢项", [row.get("drag_type") for row in daily["Current Problems"]])
 
 
 if __name__ == "__main__":
