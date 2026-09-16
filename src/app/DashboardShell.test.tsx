@@ -74,7 +74,7 @@ function rowResult(): PrDashboardResult {
       eligibleForcedMergeCount: 1,
     },
     series: [
-      { date: '2026-01-01', prNumber: 42, repoKey: 'owner/repo', queue: 600, ciRuntime: 3000, review: 1400 },
+      { date: '2026-01-01', prNumber: 42, repoKey: 'owner/repo', ciRuntime: 3000, review: 1400 },
     ],
     rows: [
       {
@@ -82,7 +82,6 @@ function rowResult(): PrDashboardResult {
         prNumber: 42,
         title: 'Add dashboard',
         htmlUrl: 'https://github.com/owner/repo/pull/42',
-        queue: 600,
         ciRuntime: 3000,
         review: 1400,
         mergedAt: '2026-01-01T02:00:00Z',
