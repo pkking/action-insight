@@ -72,6 +72,14 @@ export type PrSeriesPoint = {
   repoKey: string;
   ciRuntime?: number;
   conclusion: string | null;
+  pendingJobs?: number;
+  runningJobs?: number;
+};
+
+type PrJobTimelinePoint = {
+  createdAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
 };
 
 export type DailyPrCountPoint = { date: string; count: number };
@@ -391,6 +399,37 @@ export async function fetchPrRunSeries(
   }
 }
 
+async function fetchPrJobTimeline(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<PrJobTimelinePoint[]> {
+  if (repoRows.length === 0) return [];
+  const client = await getDatabaseClient();
+  try {
+    const placeholders = pgPlaceholders(repoRows.length);
+    const { rows } = await client.query(
+      `SELECT wj.created_at, wj.started_at, wj.completed_at
+       FROM pr_workflow_attempts pwa
+       JOIN pr_metrics pm ON pm.id = pwa.pr_metric_id
+       JOIN workflow_jobs wj
+         ON wj.run_id = pwa.run_id AND wj.run_attempt = pwa.run_attempt
+       JOIN runs r ON r.id = wj.run_id
+       WHERE r.repo_id IN (${placeholders})
+         AND pm.merged_at >= $${repoRows.length + 1}
+         AND pm.merged_at < $${repoRows.length + 2}`,
+      [...repoRows.map((r) => r.id), `${startDate}T00:00:00Z`, `${endDate}T23:59:59Z`],
+    );
+    return rows.map((row) => ({
+      createdAt: (row.created_at as string | null) ?? null,
+      startedAt: (row.started_at as string | null) ?? null,
+      completedAt: (row.completed_at as string | null) ?? null,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
 type EnrichedPr = PrMetricRow & {
   repoKey: string;
   timing: ReturnType<typeof computePrTimingParts>;
@@ -448,6 +487,7 @@ export function buildPrDashboardResult(
   enriched: EnrichedPr[],
   runSeries: PrSeriesPoint[],
   query: Pick<DashboardQuery, 'page' | 'pageSize' | 'observationLimit'>,
+  jobTimeline: PrJobTimelinePoint[] = [],
 ): PrDashboardResult {
   const cards = buildPrCards(enriched);
 
@@ -457,7 +497,22 @@ export function buildPrDashboardResult(
   const observations = sorted.slice(0, query.observationLimit);
   const truncated = sorted.length > query.observationLimit;
 
-  const series = runSeries.slice(0, query.observationLimit);
+  const series = runSeries.slice(0, query.observationLimit).map((run) => {
+    const timestamp = Date.parse(run.date);
+    const pendingJobs = jobTimeline.filter((job) => {
+      const created = job.createdAt ? Date.parse(job.createdAt) : NaN;
+      const started = job.startedAt ? Date.parse(job.startedAt) : NaN;
+      return Number.isFinite(created) && created <= timestamp &&
+        (!Number.isFinite(started) || timestamp < started);
+    }).length;
+    const runningJobs = jobTimeline.filter((job) => {
+      const started = job.startedAt ? Date.parse(job.startedAt) : NaN;
+      const completed = job.completedAt ? Date.parse(job.completedAt) : NaN;
+      return Number.isFinite(started) && started <= timestamp &&
+        (!Number.isFinite(completed) || timestamp < completed);
+    }).length;
+    return { ...run, pendingJobs, runningJobs };
+  });
   const dailyCounts = new Map<string, number>();
   for (const row of enriched) {
     const date = (row.merged_at ?? '').slice(0, 10);
@@ -1813,16 +1868,17 @@ export const getDashboardReadModel = cache(
     }
 
     // PR tab (slice 1).
-    const [rawRows, runSeries] = await Promise.all([
+    const [rawRows, runSeries, jobTimeline] = await Promise.all([
       fetchPrMetricRows(repoRows, input.startDate, input.endDate),
       fetchPrRunSeries(repoRows, input.startDate, input.endDate),
+      fetchPrJobTimeline(repoRows, input.startDate, input.endDate),
     ]);
     const enriched = buildEnrichedRows(rawRows, repoRows);
     return buildPrDashboardResult(enriched, runSeries, {
       page: input.page,
       pageSize: input.pageSize,
       observationLimit: input.observationLimit,
-    });
+    }, jobTimeline);
   },
 );
 

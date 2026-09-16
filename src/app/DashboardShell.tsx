@@ -1472,12 +1472,11 @@ export default function DashboardShell({
 
   const chartData = useMemo(() => {
     if (result.tab !== 'pr') return [];
-    const dailyCounts = new Map((result.dailyCounts ?? []).map((point) => [point.date, point.count]));
     return result.series.map((point) => ({
       timestamp: point.date,
-      day: point.date.slice(0, 10),
       ciRuntime: point.ciRuntime,
-      dailyCount: dailyCounts.get(point.date.slice(0, 10)),
+      pendingJobs: point.pendingJobs,
+      runningJobs: point.runningJobs,
       repoKey: point.repoKey,
       prNumber: point.prNumber,
       conclusion: point.conclusion,
@@ -1682,14 +1681,15 @@ export default function DashboardShell({
                   <XAxis dataKey="timestamp" tick={{ fontSize: 10, fill: '#888' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
                   <YAxis yAxisId="seconds" tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
                   <YAxis yAxisId="count" orientation="right" allowDecimals={false} tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(value, name) => [name === 'Merged PRs' ? value : fmtSeconds(Number(value)), String(name)]} />
+                  <Tooltip formatter={(value, name) => [name === 'Running Jobs' || name === 'Pending Jobs' ? value : fmtSeconds(Number(value)), String(name)]} />
                   <Legend />
                   <Bar yAxisId="seconds" dataKey="ciRuntime" name="CI Runtime">
                     {chartData.map((entry, index) => (
                       <Cell key={`${entry.timestamp}-${index}`} fill={entry.conclusion === 'success' ? '#34d399' : entry.conclusion ? '#f87171' : '#9ca3af'} />
                     ))}
                   </Bar>
-                  <Line yAxisId="count" type="monotone" dataKey="dailyCount" name="Merged PRs" stroke="#a78bfa" strokeWidth={2} dot={false} connectNulls />
+                  <Line yAxisId="count" type="monotone" dataKey="runningJobs" name="Running Jobs" stroke="#a78bfa" strokeWidth={2} dot={false} />
+                  <Line yAxisId="count" type="monotone" dataKey="pendingJobs" name="Pending Jobs" stroke="#f59e0b" strokeWidth={2} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
