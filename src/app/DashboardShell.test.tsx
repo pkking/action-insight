@@ -21,7 +21,9 @@ vi.mock('next/navigation', () => ({
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   ComposedChart: ({ data }: { data?: unknown[] }) => <div data-testid="chart" data-len={data?.length ?? 0} />,
-  LineChart: ({ data }: { data?: unknown[] }) => <div data-testid="cost-chart" data-len={data?.length ?? 0} />,
+  LineChart: ({ data, 'data-testid': testId }: { data?: unknown[]; 'data-testid'?: string }) => (
+    <div data-testid={testId ?? 'cost-chart'} data-len={data?.length ?? 0} />
+  ),
   Bar: () => null,
   Line: () => null,
   XAxis: () => null,
@@ -72,7 +74,7 @@ function rowResult(): PrDashboardResult {
       eligibleForcedMergeCount: 1,
     },
     series: [
-      { date: '2026-01-01', prNumber: 42, repoKey: 'owner/repo', queue: 600, ciRuntime: 3000, review: 1400 },
+      { date: '2026-01-01', prNumber: 42, repoKey: 'owner/repo', ciRuntime: 3000, review: 1400 },
     ],
     rows: [
       {
@@ -80,7 +82,6 @@ function rowResult(): PrDashboardResult {
         prNumber: 42,
         title: 'Add dashboard',
         htmlUrl: 'https://github.com/owner/repo/pull/42',
-        queue: 600,
         ciRuntime: 3000,
         review: 1400,
         mergedAt: '2026-01-01T02:00:00Z',
@@ -359,6 +360,20 @@ describe('DashboardShell', () => {
     expect(screen.getByText('Add dashboard')).toBeInTheDocument();
     // Chart received the series point
     expect(screen.getByTestId('chart').getAttribute('data-len')).toBe('1');
+  });
+
+  it('renders the daily PR count as a separate date-aligned line chart', () => {
+    const result = rowResult();
+    result.series = [
+      ...result.series,
+      { date: '2026-01-02', prNumber: 43, repoKey: 'owner/repo' },
+      { date: '2026-01-02', prNumber: 44, repoKey: 'owner/repo' },
+    ];
+
+    render(<DashboardShell repoOptions={repoOptions} result={result} searchParams={{}} />);
+
+    expect(screen.getByTestId('chart').getAttribute('data-len')).toBe('3');
+    expect(screen.getByTestId('daily-pr-count-chart').getAttribute('data-len')).toBe('2');
   });
 
   it('lazily fetches PR drill-down on row click and renders the Machine-Hours summary', async () => {

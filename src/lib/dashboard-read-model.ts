@@ -70,7 +70,6 @@ export type PrSeriesPoint = {
   date: string; // merged_at (yyyy-mm-dd) for the daily count line
   prNumber: number;
   repoKey: string;
-  queue?: number;
   ciRuntime?: number;
   review?: number;
 };
@@ -80,7 +79,6 @@ export type PrTableRow = {
   prNumber: number;
   title: string;
   htmlUrl: string;
-  queue?: number;
   ciRuntime?: number;
   review?: number;
   mergedAt: string;
@@ -368,9 +366,9 @@ export function buildPrCards(rows: EnrichedPr[]): PrCardSet {
   let forcedMerged = 0;
 
   for (const row of rows) {
-    const { queue, ciRuntime, review, endToEnd, forcedMerge } = row.timing;
-    if (queue !== undefined && ciRuntime !== undefined && review !== undefined) {
-      e2eSamples.push(endToEnd!);
+    const { ciRuntime, review, endToEnd, forcedMerge } = row.timing;
+    if (endToEnd !== undefined) {
+      e2eSamples.push(endToEnd);
     }
     if (ciRuntime !== undefined) ciSamples.push(ciRuntime);
     if (review !== undefined) reviewSamples.push(review);
@@ -424,7 +422,6 @@ export function buildPrDashboardResult(
     date: (row.merged_at ?? '').slice(0, 10),
     prNumber: row.pr_number,
     repoKey: row.repoKey,
-    queue: row.timing.queue,
     ciRuntime: row.timing.ciRuntime,
     review: row.timing.review,
   }));
@@ -434,7 +431,6 @@ export function buildPrDashboardResult(
     prNumber: row.pr_number,
     title: row.title,
     htmlUrl: row.html_url,
-    queue: row.timing.queue,
     ciRuntime: row.timing.ciRuntime,
     review: row.timing.review,
     mergedAt: row.merged_at ?? '',

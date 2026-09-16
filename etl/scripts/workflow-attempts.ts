@@ -100,7 +100,11 @@ export function enrichRunWithWorkflowMetadata(
   const parsed = parseWorkflowPath(workflowPath);
   const match = resolveWorkflowMatch(config, repoConfig, parsed);
   const runStartedAt = getRunStartedAt(run);
-  const queueDuration = secondsBetween(run.created_at, runStartedAt);
+  const firstJobStartedAt = run.jobs
+    ?.map((job) => job.started_at)
+    .filter((startedAt): startedAt is string => Boolean(startedAt))
+    .sort((left, right) => left.localeCompare(right))[0];
+  const queueDuration = secondsBetween(run.created_at, firstJobStartedAt);
   const runtime = secondsBetween(runStartedAt, run.updated_at);
 
   return {
@@ -154,9 +158,9 @@ export function buildWorkflowAttempts(
         started_at: job.started_at || null,
         completed_at: job.completed_at || null,
         html_url: job.html_url || null,
-        queue_duration_seconds: job.queueDurationInSeconds ?? secondsBetween(job.created_at, job.started_at),
+        queue_duration_seconds: secondsBetween(job.created_at, job.started_at),
         runtime_seconds: jobRuntime,
-        total_duration_seconds: jobTotal ?? (jobRuntime !== null ? (job.queueDurationInSeconds ?? 0) + jobRuntime : null),
+        total_duration_seconds: jobTotal ?? (jobRuntime !== null ? (secondsBetween(job.created_at, job.started_at) ?? 0) + jobRuntime : null),
         labels: job.labels,
         runner_id: job.runner_id,
         runner_name: job.runner_name,

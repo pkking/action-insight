@@ -65,12 +65,12 @@ describe('computePrTimingParts', () => {
     merged_at: '2026-01-01T02:00:00Z',
   };
 
-  it('derives queue/ciRuntime/review/endToEnd from raw timestamps', () => {
+  it('derives CI/review timing and PR lifecycle duration without a queue metric', () => {
     const parts = computePrTimingParts(valid);
-    expect(parts.queue).toBe(600);
+    expect(parts).not.toHaveProperty('queue');
     expect(parts.ciRuntime).toBe(3000);
     expect(parts.review).toBe(3600);
-    expect(parts.endToEnd).toBe(600 + 3000 + 3600);
+    expect(parts.endToEnd).toBe(2 * 60 * 60);
     expect(parts.forcedMerge).toBe(false);
     expect(parts.invalidTiming).toBe(false);
   });

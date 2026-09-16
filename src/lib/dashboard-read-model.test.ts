@@ -36,7 +36,8 @@ describe('buildEnrichedRows', () => {
   it('maps repo_id to repoKey and computes timing parts', () => {
     const enriched = buildEnrichedRows([row()], REPO_ROWS);
     expect(enriched[0].repoKey).toBe('owner/repo');
-    expect(enriched[0].timing.queue).toBe(600);
+    expect(enriched[0].timing).not.toHaveProperty('queue');
+    expect(enriched[0].timing.ciRuntime).toBe(3000);
   });
 });
 

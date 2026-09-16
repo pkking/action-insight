@@ -1486,7 +1486,6 @@ export default function DashboardShell({
       if (result.tab !== 'pr') return [];
       return result.series.map((p) => ({
         label: `#${p.prNumber}`,
-        queue: p.queue,
         ciRuntime: p.ciRuntime,
         review: p.review,
         repoKey: p.repoKey,
@@ -1627,7 +1626,7 @@ export default function DashboardShell({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard
             label="PR End-to-End"
-            definition="Queue + CI runtime + review, for merged PRs with all three valid parts (spec §4)."
+            definition="PR created → merge, independent of queue metrics."
             stats={result.cards.endToEnd}
           />
           <StatCard
@@ -1679,7 +1678,7 @@ export default function DashboardShell({
           </div>
         )}
 
-        {/* Chart: stacked bar per PR + daily count line */}
+        {/* Timing is per PR; daily counts use their own date-aligned chart below. */}
         <div className="rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
           <h2 className="mb-4 text-lg font-bold">PR Timing Breakdown</h2>
           {chartData.length === 0 ? (
@@ -1693,32 +1692,32 @@ export default function DashboardShell({
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" className="dark:opacity-20" />
                   <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#888' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
                   <YAxis yAxisId="seconds" tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
-                  <YAxis yAxisId="count" orientation="right" tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
-                  <Tooltip
-                    formatter={(value, name) => [
-                      name === 'PR count' ? value : fmtSeconds(Number(value)),
-                      String(name),
-                    ]}
-                  />
+                  <Tooltip formatter={(value, name) => [fmtSeconds(Number(value)), String(name)]} />
                   <Legend />
-                  <Bar yAxisId="seconds" dataKey="queue" name="Queue" stackId="a" fill="#60a5fa" />
                   <Bar yAxisId="seconds" dataKey="ciRuntime" name="CI Runtime" stackId="a" fill="#34d399" />
                   <Bar yAxisId="seconds" dataKey="review" name="Review" stackId="a" fill="#fbbf24" />
-                  <Line
-                    yAxisId="count"
-                    type="monotone"
-                    data={dailyCounts}
-                    dataKey="count"
-                    name="PR count"
-                    stroke="#a78bfa"
-                    strokeWidth={2}
-                    dot={false}
-                  />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
           )}
         </div>
+
+        {dailyCounts.length > 0 && (
+          <div className="rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+            <h2 className="mb-4 text-lg font-bold">Daily Merged PRs</h2>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={dailyCounts} data-testid="daily-pr-count-chart">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" className="dark:opacity-20" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#888' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="count" name="Merged PRs" stroke="#a78bfa" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
 
         {/* Paged detail table */}
         <div className="overflow-hidden rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
@@ -1735,7 +1734,6 @@ export default function DashboardShell({
                   <th className="px-4 py-3">Repo</th>
                   <th className="px-4 py-3">PR</th>
                   <th className="px-4 py-3">Title</th>
-                  <th className="px-4 py-3">Queue</th>
                   <th className="px-4 py-3">CI Runtime</th>
                   <th className="px-4 py-3">Review</th>
                   <th className="px-4 py-3">Merged</th>
@@ -1744,7 +1742,7 @@ export default function DashboardShell({
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                 {result.rows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-neutral-400 dark:text-neutral-500">
+                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-neutral-400 dark:text-neutral-500">
                       No merged PRs in range. {selectedRepo ? 'Try “All repositories” or a wider range.' : ''}
                     </td>
                   </tr>
@@ -1771,7 +1769,6 @@ export default function DashboardShell({
                             </a>
                           </td>
                           <td className="px-4 py-3 max-w-xs truncate" title={row.title}>{row.title}</td>
-                          <td className="px-4 py-3 font-mono text-xs">{fmtSeconds(row.queue)}</td>
                           <td className="px-4 py-3 font-mono text-xs">{fmtSeconds(row.ciRuntime)}</td>
                           <td className="px-4 py-3 font-mono text-xs">
                             {fmtSeconds(row.review)}
