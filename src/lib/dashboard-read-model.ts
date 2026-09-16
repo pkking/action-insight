@@ -1806,7 +1806,8 @@ export function parseDashboardQuery(params: URLSearchParams): DashboardQuery {
       : 'pr';
   const repoKey = params.get('repo') || undefined;
   const resourceModel = params.get('resourceModel') || undefined;
-  const startDate = params.get('startDate') || defaultDate(DEFAULT_DAY_WINDOW[tab]);
+  const days = intParam(params, 'days', DEFAULT_DAY_WINDOW[tab]);
+  const startDate = params.get('startDate') || defaultDate(days);
   const endDate = params.get('endDate') || todayUtc();
   const page = intParam(params, 'page', 1);
   return {

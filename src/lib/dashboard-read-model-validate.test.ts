@@ -66,6 +66,14 @@ describe('parsePrDashboardQuery', () => {
     expect(q.startDate <= q.endDate).toBe(true);
   });
 
+  it('uses the requested quick-range duration when dates are not explicit', () => {
+    const q = parsePrDashboardQuery(new URLSearchParams({ days: '7' }));
+    const rangeDays =
+      (Date.parse(`${q.endDate}T00:00:00Z`) - Date.parse(`${q.startDate}T00:00:00Z`)) /
+      (24 * 60 * 60 * 1000);
+    expect(rangeDays).toBe(7);
+  });
+
   it('honours explicit repo, dates, and page', () => {
     const params = new URLSearchParams({
       repo: 'owner/repo',
