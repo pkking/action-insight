@@ -75,7 +75,7 @@ describe('buildWorkflowAttempts', () => {
       workflow_file: 'ci.yml',
       workflow_ref: 'main',
       match_kind: 'exact_ref',
-      queue_duration_seconds: 60,
+      queue_duration_seconds: 90,
       runtime_seconds: 600,
       total_duration_seconds: 660,
       pr_numbers: [42],
@@ -83,10 +83,28 @@ describe('buildWorkflowAttempts', () => {
     expect(attempt.jobs[0]).toEqual(expect.objectContaining({
       run_attempt: 2,
       job_id: 10,
+      queue_duration_seconds: 60,
       runtime_seconds: 540,
       total_duration_seconds: 600,
     }));
     expect(attempt.jobs[0].steps).toHaveLength(1);
+  });
+
+  it('uses the earliest started job for workflow queue and leaves it unavailable without one', () => {
+    const [withJobs] = buildWorkflowAttempts([
+      run({
+        jobs: [
+          { ...run().jobs![0], id: 11, started_at: '2026-07-03T00:03:00Z' },
+          { ...run().jobs![0], id: 12, started_at: '2026-07-03T00:02:00Z' },
+        ],
+      }),
+    ], config, repoConfig);
+    expect(withJobs.queue_duration_seconds).toBe(120);
+
+    const [withoutStartedJob] = buildWorkflowAttempts([
+      run({ jobs: [{ ...run().jobs![0], started_at: '' }] }),
+    ], config, repoConfig);
+    expect(withoutStartedJob.queue_duration_seconds).toBeNull();
   });
 
   it('keeps run metadata for untracked workflows without persisting step rows', () => {

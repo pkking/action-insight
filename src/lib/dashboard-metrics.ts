@@ -70,16 +70,15 @@ export function machineHours(
 }
 
 export type PrTimingParts = {
-  queue?: number; // created_at → ci_started_at
   ciRuntime?: number; // ci_started_at → ci_completed_at
   review?: number; // ci_completed_at → merged_at
-  endToEnd?: number; // queue + ciRuntime + review (only when all three valid)
+  endToEnd?: number; // PR created_at → merged_at; a lifecycle duration, not queue
   forcedMerge: boolean;
   invalidTiming: boolean;
 };
 
 /**
- * Compute the four PR timing parts plus the Forced Merge Indicator from raw
+ * Compute PR lifecycle timing plus the Forced Merge Indicator from raw
  * pr_metrics timestamps. Negative samples are dropped (invalid), matching
  * the spec: "negative values are not clamped into normal review metrics".
  */
@@ -89,7 +88,6 @@ export function computePrTimingParts(pr: {
   ci_completed_at?: string | null;
   merged_at?: string | null;
 }): PrTimingParts {
-  const queue = durationSeconds(pr.created_at, pr.ci_started_at);
   const ciRuntime = durationSeconds(pr.ci_started_at, pr.ci_completed_at);
   const review = durationSeconds(pr.ci_completed_at, pr.merged_at);
 
@@ -103,15 +101,12 @@ export function computePrTimingParts(pr: {
 
   const invalidTiming = Boolean(
     (pr.ci_started_at || pr.ci_completed_at) &&
-      (queue === undefined || ciRuntime === undefined),
+      ciRuntime === undefined,
   );
 
-  const endToEnd =
-    queue !== undefined && ciRuntime !== undefined && review !== undefined
-      ? queue + ciRuntime + review
-      : undefined;
+  const endToEnd = durationSeconds(pr.created_at, pr.merged_at);
 
-  return { queue, ciRuntime, review, endToEnd, forcedMerge, invalidTiming };
+  return { ciRuntime, review, endToEnd, forcedMerge, invalidTiming };
 }
 
 /** Summarize Machine-Hours by Resource Model for a set of jobs. */

@@ -1486,7 +1486,6 @@ export default function DashboardShell({
       if (result.tab !== 'pr') return [];
       return result.series.map((p) => ({
         label: `#${p.prNumber}`,
-        queue: p.queue,
         ciRuntime: p.ciRuntime,
         review: p.review,
         repoKey: p.repoKey,
@@ -1627,7 +1626,7 @@ export default function DashboardShell({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard
             label="PR End-to-End"
-            definition="Queue + CI runtime + review, for merged PRs with all three valid parts (spec §4)."
+            definition="PR created → merge, independent of queue metrics."
             stats={result.cards.endToEnd}
           />
           <StatCard
@@ -1695,7 +1694,6 @@ export default function DashboardShell({
                   <YAxis yAxisId="seconds" tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
                   <Tooltip formatter={(value, name) => [fmtSeconds(Number(value)), String(name)]} />
                   <Legend />
-                  <Bar yAxisId="seconds" dataKey="queue" name="Queue" stackId="a" fill="#60a5fa" />
                   <Bar yAxisId="seconds" dataKey="ciRuntime" name="CI Runtime" stackId="a" fill="#34d399" />
                   <Bar yAxisId="seconds" dataKey="review" name="Review" stackId="a" fill="#fbbf24" />
                 </ComposedChart>
@@ -1736,7 +1734,6 @@ export default function DashboardShell({
                   <th className="px-4 py-3">Repo</th>
                   <th className="px-4 py-3">PR</th>
                   <th className="px-4 py-3">Title</th>
-                  <th className="px-4 py-3">Queue</th>
                   <th className="px-4 py-3">CI Runtime</th>
                   <th className="px-4 py-3">Review</th>
                   <th className="px-4 py-3">Merged</th>
@@ -1745,7 +1742,7 @@ export default function DashboardShell({
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                 {result.rows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-neutral-400 dark:text-neutral-500">
+                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-neutral-400 dark:text-neutral-500">
                       No merged PRs in range. {selectedRepo ? 'Try “All repositories” or a wider range.' : ''}
                     </td>
                   </tr>
@@ -1772,7 +1769,6 @@ export default function DashboardShell({
                             </a>
                           </td>
                           <td className="px-4 py-3 max-w-xs truncate" title={row.title}>{row.title}</td>
-                          <td className="px-4 py-3 font-mono text-xs">{fmtSeconds(row.queue)}</td>
                           <td className="px-4 py-3 font-mono text-xs">{fmtSeconds(row.ciRuntime)}</td>
                           <td className="px-4 py-3 font-mono text-xs">
                             {fmtSeconds(row.review)}
