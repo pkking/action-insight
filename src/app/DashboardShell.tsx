@@ -27,6 +27,7 @@ import {
 } from 'recharts';
 import { format, parseISO } from 'date-fns';
 
+import CostAllocationModal from './CostAllocationModal';
 import { callApi } from '@/lib/api-client';
 import {
   machineHours,
@@ -329,13 +330,29 @@ const COST_REPO_COLORS = ['#3b82f6', '#14b8a6', '#f59e0b', '#a78bfa', '#ec4899',
 /** Cost tab body: Machine-Hour cards, daily per-repo trend, grouped table (spec §5.2). */
 function CostBody({
   result,
+  repoOptions,
 }: {
   result: CostDashboardResult;
+  repoOptions: RepoOption[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const urlSearchParams = useSearchParams();
   const cards = result.cards;
+  const [selectedWorkflow, setSelectedWorkflow] = useState<{
+    repoKey: string;
+    workflowFile: string;
+    workflowRef: string;
+  } | null>(null);
+  const endDate = urlSearchParams.get('endDate') || new Date().toISOString().slice(0, 10);
+  const startDate = useMemo(() => {
+    const explicit = urlSearchParams.get('startDate');
+    if (explicit) return explicit;
+    const days = Number(urlSearchParams.get('days') || 14);
+    const date = new Date(`${endDate}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - days);
+    return date.toISOString().slice(0, 10);
+  }, [endDate, urlSearchParams]);
 
   // Map of repoKey → color for the multi-line chart.
   const repoColors = useMemo(() => {
@@ -472,7 +489,15 @@ function CostBody({
                 result.rows.map((row, i) => (
                   <tr key={i} className="hover:bg-neutral-50 dark:hover:bg-neutral-950/60">
                     <td className="px-4 py-3 text-xs text-neutral-500 dark:text-neutral-400">{row.repoKey}</td>
-                    <td className="px-4 py-3 font-medium" title={row.workflowRef || undefined}>{row.workflowFile || '—'}</td>
+                    <td className="px-4 py-3 font-medium" title={row.workflowRef || undefined}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedWorkflow({ repoKey: row.repoKey, workflowFile: row.workflowFile, workflowRef: row.workflowRef })}
+                        className="max-w-xs truncate text-left hover:text-blue-600 hover:underline dark:hover:text-blue-400"
+                      >
+                        {row.workflowFile || '—'}
+                      </button>
+                    </td>
                     <td className="px-4 py-3 text-xs">{row.resourceModel || '—'}</td>
                     <td className="px-4 py-3 font-mono text-xs">{fmtSeconds(row.avgWorkflowTotalDuration)}</td>
                     <td className="px-4 py-3 font-mono text-xs">{row.attemptCount}</td>
@@ -512,6 +537,20 @@ function CostBody({
           </div>
         )}
       </div>
+      {selectedWorkflow && (() => {
+        const repo = repoOptions.find((option) => option.key === selectedWorkflow.repoKey);
+        return repo ? (
+          <CostAllocationModal
+            owner={repo.owner}
+            repo={repo.repo}
+            startDate={startDate}
+            endDate={endDate}
+            workflowFile={selectedWorkflow.workflowFile}
+            workflowRef={selectedWorkflow.workflowRef}
+            onClose={() => setSelectedWorkflow(null)}
+          />
+        ) : null;
+      })()}
     </>
   );
 }
@@ -1818,7 +1857,7 @@ export default function DashboardShell({
         )}
 
         {result.tab === 'cost' && (
-          <CostBody result={result} />
+          <CostBody result={result} repoOptions={repoOptions} />
         )}
 
         {result.tab === 'workflow' && (

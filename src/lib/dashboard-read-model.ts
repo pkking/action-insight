@@ -568,6 +568,11 @@ const DEFAULT_OBSERVATION_LIMIT = 500;
 
 // ---- Cost tab read model (spec §5.2) -----------------------------------
 
+export type CostBreakdownSlice = {
+  label: string;
+  machineHours: number;
+};
+
 export type CostJobRow = {
   repoKey: string;
   runId: number;
@@ -643,6 +648,75 @@ export async function fetchCostJobRows(
  * whose run falls in the same filtered window. Count-only join — no PR
  * timing is read (the single pr_metrics touch for the "per merged PR" card).
  */
+/** Exact Machine-Hour allocation for one workflow, grouped by resource model. */
+export async function fetchCostWorkflowResourceBreakdown(
+  repoId: number,
+  startDate: string,
+  endDate: string,
+  workflowFile: string,
+  workflowRef: string | null,
+): Promise<CostBreakdownSlice[]> {
+  const client = await getDatabaseClient();
+  try {
+    const { rows } = await client.query(
+      `SELECT COALESCE(wj.resource_model, 'unknown') AS label,
+              SUM(wj.runtime_seconds * wj.resource_count / 3600.0) AS machine_hours
+       FROM workflow_jobs wj
+       JOIN workflow_attempts wa ON wa.run_id = wj.run_id AND wa.run_attempt = wj.run_attempt
+       JOIN runs r ON r.id = wa.run_id
+       WHERE r.repo_id = $1 AND r.date >= $2 AND r.date <= $3
+         AND wa.tracked = 1
+         AND COALESCE(wa.workflow_file, '') = $4
+         AND COALESCE(wa.workflow_ref, '') = $5
+         AND wj.runtime_seconds IS NOT NULL AND wj.runtime_seconds >= 0
+         AND wj.resource_count IS NOT NULL AND wj.resource_count > 0
+       GROUP BY COALESCE(wj.resource_model, 'unknown')
+       ORDER BY machine_hours DESC, label ASC`,
+      [repoId, startDate, endDate, workflowFile, workflowRef ?? ''],
+    );
+    return rows.map((row) => ({
+      label: String(row.label),
+      machineHours: Number(row.machine_hours),
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+/** Exact Machine-Hour allocation for one resource model, grouped by workflow. */
+export async function fetchCostResourceWorkflowBreakdown(
+  repoId: number,
+  startDate: string,
+  endDate: string,
+  resourceModel: string,
+): Promise<CostBreakdownSlice[]> {
+  const client = await getDatabaseClient();
+  try {
+    const { rows } = await client.query(
+      `SELECT CONCAT(COALESCE(wa.workflow_file, 'unknown'),
+                     CASE WHEN COALESCE(wa.workflow_ref, '') = '' THEN '' ELSE ' @ ' || wa.workflow_ref END) AS label,
+              SUM(wj.runtime_seconds * wj.resource_count / 3600.0) AS machine_hours
+       FROM workflow_jobs wj
+       JOIN workflow_attempts wa ON wa.run_id = wj.run_id AND wa.run_attempt = wj.run_attempt
+       JOIN runs r ON r.id = wa.run_id
+       WHERE r.repo_id = $1 AND r.date >= $2 AND r.date <= $3
+         AND wa.tracked = 1
+         AND COALESCE(wj.resource_model, 'unknown') = $4
+         AND wj.runtime_seconds IS NOT NULL AND wj.runtime_seconds >= 0
+         AND wj.resource_count IS NOT NULL AND wj.resource_count > 0
+       GROUP BY wa.workflow_file, wa.workflow_ref
+       ORDER BY machine_hours DESC, label ASC`,
+      [repoId, startDate, endDate, resourceModel],
+    );
+    return rows.map((row) => ({
+      label: String(row.label),
+      machineHours: Number(row.machine_hours),
+    }));
+  } finally {
+    client.release();
+  }
+}
+
 export async function fetchCostMergedPrCount(
   repoRows: RepoRow[],
   startDate: string,

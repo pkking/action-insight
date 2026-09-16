@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server';
 import { fetchPullRequestDetail } from '@/lib/pr-data-fetcher';
 import { getTrackedRepoOptions } from '@/lib/server-homepage-data';
 import { getRepoId } from '@/lib/db';
-import { fetchWorkflowAttemptDrilldown, fetchJobAttemptDrilldown } from '@/lib/dashboard-read-model';
+import {
+  fetchCostResourceWorkflowBreakdown,
+  fetchCostWorkflowResourceBreakdown,
+  fetchJobAttemptDrilldown,
+  fetchWorkflowAttemptDrilldown,
+} from '@/lib/dashboard-read-model';
 
 type FetchPullRequestDetailRequest = {
   action: 'fetchPullRequestDetail';
@@ -20,6 +25,25 @@ type FetchWorkflowAttemptsRequest = {
   resourceModel?: string | null;
 };
 
+type FetchCostWorkflowResourcesRequest = {
+  action: 'fetchCostWorkflowResources';
+  owner: string;
+  repo: string;
+  startDate: string;
+  endDate: string;
+  workflowFile: string;
+  workflowRef?: string | null;
+};
+
+type FetchCostResourceWorkflowsRequest = {
+  action: 'fetchCostResourceWorkflows';
+  owner: string;
+  repo: string;
+  startDate: string;
+  endDate: string;
+  resourceModel: string;
+};
+
 type FetchJobAttemptsRequest = {
   action: 'fetchJobAttempts';
   owner: string;
@@ -33,7 +57,9 @@ type FetchJobAttemptsRequest = {
 type DataRequest =
   | FetchPullRequestDetailRequest
   | FetchWorkflowAttemptsRequest
-  | FetchJobAttemptsRequest;
+  | FetchJobAttemptsRequest
+  | FetchCostWorkflowResourcesRequest
+  | FetchCostResourceWorkflowsRequest;
 
 function isSameOrigin(request: Request): boolean {
   const origin = request.headers.get('origin');
@@ -101,6 +127,32 @@ export async function POST(request: Request) {
           body.resourceModel ?? null,
         );
         return NextResponse.json({ data: attempts });
+      }
+
+      case 'fetchCostWorkflowResources': {
+        if (!body.workflowFile || typeof body.workflowFile !== 'string' ||
+            !body.startDate || typeof body.startDate !== 'string' ||
+            !body.endDate || typeof body.endDate !== 'string') {
+          return NextResponse.json({ error: 'workflowFile, startDate, and endDate are required' }, { status: 400 });
+        }
+        const repoId = await getRepoId(body.owner, body.repo);
+        const slices = await fetchCostWorkflowResourceBreakdown(
+          repoId, body.startDate, body.endDate, body.workflowFile, body.workflowRef ?? null,
+        );
+        return NextResponse.json({ data: slices });
+      }
+
+      case 'fetchCostResourceWorkflows': {
+        if (!body.resourceModel || typeof body.resourceModel !== 'string' ||
+            !body.startDate || typeof body.startDate !== 'string' ||
+            !body.endDate || typeof body.endDate !== 'string') {
+          return NextResponse.json({ error: 'resourceModel, startDate, and endDate are required' }, { status: 400 });
+        }
+        const repoId = await getRepoId(body.owner, body.repo);
+        const slices = await fetchCostResourceWorkflowBreakdown(
+          repoId, body.startDate, body.endDate, body.resourceModel,
+        );
+        return NextResponse.json({ data: slices });
       }
 
       case 'fetchJobAttempts': {
