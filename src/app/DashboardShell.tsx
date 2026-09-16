@@ -1472,12 +1472,11 @@ export default function DashboardShell({
 
   const chartData = useMemo(() => {
     if (result.tab !== 'pr') return [];
-    const dailyCounts = new Map((result.dailyCounts ?? []).map((point) => [point.date, point.count]));
     return result.series.map((point) => ({
       timestamp: point.date,
-      day: point.date.slice(0, 10),
       ciRuntime: point.ciRuntime,
-      dailyCount: dailyCounts.get(point.date.slice(0, 10)),
+      pendingJobs: point.pendingJobs,
+      runningJobs: point.runningJobs,
       repoKey: point.repoKey,
       prNumber: point.prNumber,
       conclusion: point.conclusion,
@@ -1675,23 +1674,35 @@ export default function DashboardShell({
               No merged PRs in the selected range.
             </div>
           ) : (
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" className="dark:opacity-20" />
-                  <XAxis dataKey="timestamp" tick={{ fontSize: 10, fill: '#888' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-                  <YAxis yAxisId="seconds" tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
-                  <YAxis yAxisId="count" orientation="right" allowDecimals={false} tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(value, name) => [name === 'Merged PRs' ? value : fmtSeconds(Number(value)), String(name)]} />
-                  <Legend />
-                  <Bar yAxisId="seconds" dataKey="ciRuntime" name="CI Runtime">
-                    {chartData.map((entry, index) => (
-                      <Cell key={`${entry.timestamp}-${index}`} fill={entry.conclusion === 'success' ? '#34d399' : entry.conclusion ? '#f87171' : '#9ca3af'} />
-                    ))}
-                  </Bar>
-                  <Line yAxisId="count" type="monotone" dataKey="dailyCount" name="Merged PRs" stroke="#a78bfa" strokeWidth={2} dot={false} connectNulls />
-                </ComposedChart>
-              </ResponsiveContainer>
+            <div className="h-80 space-y-3">
+              <div className="h-52">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={chartData} syncId="pr-timeline">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" className="dark:opacity-20" />
+                    <XAxis dataKey="timestamp" hide />
+                    <YAxis yAxisId="seconds" tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
+                    <Tooltip formatter={(value) => [fmtSeconds(Number(value)), 'CI Runtime']} />
+                    <Bar yAxisId="seconds" dataKey="ciRuntime" name="CI Runtime">
+                      {chartData.map((entry, index) => (
+                        <Cell key={`${entry.timestamp}-${index}`} fill={entry.conclusion === 'success' ? '#34d399' : entry.conclusion ? '#f87171' : '#9ca3af'} />
+                      ))}
+                    </Bar>
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="h-24">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData} syncId="pr-timeline">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" className="dark:opacity-20" />
+                    <XAxis dataKey="timestamp" tick={{ fontSize: 10, fill: '#888' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="stepAfter" dataKey="runningJobs" name="Running Jobs" stroke="#a78bfa" strokeWidth={2.5} dot={false} />
+                    <Line type="stepAfter" dataKey="pendingJobs" name="Pending Jobs" stroke="#f59e0b" strokeWidth={2.5} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           )}
         </div>
