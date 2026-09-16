@@ -25,6 +25,7 @@ vi.mock('recharts', () => ({
     <div data-testid={testId ?? 'cost-chart'} data-len={data?.length ?? 0} />
   ),
   Bar: () => null,
+  Cell: () => null,
   Line: () => null,
   XAxis: () => null,
   YAxis: () => null,
@@ -74,7 +75,7 @@ function rowResult(): PrDashboardResult {
       eligibleForcedMergeCount: 1,
     },
     series: [
-      { date: '2026-01-01', prNumber: 42, repoKey: 'owner/repo', ciRuntime: 3000, review: 1400 },
+      { date: '2026-01-01T00:10:00Z', prNumber: 42, repoKey: 'owner/repo', ciRuntime: 3000, conclusion: 'success' },
     ],
     rows: [
       {
@@ -362,18 +363,17 @@ describe('DashboardShell', () => {
     expect(screen.getByTestId('chart').getAttribute('data-len')).toBe('1');
   });
 
-  it('renders the daily PR count as a separate date-aligned line chart', () => {
+  it('renders each PR run as a time-series chart observation', () => {
     const result = rowResult();
     result.series = [
       ...result.series,
-      { date: '2026-01-02', prNumber: 43, repoKey: 'owner/repo' },
-      { date: '2026-01-02', prNumber: 44, repoKey: 'owner/repo' },
+      { date: '2026-01-02T00:10:00Z', prNumber: 43, repoKey: 'owner/repo', conclusion: 'failure' },
+      { date: '2026-01-02T00:20:00Z', prNumber: 44, repoKey: 'owner/repo', conclusion: 'success' },
     ];
 
     render(<DashboardShell repoOptions={repoOptions} result={result} searchParams={{}} />);
 
     expect(screen.getByTestId('chart').getAttribute('data-len')).toBe('3');
-    expect(screen.getByTestId('daily-pr-count-chart').getAttribute('data-len')).toBe('2');
   });
 
   it('lazily fetches PR drill-down on row click and renders the Machine-Hours summary', async () => {
