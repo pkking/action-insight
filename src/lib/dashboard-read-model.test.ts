@@ -83,7 +83,7 @@ describe('buildPrDashboardResult', () => {
       }),
     );
     const enriched = buildEnrichedRows(rows, REPO_ROWS);
-    const result = buildPrDashboardResult(enriched, {
+    const result = buildPrDashboardResult(enriched, [], {
       page: 1,
       pageSize: 20,
       observationLimit: 500,
@@ -91,7 +91,7 @@ describe('buildPrDashboardResult', () => {
     expect(result.displayedObservationCount).toBe(500);
     expect(result.truncated).toBe(true);
     expect(result.cards.mergedPrCount).toBe(600); // full population
-    expect(result.series).toHaveLength(500);
+    expect(result.series).toHaveLength(0); // no workflow-attempt chart inputs supplied
     expect(result.totalRows).toBe(500);
   });
 
@@ -100,12 +100,12 @@ describe('buildPrDashboardResult', () => {
       row({ pr_number: i + 1 }),
     );
     const enriched = buildEnrichedRows(rows, REPO_ROWS);
-    const page1 = buildPrDashboardResult(enriched, {
+    const page1 = buildPrDashboardResult(enriched, [], {
       page: 1,
       pageSize: 20,
       observationLimit: 500,
     });
-    const page2 = buildPrDashboardResult(enriched, {
+    const page2 = buildPrDashboardResult(enriched, [], {
       page: 2,
       pageSize: 20,
       observationLimit: 500,
@@ -123,7 +123,7 @@ describe('buildPrDashboardResult', () => {
       row({ pr_number: 3, merged_at: '2026-01-03T00:00:00Z' }),
     ];
     const enriched = buildEnrichedRows(rows, REPO_ROWS);
-    const result = buildPrDashboardResult(enriched, {
+    const result = buildPrDashboardResult(enriched, [], {
       page: 1,
       pageSize: 20,
       observationLimit: 500,
@@ -136,7 +136,7 @@ describe('buildPrDashboardResult', () => {
       [row({ pr_number: 1 }), row({ pr_number: 2, partial_ci_history: 1 })],
       REPO_ROWS,
     );
-    const result = buildPrDashboardResult(enriched, {
+    const result = buildPrDashboardResult(enriched, [], {
       page: 1,
       pageSize: 20,
       observationLimit: 500,

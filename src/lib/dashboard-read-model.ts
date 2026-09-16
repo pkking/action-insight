@@ -67,12 +67,14 @@ export type PrCardSet = {
 };
 
 export type PrSeriesPoint = {
-  date: string; // merged_at (yyyy-mm-dd) for the daily count line
+  date: string; // workflow attempt created_at, used as the chart time anchor
   prNumber: number;
   repoKey: string;
   ciRuntime?: number;
-  review?: number;
+  conclusion: string | null;
 };
+
+export type DailyPrCountPoint = { date: string; count: number };
 
 export type PrTableRow = {
   repoKey: string;
@@ -89,6 +91,7 @@ export type PrTableRow = {
 
 export type PrDashboardResult = DashboardResult<PrCardSet, PrSeriesPoint, PrTableRow> & {
   tab: 'pr';
+  dailyCounts?: DailyPrCountPoint[];
 };
 
 // ---- Cost tab types (spec §5.2) ----------------------------------------
@@ -353,6 +356,41 @@ export async function fetchPrMetricRows(
   }
 }
 
+export async function fetchPrRunSeries(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<PrSeriesPoint[]> {
+  if (repoRows.length === 0) return [];
+  const client = await getDatabaseClient();
+  try {
+    const placeholders = pgPlaceholders(repoRows.length);
+    const { rows } = await client.query(
+      `SELECT r.repo_id, pm.pr_number, wa.created_at, wa.runtime_seconds, wa.conclusion
+       FROM pr_workflow_attempts pwa
+       JOIN pr_metrics pm ON pm.id = pwa.pr_metric_id
+       JOIN workflow_attempts wa
+         ON wa.run_id = pwa.run_id AND wa.run_attempt = pwa.run_attempt
+       JOIN runs r ON r.id = wa.run_id
+       WHERE r.repo_id IN (${placeholders})
+         AND pm.merged_at >= $${repoRows.length + 1}
+         AND pm.merged_at < $${repoRows.length + 2}
+       ORDER BY wa.created_at ASC, wa.run_id ASC, wa.run_attempt ASC`,
+      [...repoRows.map((r) => r.id), `${startDate}T00:00:00Z`, `${endDate}T23:59:59Z`],
+    );
+    const idToKey = new Map(repoRows.map((r) => [r.id, r.key]));
+    return rows.map((row) => ({
+      date: String(row.created_at),
+      prNumber: Number(row.pr_number),
+      repoKey: idToKey.get(Number(row.repo_id)) ?? 'unknown',
+      ciRuntime: row.runtime_seconds == null ? undefined : Number(row.runtime_seconds),
+      conclusion: (row.conclusion as string | null) ?? null,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
 type EnrichedPr = PrMetricRow & {
   repoKey: string;
   timing: ReturnType<typeof computePrTimingParts>;
@@ -408,6 +446,7 @@ export function buildEnrichedRows(
  */
 export function buildPrDashboardResult(
   enriched: EnrichedPr[],
+  runSeries: PrSeriesPoint[],
   query: Pick<DashboardQuery, 'page' | 'pageSize' | 'observationLimit'>,
 ): PrDashboardResult {
   const cards = buildPrCards(enriched);
@@ -418,13 +457,12 @@ export function buildPrDashboardResult(
   const observations = sorted.slice(0, query.observationLimit);
   const truncated = sorted.length > query.observationLimit;
 
-  const series: PrSeriesPoint[] = observations.map((row) => ({
-    date: (row.merged_at ?? '').slice(0, 10),
-    prNumber: row.pr_number,
-    repoKey: row.repoKey,
-    ciRuntime: row.timing.ciRuntime,
-    review: row.timing.review,
-  }));
+  const series = runSeries.slice(0, query.observationLimit);
+  const dailyCounts = new Map<string, number>();
+  for (const row of enriched) {
+    const date = (row.merged_at ?? '').slice(0, 10);
+    if (date) dailyCounts.set(date, (dailyCounts.get(date) ?? 0) + 1);
+  }
 
   const rows: PrTableRow[] = observations.map((row) => ({
     repoKey: row.repoKey,
@@ -452,6 +490,9 @@ export function buildPrDashboardResult(
     tab: 'pr',
     cards,
     series,
+    dailyCounts: [...dailyCounts.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([date, count]) => ({ date, count })),
     rows: pagedRows,
     page: query.page,
     pageSize: query.pageSize,
@@ -1772,9 +1813,12 @@ export const getDashboardReadModel = cache(
     }
 
     // PR tab (slice 1).
-    const rawRows = await fetchPrMetricRows(repoRows, input.startDate, input.endDate);
+    const [rawRows, runSeries] = await Promise.all([
+      fetchPrMetricRows(repoRows, input.startDate, input.endDate),
+      fetchPrRunSeries(repoRows, input.startDate, input.endDate),
+    ]);
     const enriched = buildEnrichedRows(rawRows, repoRows);
-    return buildPrDashboardResult(enriched, {
+    return buildPrDashboardResult(enriched, runSeries, {
       page: input.page,
       pageSize: input.pageSize,
       observationLimit: input.observationLimit,

@@ -15,6 +15,7 @@ import {
 import {
   Bar,
   CartesianGrid,
+  Cell,
   ComposedChart,
   Legend,
   Line,
@@ -1469,31 +1470,19 @@ export default function DashboardShell({
   const totalPages = Math.max(1, Math.ceil(result.totalRows / result.pageSize));
   const currentPage = Math.min(result.page, totalPages);
 
-  // Daily count line derived from the bounded PR series (newest 500 PRs).
-  const dailyCounts = useMemo(() => {
+  const chartData = useMemo(() => {
     if (result.tab !== 'pr') return [];
-    const byDate = new Map<string, number>();
-    for (const point of result.series) {
-      byDate.set(point.date, (byDate.get(point.date) ?? 0) + 1);
-    }
-    return [...byDate.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, count]) => ({ date, count }));
+    const dailyCounts = new Map((result.dailyCounts ?? []).map((point) => [point.date, point.count]));
+    return result.series.map((point) => ({
+      timestamp: point.date,
+      day: point.date.slice(0, 10),
+      ciRuntime: point.ciRuntime,
+      dailyCount: dailyCounts.get(point.date.slice(0, 10)),
+      repoKey: point.repoKey,
+      prNumber: point.prNumber,
+      conclusion: point.conclusion,
+    }));
   }, [result]);
-
-  const chartData = useMemo(
-    () => {
-      if (result.tab !== 'pr') return [];
-      return result.series.map((p) => ({
-        label: `#${p.prNumber}`,
-        ciRuntime: p.ciRuntime,
-        review: p.review,
-        repoKey: p.repoKey,
-        prNumber: p.prNumber,
-      }));
-    },
-    [result],
-  );
 
   return (
     <div className="min-h-screen bg-neutral-50 p-4 font-sans text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100 md:p-8">
@@ -1690,34 +1679,23 @@ export default function DashboardShell({
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" className="dark:opacity-20" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#888' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                  <XAxis dataKey="timestamp" tick={{ fontSize: 10, fill: '#888' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
                   <YAxis yAxisId="seconds" tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(value, name) => [fmtSeconds(Number(value)), String(name)]} />
+                  <YAxis yAxisId="count" orientation="right" allowDecimals={false} tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
+                  <Tooltip formatter={(value, name) => [name === 'Merged PRs' ? value : fmtSeconds(Number(value)), String(name)]} />
                   <Legend />
-                  <Bar yAxisId="seconds" dataKey="ciRuntime" name="CI Runtime" stackId="a" fill="#34d399" />
-                  <Bar yAxisId="seconds" dataKey="review" name="Review" stackId="a" fill="#fbbf24" />
+                  <Bar yAxisId="seconds" dataKey="ciRuntime" name="CI Runtime">
+                    {chartData.map((entry, index) => (
+                      <Cell key={`${entry.timestamp}-${index}`} fill={entry.conclusion === 'success' ? '#34d399' : entry.conclusion ? '#f87171' : '#9ca3af'} />
+                    ))}
+                  </Bar>
+                  <Line yAxisId="count" type="monotone" dataKey="dailyCount" name="Merged PRs" stroke="#a78bfa" strokeWidth={2} dot={false} connectNulls />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
           )}
         </div>
 
-        {dailyCounts.length > 0 && (
-          <div className="rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-            <h2 className="mb-4 text-lg font-bold">Daily Merged PRs</h2>
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={dailyCounts} data-testid="daily-pr-count-chart">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" className="dark:opacity-20" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#888' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="count" name="Merged PRs" stroke="#a78bfa" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        )}
 
         {/* Paged detail table */}
         <div className="overflow-hidden rounded-xl border border-neutral-100 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
