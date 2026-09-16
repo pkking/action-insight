@@ -3,7 +3,7 @@ import { cache } from 'react';
 
 import { getTrackedRepoOptions, type RepoOption } from './server-homepage-data';
 import { getDatabaseClient, query } from './db';
-import { pgPlaceholders } from './pg-utils';
+import { pgPlaceholders, pgTuplePlaceholders } from './pg-utils';
 import {
   computePrTimingParts,
   computeStats,
@@ -284,7 +284,7 @@ async function resolveRepoRows(
   if (!repoKey) {
     // All tracked repositories. Resolve ids in one query.
     if (options.length === 0) return [];
-    const placeholders = pgPlaceholders(options.length * 2);
+    const placeholders = pgTuplePlaceholders(options.length);
     const { rows } = await query(
       `SELECT id, owner, repo FROM repos WHERE (owner, repo) IN (${placeholders})`,
       options.flatMap((o) => [o.owner, o.repo]),
@@ -1806,7 +1806,8 @@ export function parseDashboardQuery(params: URLSearchParams): DashboardQuery {
       : 'pr';
   const repoKey = params.get('repo') || undefined;
   const resourceModel = params.get('resourceModel') || undefined;
-  const startDate = params.get('startDate') || defaultDate(DEFAULT_DAY_WINDOW[tab]);
+  const days = intParam(params, 'days', DEFAULT_DAY_WINDOW[tab]);
+  const startDate = params.get('startDate') || defaultDate(days);
   const endDate = params.get('endDate') || todayUtc();
   const page = intParam(params, 'page', 1);
   return {
