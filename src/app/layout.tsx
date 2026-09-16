@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,8 +13,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+      <body className="min-h-full flex flex-col">
+        <Script id="theme-preference" strategy="beforeInteractive">{`(() => {
+  try {
+    const preference = localStorage.getItem('action-insight-theme') || 'system';
+    const resolved = preference === 'system'
+      ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : preference;
+    document.documentElement.classList.toggle('dark', resolved === 'dark');
+    document.documentElement.style.colorScheme = resolved;
+  } catch (_) {}
+})()`}</Script>
+        {children}
+      </body>
     </html>
   );
 }

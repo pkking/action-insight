@@ -1,8 +1,29 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --chart-grid: #e5e5e5;
+  --chart-axis: #737373;
+  --chart-legend: #525252;
+  --chart-tooltip-background: #ffffff;
+  --chart-tooltip-border: #d4d4d4;
+  --chart-tooltip-text: #171717;
+  --chart-cursor: rgb(59 130 246 / 0.12);
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --chart-grid: #404040;
+  --chart-axis: #a3a3a3;
+  --chart-legend: #d4d4d4;
+  --chart-tooltip-background: #171717;
+  --chart-tooltip-border: #525252;
+  --chart-tooltip-text: #f5f5f5;
+  --chart-cursor: rgb(96 165 250 / 0.18);
 }
 
 @theme inline {
@@ -12,15 +33,46 @@
   --font-mono: "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Recharts renders several SVG/HTML elements with light inline defaults. Keep
+   every chart surface in the same token system as the surrounding dashboard. */
+.recharts-cartesian-grid line {
+  stroke: var(--chart-grid) !important;
+}
+
+.recharts-text {
+  fill: var(--chart-axis) !important;
+}
+
+.recharts-legend-item-text {
+  color: var(--chart-legend) !important;
+}
+
+.recharts-default-tooltip {
+  /* Recharts assigns white backgrounds and per-series inline text colours. */
+  background: var(--chart-tooltip-background) !important;
+  border: 1px solid var(--chart-tooltip-border) !important;
+  color: var(--chart-tooltip-text) !important;
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 18px rgb(0 0 0 / 0.16);
+}
+
+/* Target each text node so Recharts' inline per-series colour cannot create
+   light text on a light tooltip (or dark text on a dark tooltip). */
+.recharts-default-tooltip .recharts-tooltip-label,
+.recharts-default-tooltip .recharts-tooltip-item,
+.recharts-default-tooltip .recharts-tooltip-item-name,
+.recharts-default-tooltip .recharts-tooltip-item-separator,
+.recharts-default-tooltip .recharts-tooltip-item-value,
+.recharts-default-tooltip .recharts-tooltip-item-unit {
+  color: var(--chart-tooltip-text) !important;
+}
+
+.recharts-tooltip-cursor {
+  fill: var(--chart-cursor) !important;
 }

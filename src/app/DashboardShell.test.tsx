@@ -20,9 +20,11 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  ComposedChart: ({ data }: { data?: unknown[] }) => <div data-testid="chart" data-len={data?.length ?? 0} />,
-  LineChart: ({ data, 'data-testid': testId }: { data?: unknown[]; 'data-testid'?: string }) => (
-    <div data-testid={testId ?? 'cost-chart'} data-len={data?.length ?? 0} />
+  ComposedChart: ({ data, children }: { data?: unknown[]; children?: React.ReactNode }) => (
+    <div data-testid="chart" data-len={data?.length ?? 0}>{children}</div>
+  ),
+  LineChart: ({ data, children, 'data-testid': testId }: { data?: unknown[]; children?: React.ReactNode; 'data-testid'?: string }) => (
+    <div data-testid={testId ?? 'cost-chart'} data-len={data?.length ?? 0}>{children}</div>
   ),
   Bar: () => null,
   Cell: () => null,
@@ -30,7 +32,13 @@ vi.mock('recharts', () => ({
   XAxis: () => null,
   YAxis: () => null,
   CartesianGrid: () => null,
-  Tooltip: () => null,
+  Tooltip: ({ content }: {
+    content?: (props: {
+      active?: boolean;
+      label?: React.ReactNode;
+      payload?: { name?: React.ReactNode; value?: React.ReactNode }[];
+    }) => React.ReactNode;
+  }) => <>{content?.({ active: true, label: '2026-01-01', payload: [{ name: 'Runtime', value: '1h' }] })}</>,
   Legend: () => null,
 }));
 
@@ -339,6 +347,8 @@ function mockFetchDetail(jobs: unknown[] = []) {
 
 beforeEach(() => {
   replaceMock.mockReset();
+  window.localStorage.clear();
+  document.documentElement.classList.remove('dark');
 });
 
 afterEach(() => {
@@ -347,6 +357,29 @@ afterEach(() => {
 });
 
 describe('DashboardShell', () => {
+  it('switches between light, dark, and system themes', () => {
+    render(<DashboardShell repoOptions={repoOptions} result={emptyResult()} searchParams={{}} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dark theme' }));
+    expect(document.documentElement).toHaveClass('dark');
+    expect(window.localStorage.getItem('action-insight-theme')).toBe('dark');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Light theme' }));
+    expect(document.documentElement).not.toHaveClass('dark');
+    expect(window.localStorage.getItem('action-insight-theme')).toBe('light');
+
+    fireEvent.click(screen.getByRole('button', { name: 'System theme' }));
+    expect(window.localStorage.getItem('action-insight-theme')).toBe('system');
+  });
+
+  it('renders every chart tooltip with explicit light and dark surface classes', () => {
+    render(<DashboardShell repoOptions={repoOptions} result={rowResult()} searchParams={{}} />);
+
+    for (const tooltip of screen.getAllByTestId('chart-tooltip')) {
+      expect(tooltip).toHaveClass('bg-white', 'text-neutral-900', 'dark:bg-neutral-900', 'dark:text-neutral-100');
+    }
+  });
+
   it('renders the empty state when there are no merged PRs', () => {
     render(<DashboardShell repoOptions={repoOptions} result={emptyResult()} searchParams={{}} />);
     expect(screen.getByText(/No merged PRs in the selected range/i)).toBeInTheDocument();

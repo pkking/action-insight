@@ -21,12 +21,13 @@ import {
   Line,
   LineChart,
   ResponsiveContainer,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   XAxis,
   YAxis,
 } from 'recharts';
 import { format, parseISO } from 'date-fns';
 
+import ThemeToggle from './ThemeToggle';
 import { callApi } from '@/lib/api-client';
 import {
   machineHours,
@@ -325,6 +326,82 @@ function StatusDot({ conclusion }: { conclusion: string }) {
 }
 
 const COST_REPO_COLORS = ['#3b82f6', '#14b8a6', '#f59e0b', '#a78bfa', '#ec4899', '#10b981', '#f43f5e', '#8b5cf6'];
+
+type ChartTooltipEntry = {
+  name?: React.ReactNode;
+  value?: React.ReactNode;
+  unit?: React.ReactNode;
+  formatter?: ChartTooltipFormatter;
+};
+
+type ChartTooltipFormatter = (
+  value: unknown,
+  name: unknown,
+  entry: ChartTooltipEntry,
+  index: number,
+  payload: readonly ChartTooltipEntry[],
+) => React.ReactNode | [React.ReactNode, React.ReactNode];
+
+function ChartTooltipContent({
+  active,
+  label,
+  payload = [],
+  formatter,
+}: {
+  active?: boolean;
+  label?: React.ReactNode;
+  payload?: readonly ChartTooltipEntry[];
+  formatter?: ChartTooltipFormatter;
+}) {
+  if (!active || payload.length === 0) return null;
+
+  return (
+    <div data-testid="chart-tooltip" className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-900 shadow-md dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100">
+      {label !== undefined && <p className="mb-1 font-medium">{label}</p>}
+      <ul className="space-y-1">
+        {payload.map((entry, index) => {
+          const formatted = (entry.formatter ?? formatter)?.(
+            entry.value,
+            entry.name,
+            entry,
+            index,
+            payload,
+          );
+          const [value, name] = Array.isArray(formatted)
+            ? formatted
+            : [formatted ?? entry.value, entry.name];
+          return (
+            <li key={`${String(name)}-${index}`} className="text-inherit">
+              {name !== undefined && <span>{name}: </span>}
+              <span className="font-medium">{value}</span>
+              {entry.unit && <span> {entry.unit}</span>}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+// Use custom content rather than Recharts' default tooltip: its generated
+// inline background and per-series text colours do not obey the app theme.
+function Tooltip({ formatter, ...props }: React.ComponentProps<typeof RechartsTooltip>) {
+  return (
+    <RechartsTooltip
+      {...props}
+      formatter={formatter}
+      content={(contentProps) => (
+        <ChartTooltipContent
+          active={contentProps.active}
+          label={contentProps.label}
+          payload={contentProps.payload as readonly ChartTooltipEntry[] | undefined}
+          formatter={formatter as ChartTooltipFormatter | undefined}
+        />
+      )}
+      cursor={{ fill: 'var(--chart-cursor)' }}
+    />
+  );
+}
 
 /** Cost tab body: Machine-Hour cards, daily per-repo trend, grouped table (spec §5.2). */
 function CostBody({
@@ -1489,9 +1566,12 @@ export default function DashboardShell({
         <header className="flex items-center gap-2 rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
           <Activity className="text-blue-500 dark:text-blue-400" />
           <h1 className="text-2xl font-bold">Action Insight</h1>
-          <span className="ml-auto text-sm text-neutral-400 dark:text-neutral-500">
-            Attempt-scoped CI analytics
-          </span>
+          <div className="ml-auto flex items-center gap-3">
+            <span className="hidden text-sm text-neutral-400 dark:text-neutral-500 sm:inline">
+              Attempt-scoped CI analytics
+            </span>
+            <ThemeToggle />
+          </div>
         </header>
 
         {/* Fixed filter toolbar */}
