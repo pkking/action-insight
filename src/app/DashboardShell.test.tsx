@@ -460,6 +460,28 @@ describe('DashboardShell', () => {
     expect(await within(dialog).findByText(/ci.yml @ refs\/heads\/main/i)).toBeInTheDocument();
   });
 
+  it('opens workflow share when a Cost resource is clicked', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        data: [
+          { label: 'owner/repo / ci.yml @ refs/heads/main', machineHours: 6 },
+          { label: 'other/repo / ci.yml @ refs/heads/main', machineHours: 2 },
+        ],
+      })),
+    );
+    render(<DashboardShell repoOptions={repoOptions} result={costResult()} searchParams={{}} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show workflow share for npu-a3' }));
+
+    const dialog = await screen.findByRole('dialog', { name: /npu-a3 across workflows/i });
+    expect(await within(dialog).findByText(/owner\/repo \/ ci.yml @ refs\/heads\/main/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/other\/repo \/ ci.yml @ refs\/heads\/main/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/All tracked repositories/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/6\.0h · 75%/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/2\.0h · 25%/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Workflow share of this resource/i)).toBeInTheDocument();
+  });
+
   it('renders the Cost empty state when there are no attributable jobs', () => {
     render(<DashboardShell repoOptions={repoOptions} result={emptyCostResult()} searchParams={{}} />);
     expect(screen.getByText(/No tracked workflow jobs in range/i)).toBeInTheDocument();

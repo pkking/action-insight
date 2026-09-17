@@ -683,9 +683,12 @@ export async function fetchCostWorkflowResourceBreakdown(
   }
 }
 
-/** Exact Machine-Hour allocation for one resource model, grouped by workflow. */
+/**
+ * Exact Machine-Hour allocation for one resource model across all tracked
+ * repositories, grouped by repository and workflow so same-named workflows
+ * remain distinct.
+ */
 export async function fetchCostResourceWorkflowBreakdown(
-  repoId: number,
   startDate: string,
   endDate: string,
   resourceModel: string,
@@ -693,20 +696,21 @@ export async function fetchCostResourceWorkflowBreakdown(
   const client = await getDatabaseClient();
   try {
     const { rows } = await client.query(
-      `SELECT CONCAT(COALESCE(wa.workflow_file, 'unknown'),
+      `SELECT CONCAT(rp.owner, '/', rp.repo, ' / ', COALESCE(wa.workflow_file, 'unknown'),
                      CASE WHEN COALESCE(wa.workflow_ref, '') = '' THEN '' ELSE ' @ ' || wa.workflow_ref END) AS label,
               SUM(wj.runtime_seconds * wj.resource_count / 3600.0) AS machine_hours
        FROM workflow_jobs wj
        JOIN workflow_attempts wa ON wa.run_id = wj.run_id AND wa.run_attempt = wj.run_attempt
        JOIN runs r ON r.id = wa.run_id
-       WHERE r.repo_id = $1 AND r.date >= $2 AND r.date <= $3
+       JOIN repos rp ON rp.id = r.repo_id
+       WHERE r.date >= $1 AND r.date <= $2
          AND wa.tracked = 1
-         AND COALESCE(wj.resource_model, 'unknown') = $4
+         AND COALESCE(wj.resource_model, 'unknown') = $3
          AND wj.runtime_seconds IS NOT NULL AND wj.runtime_seconds >= 0
          AND wj.resource_count IS NOT NULL AND wj.resource_count > 0
-       GROUP BY wa.workflow_file, wa.workflow_ref
+       GROUP BY rp.owner, rp.repo, wa.workflow_file, wa.workflow_ref
        ORDER BY machine_hours DESC, label ASC`,
-      [repoId, startDate, endDate, resourceModel],
+      [startDate, endDate, resourceModel],
     );
     return rows.map((row) => ({
       label: String(row.label),
@@ -1710,7 +1714,9 @@ export function buildQueueCards(jobRows: JobRow[]): QueueCardSet {
   return {
     p50QueueDuration: stats.sampleCount > 0 ? stats.p50 : undefined,
     p90QueueDuration: stats.sampleCount > 0 ? stats.p90 : undefined,
-    maxQueueDuration: validQueue.length > 0 ? Math.max(...validQueue) : undefined,
+    maxQueueDuration: validQueue.length > 0
+      ? validQueue.reduce((max, queue) => Math.max(max, queue), -Infinity)
+      : undefined,
     shareOverOneHour:
       validQueue.length > 0 ? (overOneHour / validQueue.length) * 100 : 0,
     distinctResourceModelCount,

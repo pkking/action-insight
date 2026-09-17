@@ -13,8 +13,9 @@ type CostAllocationModalProps = {
   repo: string;
   startDate: string;
   endDate: string;
-  workflowFile: string;
-  workflowRef: string;
+  workflowFile?: string;
+  workflowRef?: string;
+  initialResourceModel?: string;
   onClose: () => void;
 };
 
@@ -31,10 +32,14 @@ export default function CostAllocationModal({
   endDate,
   workflowFile,
   workflowRef,
+  initialResourceModel,
   onClose,
 }: CostAllocationModalProps) {
-  const [mode, setMode] = useState<'resources' | 'workflows'>('resources');
-  const [resourceModel, setResourceModel] = useState<string | null>(null);
+  const openedFromResource = Boolean(initialResourceModel);
+  const [mode, setMode] = useState<'resources' | 'workflows'>(
+    openedFromResource ? 'workflows' : 'resources',
+  );
+  const [resourceModel, setResourceModel] = useState<string | null>(initialResourceModel ?? null);
   const [slices, setSlices] = useState<Slice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +48,7 @@ export default function CostAllocationModal({
     const controller = new AbortController();
     const request = mode === 'resources'
       ? callApi<Slice[]>('fetchCostWorkflowResources', {
-          owner, repo, startDate, endDate, workflowFile, workflowRef: workflowRef || null,
+          owner, repo, startDate, endDate, workflowFile: workflowFile ?? '', workflowRef: workflowRef || null,
         }, controller.signal)
       : callApi<Slice[]>('fetchCostResourceWorkflows', {
           owner, repo, startDate, endDate, resourceModel: resourceModel ?? '',
@@ -81,7 +86,7 @@ export default function CostAllocationModal({
       <div className="w-full max-w-2xl rounded-xl border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
         <div className="flex items-start gap-3">
           <div>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">{owner}/{repo} · {startDate} to {endDate}</p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">{openedFromResource ? 'All tracked repositories' : `${owner}/${repo}`} · {startDate} to {endDate}</p>
             <h2 id="cost-allocation-title" className="mt-1 text-lg font-bold">{title}</h2>
           </div>
           <button type="button" onClick={onClose} aria-label="Close cost allocation" className="ml-auto rounded-md p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100">
@@ -89,7 +94,7 @@ export default function CostAllocationModal({
           </button>
         </div>
 
-        {mode === 'workflows' && (
+        {mode === 'workflows' && !openedFromResource && (
           <button type="button" onClick={showResources} className="mt-3 text-xs font-medium text-blue-600 hover:underline dark:text-blue-400">
             ← Back to resource types
           </button>
@@ -112,7 +117,7 @@ export default function CostAllocationModal({
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <p className="text-center text-xs text-neutral-500 dark:text-neutral-400">{formatMachineHours(total)} total{mode === 'resources' ? ' · Select a resource type to see workflow share' : ''}</p>
+            <p className="text-center text-xs text-neutral-500 dark:text-neutral-400">{formatMachineHours(total)} total{mode === 'resources' ? ' · Select a resource type to see workflow share' : ' · Workflow share of this resource'}</p>
             <ul className="mt-4 max-h-48 space-y-1 overflow-y-auto text-sm">
               {slices.map((slice, index) => (
                 <li key={slice.label}>

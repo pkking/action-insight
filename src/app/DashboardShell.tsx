@@ -28,6 +28,7 @@ import {
 import { format, parseISO } from 'date-fns';
 
 import CostAllocationModal from './CostAllocationModal';
+import ThemeToggle from './ThemeToggle';
 import { callApi } from '@/lib/api-client';
 import {
   machineHours,
@@ -339,11 +340,11 @@ function CostBody({
   const pathname = usePathname();
   const urlSearchParams = useSearchParams();
   const cards = result.cards;
-  const [selectedWorkflow, setSelectedWorkflow] = useState<{
-    repoKey: string;
-    workflowFile: string;
-    workflowRef: string;
-  } | null>(null);
+  const [selectedAllocation, setSelectedAllocation] = useState<
+    | { kind: 'workflow'; repoKey: string; workflowFile: string; workflowRef: string }
+    | { kind: 'resource'; repoKey: string; resourceModel: string }
+    | null
+  >(null);
   const endDate = urlSearchParams.get('endDate') || new Date().toISOString().slice(0, 10);
   const startDate = useMemo(() => {
     const explicit = urlSearchParams.get('startDate');
@@ -492,13 +493,24 @@ function CostBody({
                     <td className="px-4 py-3 font-medium" title={row.workflowRef || undefined}>
                       <button
                         type="button"
-                        onClick={() => setSelectedWorkflow({ repoKey: row.repoKey, workflowFile: row.workflowFile, workflowRef: row.workflowRef })}
+                        onClick={() => setSelectedAllocation({ kind: 'workflow', repoKey: row.repoKey, workflowFile: row.workflowFile, workflowRef: row.workflowRef })}
                         className="max-w-xs truncate text-left hover:text-blue-600 hover:underline dark:hover:text-blue-400"
                       >
                         {row.workflowFile || '—'}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-xs">{row.resourceModel || '—'}</td>
+                    <td className="px-4 py-3 text-xs">
+                      {row.resourceModel ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedAllocation({ kind: 'resource', repoKey: row.repoKey, resourceModel: row.resourceModel })}
+                          className="max-w-xs truncate text-left hover:text-blue-600 hover:underline dark:hover:text-blue-400"
+                          aria-label={`Show workflow share for ${row.resourceModel}`}
+                        >
+                          {row.resourceModel}
+                        </button>
+                      ) : '—'}
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs">{fmtSeconds(row.avgWorkflowTotalDuration)}</td>
                     <td className="px-4 py-3 font-mono text-xs">{row.attemptCount}</td>
                     <td className="px-4 py-3 font-mono text-xs text-emerald-600 dark:text-emerald-400">{row.successCount}</td>
@@ -537,19 +549,30 @@ function CostBody({
           </div>
         )}
       </div>
-      {selectedWorkflow && (() => {
-        const repo = repoOptions.find((option) => option.key === selectedWorkflow.repoKey);
-        return repo ? (
+      {selectedAllocation && (() => {
+        const repo = repoOptions.find((option) => option.key === selectedAllocation.repoKey);
+        if (!repo) return null;
+        return selectedAllocation.kind === 'workflow' ? (
           <CostAllocationModal
             owner={repo.owner}
             repo={repo.repo}
             startDate={startDate}
             endDate={endDate}
-            workflowFile={selectedWorkflow.workflowFile}
-            workflowRef={selectedWorkflow.workflowRef}
-            onClose={() => setSelectedWorkflow(null)}
+            workflowFile={selectedAllocation.workflowFile}
+            workflowRef={selectedAllocation.workflowRef}
+            onClose={() => setSelectedAllocation(null)}
           />
-        ) : null;
+        ) : (
+          <CostAllocationModal
+            key={`${selectedAllocation.repoKey}:${selectedAllocation.resourceModel}`}
+            owner={repo.owner}
+            repo={repo.repo}
+            startDate={startDate}
+            endDate={endDate}
+            initialResourceModel={selectedAllocation.resourceModel}
+            onClose={() => setSelectedAllocation(null)}
+          />
+        );
       })()}
     </>
   );
@@ -1528,9 +1551,12 @@ export default function DashboardShell({
         <header className="flex items-center gap-2 rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
           <Activity className="text-blue-500 dark:text-blue-400" />
           <h1 className="text-2xl font-bold">Action Insight</h1>
-          <span className="ml-auto text-sm text-neutral-400 dark:text-neutral-500">
-            Attempt-scoped CI analytics
-          </span>
+          <div className="ml-auto flex items-center gap-3">
+            <span className="hidden text-sm text-neutral-400 dark:text-neutral-500 sm:inline">
+              Attempt-scoped CI analytics
+            </span>
+            <ThemeToggle />
+          </div>
         </header>
 
         {/* Fixed filter toolbar */}

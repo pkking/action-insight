@@ -148,9 +148,8 @@ export async function POST(request: Request) {
             !body.endDate || typeof body.endDate !== 'string') {
           return NextResponse.json({ error: 'resourceModel, startDate, and endDate are required' }, { status: 400 });
         }
-        const repoId = await getRepoId(body.owner, body.repo);
         const slices = await fetchCostResourceWorkflowBreakdown(
-          repoId, body.startDate, body.endDate, body.resourceModel,
+          body.startDate, body.endDate, body.resourceModel,
         );
         return NextResponse.json({ data: slices });
       }
