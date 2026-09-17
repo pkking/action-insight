@@ -7,6 +7,23 @@ type FetchWorkflowAttemptsParams = {
   resourceModel?: string | null;
 };
 
+type FetchCostWorkflowResourcesParams = {
+  owner: string;
+  repo: string;
+  startDate: string;
+  endDate: string;
+  workflowFile: string;
+  workflowRef?: string | null;
+};
+
+type FetchCostResourceWorkflowsParams = {
+  owner: string;
+  repo: string;
+  startDate: string;
+  endDate: string;
+  resourceModel: string;
+};
+
 type FetchJobAttemptsParams = {
   owner: string;
   repo: string;
@@ -18,6 +35,8 @@ type FetchJobAttemptsParams = {
 
 export async function callApi<T>(action: 'fetchPullRequestDetail', params: FetchPullRequestDetailParams, signal?: AbortSignal): Promise<T>;
 export async function callApi<T>(action: 'fetchWorkflowAttempts', params: FetchWorkflowAttemptsParams, signal?: AbortSignal): Promise<T>;
+export async function callApi<T>(action: 'fetchCostWorkflowResources', params: FetchCostWorkflowResourcesParams, signal?: AbortSignal): Promise<T>;
+export async function callApi<T>(action: 'fetchCostResourceWorkflows', params: FetchCostResourceWorkflowsParams, signal?: AbortSignal): Promise<T>;
 export async function callApi<T>(action: 'fetchJobAttempts', params: FetchJobAttemptsParams, signal?: AbortSignal): Promise<T>;
 export async function callApi<T>(action: string, params: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
   const response = await fetch('/api/data', {

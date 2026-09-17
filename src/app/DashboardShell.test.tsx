@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DashboardShell from './DashboardShell';
@@ -27,6 +27,8 @@ vi.mock('recharts', () => ({
   Bar: () => null,
   Cell: () => null,
   Line: () => null,
+  Pie: () => null,
+  PieChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
   XAxis: () => null,
   YAxis: () => null,
   CartesianGrid: () => null,
@@ -434,6 +436,28 @@ describe('DashboardShell', () => {
     expect(screen.getByText('npu-a3')).toBeInTheDocument();
     // Daily chart received the two series points.
     expect(screen.getByTestId('cost-chart').getAttribute('data-len')).toBe('2');
+  });
+
+  it('opens the Cost allocation pie and drills from a workflow resource to workflows', async () => {
+    vi.spyOn(global, 'fetch').mockImplementation(async (_url, init) => {
+      const body = JSON.parse(init?.body as string);
+      if (body.action === 'fetchCostWorkflowResources') {
+        return new Response(JSON.stringify({ data: [{ label: 'npu-a3', machineHours: 8 }] }));
+      }
+      if (body.action === 'fetchCostResourceWorkflows') {
+        return new Response(JSON.stringify({ data: [{ label: 'ci.yml @ refs/heads/main', machineHours: 8 }] }));
+      }
+      return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+    });
+    render(<DashboardShell repoOptions={repoOptions} result={costResult()} searchParams={{}} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'ci.yml' }));
+    const dialog = await screen.findByRole('dialog', { name: /ci.yml by resource/i });
+    expect(await within(dialog).findByText('npu-a3')).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /npu-a3/i }));
+    expect(await within(dialog).findByRole('heading', { name: /npu-a3 across workflows/i })).toBeInTheDocument();
+    expect(await within(dialog).findByText(/ci.yml @ refs\/heads\/main/i)).toBeInTheDocument();
   });
 
   it('renders the Cost empty state when there are no attributable jobs', () => {
