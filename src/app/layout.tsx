@@ -13,6 +13,23 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full antialiased">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(() => {
+              try {
+                const stored = localStorage.getItem('action-insight-theme');
+                const preference = stored === 'light' || stored === 'dark' || stored === 'system'
+                  ? stored
+                  : 'system';
+                document.documentElement.dataset.theme = preference === 'system'
+                  ? matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+                  : preference;
+              } catch { /* Use the light CSS default if storage is unavailable. */ }
+            })();`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

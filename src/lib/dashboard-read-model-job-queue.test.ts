@@ -186,6 +186,14 @@ describe('buildQueueCards', () => {
     expect(cards.distinctResourceModelCount).toBe(1);
   });
 
+  it('handles a production-sized queue sample set without spreading it into Math.max', () => {
+    const rows = Array.from({ length: 200_000 }, (_, index) =>
+      job({ jobId: index, queueDurationSeconds: index }),
+    );
+
+    expect(buildQueueCards(rows).maxQueueDuration).toBe(199_999);
+  });
+
   it('returns undefined percentiles when no valid samples', () => {
     const cards = buildQueueCards([job({ queueDurationSeconds: null })]);
     expect(cards.p50QueueDuration).toBeUndefined();

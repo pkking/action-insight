@@ -9,16 +9,16 @@ The Cost table is a paged, capped summary grouped by repository, workflow, ref, 
 
 ## Decision
 
-Cost allocation pies use two lazy, repository-scoped read-model endpoints over the same attempt-scoped `workflow_jobs` data and Machine-Hour definition as the Cost tab:
+Cost allocation pies use lazy read-model endpoints over the same attempt-scoped `workflow_jobs` data and Machine-Hour definition as the Cost tab:
 
-1. Selecting a Cost table workflow fetches its Machine-Hours grouped by resource model.
-2. Selecting a resource-model slice fetches that model's Machine-Hours grouped by workflow.
+1. Selecting a Cost table workflow fetches its Machine-Hours grouped by resource model and remains scoped to that workflow's repository.
+2. Selecting a resource model from the Cost table fetches that model's Machine-Hours across **all tracked repositories**, grouped by repository, workflow, and ref. The repository is included in each label so same-named workflows are not merged or ambiguous.
 
-Both requests retain the current date window and selected repository. Only attributable jobs (non-negative runtime and positive resource count) contribute. Unknown-cost jobs remain excluded, matching the existing Cost cards and table.
+Both requests retain the current date window. Only attributable jobs (non-negative runtime and positive resource count) contribute. Unknown-cost jobs remain excluded, matching the existing Cost cards and table.
 
 ## Consequences
 
 - The initial Cost payload remains bounded and unchanged by pie drill-down volume.
-- Pie totals remain complete for the selected repository/date window despite table pagination or truncation.
+- Workflow pies remain complete for the selected repository/date window; resource pies use all tracked repositories for the date window despite table pagination, truncation, or the page's repository filter.
 - Opening a breakdown adds one local PostgreSQL query but makes no GitHub API request.
-- In an all-repositories view, selecting a table row scopes the modal to that row's repository so workflow identity is unambiguous.
+- Resource pie labels include the repository, preserving workflow identity across repositories.
