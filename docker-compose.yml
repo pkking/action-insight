@@ -28,6 +28,17 @@ services:
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     ports:
       - "3000:3000"
+    develop:
+      watch:
+        # Production image is rebuilt so Next.js standalone output stays in sync.
+        - action: rebuild
+          path: .
+          ignore:
+            - node_modules/
+            - .next/
+            - .git/
+            - etl/data/
+            - .pi/
 
 volumes:
   pgdata:
