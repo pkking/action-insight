@@ -1963,7 +1963,7 @@ export const getDashboardReadModel = cache(
 );
 
 const DEFAULT_DAY_WINDOW: Record<DashboardTab, number> = {
-  pr: 1,
+  pr: 7,
   cost: 14,
   workflow: 14,
   job: 14,
@@ -1972,7 +1972,7 @@ const DEFAULT_DAY_WINDOW: Record<DashboardTab, number> = {
 
 /**
  * Parse dashboard search params into a validated query. Date range defaults
- * to 1 day for the PR tab and 14 days otherwise (spec §3).
+ * to 7 days for the PR tab and 14 days otherwise (spec §3).
  */
 export function parseDashboardQuery(params: URLSearchParams): DashboardQuery {
   const tabRaw = params.get('tab');

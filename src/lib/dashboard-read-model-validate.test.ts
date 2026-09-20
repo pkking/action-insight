@@ -55,23 +55,26 @@ describe('validateDashboardQuery', () => {
 });
 
 describe('parsePrDashboardQuery', () => {
-  it('defaults to a 1-day window ending today when no params', () => {
+  it('defaults to a 7-day window ending today when no params', () => {
     const q = parsePrDashboardQuery(new URLSearchParams());
     expect(q.tab).toBe('pr');
     expect(q.repoKey).toBeUndefined();
     expect(q.page).toBe(1);
     expect(q.pageSize).toBe(20);
     expect(q.observationLimit).toBe(500);
-    // endDate defaults to today; startDate defaults to ~1 day back.
-    expect(q.startDate <= q.endDate).toBe(true);
-  });
-
-  it('uses the requested quick-range duration when dates are not explicit', () => {
-    const q = parsePrDashboardQuery(new URLSearchParams({ days: '7' }));
+    // endDate defaults to today; startDate defaults to seven days back.
     const rangeDays =
       (Date.parse(`${q.endDate}T00:00:00Z`) - Date.parse(`${q.startDate}T00:00:00Z`)) /
       (24 * 60 * 60 * 1000);
     expect(rangeDays).toBe(7);
+  });
+
+  it('uses the requested quick-range duration when dates are not explicit', () => {
+    const q = parsePrDashboardQuery(new URLSearchParams({ days: '1' }));
+    const rangeDays =
+      (Date.parse(`${q.endDate}T00:00:00Z`) - Date.parse(`${q.startDate}T00:00:00Z`)) /
+      (24 * 60 * 60 * 1000);
+    expect(rangeDays).toBe(1);
   });
 
   it('honours explicit repo, dates, and page', () => {
