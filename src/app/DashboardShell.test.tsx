@@ -20,12 +20,16 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  ComposedChart: ({ data }: { data?: unknown[] }) => <div data-testid="chart" data-len={data?.length ?? 0} />,
+  ComposedChart: ({ data, children }: { data?: unknown[]; children?: React.ReactNode }) => (
+    <div data-testid="chart" data-len={data?.length ?? 0}>{children}</div>
+  ),
   LineChart: ({ data, 'data-testid': testId }: { data?: unknown[]; 'data-testid'?: string }) => (
     <div data-testid={testId ?? 'cost-chart'} data-len={data?.length ?? 0} />
   ),
-  Bar: () => null,
-  Cell: () => null,
+  Bar: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  Cell: ({ onClick }: { onClick?: () => void }) => onClick ? (
+    <button type="button" aria-label="Open PR details from chart" onClick={onClick} />
+  ) : null,
   Line: () => null,
   Pie: () => null,
   PieChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
@@ -415,6 +419,36 @@ describe('DashboardShell', () => {
     });
     expect(screen.getByText('build')).toBeInTheDocument();
     expect(screen.getByText('npu-a3')).toBeInTheDocument();
+  });
+
+  it('opens the matching PR detail when its timing-chart bar is clicked', async () => {
+    mockFetchDetail([
+      {
+        id: 200,
+        runAttempt: 1,
+        name: 'build',
+        status: 'completed',
+        conclusion: 'success',
+        created_at: '2026-01-01T00:10:00Z',
+        started_at: '2026-01-01T00:12:00Z',
+        completed_at: '2026-01-01T00:42:00Z',
+        html_url: 'https://github.com/owner/repo/jobs/200',
+        queueDurationInSeconds: 120,
+        durationInSeconds: 1800,
+        runtimeInSeconds: 1800,
+        resource_model: 'npu-a3',
+        resource_count: 4,
+        steps: [],
+      },
+    ]);
+    render(<DashboardShell repoOptions={repoOptions} result={rowResult()} searchParams={{}} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open PR details from chart' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Machine-Hours by Resource Model/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText('build')).toBeInTheDocument();
   });
 
   it('renders truncation notice when observations exceed the cap', () => {

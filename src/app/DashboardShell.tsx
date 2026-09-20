@@ -1443,7 +1443,7 @@ export default function DashboardShell({
   const [days, setDays] = useState<number>(() => {
     const raw = searchParams.days;
     const n = typeof raw === 'string' ? parseInt(raw, 10) : NaN;
-    return Number.isFinite(n) && n > 0 ? n : 1;
+    return Number.isFinite(n) && n > 0 ? n : 7;
   });
   const [expandedPr, setExpandedPr] = useState<string | null>(null);
   const [detailsByPr, setDetailsByPr] = useState<Record<string, PrDetail>>({});
@@ -1452,7 +1452,7 @@ export default function DashboardShell({
   const lastUrlRef = useRef<string>('');
 
   const activeTab = result.tab;
-  const tabDefaultDays = activeTab === 'pr' ? 1 : 14;
+  const tabDefaultDays = activeTab === 'pr' ? 7 : 14;
 
   // Sync state → URL. `tab` is read back from the current URL so a tab switch
   // (written directly by switchTab) survives subsequent filter edits.
@@ -1479,7 +1479,7 @@ export default function DashboardShell({
   const switchTab = useCallback(
     (tab: 'pr' | 'cost' | 'workflow' | 'job' | 'queue') => {
       if (tab === activeTab) return;
-      const defaultDays = tab === 'pr' ? 1 : 14;
+      const defaultDays = tab === 'pr' ? 7 : 14;
       setUseCustomRange(false);
       setDays(defaultDays);
       const params = new URLSearchParams();
@@ -1749,7 +1749,12 @@ export default function DashboardShell({
                     <Tooltip formatter={(value) => [fmtSeconds(Number(value)), 'CI Runtime']} />
                     <Bar yAxisId="seconds" dataKey="ciRuntime" name="CI Runtime">
                       {chartData.map((entry, index) => (
-                        <Cell key={`${entry.timestamp}-${index}`} fill={entry.conclusion === 'success' ? '#34d399' : entry.conclusion ? '#f87171' : '#9ca3af'} />
+                        <Cell
+                          key={`${entry.timestamp}-${index}`}
+                          fill={entry.conclusion === 'success' ? '#34d399' : entry.conclusion ? '#f87171' : '#9ca3af'}
+                          className="cursor-pointer"
+                          onClick={() => void loadDetail(entry.repoKey, entry.prNumber)}
+                        />
                       ))}
                     </Bar>
                   </ComposedChart>
