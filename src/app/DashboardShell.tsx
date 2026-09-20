@@ -83,7 +83,11 @@ function fmtMachineHours(hours?: number): string {
 }
 
 function scrollToTableRow(id: string) {
-  document.getElementById(id)?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  const row = document.getElementById(id);
+  if (!row) return;
+  row.classList.add('bg-blue-50', 'dark:bg-blue-950/40');
+  row.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  window.setTimeout(() => row.classList.remove('bg-blue-50', 'dark:bg-blue-950/40'), 1_500);
 }
 
 function MetricTooltip({ definition }: { definition: string }) {
