@@ -82,6 +82,10 @@ function fmtMachineHours(hours?: number): string {
   return `${hours.toFixed(1)}h`;
 }
 
+function scrollToTableRow(id: string) {
+  document.getElementById(id)?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+}
+
 function MetricTooltip({ definition }: { definition: string }) {
   const [open, setOpen] = useState(false);
   return (
@@ -887,6 +891,7 @@ function WorkflowDrillDown({
   const chartData = useMemo(
     () =>
       (attempts ?? []).map((a) => ({
+        id: `workflow-attempt-${a.runId}-${a.runAttempt}`,
         label: `#${a.runId}/${a.runAttempt}`,
         queue: a.queueDurationSeconds ?? 0,
         runtime: a.runtimeSeconds ?? 0,
@@ -922,8 +927,12 @@ function WorkflowDrillDown({
             <YAxis tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
             <Tooltip formatter={(value) => fmtSeconds(Number(value))} />
             <Legend />
-            <Bar dataKey="queue" name="Queue" stackId="a" fill="#60a5fa" />
-            <Bar dataKey="runtime" name="Runtime" stackId="a" fill="#34d399" />
+            <Bar dataKey="queue" name="Queue" stackId="a" fill="#60a5fa">
+              {chartData.map((entry) => <Cell key={`queue-${entry.id}`} className="cursor-pointer" onClick={() => scrollToTableRow(entry.id)} />)}
+            </Bar>
+            <Bar dataKey="runtime" name="Runtime" stackId="a" fill="#34d399">
+              {chartData.map((entry) => <Cell key={`runtime-${entry.id}`} className="cursor-pointer" onClick={() => scrollToTableRow(entry.id)} />)}
+            </Bar>
           </ComposedChart>
         </ResponsiveContainer>
       </div>
@@ -940,7 +949,7 @@ function WorkflowDrillDown({
           </thead>
           <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
             {attempts.map((a) => (
-              <tr key={`${a.runId}:${a.runAttempt}`}>
+              <tr id={`workflow-attempt-${a.runId}-${a.runAttempt}`} key={`${a.runId}:${a.runAttempt}`}>
                 <td className="px-2 py-1 font-mono">{a.runId}/{a.runAttempt}</td>
                 <td className="px-2 py-1 text-neutral-500 dark:text-neutral-400">{a.runDate}</td>
                 <td className="px-2 py-1 font-mono">{fmtSeconds(a.queueDurationSeconds ?? undefined)}</td>
@@ -1195,6 +1204,7 @@ function JobDrillDown({
   const chartData = useMemo(
     () =>
       (attempts ?? []).map((a) => ({
+        id: `job-attempt-${a.runId}-${a.runAttempt}-${a.jobId}`,
         label: `#${a.runId}/${a.runAttempt}/${a.jobId}`,
         queue: a.queueDurationSeconds ?? 0,
         runtime: a.runtimeSeconds ?? 0,
@@ -1221,8 +1231,12 @@ function JobDrillDown({
             <YAxis tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
             <Tooltip formatter={(value) => fmtSeconds(Number(value))} />
             <Legend />
-            <Bar dataKey="queue" name="Queue" stackId="a" fill="#60a5fa" />
-            <Bar dataKey="runtime" name="Runtime" stackId="a" fill="#34d399" />
+            <Bar dataKey="queue" name="Queue" stackId="a" fill="#60a5fa">
+              {chartData.map((entry) => <Cell key={`queue-${entry.id}`} className="cursor-pointer" onClick={() => scrollToTableRow(entry.id)} />)}
+            </Bar>
+            <Bar dataKey="runtime" name="Runtime" stackId="a" fill="#34d399">
+              {chartData.map((entry) => <Cell key={`runtime-${entry.id}`} className="cursor-pointer" onClick={() => scrollToTableRow(entry.id)} />)}
+            </Bar>
           </ComposedChart>
         </ResponsiveContainer>
       </div>
@@ -1240,7 +1254,7 @@ function JobDrillDown({
           </thead>
           <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
             {attempts.map((a) => (
-              <tr key={`${a.runId}:${a.runAttempt}:${a.jobId}`}>
+              <tr id={`job-attempt-${a.runId}-${a.runAttempt}-${a.jobId}`} key={`${a.runId}:${a.runAttempt}:${a.jobId}`}>
                 <td className="px-2 py-1 font-mono">{a.runId}/{a.runAttempt}/{a.jobId}</td>
                 <td className="px-2 py-1 text-neutral-500 dark:text-neutral-400">{a.runDate}</td>
                 <td className="px-2 py-1 font-mono">{fmtSeconds(a.queueDurationSeconds ?? undefined)}</td>
@@ -1539,6 +1553,7 @@ export default function DashboardShell({
       ciRuntime: point.ciRuntime,
       pendingJobs: point.pendingJobs,
       runningJobs: point.runningJobs,
+      id: `pr-row-${point.repoKey}-${point.prNumber}`,
       repoKey: point.repoKey,
       prNumber: point.prNumber,
       conclusion: point.conclusion,
@@ -1753,7 +1768,10 @@ export default function DashboardShell({
                           key={`${entry.timestamp}-${index}`}
                           fill={entry.conclusion === 'success' ? '#34d399' : entry.conclusion ? '#f87171' : '#9ca3af'}
                           className="cursor-pointer"
-                          onClick={() => void loadDetail(entry.repoKey, entry.prNumber)}
+                          onClick={() => {
+                            scrollToTableRow(entry.id);
+                            void loadDetail(entry.repoKey, entry.prNumber);
+                          }}
                         />
                       ))}
                     </Bar>
@@ -1812,6 +1830,7 @@ export default function DashboardShell({
                     return (
                       <React.Fragment key={key}>
                         <tr
+                          id={`pr-row-${row.repoKey}-${row.prNumber}`}
                           className="cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-950/60"
                           onClick={() => loadDetail(row.repoKey, row.prNumber)}
                         >

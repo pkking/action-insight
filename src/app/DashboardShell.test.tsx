@@ -28,7 +28,7 @@ vi.mock('recharts', () => ({
   ),
   Bar: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
   Cell: ({ onClick }: { onClick?: () => void }) => onClick ? (
-    <button type="button" aria-label="Open PR details from chart" onClick={onClick} />
+    <button type="button" aria-label="Open chart details" onClick={onClick} />
   ) : null,
   Line: () => null,
   Pie: () => null,
@@ -443,12 +443,40 @@ describe('DashboardShell', () => {
     ]);
     render(<DashboardShell repoOptions={repoOptions} result={rowResult()} searchParams={{}} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open PR details from chart' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open chart details' }));
 
     await waitFor(() => {
       expect(screen.getByText(/Machine-Hours by Resource Model/i)).toBeInTheDocument();
     });
     expect(screen.getByText('build')).toBeInTheDocument();
+  });
+
+  it('scrolls to the matching workflow attempt when a drill-down bar is clicked', async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      data: [{
+        runId: 101,
+        runAttempt: 1,
+        repoKey: 'owner/repo',
+        queueDurationSeconds: 60,
+        runtimeSeconds: 600,
+        totalDurationSeconds: 660,
+        conclusion: 'success',
+        status: 'completed',
+        runDate: '2026-01-02',
+      }],
+    })));
+    render(<DashboardShell repoOptions={repoOptions} result={workflowResult()} searchParams={{}} />);
+
+    fireEvent.click(screen.getByText('ci.yml'));
+    await screen.findByText('101/1');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Open chart details' })[0]);
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
   });
 
   it('renders truncation notice when observations exceed the cap', () => {
