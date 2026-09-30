@@ -85,6 +85,66 @@ describe('fetchJobsForRunAttempt', () => {
   });
 });
 
+describe('malformed GitHub collection responses', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    mockRepoState({ latest: '2026-04-14', dates: ['2026-04-14'] });
+  });
+
+  it.each([{}, { workflow_runs: null }, { workflow_runs: 'invalid' }])('retries an invalid run page without checkpointing it: %j', async (data) => {
+    try {
+      const request = vi.fn()
+        .mockResolvedValueOnce({ status: 200, data })
+        .mockResolvedValue({ status: 200, data: { workflow_runs: [] } });
+      const pending = collectRepo({ request } as never, 'acme/widgets', 2,
+        { forceFullBackfill: false, reverse: true, skipJobs: true },
+        undefined, [{ start: '2026-04-14', end: '2026-04-14' }]);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(persistCollectionWindow).not.toHaveBeenCalled();
+      await vi.runAllTimersAsync();
+      await pending;
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(request.mock.calls[0]).toEqual(request.mock.calls[1]);
+      expect(persistCollectionWindow).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([1, 2])('retries an invalid jobs page for attempt %i', async (attempt) => {
+    try {
+      const request = vi.fn()
+        .mockResolvedValueOnce({ status: 200, data: { jobs: null } })
+        .mockResolvedValue({ status: 200, data: { jobs: [] } });
+      const pending = fetchJobsForRunAttempt({ request } as never, 'acme', 'widgets', 42, attempt);
+      const assertion = expect(pending).resolves.toEqual({ jobs: [] });
+      await vi.runAllTimersAsync();
+      await assertion;
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(request.mock.calls[0]).toEqual(request.mock.calls[1]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails with safe context after bounded retries and does not persist an invalid run page', async () => {
+    try {
+      const request = vi.fn().mockResolvedValue({ status: 200, data: { message: 'secret-body-not-for-logs' } });
+      const pending = collectRepo({ request } as never, 'acme/widgets', 2,
+        { forceFullBackfill: false, reverse: true, skipJobs: true },
+        undefined, [{ start: '2026-04-14', end: '2026-04-14' }]);
+      const assertion = expect(pending).rejects.toThrow(/Invalid GitHub response.*acme\/widgets.*page=1.*status=200.*workflow_runs.*keys=message/);
+      await vi.runAllTimersAsync();
+      await assertion;
+      expect(request).toHaveBeenCalledTimes(4);
+      expect(persistCollectionWindow).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('resolveCollectionHeartbeatMs', () => {
   it('defaults to 30 seconds', () => {
     expect(resolveCollectionHeartbeatMs(undefined)).toBe(30_000);

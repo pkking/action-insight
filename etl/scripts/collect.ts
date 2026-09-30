@@ -80,7 +80,25 @@ export const RETRYABLE_POSTGRES_CODES = new Set([
   '57P03',
 ]);
 
+class InvalidGitHubResponseError extends Error {}
+
+/** Validate inside withRetry; never treat a missing array as an empty page.
+ * Only log shape metadata, not response bodies or credentials. */
+function validateGitHubArrayResponse(
+  response: { data: unknown; status?: number },
+  field: 'workflow_runs' | 'jobs',
+  context: string,
+): void {
+  const data = response.data;
+  if (data && typeof data === 'object' && Array.isArray((data as Record<string, unknown>)[field])) return;
+  const keys = data && typeof data === 'object' ? Object.keys(data).join(',') : typeof data;
+  throw new InvalidGitHubResponseError(
+    `Invalid GitHub response: ${context} status=${response.status ?? 'unknown'} expected array ${field}; keys=${keys}`,
+  );
+}
+
 export function isTransientError(err: unknown): boolean {
+  if (err instanceof InvalidGitHubResponseError) return true;
   if (typeof err !== 'object' || err === null) return false;
   const e = err as Record<string, unknown>;
   const status = e.status as number | undefined;
@@ -413,14 +431,18 @@ export async function fetchJobsForRunAttempt(
   if (runAttempt > 1) {
     try {
       return await fetchAllJobPages(async (page) => {
-        const response = await withRetry(() => octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs', {
-          owner,
-          repo,
-          run_id: runId,
-          attempt_number: runAttempt,
-          per_page: PER_PAGE,
-          page,
-        }));
+        const response = await withRetry(async () => {
+          const response = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs', {
+            owner,
+            repo,
+            run_id: runId,
+            attempt_number: runAttempt,
+            per_page: PER_PAGE,
+            page,
+          });
+          validateGitHubArrayResponse(response, 'jobs', `${owner}/${repo} run=${runId} attempt=${runAttempt} jobs page=${page}`);
+          return response;
+        });
         return response.data as GitHubRunJobsResponse;
       });
     } catch (err) {
@@ -430,13 +452,17 @@ export async function fetchJobsForRunAttempt(
   }
 
   return fetchAllJobPages(async (page) => {
-    const response = await withRetry(() => octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
-      owner,
-      repo,
-      run_id: runId,
-      per_page: PER_PAGE,
-      page,
-    }));
+    const response = await withRetry(async () => {
+      const response = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
+        owner,
+        repo,
+        run_id: runId,
+        per_page: PER_PAGE,
+        page,
+      });
+      validateGitHubArrayResponse(response, 'jobs', `${owner}/${repo} run=${runId} attempt=${runAttempt} jobs page=${page}`);
+      return response;
+    });
     return response.data as GitHubRunJobsResponse;
   });
 }
@@ -575,7 +601,8 @@ export async function collectRepo(
       const startTime = Date.now();
       let data;
       try {
-        const response = await withRetry(() => workflowId
+        const response = await withRetry(async () => {
+          const response = await (workflowId
           ? octokit.request('GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs', {
             owner,
             repo: repoName,
@@ -585,8 +612,10 @@ export async function collectRepo(
             created: createdParam,
             ...(page === 1 && cachedEtag ? { headers: { 'if-none-match': cachedEtag } } : {}),
           })
-          : octokit.request('GET /repos/{owner}/{repo}/actions/runs', { owner, repo: repoName, per_page: PER_PAGE, page, created: createdParam })
-        );
+          : octokit.request('GET /repos/{owner}/{repo}/actions/runs', { owner, repo: repoName, per_page: PER_PAGE, page, created: createdParam }));
+          validateGitHubArrayResponse(response, 'workflow_runs', `${repo} workflow=${workflowId ?? 'all'} runs page=${page} window=${createdParam}`);
+          return response;
+        });
         data = response.data;
         const etag = page === 1 && typeof response.headers?.etag === 'string' ? response.headers.etag : undefined;
         if (workflowId && etag) {
