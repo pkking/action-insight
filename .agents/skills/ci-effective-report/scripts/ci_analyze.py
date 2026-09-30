@@ -50,7 +50,7 @@ SCRIPT_DIR = Path(__file__).parent
 SKILL_DIR = SCRIPT_DIR.parent
 REPO_ROOT = SKILL_DIR.parents[2]
 ENV_FILE = REPO_ROOT / ".env"
-DEFAULT_CONFIG = REPO_ROOT / ".github-ci-efficiency.yaml"
+DEFAULT_CONFIG = REPO_ROOT / "etl" / "repos.yaml"
 DEFAULT_DRILLDOWN_CONFIG = REPO_ROOT / "config" / "drilldown-workflows.yaml"
 DEFAULT_STEP_NAMES = SKILL_DIR / "references" / "step-names.json"
 DEFAULT_PG_URL = "postgresql://action_insight:action_insight@localhost:5433/action_insight"
@@ -188,10 +188,22 @@ def parse_config_entries(path: str) -> dict[str, list[dict]]:
         print("[ERROR] 缺少 PyYAML；请用 `uv run` 执行本脚本")
         sys.exit(1)
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
-    return {
-        item["repo"]: [w for w in item.get("workflows", []) if w.get("name")]
-        for item in data.get("repositories", []) if item.get("repo")
-    }
+    unified = "repos" in data
+    repositories = data.get("repos", data.get("repositories", []))
+    entries = {}
+    for item in repositories:
+        if not item.get("repo"):
+            continue
+        workflows = []
+        for workflow in item.get("workflows", []):
+            name = workflow.get("report_name") if unified else workflow.get("name")
+            if not name:
+                continue
+            entry = {**workflow, "name": name}
+            workflows.append(entry)
+        if workflows:
+            entries[item["repo"]] = workflows
+    return entries
 
 
 def parse_resource_pools(path: str) -> dict[str, int]:
@@ -2178,7 +2190,7 @@ def main():
     parser.add_argument("--no-excel", action="store_true", help="跳过 Excel 输出")
     parser.add_argument("--skip-steps", action="store_true", help="跳过 steps 数据（加速查询）")
     parser.add_argument("--output", "-o", help="输出 Excel 文件路径（默认自动生成）")
-    parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="项目/workflow 对比配置（默认仓库根目录 .github-ci-efficiency.yaml）")
+    parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="统一仓库/workflow 配置（默认 etl/repos.yaml）")
     parser.add_argument("--drilldown-config", default=str(DEFAULT_DRILLDOWN_CONFIG), help="下钻 workflow 白名单配置；默认 config/drilldown-workflows.yaml")
     parser.add_argument("--pg-url", help="PostgreSQL 连接串；默认读取 PG_DATABASE_URL")
     parser.add_argument("--success-only", action="store_true", help="job/workflow 耗时统计只算 conclusion=success 的样本（目的2 口径，ADR-005）")

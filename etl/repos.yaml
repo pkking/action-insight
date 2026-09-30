@@ -1,64 +1,159 @@
-# List of repositories and workflows to track.
-# Workflow file rules use basenames such as ci.yml, not .github/workflows/ci.yml paths.
 defaults:
   steps_min_workflow_duration_seconds: 600
-
+  min_e2e_minutes: 10
 repos:
-  - repo: areal-project/AReaL
-    workflows:
-      - file: test-areal.yml
-      - file: nightly.yml
-  - repo: alibaba/ROLL
-    workflows:
-      - file: ci-npu-mindspeed.yml
-      - file: ci-npu-test.yml
-  - repo: hiyouga/LlamaFactory
-    workflows:
-      - file: tests_npu.yml
-      - file: tests.yml
-  - repo: modelscope/ms-swift
-    workflows:
-      - file: citest_npu.yaml
-      - file: citest.yaml
-  - repo: sgl-project/sglang
-    workflows:
-      - file: pr-test-npu.yml
-      - file: pr-test.yml
-      - file: nightly-test-npu.yml
-      - file: nightly-test-nvidia.yml
-  - repo: tile-ai/tilelang-mlir-ascend
-    workflows:
-      - file: base_ci.yml
-  - repo: tile-ai/tilelang
-    workflows:
-      - file: ci.yml
-  - repo: triton-lang/triton
-    workflows:
-      - file: ci.yml
-  - repo: triton-lang/triton-ascend
-    workflows:
-      - file: ci.yml
-  - repo: verl-project/verl
-    workflows:
-      - file: e2e_ascend.yml
-      - file: vllm.yml
-      - file: nightly_ascend.yml
-  - repo: ascend/pytorch
-    workflows:
-      - file: npu-full-test.yml
-      - file: npu-sync-test.yml
-      - file: npu-test.yml
-      - file: torch-npu-upstream-test-trigger.yml
-      - file: pytorch_ci_trigger_pr.yml
-      - file: pytorch_ci_trigger_push.yml
-  - repo: ByteDance-Seed/VeOmni
-    workflows:
-      - file: gpu_e2e_test.yml
-      - file: npu_e2e_test.yml
-      - file: gpu_unit_tests.yml
-      - file: npu_unit_tests.yml
-  - repo: vllm-project/vllm-ascend
-    workflows:
-      - file: pr_test.yaml
-      - file: schedule_nightly_test_a2.yaml
-      - file: schedule_nightly_test_a3.yaml
+- repo: areal-project/AReaL
+  workflows:
+  - file: test-areal.yml
+    report_name: AReaL CI on GCP runner
+    comparison_name: PR
+  - file: nightly.yml
+    report_name: Nightly CI
+    comparison_name: Nightly
+  comparison_group: areal
+- repo: alibaba/ROLL
+  workflows:
+  - file: ci-npu-mindspeed.yml
+    report_name: MindSpeed NPU Tests
+    comparison_name: PR
+  - file: ci-npu-test.yml
+    report_name: Tests
+    comparison_name: PR
+  comparison_group: roll
+- repo: hiyouga/LlamaFactory
+  workflows:
+  - file: tests_npu.yml
+    report_name: tests_npu
+    comparison_name: PR
+  - file: tests.yml
+    report_name: tests
+    comparison_name: PR
+  comparison_group: llamafactory
+- repo: modelscope/ms-swift
+  workflows:
+  - file: citest_npu.yaml
+    report_name: citest-npu
+    comparison_name: PR
+  - file: citest.yaml
+    report_name: citest
+    comparison_name: PR
+  comparison_group: ms-swift
+- repo: sgl-project/sglang
+  workflows:
+  - file: pr-test-npu.yml
+    report_name: PR Test (NPU)
+    comparison_name: PR
+  - file: pr-test.yml
+    report_name: PR Test Base
+    comparison_name: PR
+  - file: nightly-test-npu.yml
+    report_name: Nightly Test (NPU)
+    comparison_name: Nightly
+  - file: nightly-test-nvidia.yml
+    report_name: Nightly Test (Nvidia)
+    comparison_name: Nightly
+  comparison_group: sglang
+- repo: sgl-project/sglang-omni
+  workflows:
+  - file: release-docker-npu.yml
+  - file: release-docker-npu-nightly.yml
+- repo: tile-ai/tilelang-mlir-ascend
+  workflows:
+  - file: base_ci.yml
+    report_name: Base CI
+    comparison_name: PR
+  comparison_group: tilelang
+- repo: tile-ai/tilelang
+  workflows:
+  - file: ci.yml
+    report_name: CI
+    comparison_name: PR
+  comparison_group: tilelang
+- repo: triton-lang/triton
+  workflows:
+  - file: ci.yml
+    report_name: Integration Tests
+    comparison_name: PR
+  comparison_group: triton
+- repo: triton-lang/triton-ascend
+  workflows:
+  - file: ci.yml
+    report_name: Integration Tests
+    comparison_name: PR
+  comparison_group: triton
+- repo: verl-project/verl
+  workflows:
+  - file: e2e_ascend.yml
+  - file: vllm.yml
+  - file: nightly_ascend.yml
+  - file: e2e_ppo_trainer_veomni_vllm_ascend.yml
+    report_name: e2e_ppo_trainer_veomni_vllm_ascend
+    comparison_name: VeOmni + vLLM PPO
+  - file: e2e_ppo_trainer_veomni_vllm.yml
+    report_name: e2e_ppo_trainer_veomni_vllm
+    comparison_name: VeOmni + vLLM PPO
+  comparison_group: verl
+- repo: verl-project/verl-SpeCo
+  workflows:
+  - file: docker-build-ascend-a3.yml
+  - file: npu_vllm_unit_tests.yml
+  - file: npu_sglang_unit_tests.yml
+- repo: ascend/pytorch
+  workflows:
+  - file: npu-full-test.yml
+    report_name: PyTorch NPU Full Test (v2.7.1)
+    comparison_name: Full Test
+  - file: npu-sync-test.yml
+    report_name: PyTorch NPU Sync Test
+    comparison_name: Sync Test
+  - file: npu-test.yml
+    report_name: NPU Build and Test
+    comparison_name: Build and Test
+  - file: torch-npu-upstream-test-trigger.yml
+    report_name: Torch NPU Upstream v2.7.1 Trigger
+    comparison_name: Upstream Test
+  - file: pytorch_ci_trigger_pr.yml
+    report_name: PyTorch CI Trigger (PR)
+    comparison_name: PR Trigger
+  - file: pytorch_ci_trigger_push.yml
+    report_name: PyTorch CI Trigger (Push)
+    comparison_name: Push Trigger
+  comparison_group: ascend-pytorch
+- repo: ByteDance-Seed/VeOmni
+  workflows:
+  - file: gpu_e2e_test.yml
+    report_name: GPU e2e tests
+    comparison_name: E2E
+    static_resources:
+      L20: 8
+  - file: npu_e2e_test.yml
+    report_name: NPU e2e tests
+    comparison_name: E2E
+    static_resources:
+      Ascend 910B: 8
+  - file: gpu_unit_tests.yml
+    report_name: GPU unit tests
+    comparison_name: Unit
+    static_resources:
+      L20: 8
+  - file: npu_unit_tests.yml
+    report_name: NPU unit tests
+    comparison_name: Unit
+    static_resources:
+      Ascend 910B: 8
+  comparison_group: veomni
+- repo: vllm-project/vllm-ascend
+  workflows:
+  - file: pr_test.yaml
+    report_name: E2E
+    comparison_name: PR
+  - file: schedule_nightly_test_a2.yaml
+    report_name: Nightly-A2
+    comparison_name: Nightly
+  - file: schedule_nightly_test_a3.yaml
+    report_name: Nightly-A3
+    comparison_name: Nightly
+  comparison_group: vllm
+resource_pools:
+  A3: 364
+  A2: 104

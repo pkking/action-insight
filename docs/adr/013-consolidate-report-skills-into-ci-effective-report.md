@@ -47,7 +47,7 @@ Removal of `.agents/skills/ci-efficiency-report/` happens only after the migrati
 - New report requirements are implemented only in `ci-effective-report`, reading local PostgreSQL. Metric definitions have exactly one implementation.
 - ADR-009 contracts apply to all report modes: job-level queue metrics, `workflow.file` stable matching, `static_resources` priority, mandatory empty-value justifications, read-only report transactions.
 - `etl/repos.yaml` remains the single source of analysis targets; a repository must be added there (and collected) before it can appear in any report.
-- The skill regression test enforcing that `.github-ci-efficiency.yaml` and `config/drilldown-workflows.yaml` repositories appear in `etl/repos.yaml` continues to apply; migrated modes add coverage in `test_ci_analyze.py`.
+- The repository inventory and report metadata share `etl/repos.yaml`; the independent `config/drilldown-workflows.yaml` remains a scoped allowlist. Regression coverage verifies report targets are drawn from the unified inventory.
 - Documentation referencing the efficiency skill in historical plans/brainstorms is left as-is; living docs (README, skill listings) are updated at removal time.
 - Schema or metric-contract changes still require updating ADR-009/ADR-013 and the skill tests.
 
