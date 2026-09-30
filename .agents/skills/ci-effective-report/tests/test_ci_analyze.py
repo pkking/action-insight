@@ -128,13 +128,46 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("ILIKE 'E2E'", clause)
         self.assertNotIn("%E2E%", clause)
 
-    def test_report_repositories_are_collected_by_etl(self):
+    def test_unified_config_drives_report_and_includes_llamafactory_cpu_workflow(self):
+        root = Path(__file__).parents[4]
+        config_path = root / "etl" / "repos.yaml"
+        entries = MODULE.parse_config_entries(str(config_path))
+        self.assertIn("tests", [item["name"] for item in entries["hiyouga/LlamaFactory"]])
+        cpu = next(item for item in entries["hiyouga/LlamaFactory"] if item["name"] == "tests")
+        self.assertEqual(cpu["file"], "tests.yml")
+        self.assertEqual(
+            set(entries),
+            {item["repo"] for item in __import__("yaml").safe_load(config_path.read_text())["repos"]
+             if any(workflow.get("report_name") for workflow in item.get("workflows", []))},
+        )
+
+    def test_unified_config_preserves_resources_and_drilldown_inventory(self):
         import yaml
         root = Path(__file__).parents[4]
-        report_repos = set(MODULE.parse_config(str(root / ".github-ci-efficiency.yaml")))
-        etl = yaml.safe_load((root / "etl" / "repos.yaml").read_text())
-        etl_repos = {item["repo"] for item in etl["repos"]}
-        self.assertEqual(report_repos - etl_repos, set())
+        config_path = root / "etl" / "repos.yaml"
+        config = yaml.safe_load(config_path.read_text())
+        entries = MODULE.parse_config_entries(str(config_path))
+        self.assertEqual(MODULE.DEFAULT_CONFIG, config_path)
+        self.assertEqual(MODULE.parse_resource_pools(str(config_path)), {"A3": 364, "A2": 104})
+        veomni = {workflow["file"]: workflow for workflow in entries["ByteDance-Seed/VeOmni"]}
+        self.assertEqual(veomni["gpu_e2e_test.yml"]["static_resources"], {"L20": 8})
+        self.assertEqual(veomni["npu_e2e_test.yml"]["static_resources"], {"Ascend 910B": 8})
+        self.assertEqual(veomni["gpu_e2e_test.yml"]["comparison_name"], "E2E")
+        self.assertNotIn("sgl-project/sglang-omni", entries)  # collection only
+        self.assertNotIn("verl-project/verl-SpeCo", entries)
+        files = {repo["repo"]: {workflow["file"] for workflow in repo["workflows"]} for repo in config["repos"]}
+        drilldown = yaml.safe_load((root / "config" / "drilldown-workflows.yaml").read_text())
+        for repo in drilldown["repositories"]:
+            self.assertIn(repo["repo"], files)
+            for workflow in repo["workflows"]:
+                self.assertIn(workflow["file"], files[repo["repo"]])
+
+    def test_unified_reports_require_explicit_report_name(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "repos.yaml"
+            config.write_text("repos:\n  - repo: o/r\n    workflows:\n      - file: ci.yml\n        report_name: CI\n      - file: hidden.yml\n        name: not-a-report-name\n")
+            self.assertEqual(MODULE.parse_config(str(config)), {"o/r": ["CI"]})
 
     def test_excel_uses_arial(self):
         from openpyxl import load_workbook
