@@ -82,6 +82,9 @@ function fmtMachineHours(hours?: number): string {
   return `${hours.toFixed(1)}h`;
 }
 
+const PR_CI_RUNTIME_TOOLTIP =
+  'Elapsed CI span: earliest associated completed workflow attempt created → latest associated completed attempt updated (completion-time proxy). Includes gaps between commits/retries and terminal non-success attempts; it is not cumulative job or workflow execution time.';
+
 function scrollToTableRow(id: string) {
   const row = document.getElementById(id);
   if (!row) return;
@@ -1703,7 +1706,7 @@ export default function DashboardShell({
           />
           <StatCard
             label="PR CI Runtime"
-            definition="First tracked CI start → last tracked CI completion."
+            definition={PR_CI_RUNTIME_TOOLTIP}
             stats={result.cards.ciRuntime}
           />
           <StatCard
@@ -1815,7 +1818,12 @@ export default function DashboardShell({
                   <th className="px-4 py-3">Repo</th>
                   <th className="px-4 py-3">PR</th>
                   <th className="px-4 py-3">Title</th>
-                  <th className="px-4 py-3">CI Runtime</th>
+                  <th className="px-4 py-3">
+                    <span className="inline-flex items-center gap-1">
+                      CI Runtime
+                      <MetricTooltip definition={PR_CI_RUNTIME_TOOLTIP} />
+                    </span>
+                  </th>
                   <th className="px-4 py-3">Review</th>
                   <th className="px-4 py-3">Merged</th>
                 </tr>
