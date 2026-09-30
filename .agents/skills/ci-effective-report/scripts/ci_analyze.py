@@ -465,6 +465,79 @@ def _card_hours(job: dict) -> float | None:
         return None
 
 
+def _elapsed_job_hours(job: dict) -> float | None:
+    started, completed = job.get("started_at"), job.get("completed_at")
+    if not started or not completed:
+        return None
+    try:
+        start = datetime.fromisoformat(str(started).replace("Z", "+00:00"))
+        end = datetime.fromisoformat(str(completed).replace("Z", "+00:00"))
+        seconds = (end - start).total_seconds()
+        return seconds / 3600 if seconds >= 0 else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _machine_hour_resource(job: dict) -> tuple[str, int, str] | None:
+    """Return known resource quantities with an explicit unit, never a guessed runner."""
+    for label in job.get("labels") or []:
+        match = _re.search(r"(?:^|-)cpu-(\d+)(?:-|$)", label, _re.IGNORECASE) if isinstance(label, str) else None
+        if match:
+            cores = int(match.group(1))
+            return ("CPU", cores, "CPU核时") if cores > 0 else None
+    # Reject explicit corrupt quantities instead of turning zero/boolean data
+    # into measurable accelerator work through a fallback label.
+    count = job.get("card_count")
+    if count is not None and (type(count) is not int or count <= 0):
+        return None
+    resource = _resource_type_and_cards(job)
+    if not resource:
+        return None
+    kind, cards = resource
+    if not kind.strip() or "CPU" in kind or kind in {"UNKNOWN", "UNSPECIFIED"} or cards <= 0:
+        return None
+    return kind, cards, "加速卡机时"
+
+
+def build_machine_hours_rows(repos_data: dict[str, dict]) -> list[dict]:
+    """Separate accelerator machine-hours from CPU core-hours and coverage gaps.
+
+    Parent rows are per-unit subtotals; children must not be summed again.
+    Only completed jobs contribute. Unknown cost is not zero or one runner-hour.
+    """
+    rows = []
+    for repo, data in sorted(repos_data.items()):
+        totals = {"加速卡机时": 0.0, "CPU核时": 0.0}
+        unknown = invalid = nonterminal = 0
+        resources: dict[tuple[str, str], float] = defaultdict(float)
+        for job in data.get("jobs", []):
+            if job.get("status") != "completed":
+                nonterminal += 1
+                continue
+            elapsed = _elapsed_job_hours(job)
+            if elapsed is None:
+                invalid += 1
+                unknown += 1
+                continue
+            resource = _machine_hour_resource(job)
+            if resource is None:
+                unknown += 1
+                continue
+            kind, quantity, unit = resource
+            hours = elapsed * quantity
+            totals[unit] += hours
+            resources[(kind, unit)] += hours
+        rows.append({"仓库": repo, "资源类型": "小计（已知资源）",
+                     **{unit: round(hours, 3) for unit, hours in totals.items()},
+                     "未知成本样本": unknown, "无效时间样本": invalid, "非终态样本": nonterminal})
+        for (kind, unit), hours in sorted(resources.items()):
+            rows.append({"仓库": repo, "资源类型": kind,
+                         "加速卡机时": round(hours, 3) if unit == "加速卡机时" else None,
+                         "CPU核时": round(hours, 3) if unit == "CPU核时" else None,
+                         "未知成本样本": None, "无效时间样本": None, "非终态样本": None})
+    return rows
+
+
 def _is_cpu_job(job: dict) -> bool:
     """A job whose runner labels indicate a CPU-only machine (no accelerator)."""
     labels = job.get("labels") or []
@@ -2016,6 +2089,11 @@ def write_excel(filepath: str, sheets: dict[str, list[dict]]):
         "Workflow": "工作流文件名；未配置或不可得时为空。",
         "Workflow显示名": "报告配置中的工作流显示名称。",
         "资源需求": "当前窗口的最大单次 Run 资源需求；窗口无 Job 时使用最近采集的 runner label，仅用于识别，不计入卡时。",
+        "加速卡机时": "已完成 Job 运行时长 × 已知正数加速卡数量（小时）；沿用现有 A3 双 die 折算物理卡规则。与 CPU 核时不可相加；资源子行已包含在仓库小计中，不可重复相加。零表示已知样本的零机时，不代表未知样本成本为零。",
+        "CPU核时": "已完成 CPU Job 运行时长 × runner label 明示的正数 CPU 核数（小时）；独立于加速卡机时，不可混合相加或称为加速卡机时。",
+        "未知成本样本": "已完成 Job 缺少有效运行时间或已知正数资源数量的样本数；不猜测为 1 台，不计入机时/核时小计。",
+        "无效时间样本": "已完成 Job 的开始/完成时间缺失、格式错误或运行时长为负的样本数；包含在未知成本样本中。",
+        "非终态样本": "状态不是 completed 的 Job 数；不计入正式机时/核时。小计基于当前窗口所选 runs 的 Job，不使用历史资源提示。",
         "总Run数": "统计窗口内匹配该工作流的全部 Run 数。",
         "成功Run数": "结论为 success 的 Run 数。",
         "有效成功Run数": "结论为 success 且 E2E 耗时≥5 分钟的 Run 数；单位为 Run，用于 E2E 统计。",
@@ -2039,7 +2117,7 @@ def write_excel(filepath: str, sheets: dict[str, list[dict]]):
             cell.fill = header_fill
             cell.alignment = Alignment(horizontal="center", wrap_text=True)
             cell.border = thin_border
-            if sheet_name == "总览" and h in overview_comments:
+            if sheet_name in {"总览", "仓库机时"} and h in overview_comments:
                 cell.comment = Comment(overview_comments[h], "Action Insight")
 
         for ri, row_data in enumerate(rows, 2):
@@ -2335,6 +2413,9 @@ def main():
     # 总览页
     if overview_data:
         sheets["总览"] = build_overview(overview_data)
+
+    # Repository-level resource-weighted machine hours with one child row per resource.
+    sheets["仓库机时"] = build_machine_hours_rows(repos_data)
 
     # Multi-repo comparison
     if len(repo_names) > 1:
