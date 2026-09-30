@@ -268,6 +268,21 @@ export function resolveCollectionSlowOperationMs(value = process.env.COLLECTION_
 const COLLECTION_HEARTBEAT_MS = resolveCollectionHeartbeatMs();
 const COLLECTION_SLOW_OPERATION_MS = resolveCollectionSlowOperationMs();
 
+const MAX_LANE_RECOVERY_MS = 65 * 60_000;
+const MAX_BUDGET_REFRESHES = 6;
+
+async function waitForRateLimitCooldown(milliseconds: number, identity: string, hasPendingWork: () => boolean): Promise<boolean> {
+  let remaining = milliseconds;
+  while (remaining > 0) {
+    if (!hasPendingWork()) return false;
+    const chunk = Math.min(remaining, 60_000);
+    console.warn(`Rate limit wait: identity=${identity} remaining=${Math.ceil(remaining / 1000)}s; checking again in ${Math.ceil(chunk / 1000)}s`);
+    await new Promise(resolve => setTimeout(resolve, chunk));
+    remaining -= chunk;
+  }
+  return hasPendingWork();
+}
+
 export function rateLimitCooldown(details: RateLimitDetails): string {
   const retryAfter = Number(details.retryAfter);
   if (Number.isFinite(retryAfter) && retryAfter > 0) return `${Math.ceil(retryAfter)}s`;
@@ -276,14 +291,18 @@ export function rateLimitCooldown(details: RateLimitDetails): string {
   return 'until=next-cycle';
 }
 
-function secondaryCooldownMs(details: RateLimitDetails): number {
+export function rateLimitCooldownMs(details: RateLimitDetails, now = Date.now()): number {
   const retryAfter = Number(details.retryAfter);
-  return details.remaining !== '0' && Number.isFinite(retryAfter) && retryAfter > 0
-    ? Math.ceil(retryAfter * 1000)
-    : 0;
+  if (Number.isFinite(retryAfter) && retryAfter > 0) return Math.ceil(retryAfter * 1000);
+  const reset = Number(details.reset);
+  if (Number.isFinite(reset) && reset > 0) {
+    const waitMs = reset * 1000 - now;
+    return waitMs > 0 ? waitMs + 1_000 : 0;
+  }
+  return 0;
 }
 
-export function reserveRateLimitBudget(octokit: Octokit, remaining: number, initialReset?: number): Octokit & { getBudget: () => number } {
+export function reserveRateLimitBudget(octokit: Octokit, remaining: number, initialReset?: number): Octokit & { getBudget: () => number; refreshBudget: () => Promise<number> } {
   let budget = remaining;
   let resetTimestamp = initialReset !== undefined ? String(initialReset) : undefined;
   return {
@@ -305,7 +324,14 @@ export function reserveRateLimitBudget(octokit: Octokit, remaining: number, init
       return response;
     },
     getBudget: () => budget,
-  } as Octokit & { getBudget: () => number };
+    refreshBudget: async () => {
+      const response = await octokit.request('GET /rate_limit');
+      const data = response.data as { resources?: { core?: { remaining?: number; reset?: number } } };
+      budget = data.resources?.core?.remaining ?? 0;
+      resetTimestamp = data.resources?.core?.reset === undefined ? resetTimestamp : String(data.resources.core.reset);
+      return budget;
+    },
+  } as Octokit & { getBudget: () => number; refreshBudget: () => Promise<number> };
 }
 
 
@@ -991,6 +1017,7 @@ export async function runSharedCollectionPlan({
 
   try {
     await Promise.all(lanes.map(async ({ client, identity }) => {
+      let recoveryDeadline: number | undefined;
       while (true) {
         const index = pending.findIndex(unit => unit.priority === 0 && !activeRepos.has(unit.repo));
         const nextIndex = index >= 0
@@ -1060,7 +1087,7 @@ export async function runSharedCollectionPlan({
           if (err instanceof RateLimitAbortError) {
             // This identity cannot safely spend its reserve. Leave the unit for another lane.
             pending.unshift(unit);
-            const cooldownMs = secondaryCooldownMs(err.details);
+            const cooldownMs = rateLimitCooldownMs(err.details);
             const lSummary = laneSummaries.get(identity);
             if (lSummary) {
               lSummary.deferred += 1;
@@ -1069,11 +1096,40 @@ export async function runSharedCollectionPlan({
               lSummary.durationMs += durationMs;
             }
             console.warn(`Collection window released: ${unit.repo} (${unit.window.start}..${unit.window.end}); identity lane ${identity} cooldown=${rateLimitCooldown(err.details)}.`);
-            if (cooldownMs > 0) {
-              if (pending.length === 0) return;
-              await new Promise(resolve => setTimeout(resolve, cooldownMs));
-              console.log(`Collection lane resumed: identity=${identity}, cooldown=${rateLimitCooldown(err.details)}`);
-              continue;
+            const hasReset = Number.isFinite(Number(err.details.reset)) && Number(err.details.reset) > 0;
+            const hasRetryAfter = Number.isFinite(Number(err.details.retryAfter)) && Number(err.details.retryAfter) > 0;
+            // Release repository exclusivity before waiting so healthy lanes can
+            // claim this window. The finally block also cleans up idempotently.
+            if (slowTimer) clearInterval(slowTimer);
+            activeRepos.delete(unit.repo);
+            activeWork.delete(unit.repo);
+            if (cooldownMs > 0 || hasReset || hasRetryAfter) {
+              recoveryDeadline ??= Date.now() + MAX_LANE_RECOVERY_MS;
+              const hasPendingWork = () => pending.length > 0;
+              if (!hasPendingWork() || Date.now() + cooldownMs >= recoveryDeadline) return;
+              try {
+                if (!await waitForRateLimitCooldown(cooldownMs, identity, hasPendingWork)) return;
+                let refreshedBudget = 0;
+                for (let refresh = 0; refresh < MAX_BUDGET_REFRESHES; refresh += 1) {
+                  if (!hasPendingWork() || Date.now() >= recoveryDeadline) return;
+                  refreshedBudget = await withRetry(() => client.refreshBudget());
+                  if (refreshedBudget > RATE_LIMIT_RESERVE) break;
+                  if (refresh === MAX_BUDGET_REFRESHES - 1 || Date.now() + 60_000 >= recoveryDeadline) {
+                    console.warn(`Collection lane recovery exhausted: identity=${identity}; unfinished windows deferred`);
+                    return;
+                  }
+                  console.warn(`GitHub quota still exhausted for identity=${identity}; polling again in 60s`);
+                  if (!await waitForRateLimitCooldown(60_000, identity, hasPendingWork)) return;
+                }
+                console.log(`Collection lane resumed: identity=${identity}, cooldown=${rateLimitCooldown(err.details)}, remainingBudget=${refreshedBudget}`);
+                continue;
+              } catch (refreshError) {
+                // A failed budget probe must not abort healthy sibling lanes or
+                // lose the released window. Never log the credential-bearing request.
+                const message = refreshError instanceof Error ? refreshError.message : 'unknown error';
+                console.warn(`Collection lane recovery failed: identity=${identity} error="${message}"; unfinished windows deferred`);
+                return;
+              }
             }
             return;
           }
@@ -1097,8 +1153,10 @@ export async function runSharedCollectionPlan({
           }
         } finally {
           if (slowTimer) clearInterval(slowTimer);
-          activeRepos.delete(unit.repo);
-          activeWork.delete(unit.repo);
+          if (activeWork.get(unit.repo)?.lane === identity) {
+            activeRepos.delete(unit.repo);
+            activeWork.delete(unit.repo);
+          }
         }
       }
     }));
