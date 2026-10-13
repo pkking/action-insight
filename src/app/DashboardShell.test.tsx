@@ -369,6 +369,15 @@ describe('DashboardShell', () => {
     expect(screen.getByTestId('chart').getAttribute('data-len')).toBe('1');
   });
 
+  it('explains that PR CI Runtime is an elapsed span rather than cumulative execution', () => {
+    render(<DashboardShell repoOptions={repoOptions} result={rowResult()} searchParams={{}} />);
+
+    fireEvent.click(screen.getAllByLabelText('Metric definition')[1]);
+
+    expect(screen.getByText(/Elapsed CI span: earliest associated completed workflow attempt/i)).toBeInTheDocument();
+    expect(screen.getByText(/not cumulative job or workflow execution time/i)).toBeInTheDocument();
+  });
+
   it('renders each PR run as a time-series chart observation', () => {
     const result = rowResult();
     result.series = [
