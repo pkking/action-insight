@@ -45,6 +45,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(MODULE.parse_config(str(config)), {"o/r": ["E2E", "Nightly"]})
         self.assertEqual(MODULE.parse_config_entries(str(config))["o/r"][0]["file"], "e2e.yml")
 
+
     def test_workflow_file_normalizes_dynamic_run_name(self):
         runs = [{"name": "PR #123 - dynamic title", "workflow_file": "pr-test.yml"}]
         MODULE.normalize_configured_workflows(
@@ -156,6 +157,83 @@ class ConfigTests(unittest.TestCase):
         output = "/tmp/ci-effective-resource-pool.xlsx"
         MODULE.write_excel(output, {"资源池利用率": [{"项目": "o/r", "资源类型": "A3", "资源池卡数": 10, "消耗卡时": 5}]})
         self.assertEqual(len(load_workbook(output)["资源池利用率"]._charts), 1)
+
+
+class MachineHoursTests(unittest.TestCase):
+    def job(self, **changes):
+        return {"status": "completed", "started_at": "2026-07-15T10:00:00Z",
+                "completed_at": "2026-07-15T11:00:00Z",
+                "card_model": "linux-aarch64-a2", "card_count": 2, "labels": [], **changes}
+
+    def rows(self, jobs):
+        return MODULE.build_machine_hours_rows({"o/r": {"jobs": jobs}})
+
+    def test_different_units_have_separate_subtotals_and_children(self):
+        rows = self.rows([self.job(), self.job(card_model=None, card_count=None, labels=["linux-amd64-runner-cpu-4"])])
+        parent, card, cpu = rows
+        self.assertEqual((parent["加速卡机时"], parent["CPU核时"], parent["未知成本样本"]), (2, 4, 0))
+        self.assertEqual((card["资源类型"], card["加速卡机时"], card["CPU核时"]), ("A2", 2, None))
+        self.assertEqual((cpu["资源类型"], cpu["加速卡机时"], cpu["CPU核时"]), ("CPU", None, 4))
+        self.assertTrue(all(row["仓库"] == "o/r" for row in rows))
+        self.assertNotIn("机时", parent)  # no mixed-unit total
+        self.assertEqual(parent["加速卡机时"], sum(row["加速卡机时"] or 0 for row in rows[1:]))
+
+    def test_unknown_quantity_is_not_guessed_as_one_runner(self):
+        parent, = self.rows([self.job(card_model=None, card_count=None, labels=["ubuntu-latest"])])
+        self.assertEqual((parent["加速卡机时"], parent["CPU核时"], parent["未知成本样本"]), (0, 0, 1))
+
+    def test_invalid_quantities_and_cpu_models_are_excluded(self):
+        for count in (0, -1, True, 1.5, "2"):
+            with self.subTest(count=count):
+                parent, = self.rows([self.job(card_count=count, labels=["linux-aarch64-a2-4"])])
+                self.assertEqual(parent["未知成本样本"], 1)
+                self.assertEqual(parent["加速卡机时"], 0)
+        parent, = self.rows([self.job(card_model="linux-aarch64-cpu"), self.job(card_model="unknown"),
+                            self.job(card_model=None, card_count=None, labels=["linux-aarch64-a2-0"]),
+                            self.job(card_model=None, card_count=None, labels=["linux-amd64-cpu-0"])])
+        self.assertEqual(parent["未知成本样本"], 4)
+
+    def test_bad_timestamps_are_counted_and_excluded(self):
+        jobs = [self.job(started_at=None), self.job(completed_at="garbage"),
+                self.job(completed_at="2026-07-15T09:00:00Z"),
+                self.job(completed_at="2026-07-15T11:00:00")]
+        parent, = self.rows(jobs)
+        self.assertEqual((parent["无效时间样本"], parent["未知成本样本"], parent["加速卡机时"]), (4, 4, 0))
+
+    def test_zero_duration_is_valid_and_nonterminal_jobs_are_separate(self):
+        parent, child = self.rows([self.job(completed_at="2026-07-15T10:00:00Z"), self.job(status="in_progress")])
+        self.assertEqual((parent["加速卡机时"], parent["未知成本样本"], parent["非终态样本"]), (0, 0, 1))
+        self.assertEqual(child["加速卡机时"], 0)
+
+    def test_empty_repositories_and_a3_physical_card_convention(self):
+        self.assertEqual(MODULE.build_machine_hours_rows({}), [])
+        parent, = MODULE.build_machine_hours_rows({"o/empty": {"jobs": []}})
+        self.assertEqual(parent["加速卡机时"], 0)
+        parent, child = self.rows([self.job(card_model="linux-aarch64-a3", card_count=4)])
+        self.assertEqual((parent["加速卡机时"], child["加速卡机时"]), (2, 2))
+
+    def test_main_writes_resource_hours_sheet_with_unit_comments(self):
+        import tempfile
+        from unittest.mock import patch
+        from openpyxl import load_workbook
+        data = {"runs": [_run(1, "E2E", 3600)],
+                "jobs": [{**_job(10, 1, "test", 3600), **self.job()}],
+                "steps": [], "pr_metrics": [], "pr_workflows": []}
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "report.xlsx"
+            with patch.object(MODULE, "PostgresClient"), patch.object(MODULE, "get_repo_ids", return_value={"o/r": 1}), \
+                 patch.object(MODULE, "fetch_all_for_repo", return_value=data), \
+                 patch.object(MODULE, "fetch_recent_resource_jobs", return_value={}), \
+                 patch.object(sys, "argv", ["ci_analyze.py", "--repo", "o/r", "--from", "2026-07-15", "--to", "2026-07-15", "--skip-steps", "--no-drilldown", "--output", str(output)]):
+                MODULE.main()
+            workbook = load_workbook(output)
+            sheet = workbook["仓库机时"]
+            self.assertEqual(sheet["C1"].value, "加速卡机时")
+            self.assertEqual(sheet["D1"].value, "CPU核时")
+            self.assertEqual(sheet["C2"].value, 2)
+            self.assertIn("不可相加", sheet["C1"].comment.text)
+            self.assertEqual(sheet["D2"].value, 0)
+            workbook.close()
 
 
 class FetchJobsTests(unittest.TestCase):
