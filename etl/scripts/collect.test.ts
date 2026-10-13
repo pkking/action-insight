@@ -8,6 +8,7 @@ import {
   jitteredRetryDelayMs,
   parseRunnerResourceLabels,
   rateLimitCooldown,
+  rateLimitCooldownMs,
   resetSharedRetryCount,
   resolveCollectionHeartbeatMs,
   resolveCollectionSlowOperationMs,
@@ -279,6 +280,13 @@ describe('rateLimitCooldown', () => {
     expect(rateLimitCooldown({ retryAfter: '60', reset: '0' })).toBe('60s');
     expect(rateLimitCooldown({ reset: '1712345678' })).toBe('until=2024-04-05T19:34:38.000Z');
     expect(rateLimitCooldown({})).toBe('until=next-cycle');
+  });
+
+  it('waits through Retry-After or until the primary reset plus a safety margin', () => {
+    expect(rateLimitCooldownMs({ retryAfter: '60', reset: '0' }, 0)).toBe(60_000);
+    expect(rateLimitCooldownMs({ remaining: '0', reset: '1712345678' }, 1_712_345_000_000)).toBe(679_000);
+    expect(rateLimitCooldownMs({ remaining: '0', reset: '1712345678' }, 1_712_346_000_000)).toBe(0);
+    expect(rateLimitCooldownMs({ remaining: '0' }, 0)).toBe(0);
   });
 });
 
@@ -1759,16 +1767,20 @@ describe('collect rate limit handling', () => {
     expect(logSpy).toHaveBeenCalledWith('Collection summary: completed=1, failures=0, deferred=0, retries=1');
   });
 
-  it('reports reset cooldown when identity lane depletes its budget reserve', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('refreshes an exhausted lane budget and continues the unfinished window', async () => {
+    let rateLimitCalls = 0;
     const fakeClient = {
       request: vi.fn(async (route: string) => {
         if (route === 'GET /user') return { data: { id: 1, login: 'collector' }, headers: {} };
-        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 10, reset: 1712345678 } } }, headers: {} };
+        if (route === 'GET /rate_limit') {
+          rateLimitCalls += 1;
+          return { data: { resources: { core: { remaining: rateLimitCalls === 1 ? 10 : 12, reset: 1712345678 } } }, headers: {} };
+        }
         return { data: {}, headers: {} };
       }),
     };
     vi.spyOn(github, 'createOctokit').mockReturnValue(fakeClient as never);
+    const collectRepoImpl = vi.fn(async (client) => { await client.request('GET /any'); });
 
     const result = await runSharedCollectionPlan({
       tokens: ['token'],
@@ -1776,13 +1788,79 @@ describe('collect rate limit handling', () => {
       retentionDays: 90,
       cliOptions: { forceFullBackfill: false, reverse: false },
       reposConfig: { repos: [] },
-      collectRepoImpl: vi.fn(async (client) => {
-        await client.request('GET /any');
-      }) as never,
+      collectRepoImpl: collectRepoImpl as never,
     });
 
-    expect(result.deferred).toBe(1);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('cooldown=until=2024-04-05T19:34:38.000Z.'));
+    expect(result).toMatchObject({ completed: 1, deferred: 0, failures: [] });
+    expect(result).toEqual(expect.objectContaining({ repositories: expect.anything() }));
+    expect(collectRepoImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['reset', 'refresh-failure', 'low-budget', 'distant-reset'] as const)('bounds lane recovery: %s', async (scenario) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-18T00:00:00Z'));
+    try {
+      let probes = 0;
+      const reset = Math.floor(Date.now() / 1000) + (scenario === 'distant-reset' ? 7200 : 1);
+      const request = vi.fn(async (route: string) => {
+        if (route === 'GET /user') return { data: { id: 1 }, headers: {} };
+        if (route === 'GET /rate_limit') {
+          probes += 1;
+          if (probes > 1 && scenario === 'refresh-failure') throw Object.assign(new Error('network unavailable'), { status: 500 });
+          return { data: { resources: { core: { remaining: probes > 1 && scenario === 'reset' ? 50 : 10, reset } } }, headers: {} };
+        }
+        return { data: {}, headers: {} };
+      });
+      vi.spyOn(github, 'createOctokit').mockReturnValue({ request } as never);
+      const scheduled = runSharedCollectionPlan({
+        tokens: ['token'],
+        work: [{ repo: 'acme/a', window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 }],
+        retentionDays: 90, cliOptions: { forceFullBackfill: false, reverse: true }, reposConfig: { repos: [] },
+        collectRepoImpl: vi.fn(async (client) => { await client.request('GET /any'); }) as never,
+      });
+      const assertion = expect(scheduled).resolves.toMatchObject({
+        completed: scenario === 'reset' ? 1 : 0,
+        deferred: scenario === 'reset' ? 0 : 1,
+        failures: [],
+      });
+      await vi.advanceTimersByTimeAsync(400_000);
+      await assertion;
+      expect(probes).toBe(scenario === 'reset' ? 2 : scenario === 'low-budget' ? 7 : scenario === 'refresh-failure' ? 5 : 1);
+      expect(persistCollectionWindow).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('releases the limited repository to a healthy lane and stops needless cooldown probes', async () => {
+    vi.useFakeTimers();
+    try {
+      const first = { request: vi.fn(async (route: string) => route === 'GET /user'
+        ? { data: { id: 1 }, headers: {} }
+        : { data: { resources: { core: { remaining: 10, reset: Math.floor(Date.now() / 1000) + 3600 } } }, headers: {} }) };
+      const second = { request: vi.fn(async (route: string) => route === 'GET /user'
+        ? { data: { id: 2 }, headers: {} }
+        : { data: { resources: { core: { remaining: 100 } } }, headers: {} }) };
+      vi.spyOn(github, 'createOctokit').mockReturnValueOnce(first as never).mockReturnValueOnce(second as never);
+      const collected: string[] = [];
+      const scheduled = runSharedCollectionPlan({
+        tokens: ['first', 'second'],
+        work: ['acme/a', 'acme/b'].map(repo => ({ repo, window: { start: '2026-04-17', end: '2026-04-18' }, priority: 0 })),
+        retentionDays: 90, cliOptions: { forceFullBackfill: false, reverse: true }, reposConfig: { repos: [] },
+        collectRepoImpl: vi.fn(async (client, repo) => {
+          await client.request('GET /any');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          collected.push(repo);
+        }) as never,
+      });
+      const assertion = expect(scheduled).resolves.toMatchObject({ completed: 2, deferred: 0, failures: [] });
+      await vi.advanceTimersByTimeAsync(61_000);
+      await assertion;
+      expect(collected).toEqual(['acme/b', 'acme/a']);
+      expect(first.request).toHaveBeenCalledTimes(2); // discovery only; no obsolete budget refresh
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('ends partial with coverage reporting when collection windows are deferred', async () => {
@@ -1791,7 +1869,7 @@ describe('collect rate limit handling', () => {
     const fakeClient = {
       request: vi.fn(async (route: string) => {
         if (route === 'GET /user') return { data: { id: 1, login: 'collector' }, headers: {} };
-        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 10, reset: 1712345678 } } }, headers: {} };
+        if (route === 'GET /rate_limit') return { data: { resources: { core: { remaining: 10 } } }, headers: {} };
         return { data: {}, headers: {} };
       }),
     };
