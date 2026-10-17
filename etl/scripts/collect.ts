@@ -127,11 +127,42 @@ export function resetSharedRetryCount(): void {
   sharedRetryCount = 0;
 }
 
+function safeErrorDiagnostics(err: unknown, depth = 0): Record<string, unknown> {
+  const redact = (text: string) => text
+    .replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
+    .replace(/\b(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]+/gi, '[REDACTED]')
+    .replace(/\b(token|authorization|password)["']?\s*[:=]\s*["']?[^\s,"';}]+/gi, '$1=[REDACTED]')
+    .replace(/(\w+:\/\/)[^\s/@]+:[^\s/@]+@/g, '$1[REDACTED]@');
+  if (typeof err !== 'object' || err === null) return { message: redact(String(err)) };
+  const value = err as Record<string, unknown>;
+  const response = value.response && typeof value.response === 'object'
+    ? value.response as Record<string, unknown> : {};
+  const headers = response.headers && typeof response.headers === 'object'
+    ? response.headers as Record<string, unknown> : {};
+  const message = typeof value.message === 'string' ? redact(value.message) : undefined;
+  const stack = typeof value.stack === 'string' ? redact(value.stack) : undefined;
+  const cause = depth < 2 && value.cause !== undefined ? safeErrorDiagnostics(value.cause, depth + 1) : undefined;
+  return Object.fromEntries(Object.entries({
+    name: typeof value.name === 'string' ? value.name : undefined,
+    message,
+    stack,
+    cause,
+    code: typeof value.code === 'string' ? value.code : undefined,
+    status: typeof value.status === 'number' ? value.status : response.status,
+    requestId: headers['x-github-request-id'] ?? headers['X-GitHub-Request-Id'],
+    retryAfter: headers['retry-after'] ?? headers['Retry-After'],
+    rateLimitRemaining: headers['x-ratelimit-remaining'] ?? headers['X-RateLimit-Remaining'],
+    rateLimitReset: headers['x-ratelimit-reset'] ?? headers['X-RateLimit-Reset'],
+  }).filter(([, item]) => item !== undefined)
+    .map(([key, item]) => [key, typeof item === 'string' ? redact(item) : item]));
+}
+
 export async function withRetry<T>(
   fn: () => Promise<T>,
   maxRetries = 3,
   baseDelayMs = 2000,
   onRetry?: (err: unknown, attempt: number) => void,
+  context = 'operation',
 ): Promise<T> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -144,7 +175,7 @@ export async function withRetry<T>(
       onRetry?.(err, attempt + 1);
       const delay = baseDelayMs * 2 ** attempt;
       const jitteredDelay = jitteredRetryDelayMs(delay);
-      warn(`Transient API error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${jitteredDelay}ms...`, err);
+      console.warn(`Transient operation error: ${JSON.stringify({ context, attempt: attempt + 1, maxRetries, nextDelayMs: jitteredDelay, error: safeErrorDiagnostics(err) })}`);
       await new Promise(resolve => setTimeout(resolve, jitteredDelay));
     }
   }
@@ -574,7 +605,7 @@ export async function collectRepo(
   options: CollectCliOptions,
   reposConfig: ReposConfig = { repos: [{ repo, workflows: [] }] },
   plannedWindows?: CollectionWindow[],
-  onPhaseChange?: (phase: 'listing' | 'jobs' | 'persisting') => void,
+  onPhaseChange?: (phase: 'listing' | 'jobs' | 'persisting', detail?: string) => void,
   onRetry?: (err: unknown, attempt: number) => void,
 ): Promise<{ cachedAttempts: number; collectedRuns: number }> {
   console.log(`Processing ${repo}...`);
@@ -623,7 +654,9 @@ export async function collectRepo(
       : null;
 
     while (true) {
-      log(`Fetching page ${page} for ${createdParam}...`);
+      const requestContext = `repo=${repo} workflow=${workflowId ?? 'all'} window=${window.start}..${window.end} page=${page} created=${createdParam}`;
+      onPhaseChange?.('listing', `GET workflow-runs ${requestContext}`);
+      log(`Fetching page ${page} for ${createdParam}... context=${requestContext}`);
       const startTime = Date.now();
       let data;
       try {
@@ -641,7 +674,7 @@ export async function collectRepo(
           : octokit.request('GET /repos/{owner}/{repo}/actions/runs', { owner, repo: repoName, per_page: PER_PAGE, page, created: createdParam }));
           validateGitHubArrayResponse(response, 'workflow_runs', `${repo} workflow=${workflowId ?? 'all'} runs page=${page} window=${createdParam}`);
           return response;
-        });
+        }, 3, 2000, undefined, `GET workflow-runs ${requestContext}`);
         data = response.data;
         const etag = page === 1 && typeof response.headers?.etag === 'string' ? response.headers.etag : undefined;
         if (workflowId && etag) {
@@ -772,7 +805,7 @@ export async function collectRepo(
       throw new SaturatedCollectionWindowError(window);
     }
 
-    console.log(`Splitting saturated window (${window.start}..${window.end}) into ${childWindows.length} sub-windows`);
+    console.warn(`Collection window split: ${JSON.stringify({ repo, workflow: workflowId ?? 'all', parent: window, reason: 'result-cap', maxResultsPerQuery: MAX_RESULTS_PER_QUERY, children: childWindows })}`);
     const mergedRuns = new Map<string, Run>();
     const validators: RunListValidator[] = [];
 
@@ -1028,6 +1061,7 @@ export async function runSharedCollectionPlan({
         const repoConfig = findRepoConfig(reposConfig, unit.repo);
         const workflow = repoConfig.workflows.map(w => w.file || w.workflow).filter(Boolean).join(',') || 'all';
         let currentPhase = 'running';
+        let currentDetail = 'starting';
         const unitStartTime = Date.now();
         const retriesBefore = getSharedRetryCount();
         let unitRetried = 0;
@@ -1040,6 +1074,7 @@ export async function runSharedCollectionPlan({
           workflow,
           window: unit.window,
           get phase() { return currentPhase; },
+          get detail() { return currentDetail; },
           budget: () => (client as { getBudget?: () => number }).getBudget?.() ?? 0,
         });
 
@@ -1047,7 +1082,7 @@ export async function runSharedCollectionPlan({
 
         const slowTimer = COLLECTION_SLOW_OPERATION_MS > 0 ? setInterval(() => {
           const elapsedSeconds = Math.floor((Date.now() - unitStartTime) / 1000);
-          console.warn(`Collection slow-operation: lane=${identity} repo=${unit.repo} window=${unit.window.start}..${unit.window.end} phase=${currentPhase} elapsed=${elapsedSeconds}s`);
+          console.warn(`Collection slow-operation: lane=${identity} repo=${unit.repo} window=${unit.window.start}..${unit.window.end} phase=${currentPhase} elapsed=${elapsedSeconds}s detail=${activeWork.get(unit.repo)?.detail ?? 'unknown'}`);
         }, COLLECTION_SLOW_OPERATION_MS) : undefined;
         slowTimer?.unref?.();
 
@@ -1059,7 +1094,7 @@ export async function runSharedCollectionPlan({
             cliOptions,
             reposConfig,
             [unit.window],
-            (phase: 'listing' | 'jobs' | 'persisting') => { currentPhase = phase; },
+            (phase: 'listing' | 'jobs' | 'persisting', detail?: string) => { currentPhase = phase; currentDetail = detail ?? phase; },
             onRetry,
           )) as { cachedAttempts?: number } | undefined;
           completed += 1;
@@ -1126,17 +1161,22 @@ export async function runSharedCollectionPlan({
               } catch (refreshError) {
                 // A failed budget probe must not abort healthy sibling lanes or
                 // lose the released window. Never log the credential-bearing request.
-                const message = refreshError instanceof Error ? refreshError.message : 'unknown error';
-                console.warn(`Collection lane recovery failed: identity=${identity} error="${message}"; unfinished windows deferred`);
+                console.warn(`Collection lane recovery failed: identity=${identity} error=${JSON.stringify(safeErrorDiagnostics(refreshError))}; unfinished windows deferred`);
                 return;
               }
             }
             return;
           }
-          const message = err instanceof Error ? err.message : String(err);
+          const diagnostics = safeErrorDiagnostics(err);
+          const message = typeof diagnostics.message === 'string' ? diagnostics.message : 'unknown error';
+          const failureContext = {
+            lane: identity, repo: unit.repo, workflow, window: unit.window,
+            phase: currentPhase, detail: currentDetail, durationMs, retries: deltaRetries,
+            remainingBudget: (client as { getBudget?: () => number }).getBudget?.() ?? null,
+            error: diagnostics,
+          };
           failures.push(`${unit.repo} (${unit.window.start}..${unit.window.end}): ${message}`);
-          console.error(`Collection unit failed: lane=${identity} repo=${unit.repo} window=${unit.window.start}..${unit.window.end} duration=${durationMs}ms error="${message}"`);
-          error(`Failed collection window ${unit.repo} (${unit.window.start}..${unit.window.end}):`, err);
+          console.error(`Collection unit failed: ${JSON.stringify(failureContext)}`);
 
           const rSummary = repoSummaries.get(unit.repo);
           if (rSummary) {

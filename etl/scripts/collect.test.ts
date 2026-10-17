@@ -228,6 +228,41 @@ describe('withRetry', () => {
     expect(getSharedRetryCount()).toBe(2);
   });
 
+  it.each([
+    'ghp_supersecret',
+    'github_pat_supersecret',
+    'Bearer opaque-secret',
+    'token=opaque-secret',
+    '"token": "opaque-secret"',
+    'authorization: opaque-secret',
+    'password=opaque-secret',
+    'postgresql://db-user:opaque-secret@localhost/db',
+  ])('logs retry context and redacts credentials: %s', async (credential) => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const cause = new Error(`underlying failure ${credential}`);
+      const err = Object.assign(new Error(`request failed ${credential}`, { cause }), {
+        status: 503,
+        response: { headers: { 'x-github-request-id': 'req-123', 'retry-after': '4' } },
+        request: { headers: { authorization: 'must-not-serialize-request' } },
+      });
+      const fn = vi.fn().mockRejectedValueOnce(err).mockResolvedValue('ok');
+      await expect(withRetry(fn, 1, 0, undefined, 'GET runs page=2')).resolves.toBe('ok');
+      const message = String(warnSpy.mock.calls[0][0]);
+      expect(message).toContain('GET runs page=2');
+      expect(message).toContain('req-123');
+      expect(message).toContain('503');
+      expect(message).toContain('[REDACTED]');
+      expect(message).not.toContain(credential);
+      expect(message).not.toContain('opaque-secret');
+      expect(message).not.toContain('must-not-serialize-request');
+      const diagnostic = JSON.parse(message.replace(/^Transient operation error: /, ''));
+      expect(diagnostic.error.cause.message).toContain('[REDACTED]');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it('throws immediately on non-transient errors without retry', async () => {
     const fn = vi.fn(async () => {
       const err = new Error('syntax error') as Error & { code: string };
@@ -1947,12 +1982,12 @@ describe('collect rate limit handling', () => {
 
     await vi.advanceTimersByTimeAsync(30_000);
     expect(warnSpy).toHaveBeenCalledWith(
-      'Collection slow-operation: lane=user:1 (collector) repo=acme/slow-repo window=2026-04-17..2026-04-18 phase=jobs elapsed=30s',
+      'Collection slow-operation: lane=user:1 (collector) repo=acme/slow-repo window=2026-04-17..2026-04-18 phase=jobs elapsed=30s detail=jobs',
     );
 
     await vi.advanceTimersByTimeAsync(30_000);
     expect(warnSpy).toHaveBeenCalledWith(
-      'Collection slow-operation: lane=user:1 (collector) repo=acme/slow-repo window=2026-04-17..2026-04-18 phase=jobs elapsed=60s',
+      'Collection slow-operation: lane=user:1 (collector) repo=acme/slow-repo window=2026-04-17..2026-04-18 phase=jobs elapsed=60s detail=jobs',
     );
 
     finishWork();
@@ -1995,9 +2030,14 @@ describe('collect rate limit handling', () => {
     expect(logSpy).toHaveBeenCalledWith(
       'Collection unit start: lane=user:1 (collector) repo=acme/fail window=2026-04-17..2026-04-18 priority=1',
     );
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringMatching(/^Collection unit failed: lane=user:1 \(collector\) repo=acme\/fail window=2026-04-17\.\.2026-04-18 duration=\d+ms error="disk full"$/),
-    );
+    const failureLog = String(errorSpy.mock.calls[0][0]);
+    expect(failureLog).toMatch(/^Collection unit failed: /);
+    expect(JSON.parse(failureLog.replace(/^Collection unit failed: /, ''))).toMatchObject({
+      repo: 'acme/fail',
+      phase: 'running',
+      detail: 'starting',
+      error: { message: 'disk full' },
+    });
   });
 
   it('aggregates per-repository and per-lane terminal metrics across multi-repo runs', async () => {
