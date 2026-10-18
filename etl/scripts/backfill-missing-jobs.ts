@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createOctokit, resolveGitHubTokens } from './github';
+import { fetchAdaptiveJobsForRunAttempt, InvalidJobsResponseError } from './github-jobs.ts';
 
 import { getDatabaseClient } from '../../src/lib/db.ts';
 import { writeWorkflowAttempts } from './pg-storage.ts';
@@ -53,7 +54,6 @@ interface JobRow {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const JOBS_PER_PAGE = 100;
 
 function warn(...args: unknown[]) {
   console.warn(`[${new Date().toISOString()}] WARN:`, ...args);
@@ -145,6 +145,7 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelayMs = 
       const status = typeof err === 'object' && err !== null ? (err as { status?: number }).status : undefined;
       const code = typeof err === 'object' && err !== null ? (err as { code?: string }).code : undefined;
       const transient =
+        err instanceof InvalidJobsResponseError ||
         (typeof status === 'number' && status >= 500 && status < 600) ||
         (typeof code === 'string' && ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ERR_SOCKET_TIMEOUT'].includes(code));
 
@@ -153,55 +154,24 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelayMs = 
       }
 
       const delay = baseDelayMs * 2 ** attempt;
-      warn(`Transient API error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`, err);
+      warn(`Transient API error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`, {
+        status: typeof status === 'number' ? status : undefined,
+      });
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
   throw lastErr;
 }
 
-async function fetchJobsForRunAttempt(
+export async function fetchJobsForRunAttempt(
   octokit: Octokit,
   owner: string,
   repo: string,
   runId: number,
   runAttempt: number,
 ): Promise<JobRow[]> {
-  const jobs: Array<Record<string, unknown>> = [];
-  for (let page = 1; ; page += 1) {
-    const response = await withRetry(async () => {
-      try {
-        if (runAttempt > 1) {
-          return await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs', {
-            owner,
-            repo,
-            run_id: runId,
-            attempt_number: runAttempt,
-            per_page: JOBS_PER_PAGE,
-            page,
-          });
-        }
-
-        return await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
-          owner,
-          repo,
-          run_id: runId,
-          per_page: JOBS_PER_PAGE,
-          page,
-        });
-      } catch (err) {
-        const status = typeof err === 'object' && err !== null ? (err as { status?: number }).status : undefined;
-        if (status === 404 || status === 422) {
-          warn(`Skipping run ${repo}#${runId} attempt ${runAttempt} because GitHub returned ${status}`);
-          return { data: { jobs: [] } };
-        }
-        throw err;
-      }
-    });
-    const pageJobs = (response.data as { jobs?: Array<Record<string, unknown>> }).jobs ?? [];
-    jobs.push(...pageJobs);
-    if (pageJobs.length < JOBS_PER_PAGE) break;
-  }
+  const { jobs } = await fetchAdaptiveJobsForRunAttempt(octokit, owner, repo, runId, runAttempt,
+    operation => withRetry(operation));
   return jobs.map((job) => {
     const rawSteps = Array.isArray(job.steps) ? job.steps as Array<Record<string, unknown>> : [];
     const steps: Step[] = rawSteps.map((step, index) => ({
@@ -318,7 +288,7 @@ async function fetchMissingAttempts(
   }
 }
 
-async function backfillRepo(repo: string, config: ReposConfig, days: number, token: string): Promise<void> {
+export async function backfillRepo(repo: string, config: ReposConfig, days: number, token: string): Promise<void> {
   const [owner, repoName] = repo.split('/');
   if (!owner || !repoName) {
     throw new Error(`Invalid repo format: ${repo}. Expected owner/repo`);

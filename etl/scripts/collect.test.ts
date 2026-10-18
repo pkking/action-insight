@@ -129,6 +129,30 @@ describe('malformed GitHub collection responses', () => {
     }
   });
 
+  it('leaves the window and validators uncheckpointed when every jobs page size fails', async () => {
+    try {
+      const request = vi.fn(async (route: string) => {
+        if (route.endsWith('/jobs')) throw Object.assign(new Error('gateway unavailable'), { status: 502 });
+        return { headers: { etag: 'not-committed' }, data: { workflow_runs: [{
+          id: 42, name: 'CI', head_branch: 'main', run_attempt: 2,
+          status: 'completed', conclusion: 'success', path: '.github/workflows/ci.yml',
+          created_at: '2026-04-14T10:00:00Z', updated_at: '2026-04-14T11:00:00Z',
+        }] } };
+      });
+      const pending = collectRepo({ request } as never, 'acme/widgets', 2,
+        { forceFullBackfill: false, reverse: true },
+        { repos: [{ repo: 'acme/widgets', workflows: [{ file: 'ci.yml' }] }] },
+        [{ start: '2026-04-14', end: '2026-04-14' }]);
+      const assertion = expect(pending).rejects.toMatchObject({ status: 502 });
+      await vi.runAllTimersAsync();
+      await assertion;
+      expect(persistCollectionWindow).not.toHaveBeenCalled();
+      expect(writeRunListValidator).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('fails with safe context after bounded retries and does not persist an invalid run page', async () => {
     try {
       const request = vi.fn().mockResolvedValue({ status: 200, data: { message: 'secret-body-not-for-logs' } });
