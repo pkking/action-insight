@@ -24,6 +24,7 @@ import {
   formatFreshnessReport,
 } from './pg-storage.ts';
 import { readPullRequestsFromPayload } from './github-utils.ts';
+import { fetchAdaptiveJobsForRunAttempt, InvalidJobsResponseError, type GitHubRunJobsResponse } from './github-jobs.ts';
 import type { GitHubApiPayload, PullRequestRef, Step } from '../../src/lib/types.ts';
 import { getRepoNames, parseReposConfig, type RepoConfigEntry, type ReposConfig } from './repos-config.ts';
 import { buildWorkflowAttempts, enrichRunWithWorkflowMetadata } from './workflow-attempts.ts';
@@ -98,7 +99,7 @@ function validateGitHubArrayResponse(
 }
 
 export function isTransientError(err: unknown): boolean {
-  if (err instanceof InvalidGitHubResponseError) return true;
+  if (err instanceof InvalidGitHubResponseError || err instanceof InvalidJobsResponseError) return true;
   if (typeof err !== 'object' || err === null) return false;
   const e = err as Record<string, unknown>;
   const status = e.status as number | undefined;
@@ -219,26 +220,6 @@ interface Job {
   resource_count?: number;
   githubPayload?: GitHubApiPayload;
   steps?: Step[];
-}
-
-interface GitHubJobPayload extends GitHubApiPayload {
-  id: number;
-  name: string;
-  status: string;
-  conclusion?: string | null;
-  created_at?: string;
-  started_at: string;
-  completed_at?: string;
-  html_url: string;
-  labels?: unknown;
-  runner_id?: unknown;
-  runner_name?: unknown;
-  runner_group_id?: unknown;
-  runner_group_name?: unknown;
-}
-
-interface GitHubRunJobsResponse {
-  jobs: GitHubJobPayload[];
 }
 
 interface RunListValidator {
@@ -469,15 +450,6 @@ function runAttemptKey(runId: number, runAttempt: number | undefined): string {
   return `${runId}:${runAttempt ?? 1}`;
 }
 
-async function fetchAllJobPages(fetchPage: (page: number) => Promise<GitHubRunJobsResponse>): Promise<GitHubRunJobsResponse> {
-  const jobs: GitHubJobPayload[] = [];
-  for (let page = 1; ; page += 1) {
-    const data = await fetchPage(page);
-    jobs.push(...data.jobs);
-    if (data.jobs.length < PER_PAGE) return { jobs };
-  }
-}
-
 export async function fetchJobsForRunAttempt(
   octokit: Octokit,
   owner: string,
@@ -485,43 +457,8 @@ export async function fetchJobsForRunAttempt(
   runId: number,
   runAttempt: number,
 ): Promise<GitHubRunJobsResponse> {
-  if (runAttempt > 1) {
-    try {
-      return await fetchAllJobPages(async (page) => {
-        const response = await withRetry(async () => {
-          const response = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs', {
-            owner,
-            repo,
-            run_id: runId,
-            attempt_number: runAttempt,
-            per_page: PER_PAGE,
-            page,
-          });
-          validateGitHubArrayResponse(response, 'jobs', `${owner}/${repo} run=${runId} attempt=${runAttempt} jobs page=${page}`);
-          return response;
-        });
-        return response.data as GitHubRunJobsResponse;
-      });
-    } catch (err) {
-      const status = typeof err === 'object' && err !== null ? (err as { status?: number }).status : undefined;
-      if (status !== 404 && status !== 422) throw err;
-    }
-  }
-
-  return fetchAllJobPages(async (page) => {
-    const response = await withRetry(async () => {
-      const response = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
-        owner,
-        repo,
-        run_id: runId,
-        per_page: PER_PAGE,
-        page,
-      });
-      validateGitHubArrayResponse(response, 'jobs', `${owner}/${repo} run=${runId} attempt=${runAttempt} jobs page=${page}`);
-      return response;
-    });
-    return response.data as GitHubRunJobsResponse;
-  });
+  return fetchAdaptiveJobsForRunAttempt(octokit, owner, repo, runId, runAttempt,
+    (operation, context) => withRetry(operation, 3, 2000, undefined, context));
 }
 
 async function persistCollectedRuns(
