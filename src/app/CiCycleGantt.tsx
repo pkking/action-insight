@@ -75,9 +75,13 @@ export function CiCycleGantt({
   );
   const mergePct = mergedAt ? pct(Date.parse(mergedAt)) : null;
 
-  const positionFromEvent = (e: React.MouseEvent | React.FocusEvent<HTMLElement>) => {
+  const positionFromEvent = (e: React.MouseEvent | React.FocusEvent<HTMLElement>): {
+    x: number;
+    y: number;
+    maxX: number;
+  } => {
     const container = containerRef.current;
-    if (!container) return { x: 0, y: 0 };
+    if (!container) return { x: 0, y: 0, maxX: 0 };
     const containerRect = container.getBoundingClientRect();
     const targetRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     if (e.type === 'focus') {

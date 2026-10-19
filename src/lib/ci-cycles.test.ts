@@ -104,16 +104,18 @@ describe('groupRunsIntoCycles', () => {
   });
 
   it('rolls up failed and cancelled jobs per run with capped, unique names', () => {
-    const failedJob = (id: number, name: string) => ({
+    const job = (id: number, name: string, conclusion: string) => ({
       id,
       runAttempt: 1,
       name,
       status: 'completed',
-      conclusion: 'failure',
+      conclusion,
       created_at: '',
       started_at: '',
       completed_at: '',
       html_url: '',
+      queueDurationInSeconds: 0,
+      durationInSeconds: 0,
     });
     const runs = [
       makeRun({
@@ -122,11 +124,11 @@ describe('groupRunsIntoCycles', () => {
         created_at: '2026-10-03T15:23:36Z',
         conclusion: 'failure',
         jobs: [
-          failedJob(1, 'npu-test-a'),
-          failedJob(2, 'npu-test-a'), // duplicate name collapses
-          failedJob(3, 'npu-test-b'),
-          { id: 4, runAttempt: 1, name: 'hung-job', status: 'completed', conclusion: 'cancelled', created_at: '', started_at: '', completed_at: '', html_url: '' },
-          { id: 5, runAttempt: 1, name: 'skipped-job', status: 'completed', conclusion: 'skipped', created_at: '', started_at: '', completed_at: '', html_url: '' },
+          job(1, 'npu-test-a', 'failure'),
+          job(2, 'npu-test-a', 'failure'), // duplicate name collapses
+          job(3, 'npu-test-b', 'failure'),
+          job(4, 'hung-job', 'cancelled'),
+          job(5, 'skipped-job', 'skipped'),
         ],
       }),
     ];

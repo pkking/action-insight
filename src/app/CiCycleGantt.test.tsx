@@ -38,6 +38,8 @@ function failedRun(id: number, created: string, end: string): Run {
         started_at: created,
         completed_at: end,
         html_url: '',
+        queueDurationInSeconds: 0,
+        durationInSeconds: 0,
       },
     ],
   });
