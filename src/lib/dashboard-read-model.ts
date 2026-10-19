@@ -1068,9 +1068,110 @@ export async function fetchWorkflowAttemptRows(
   }
 }
 
+export type WorkflowGroupRow = {
+  repoKey: string;
+  workflowFile: string;
+  workflowRef: string;
+  resourceModel: string;
+  machineHours: number;
+  unknownCostCount: number;
+  attemptCount: number;
+  successCount: number;
+  terminalCount: number;
+  avgWorkflowTotalDuration: number | null;
+  latestDate: string;
+};
+
+/**
+ * SQL-aggregated workflow groups (ADR-021): one row per
+ * (repo, workflow_file, workflow_ref, resource_model) with machine-hours,
+ * unknown-cost counts, and distinct-attempt stats, instead of transferring
+ * every workflow_jobs row (590K+ for a 14-day all-repo window) to Node.
+ * Attempt-level stats count DISTINCT (run_id, run_attempt) per group so a
+ * many-job attempt is not weighted by its job count.
+ */
+export async function fetchWorkflowGroupRows(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<WorkflowGroupRow[]> {
+  if (repoRows.length === 0) return [];
+  const client = await getDatabaseClient();
+  try {
+    const placeholders = pgPlaceholders(repoRows.length);
+    // Two-stage hash aggregation (590K job rows → per-group-attempt → per-group)
+    // inside a transaction that raises work_mem just for this query: the
+    // distinct-attempt rollup otherwise spills its sort to disk (EXPLAIN
+    // showed a 2.8MB external merge). SET LOCAL keeps the bump scoped.
+    await client.query('BEGIN');
+    let result: { rows: Record<string, unknown>[] };
+    try {
+      await client.query("SET LOCAL work_mem = '64MB'");
+      result = await client.query(
+        `WITH tracked AS (
+             SELECT r.repo_id, r.date, wa.run_id, wa.run_attempt,
+                    wa.workflow_file, wa.workflow_ref,
+                    wa.conclusion, wa.total_duration_seconds
+               FROM workflow_attempts wa
+               JOIN runs r ON r.id = wa.run_id
+              WHERE r.repo_id IN (${placeholders})
+                AND r.date >= $${repoRows.length + 1}
+                AND r.date <= $${repoRows.length + 2}
+                AND wa.tracked = 1
+         ), per_group_attempt AS (
+             SELECT t.repo_id, t.date, t.workflow_file, t.workflow_ref,
+                    COALESCE(j.resource_model, 'unknown') AS resource_model,
+                    t.run_id, t.run_attempt, t.conclusion, t.total_duration_seconds,
+                    SUM(CASE WHEN j.runtime_seconds >= 0 AND j.resource_count > 0
+                             THEN j.runtime_seconds * j.resource_count / 3600.0
+                             ELSE 0 END) AS attempt_mh,
+                    COUNT(*) FILTER (WHERE j.runtime_seconds IS NULL OR j.runtime_seconds < 0 OR j.resource_count IS NULL OR j.resource_count <= 0) AS attempt_unknown
+               FROM tracked t
+               JOIN workflow_jobs j
+                 ON j.run_id = t.run_id AND j.run_attempt = t.run_attempt
+              GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9
+         )
+         SELECT repo_id, workflow_file, workflow_ref, resource_model,
+                COALESCE(SUM(attempt_mh), 0) AS machine_hours,
+                SUM(attempt_unknown) AS unknown_cost_count,
+                MAX(date) AS latest_date,
+                COUNT(*) AS attempt_count,
+                COUNT(*) FILTER (WHERE conclusion = 'success') AS success_count,
+                COUNT(*) FILTER (WHERE conclusion IN ('success', 'failure', 'cancelled')) AS terminal_count,
+                AVG(total_duration_seconds) FILTER (WHERE total_duration_seconds >= 0) AS avg_total_duration
+           FROM per_group_attempt
+          GROUP BY 1, 2, 3, 4`,
+        [...repoRows.map((r) => r.id), startDate, endDate],
+      );
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    }
+    const rows = result.rows;
+    const idToKey = new Map(repoRows.map((r) => [r.id, r.key]));
+    return rows.map((row) => ({
+      repoKey: idToKey.get(Number(row.repo_id)) ?? 'unknown',
+      workflowFile: (row.workflow_file as string | null) ?? '',
+      workflowRef: (row.workflow_ref as string | null) ?? '',
+      resourceModel: String(row.resource_model),
+      machineHours: Number(row.machine_hours),
+      unknownCostCount: Number(row.unknown_cost_count),
+      attemptCount: Number(row.attempt_count),
+      successCount: Number(row.success_count),
+      terminalCount: Number(row.terminal_count),
+      avgWorkflowTotalDuration:
+        row.avg_total_duration == null ? null : Number(row.avg_total_duration),
+      latestDate: String(row.latest_date),
+    }));
+  } finally {
+    client.release();
+  }
+}
+
 export function buildWorkflowCards(
   attempts: WorkflowAttemptRow[],
-  jobRows: CostJobRow[],
+  groups: WorkflowGroupRow[],
   oneRepo: boolean,
 ): WorkflowCardSet {
   const terminal = attempts.filter((a) =>
@@ -1087,14 +1188,17 @@ export function buildWorkflowCards(
 
   const contributingRepoCount = new Set(attempts.map((a) => a.repoKey)).size;
 
-  // Highest-Machine-Hour workflow (one repo only). Derived from job rows so
-  // it reflects attributable cost, the same basis as the table.
+  // Highest-Machine-Hour workflow (one repo only). Derived from SQL-side
+  // group aggregates so it reflects attributable cost, the same basis as
+  // the table (ADR-021).
   const wfTotals = new Map<string, number>();
   if (oneRepo) {
-    for (const row of jobRows) {
-      const mh = machineHours(row.runtimeSeconds, row.resourceCount);
-      if (mh !== undefined && row.workflowFile) {
-        wfTotals.set(row.workflowFile, (wfTotals.get(row.workflowFile) ?? 0) + mh);
+    for (const group of groups) {
+      if (group.workflowFile) {
+        wfTotals.set(
+          group.workflowFile,
+          (wfTotals.get(group.workflowFile) ?? 0) + group.machineHours,
+        );
       }
     }
   }
@@ -1113,26 +1217,15 @@ export function buildWorkflowCards(
   };
 }
 
-export type WorkflowGroup = {
-  repoKey: string;
-  workflowFile: string;
-  workflowRef: string;
-  resourceModel: string;
-  machineHours: number;
-  unknownCostCount: number;
-  attempts: Map<string, { totalDuration?: number; conclusion: string | null }>;
-  latestDate: string;
-};
-
 /**
  * Pure transformation for the Workflow tab: attempt-scoped cards over the
  * full population, daily attempt-count series, and a grouped table (one row
  * per repo/workflow/ref/resource_model) bounded at the newest 500 groups.
- * Reuses the Cost grouping since the table contract is identical (spec §5.3).
+ * Groups arrive pre-aggregated from SQL (fetchWorkflowGroupRows, ADR-021).
  */
 export function buildWorkflowDashboardResult(
   attempts: WorkflowAttemptRow[],
-  jobRows: CostJobRow[],
+  groups: WorkflowGroupRow[],
   cards: WorkflowCardSet,
   oneRepo: boolean,
   query: Pick<DashboardQuery, 'page' | 'pageSize' | 'observationLimit'>,
@@ -1159,77 +1252,27 @@ export function buildWorkflowDashboardResult(
       : a.date.localeCompare(b.date),
   );
 
-  // Group jobs by (repo, workflow_file, workflow_ref, resource_model).
-  const groups = new Map<string, WorkflowGroup>();
-  for (const row of jobRows) {
-    const key = [
-      row.repoKey,
-      row.workflowFile ?? '',
-      row.workflowRef ?? '',
-      row.resourceModel ?? 'unknown',
-    ].join('\u0001');
-    let g = groups.get(key);
-    if (!g) {
-      g = {
-        repoKey: row.repoKey,
-        workflowFile: row.workflowFile ?? '',
-        workflowRef: row.workflowRef ?? '',
-        resourceModel: row.resourceModel ?? 'unknown',
-        machineHours: 0,
-        unknownCostCount: 0,
-        attempts: new Map(),
-        latestDate: '',
-      };
-      groups.set(key, g);
-    }
-    const mh = machineHours(row.runtimeSeconds, row.resourceCount);
-    if (mh !== undefined) g.machineHours += mh;
-    else g.unknownCostCount += 1;
-    const attemptKey = `${row.runId}:${row.runAttempt}`;
-    if (!g.attempts.has(attemptKey)) {
-      g.attempts.set(attemptKey, {
-        totalDuration:
-          row.attemptTotalDurationSeconds == null ||
-          row.attemptTotalDurationSeconds < 0
-            ? undefined
-            : row.attemptTotalDurationSeconds,
-        conclusion: row.attemptConclusion,
-      });
-    }
-    if (row.runDate > g.latestDate) g.latestDate = row.runDate;
-  }
-
-  const allRows: WorkflowTableRow[] = [...groups.values()].map((g) => {
-    const attemptList = [...g.attempts.values()];
-    const terminal = attemptList.filter((a) =>
-      a.conclusion ? TERMINAL_CONCLUSIONS.has(a.conclusion) : false,
-    );
-    const successCount = terminal.filter(
-      (a) => a.conclusion === 'success',
-    ).length;
-    const validDurations = attemptList
-      .map((a) => a.totalDuration)
-      .filter((v): v is number => v !== undefined);
-    return {
-      repoKey: g.repoKey,
-      workflowFile: g.workflowFile,
-      workflowRef: g.workflowRef,
-      resourceModel: g.resourceModel,
-      avgWorkflowTotalDuration:
-        validDurations.length > 0
-          ? validDurations.reduce((s, v) => s + v, 0) / validDurations.length
-          : undefined,
-      attemptCount: attemptList.length,
-      successCount,
-      failureRate:
-        terminal.length > 0
-          ? ((terminal.length - successCount) / terminal.length) * 100
-          : 0,
-      machineHours: g.machineHours,
-      unknownCostCount: g.unknownCostCount,
-      latestDate: g.latestDate,
-    };
-  });
+  // Groups arrive pre-aggregated from SQL (fetchWorkflowGroupRows, ADR-021):
+  // one row per (repo, workflow_file, workflow_ref, resource_model).
+  const allRows: WorkflowTableRow[] = groups.map((g) => ({
+    repoKey: g.repoKey,
+    workflowFile: g.workflowFile,
+    workflowRef: g.workflowRef,
+    resourceModel: g.resourceModel,
+    avgWorkflowTotalDuration:
+      g.avgWorkflowTotalDuration == null
+        ? undefined
+        : g.avgWorkflowTotalDuration,
+    attemptCount: g.attemptCount,
+    successCount: g.successCount,
+    failureRate:
+      g.terminalCount > 0
+        ? ((g.terminalCount - g.successCount) / g.terminalCount) * 100
+        : 0,
+    machineHours: g.machineHours,
+    unknownCostCount: g.unknownCostCount,
+    latestDate: g.latestDate,
+  }));
   allRows.sort(
     (a, b) =>
       b.latestDate.localeCompare(a.latestDate) ||
@@ -1242,9 +1285,10 @@ export function buildWorkflowDashboardResult(
   const pageStart = (query.page - 1) * query.pageSize;
   const pagedRows = observations.slice(pageStart, pageStart + query.pageSize);
 
-  const unknownResourceSamples = jobRows.filter(
-    (r) => machineHours(r.runtimeSeconds, r.resourceCount) === undefined,
-  ).length;
+  const unknownResourceSamples = groups.reduce(
+    (sum, g) => sum + g.unknownCostCount,
+    0,
+  );
 
   return {
     tab: 'workflow',
@@ -1905,14 +1949,14 @@ export const getDashboardReadModel = cache(
     }
 
     if (input.tab === 'workflow') {
-      const [attempts, jobRows] = await Promise.all([
+      const [attempts, groups] = await Promise.all([
         fetchWorkflowAttemptRows(repoRows, input.startDate, input.endDate),
-        fetchCostJobRows(repoRows, input.startDate, input.endDate),
+        fetchWorkflowGroupRows(repoRows, input.startDate, input.endDate),
       ]);
-      const cards = buildWorkflowCards(attempts, jobRows, repoRows.length === 1);
+      const cards = buildWorkflowCards(attempts, groups, repoRows.length === 1);
       return buildWorkflowDashboardResult(
         attempts,
-        jobRows,
+        groups,
         cards,
         repoRows.length === 1,
         {
