@@ -49,14 +49,21 @@ counts and per-attempt averages).
 
 ## Trade-offs and scope
 
-- The SQL aggregation is ~0.5s for the default window on the current
-  Docker-backed Postgres — the remaining floor is the join + hash work
-  over 590K rows, not transfer. Further gains need pre-aggregated
-  tables/materialized views, which are out of scope.
-- The Job, Queue, Cost, and PR tabs still transfer full window job rows
-  (`fetchJobRows`, `fetchCostJobRows`, `fetchPrJobTimeline`) and remain the
-  slowest tabs (~2s). They can adopt the same pattern in follow-ups; this
-  ADR only changes the Workflow tab path. `fetchCostJobRows` is retained
-  for the Cost tab.
-- Live aggregation keeps freshness exact (no cache invalidation); a
-  materialized rollup would trade that for speed.
+- **Amendment (follow-up)**: the Job, Queue, and Cost tabs adopted the same
+  pushdown, replacing `fetchJobRows`/`fetchCostJobRows` (both removed).
+  Job/Queue groups aggregate at job grain (no attempt dedup — every job row
+  counts); Queue percentiles use `percentile_disc`, which matches the
+  repository's nearest-rank convention (ceil(p·N) position, verified by the
+  parity harness). The Cost tab reuses `fetchWorkflowGroupRows` (identical
+  group grain and aggregates) plus a daily machine-hours series whose
+  (repo, date) points exist only when at least one attributable job
+  contributed — unknown-cost-only days are absent, matching the legacy
+  series. The PR tab's `fetchPrJobTimeline` still transfers window job
+  timestamps and remains the last row-transfer path.
+- Measured on the default 14-day all-repo window (single benchmark, not a
+  guarantee): workflow groups ~0.5s; job groups ~0.9s (5-key hash
+  aggregation over ~590K rows; the floor is per-row expression evaluation,
+  not transfer); queue groups ~0.9s; tab totals dropped from ~2.0s to
+  ~0.5–1.1s with parallel fetches.
+- Further gains need pre-aggregated tables/materialized views, which remain
+  out of scope.
