@@ -1,5 +1,6 @@
 import { getDatabaseClient, getRepoId } from './db';
 import { toPgSql, pgPlaceholders } from './pg-utils';
+import { mergeAttemptRows } from './ci-cycles';
 import { computePullRequestAttemptMetrics } from './pr-metrics';
 import type { PullRequestDetailFile, PullRequestIndexFile, PullRequestMetricsSummary, Run } from './types';
 
@@ -119,15 +120,56 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
     [prData.id as number],
   ).catch(() => ({ rows: [] }));
 
+  // ADR-020: branch-matched enrichment. Runs on the PR's branch (pull-request
+  // events only, tracked attempts) bounded by the PR lifecycle window —
+  // PR created_at → merged_at (or now). Recovers cycles missed by partial
+  // SHA→PR resolution; linked rows always win and branch-matched runs are
+  // tagged for UI disclosure.
+  const prBranch = (prData.branch as string) || '';
+  const prCreatedAt = (prData.created_at as string) || '';
+  const branchUpperBound =
+    (prData.merged_at as string) || new Date().toISOString();
+  let branchMatchedRows: Array<{ run_id: number; run_attempt: number }> = [];
+  if (prBranch && prCreatedAt) {
+    const { rows: branchRows } = await client
+      .query(
+        toPgSql(
+          `SELECT wa.run_id, wa.run_attempt
+             FROM workflow_attempts wa
+             JOIN runs r ON r.id = wa.run_id
+            WHERE r.repo_id = ?
+              AND r.head_branch = ?
+              AND r.event IN ('pull_request', 'pull_request_target', 'pull_request_review')
+              AND wa.tracked = 1
+              AND r.created_at >= ?
+              AND r.created_at <= ?
+            LIMIT 500`,
+        ),
+        [repoId, prBranch, prCreatedAt, branchUpperBound],
+      )
+      .catch(() => ({ rows: [] }));
+    branchMatchedRows = branchRows as Array<{ run_id: number; run_attempt: number }>;
+  }
+
+  const mergedAttemptRows = mergeAttemptRows(
+    attemptRows as Array<{ run_id: number; run_attempt: number }>,
+    branchMatchedRows,
+  );
+  const branchMatchedKeys = new Set(
+    mergedAttemptRows
+      .filter((row) => row.branchMatched)
+      .map((row) => `${row.run_id}:${row.run_attempt}`),
+  );
+
   let workflows: Run[] = [];
 
-  if (attemptRows.length > 0) {
+  if (mergedAttemptRows.length > 0) {
     // Chunk to stay below SQLite's 999-variable limit (100 attempts = 200 vars);
     // merge and sort in TS since per-chunk ORDER BY isn't globally ordered.
     const runRows: Record<string, unknown>[] = [];
     const chunkSize = 100;
-    for (let i = 0; i < attemptRows.length; i += chunkSize) {
-      const chunk = attemptRows.slice(i, i + chunkSize);
+    for (let i = 0; i < mergedAttemptRows.length; i += chunkSize) {
+      const chunk = mergedAttemptRows.slice(i, i + chunkSize);
       const clauses = chunk.map((_, idx) => `(wa.run_id = $${idx * 2 + 1} AND wa.run_attempt = $${idx * 2 + 2})`).join(' OR ');
       const { rows: chunkRows } = await client.query(
         toPgSql(`SELECT r.*, wa.run_attempt, wa.status AS attempt_status,
@@ -160,7 +202,9 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
     for (const row of runRows) {
       const key = `${Number(row.id)}:${Number(row.run_attempt)}`;
       if (!runMap.has(key)) {
-        runMap.set(key, mapAttemptRunRow(row));
+        const mapped = mapAttemptRunRow(row);
+        if (branchMatchedKeys.has(key)) mapped.branchMatched = true;
+        runMap.set(key, mapped);
       }
       if (row.job_id != null) {
         const run = runMap.get(key)!;

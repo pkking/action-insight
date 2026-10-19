@@ -60,6 +60,8 @@ export interface Run {
   workflowMatchKind?: 'exact_ref' | 'glob_ref' | 'file_only';
   stepPolicyHash?: string;
   tracked?: boolean;
+  /** Read-time branch-matched attribution (ADR-020): run linked via PR lifecycle window, not pr_workflow_attempts. */
+  branchMatched?: boolean;
   pull_requests?: PullRequestRef[];
   jobs?: Job[];
   githubPayload?: GitHubApiPayload;

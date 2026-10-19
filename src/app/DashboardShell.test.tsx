@@ -415,7 +415,7 @@ describe('DashboardShell', () => {
     render(<DashboardShell repoOptions={repoOptions} result={rowResult()} searchParams={{}} />);
 
     // Before click: no drill-down content.
-    expect(screen.queryByText(/Machine-Hours by Resource Model/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Card-Hours by Resource Model/i)).not.toBeInTheDocument();
 
     // Click the PR title cell (not the <a>, which stops propagation) to trigger the row's lazy fetch.
     await act(async () => {
@@ -424,7 +424,7 @@ describe('DashboardShell', () => {
 
     // Loading state, then drill-down with resource summary + job.
     await waitFor(() => {
-      expect(screen.getByText(/Machine-Hours by Resource Model/i)).toBeInTheDocument();
+      expect(screen.getByText(/Card-Hours by Resource Model/i)).toBeInTheDocument();
     });
     expect(screen.getByText('build')).toBeInTheDocument();
     expect(screen.getByText('npu-a3')).toBeInTheDocument();
@@ -455,7 +455,7 @@ describe('DashboardShell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open chart details' }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Machine-Hours by Resource Model/i)).toBeInTheDocument();
+      expect(screen.getByText(/Card-Hours by Resource Model/i)).toBeInTheDocument();
     });
     expect(screen.getByText('build')).toBeInTheDocument();
   });
