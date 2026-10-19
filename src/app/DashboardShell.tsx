@@ -34,6 +34,11 @@ import {
   machineHours,
   summarizeMachineHoursByResourceModel,
 } from '@/lib/dashboard-metrics';
+import {
+  computeCardHoursSummary,
+  groupRunsIntoCycles,
+  summarizeCycleWalls,
+} from '@/lib/ci-cycles';
 import type {
   CostDashboardResult,
   DashboardReadResult,
@@ -187,6 +192,32 @@ function PrDrillDown({
     [allJobs],
   );
 
+  // ADR-020: per-push CI cycles + conclusion-split card-hours.
+  const ciCycles = useMemo(
+    () => (detail ? groupRunsIntoCycles(detail.workflows) : []),
+    [detail],
+  );
+  const cycleStats = useMemo(() => summarizeCycleWalls(ciCycles), [ciCycles]);
+  const branchMatchedRunCount = useMemo(
+    () =>
+      detail
+        ? detail.workflows.filter((run) => run.branchMatched).length
+        : 0,
+    [detail],
+  );
+  const cardHours = useMemo(
+    () =>
+      computeCardHoursSummary(
+        allJobs.map(({ job }) => ({
+          resourceModel: job.resource_model,
+          resourceCount: job.resource_count,
+          runtimeSeconds: job.runtimeInSeconds,
+          conclusion: job.conclusion,
+        })),
+      ),
+    [allJobs],
+  );
+
   if (loading) {
     return (
       <div className="px-6 py-4 text-sm text-neutral-500 dark:text-neutral-400">
@@ -213,36 +244,138 @@ function PrDrillDown({
 
   return (
     <div className="space-y-3 px-6 py-4">
-      {/* Machine-Hours by Resource Model */}
+      {/* Machine-Hours by Resource Model (ADR-020: totals + conclusion split) */}
       <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-950">
         <div className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
-          Machine-Hours by Resource Model
+          Card-Hours by Resource Model
         </div>
         {resourceSummary.length === 0 ? (
           <div className="mt-1 text-[11px] text-neutral-400 dark:text-neutral-500">
             No tracked jobs with resource attribution.
           </div>
         ) : (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {resourceSummary.map((entry) => (
-              <span
-                key={entry.resourceModel}
-                className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-white px-2 py-0.5 text-[11px] dark:border-neutral-700 dark:bg-neutral-900"
-              >
-                <span className="font-medium text-neutral-700 dark:text-neutral-200">
-                  {entry.resourceModel}
+          <>
+            <div className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+              Total {fmtMachineHours(cardHours.totalCardHours)} · success{' '}
+              {fmtMachineHours(cardHours.byConclusion.success)} / failure{' '}
+              {fmtMachineHours(cardHours.byConclusion.failure)} / cancelled{' '}
+              {fmtMachineHours(cardHours.byConclusion.cancelled)}
+              {cardHours.byConclusion.other > 0 && (
+                <> / other {fmtMachineHours(cardHours.byConclusion.other)}</>
+              )}
+              {cardHours.unknownCostCount > 0 && (
+                <span className="text-amber-600 dark:text-amber-400">
+                  {' '}· {cardHours.unknownCostCount} unknown-cost
                 </span>
-                <span className="text-neutral-500 dark:text-neutral-400">
-                  {fmtMachineHours(entry.machineHours)}
+              )}
+              {cardHours.unattributedJobCount > 0 && (
+                <span className="text-neutral-400 dark:text-neutral-500">
+                  {' '}· {cardHours.unattributedJobCount} job(s) without resource attribution
                 </span>
-                {entry.unknownCostCount > 0 && (
-                  <span className="text-amber-600 dark:text-amber-400">
-                    ({entry.unknownCostCount} unknown)
+              )}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {resourceSummary.map((entry) => (
+                <span
+                  key={entry.resourceModel}
+                  className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-white px-2 py-0.5 text-[11px] dark:border-neutral-700 dark:bg-neutral-900"
+                >
+                  <span className="font-medium text-neutral-700 dark:text-neutral-200">
+                    {entry.resourceModel}
                   </span>
-                )}
-              </span>
-            ))}
+                  <span className="text-neutral-500 dark:text-neutral-400">
+                    {fmtMachineHours(entry.machineHours)}
+                  </span>
+                  {entry.unknownCostCount > 0 && (
+                    <span className="text-amber-600 dark:text-amber-400">
+                      ({entry.unknownCostCount} unknown)
+                    </span>
+                  )}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* CI Cycles (ADR-020): one row per push batch, user-perceived wall time */}
+      <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-950">
+        <div className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
+          CI Cycles (per push)
+        </div>
+        {ciCycles.length === 0 ? (
+          <div className="mt-1 text-[11px] text-neutral-400 dark:text-neutral-500">
+            No CI cycles — no associated runs for this PR.
           </div>
+        ) : (
+          <>
+            <div className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+              {cycleStats.cycleCount} cycle(s) · median wall{' '}
+              {fmtSeconds(cycleStats.medianWallSeconds)} · p90{' '}
+              {fmtSeconds(cycleStats.p90WallSeconds)} · max{' '}
+              {fmtSeconds(cycleStats.maxWallSeconds)}
+              {cycleStats.openCycleCount > 0 && (
+                <span className="text-amber-600 dark:text-amber-400">
+                  {' '}· {cycleStats.openCycleCount} open
+                </span>
+              )}
+              {branchMatchedRunCount > 0 && (
+                <span className="text-neutral-400 dark:text-neutral-500">
+                  {' '}· includes {branchMatchedRunCount} branch-matched run(s)
+                </span>
+              )}
+            </div>
+            <div className="mt-2 space-y-1">
+              {ciCycles.slice(0, 15).map((cycle) => {
+                const outlier =
+                  cycleStats.cycleCount >= 3 &&
+                  cycle.wallSeconds !== undefined &&
+                  cycleStats.medianWallSeconds > 0 &&
+                  cycle.wallSeconds > 2 * cycleStats.medianWallSeconds;
+                return (
+                  <div
+                    key={`${cycle.startedAt}:${cycle.runs[0]?.runId ?? 0}`}
+                    className="flex flex-wrap items-center gap-2 text-[11px]"
+                  >
+                    <span className="font-mono text-neutral-500 dark:text-neutral-400">
+                      {cycle.startedAt.slice(0, 16).replace('T', ' ')}
+                    </span>
+                    <span
+                      className={`font-mono ${
+                        outlier
+                          ? 'font-semibold text-amber-600 dark:text-amber-400'
+                          : 'text-neutral-700 dark:text-neutral-300'
+                      }`}
+                    >
+                      {cycle.wallSeconds === undefined ? 'open' : fmtSeconds(cycle.wallSeconds)}
+                    </span>
+                    {outlier && (
+                      <span className="rounded bg-amber-100 px-1 text-[10px] text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+                        outlier
+                      </span>
+                    )}
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {cycle.runs.map((run) => (
+                        <span
+                          key={`${run.runId}:${run.runAttempt}`}
+                          className="inline-flex items-center gap-1 text-neutral-500 dark:text-neutral-400"
+                        >
+                          {run.workflowFile ?? 'workflow'}
+                          {run.branchMatched && <span title="branch-matched">*</span>}
+                          <StatusDot conclusion={run.conclusion} />
+                        </span>
+                      ))}
+                    </span>
+                  </div>
+                );
+              })}
+              {ciCycles.length > 15 && (
+                <div className="text-[10px] text-neutral-400 dark:text-neutral-500">
+                  + {ciCycles.length - 15} earlier cycle(s)
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
 
