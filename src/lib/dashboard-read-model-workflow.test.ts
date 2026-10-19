@@ -7,8 +7,8 @@ vi.mock('server-only', () => ({}));
 import {
   buildWorkflowCards,
   buildWorkflowDashboardResult,
-  type CostJobRow,
   type WorkflowAttemptRow,
+  type WorkflowGroupRow,
 } from './dashboard-read-model';
 
 function attempt(overrides: Partial<WorkflowAttemptRow> = {}): WorkflowAttemptRow {
@@ -29,20 +29,19 @@ function attempt(overrides: Partial<WorkflowAttemptRow> = {}): WorkflowAttemptRo
   };
 }
 
-function job(overrides: Partial<CostJobRow> = {}): CostJobRow {
+function group(overrides: Partial<WorkflowGroupRow> = {}): WorkflowGroupRow {
   return {
     repoKey: 'owner/repo',
-    runId: 1,
-    runAttempt: 1,
-    jobId: 1,
-    runDate: '2026-01-01',
     workflowFile: 'ci.yml',
     workflowRef: 'refs/heads/main',
     resourceModel: 'npu-a3',
-    resourceCount: 4,
-    runtimeSeconds: 3600,
-    attemptConclusion: 'success',
-    attemptTotalDurationSeconds: 3600,
+    machineHours: 4,
+    unknownCostCount: 0,
+    attemptCount: 1,
+    successCount: 1,
+    terminalCount: 1,
+    avgWorkflowTotalDuration: 3600,
+    latestDate: '2026-01-01',
     ...overrides,
   };
 }
@@ -82,13 +81,14 @@ describe('buildWorkflowCards', () => {
   });
 
   it('reports top-Machine-Hour workflow only for a single repo', () => {
-    const jobRows = [
-      job({ workflowFile: 'a.yml', runtimeSeconds: 3600, resourceCount: 4 }),
-      job({ workflowFile: 'b.yml', runtimeSeconds: 7200, resourceCount: 4 }),
+    const groups = [
+      group({ workflowFile: 'a.yml', machineHours: 4 }),
+      group({ workflowFile: 'b.yml', machineHours: 8 }),
+      group({ workflowFile: 'b.yml', resourceModel: 'npu-a2', machineHours: 4 }),
     ];
-    expect(buildWorkflowCards([], jobRows, false).topWorkflow).toBeUndefined();
-    expect(buildWorkflowCards([], jobRows, true).topWorkflow?.workflowFile).toBe('b.yml');
-    expect(buildWorkflowCards([], jobRows, true).topWorkflow?.machineHours).toBe(8);
+    expect(buildWorkflowCards([], groups, false).topWorkflow).toBeUndefined();
+    expect(buildWorkflowCards([], groups, true).topWorkflow?.workflowFile).toBe('b.yml');
+    expect(buildWorkflowCards([], groups, true).topWorkflow?.machineHours).toBe(12);
   });
 });
 
@@ -128,31 +128,33 @@ describe('buildWorkflowDashboardResult', () => {
     expect(e2e.attempts).toBe(1);
   });
 
-  it('groups jobs by (repo, workflow_file, workflow_ref, resource_model)', () => {
-    const jobRows = [
-      job({ runId: 1, jobId: 1, resourceModel: 'npu-a3' }),
-      job({ runId: 1, jobId: 2, resourceModel: 'npu-a2' }),
-      job({ runId: 2, jobId: 3, resourceModel: 'npu-a3' }),
+  it('maps pre-aggregated groups to table rows with failure rate over terminal attempts', () => {
+    const groups = [
+      group({ resourceModel: 'npu-a3', attemptCount: 10, successCount: 7, terminalCount: 9, machineHours: 40, avgWorkflowTotalDuration: 3600 }),
+      group({ resourceModel: 'npu-a2', attemptCount: 4, successCount: 4, terminalCount: 4, machineHours: 8 }),
     ];
-    const cards = buildWorkflowCards([], jobRows, false);
-    const result = buildWorkflowDashboardResult([], jobRows, cards, false, {
+    const cards = buildWorkflowCards([], groups, false);
+    const result = buildWorkflowDashboardResult([], groups, cards, false, {
       page: 1,
       pageSize: 20,
       observationLimit: 500,
     });
     expect(result.rows).toHaveLength(2);
     const a3 = result.rows.find((r) => r.resourceModel === 'npu-a3')!;
-    expect(a3.attemptCount).toBe(2);
-    expect(a3.machineHours).toBe(8);
+    expect(a3.attemptCount).toBe(10);
+    expect(a3.machineHours).toBe(40);
+    expect(a3.failureRate).toBeCloseTo(((9 - 7) / 9) * 100);
+    expect(a3.avgWorkflowTotalDuration).toBe(3600);
+    expect(result.rows.find((r) => r.resourceModel === 'npu-a2')!.failureRate).toBe(0);
   });
 
   it('keeps same-name workflows from different refs distinct', () => {
-    const jobRows = [
-      job({ workflowRef: 'refs/heads/main' }),
-      job({ runId: 2, workflowRef: 'refs/heads/dev' }),
+    const groups = [
+      group({ workflowRef: 'refs/heads/main' }),
+      group({ workflowRef: 'refs/heads/dev' }),
     ];
-    const cards = buildWorkflowCards([], jobRows, false);
-    const result = buildWorkflowDashboardResult([], jobRows, cards, false, {
+    const cards = buildWorkflowCards([], groups, false);
+    const result = buildWorkflowDashboardResult([], groups, cards, false, {
       page: 1,
       pageSize: 20,
       observationLimit: 500,
@@ -162,11 +164,11 @@ describe('buildWorkflowDashboardResult', () => {
   });
 
   it('caps groups at the observation limit and reports truncation', () => {
-    const jobRows = Array.from({ length: 600 }, (_, i) =>
-      job({ runId: i + 1, jobId: 1, workflowFile: `wf${i}.yml`, runDate: '2026-01-01' }),
+    const groups = Array.from({ length: 600 }, (_, i) =>
+      group({ workflowFile: `wf${i}.yml`, latestDate: '2026-01-01' }),
     );
-    const cards = buildWorkflowCards([], jobRows, false);
-    const result = buildWorkflowDashboardResult([], jobRows, cards, false, {
+    const cards = buildWorkflowCards([], groups, false);
+    const result = buildWorkflowDashboardResult([], groups, cards, false, {
       page: 1,
       pageSize: 20,
       observationLimit: 500,
@@ -177,31 +179,31 @@ describe('buildWorkflowDashboardResult', () => {
   });
 
   it('counts unknown-cost jobs in quality', () => {
-    const jobRows = [
-      job({ jobId: 1, resourceCount: 4, runtimeSeconds: 3600 }),
-      job({ jobId: 2, resourceCount: 0, runtimeSeconds: 3600 }),
+    const groups = [
+      group({ machineHours: 4, unknownCostCount: 0 }),
+      group({ resourceModel: 'unknown', machineHours: 0, unknownCostCount: 1 }),
     ];
-    const cards = buildWorkflowCards([], jobRows, false);
-    const result = buildWorkflowDashboardResult([], jobRows, cards, false, {
+    const cards = buildWorkflowCards([], groups, false);
+    const result = buildWorkflowDashboardResult([], groups, cards, false, {
       page: 1,
       pageSize: 20,
       observationLimit: 500,
     });
     expect(result.quality.unknownResourceSamples).toBe(1);
-    expect(result.rows[0].unknownCostCount).toBe(1);
+    expect(result.rows.find((r) => r.resourceModel === 'unknown')!.unknownCostCount).toBe(1);
   });
 
   it('paginates the table over the bounded groups', () => {
-    const jobRows = Array.from({ length: 50 }, (_, i) =>
-      job({ runId: i + 1, jobId: 1, workflowFile: `wf${i}.yml` }),
+    const groups = Array.from({ length: 50 }, (_, i) =>
+      group({ workflowFile: `wf${i}.yml` }),
     );
-    const cards = buildWorkflowCards([], jobRows, false);
-    const page1 = buildWorkflowDashboardResult([], jobRows, cards, false, {
+    const cards = buildWorkflowCards([], groups, false);
+    const page1 = buildWorkflowDashboardResult([], groups, cards, false, {
       page: 1,
       pageSize: 20,
       observationLimit: 500,
     });
-    const page2 = buildWorkflowDashboardResult([], jobRows, cards, false, {
+    const page2 = buildWorkflowDashboardResult([], groups, cards, false, {
       page: 2,
       pageSize: 20,
       observationLimit: 500,
@@ -212,12 +214,12 @@ describe('buildWorkflowDashboardResult', () => {
   });
 
   it('orders groups newest-first by latest contributing run date', () => {
-    const jobRows = [
-      job({ runId: 1, workflowFile: 'old.yml', runDate: '2026-01-01' }),
-      job({ runId: 2, workflowFile: 'new.yml', runDate: '2026-01-05' }),
+    const groups = [
+      group({ workflowFile: 'old.yml', latestDate: '2026-01-01' }),
+      group({ workflowFile: 'new.yml', latestDate: '2026-01-05' }),
     ];
-    const cards = buildWorkflowCards([], jobRows, false);
-    const result = buildWorkflowDashboardResult([], jobRows, cards, false, {
+    const cards = buildWorkflowCards([], groups, false);
+    const result = buildWorkflowDashboardResult([], groups, cards, false, {
       page: 1,
       pageSize: 20,
       observationLimit: 500,
