@@ -59,6 +59,20 @@ describe('groupRunsIntoCycles', () => {
     expect(groupRunsIntoCycles(runs)).toHaveLength(2);
   });
 
+  it('splits rerun attempts sharing a head_sha into their own cycles', () => {
+    // A UI rerun keeps head_sha but gets a new attempt created_at — the user
+    // waited again, so it must be a separate cycle, never merged into the
+    // original push batch.
+    const runs = [
+      makeRun({ id: 7, runAttempt: 1, head_sha: 'abc', created_at: '2026-10-03T15:23:36Z', updated_at: '2026-10-03T18:00:00Z' }),
+      makeRun({ id: 7, runAttempt: 2, head_sha: 'abc', created_at: '2026-10-04T09:00:00Z', updated_at: '2026-10-04T11:30:00Z' }),
+    ];
+    const cycles = groupRunsIntoCycles(runs);
+    expect(cycles).toHaveLength(2);
+    expect(cycles[0].runs[0].runAttempt).toBe(2);
+    expect(cycles[1].runs[0].runAttempt).toBe(1);
+  });
+
   it('marks a cycle open when no run has an end timestamp', () => {
     const runs = [
       makeRun({ id: 1, head_sha: 'abc', created_at: '2026-10-17T07:03:34Z', updated_at: '' }),
