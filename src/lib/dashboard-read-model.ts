@@ -7,7 +7,6 @@ import { pgPlaceholders, pgTuplePlaceholders } from './pg-utils';
 import {
   computePrTimingParts,
   computeStats,
-  machineHours,
   type MetricStats,
 } from './dashboard-metrics';
 
@@ -573,75 +572,6 @@ export type CostBreakdownSlice = {
   machineHours: number;
 };
 
-export type CostJobRow = {
-  repoKey: string;
-  runId: number;
-  runAttempt: number;
-  jobId: number;
-  runDate: string; // runs.date (yyyy-mm-dd) — the Cost tab date anchor
-  workflowFile: string | null;
-  workflowRef: string | null;
-  resourceModel: string | null;
-  resourceCount: number | null;
-  runtimeSeconds: number | null; // Job Runtime
-  attemptConclusion: string | null;
-  attemptTotalDurationSeconds: number | null; // Workflow Total Duration
-};
-
-/**
- * Fetch tracked workflow_jobs joined to workflow_attempts + runs for the
- * filtered repo/date window. Machine-Hours are computed downstream from
- * Job Runtime × Resource Count (ADR-008, spec §6). Tracked attempts only.
- */
-export async function fetchCostJobRows(
-  repoRows: RepoRow[],
-  startDate: string,
-  endDate: string,
-): Promise<CostJobRow[]> {
-  if (repoRows.length === 0) return [];
-  const client = await getDatabaseClient();
-  try {
-    const placeholders = pgPlaceholders(repoRows.length);
-    const { rows } = await client.query(
-      `SELECT r.id AS run_id, r.repo_id, r.date, wa.run_attempt,
-              wa.workflow_file, wa.workflow_ref, wa.conclusion AS attempt_conclusion,
-              wa.total_duration_seconds AS attempt_total_duration_seconds,
-              wj.job_id, wj.resource_model, wj.resource_count, wj.runtime_seconds
-       FROM workflow_jobs wj
-       JOIN workflow_attempts wa
-         ON wa.run_id = wj.run_id AND wa.run_attempt = wj.run_attempt
-       JOIN runs r ON r.id = wa.run_id
-       WHERE r.repo_id IN (${placeholders})
-         AND r.date >= $${repoRows.length + 1}
-         AND r.date <= $${repoRows.length + 2}
-         AND wa.tracked = 1
-       ORDER BY r.date DESC, r.id DESC, wa.run_attempt DESC, wj.job_id`,
-      [...repoRows.map((r) => r.id), startDate, endDate],
-    );
-    const idToKey = new Map(repoRows.map((r) => [r.id, r.key]));
-    return rows.map((row) => ({
-      repoKey: idToKey.get(Number(row.repo_id)) ?? 'unknown',
-      runId: Number(row.run_id),
-      runAttempt: Number(row.run_attempt),
-      jobId: Number(row.job_id),
-      runDate: String(row.date),
-      workflowFile: (row.workflow_file as string | null) ?? null,
-      workflowRef: (row.workflow_ref as string | null) ?? null,
-      resourceModel: (row.resource_model as string | null) ?? null,
-      resourceCount: row.resource_count == null ? null : Number(row.resource_count),
-      runtimeSeconds:
-        row.runtime_seconds == null ? null : Number(row.runtime_seconds),
-      attemptConclusion: (row.attempt_conclusion as string | null) ?? null,
-      attemptTotalDurationSeconds:
-        row.attempt_total_duration_seconds == null
-          ? null
-          : Number(row.attempt_total_duration_seconds),
-    }));
-  } finally {
-    client.release();
-  }
-}
-
 /**
  * Count distinct merged PRs (pr_metrics.merged_at IS NOT NULL) that have at
  * least one attributable job (positive Resource Count + valid Job Runtime)
@@ -763,7 +693,7 @@ const TERMINAL_CONCLUSIONS = new Set([
 ]);
 
 export function buildCostCards(
-  jobRows: CostJobRow[],
+  groups: WorkflowGroupRow[],
   mergedPrCount: number,
   daysInRange: number,
   oneRepo: boolean,
@@ -772,18 +702,18 @@ export function buildCostCards(
   const repoTotals = new Map<string, number>();
   const wfTotals = new Map<string, number>();
 
-  for (const row of jobRows) {
-    const mh = machineHours(row.runtimeSeconds, row.resourceCount);
-    if (mh !== undefined) {
-      totalMachineHours += mh;
-      repoTotals.set(row.repoKey, (repoTotals.get(row.repoKey) ?? 0) + mh);
-      // Top workflow only meaningful for a single-repo selection.
-      if (oneRepo && row.workflowFile) {
-        wfTotals.set(
-          row.workflowFile,
-          (wfTotals.get(row.workflowFile) ?? 0) + mh,
-        );
-      }
+  for (const group of groups) {
+    totalMachineHours += group.machineHours;
+    repoTotals.set(
+      group.repoKey,
+      (repoTotals.get(group.repoKey) ?? 0) + group.machineHours,
+    );
+    // Top workflow only meaningful for a single-repo selection.
+    if (oneRepo && group.workflowFile) {
+      wfTotals.set(
+        group.workflowFile,
+        (wfTotals.get(group.workflowFile) ?? 0) + group.machineHours,
+      );
     }
   }
 
@@ -819,80 +749,21 @@ export function dayCount(startDate: string, endDate: string): number {
   return Math.round((end - start) / 86_400_000) + 1;
 }
 
-export type CostGroupKey = string;
-
-/** Group jobs by (repo, workflow_file, workflow_ref, resource_model). */
-export function costGroupKey(row: CostJobRow): CostGroupKey {
-  return [
-    row.repoKey,
-    row.workflowFile ?? '',
-    row.workflowRef ?? '',
-    row.resourceModel ?? 'unknown',
-  ].join('\u0001');
-}
-
-type CostGroup = {
-  key: CostGroupKey;
-  repoKey: string;
-  workflowFile: string;
-  workflowRef: string;
-  resourceModel: string;
-  machineHours: number;
-  unknownCostCount: number;
-  attempts: Map<string, { totalDuration?: number; conclusion: string | null }>;
-  // newest run date among the group's jobs — observation order anchor
-  latestDate: string;
-};
-
 /**
- * Pure transformation from the full filtered job population to the bounded
- * Cost result: cards over the full population, daily series + grouped table
- * rows over the newest `observationLimit` job-observations (spec §3, §6).
+ * Pure transformation from the SQL-aggregated groups and daily series to
+ * the bounded Cost result: cards over the full population, daily series +
+ * grouped table rows over the newest `observationLimit` job-observations
+ * (spec §3, §6; ADR-021).
  */
 export function buildCostDashboardResult(
-  jobRows: CostJobRow[],
+  groups: WorkflowGroupRow[],
+  dailySeries: CostDailyPoint[],
   cards: CostCardSet,
   query: Pick<DashboardQuery, 'page' | 'pageSize' | 'observationLimit'>,
 ): CostDashboardResult {
-  // Group the full population by (repo, workflow_file, workflow_ref, model).
-  const groups = new Map<CostGroupKey, CostGroup>();
-  for (const row of jobRows) {
-    const key = costGroupKey(row);
-    let g = groups.get(key);
-    if (!g) {
-      g = {
-        key,
-        repoKey: row.repoKey,
-        workflowFile: row.workflowFile ?? '',
-        workflowRef: row.workflowRef ?? '',
-        resourceModel: row.resourceModel ?? 'unknown',
-        machineHours: 0,
-        unknownCostCount: 0,
-        attempts: new Map(),
-        latestDate: '',
-      };
-      groups.set(key, g);
-    }
-    const mh = machineHours(row.runtimeSeconds, row.resourceCount);
-    if (mh !== undefined) g.machineHours += mh;
-    else g.unknownCostCount += 1;
-    const attemptKey = `${row.runId}:${row.runAttempt}`;
-    const existing = g.attempts.get(attemptKey);
-    if (!existing) {
-      g.attempts.set(attemptKey, {
-        totalDuration:
-          row.attemptTotalDurationSeconds == null ||
-          row.attemptTotalDurationSeconds < 0
-            ? undefined
-            : row.attemptTotalDurationSeconds,
-        conclusion: row.attemptConclusion,
-      });
-    }
-    if (row.runDate > g.latestDate) g.latestDate = row.runDate;
-  }
-
-  // Table rows: one per group. Sort newest-first by latest job date, then MH.
-  const allRows: CostTableRow[] = [...groups.values()]
+  // Table rows: one per SQL-aggregated group (repo, file, ref, model).
+  // Sort newest-first by latest job date, then MH.
+  const allRows: CostTableRow[] = groups
     .map((g) => buildCostTableRow(g, cards.totalMachineHours))
     .sort((a, b) =>
       b.latestDate.localeCompare(a.latestDate) ||
@@ -905,24 +776,15 @@ export function buildCostDashboardResult(
   const pageStart = (query.page - 1) * query.pageSize;
   const pagedRows = observations.slice(pageStart, pageStart + query.pageSize);
 
-  // Daily series per repo over the full filtered population, capped at the
-  // newest `observationLimit` (repo,date) points (spec §3). Daily points are
-  // sparse (days × repos), so the cap rarely bites.
-  const dailyByRepo = new Map<string, Map<string, number>>();
-  for (const row of jobRows) {
-    const mh = machineHours(row.runtimeSeconds, row.resourceCount);
-    if (mh === undefined) continue;
-    if (!dailyByRepo.has(row.repoKey)) dailyByRepo.set(row.repoKey, new Map());
-    const dm = dailyByRepo.get(row.repoKey)!;
-    dm.set(row.runDate, (dm.get(row.runDate) ?? 0) + mh);
-  }
-  const series: CostSeriesPoint[] = [];
-  for (const [repoKey, dm] of dailyByRepo) {
-    for (const [date, machineHours] of dm) {
-      series.push({ date, repoKey, machineHours });
-    }
-  }
-  // Newest-first to cap, then ascending for the left-to-right chart axis.
+  // Daily series per repo, capped at the newest `observationLimit`
+  // (repo,date) points (spec §3). Daily points are sparse (days × repos),
+  // so the cap rarely bites. Newest-first to cap, then ascending for the
+  // left-to-right chart axis.
+  const series: CostSeriesPoint[] = dailySeries.map((p) => ({
+    date: p.date,
+    repoKey: p.repoKey,
+    machineHours: p.machineHours,
+  }));
   series.sort((a, b) => b.date.localeCompare(a.date));
   const boundedSeries = series.slice(0, query.observationLimit);
   boundedSeries.sort((a, b) =>
@@ -931,10 +793,10 @@ export function buildCostDashboardResult(
       : a.date.localeCompare(b.date),
   );
 
-  const unknownResourceSamples = jobRows.filter(
-    (r) =>
-      machineHours(r.runtimeSeconds, r.resourceCount) === undefined,
-  ).length;
+  const unknownResourceSamples = groups.reduce(
+    (sum, g) => sum + g.unknownCostCount,
+    0,
+  );
 
   return {
     tab: 'cost',
@@ -957,36 +819,24 @@ export function buildCostDashboardResult(
 
 /** Build one table row from a (repo, workflow, ref, model) group. */
 function buildCostTableRow(
-  g: CostGroup,
+  g: WorkflowGroupRow,
   totalMachineHours: number,
 ): CostTableRow & { latestDate: string } {
-  const attemptList = [...g.attempts.values()];
-  const terminal = attemptList.filter((a) =>
-    a.conclusion ? TERMINAL_CONCLUSIONS.has(a.conclusion) : false,
-  );
-  const successCount = terminal.filter(
-    (a) => a.conclusion === 'success',
-  ).length;
-  const validDurations = attemptList
-    .map((a) => a.totalDuration)
-    .filter((v): v is number => v !== undefined);
-  const avgWorkflowTotalDuration =
-    validDurations.length > 0
-      ? validDurations.reduce((s, v) => s + v, 0) / validDurations.length
-      : undefined;
-  const failureRate =
-    terminal.length > 0
-      ? ((terminal.length - successCount) / terminal.length) * 100
-      : 0;
   return {
     repoKey: g.repoKey,
     workflowFile: g.workflowFile,
     workflowRef: g.workflowRef,
     resourceModel: g.resourceModel,
-    avgWorkflowTotalDuration,
-    attemptCount: attemptList.length,
-    successCount,
-    failureRate,
+    avgWorkflowTotalDuration:
+      g.avgWorkflowTotalDuration == null
+        ? undefined
+        : g.avgWorkflowTotalDuration,
+    attemptCount: g.attemptCount,
+    successCount: g.successCount,
+    failureRate:
+      g.terminalCount > 0
+        ? ((g.terminalCount - g.successCount) / g.terminalCount) * 100
+        : 0,
     machineHours: g.machineHours,
     shareOfTotal:
       totalMachineHours > 0
@@ -1163,6 +1013,394 @@ export async function fetchWorkflowGroupRows(
       avgWorkflowTotalDuration:
         row.avg_total_duration == null ? null : Number(row.avg_total_duration),
       latestDate: String(row.latest_date),
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+// ---- Job / Queue / Cost SQL aggregation (ADR-021 follow-up) --------------
+// Same pushdown pattern as fetchWorkflowGroupRows: aggregate in SQL, return
+// group/stat rows instead of transferring every window job row to Node.
+
+const MH_SQL = `CASE WHEN wj.runtime_seconds >= 0 AND wj.resource_count > 0 THEN wj.runtime_seconds * wj.resource_count / 3600.0 ELSE 0 END`;
+const UNKNOWN_COST_SQL = `(wj.runtime_seconds IS NULL OR wj.runtime_seconds < 0 OR wj.resource_count IS NULL OR wj.resource_count <= 0)`;
+const TERMINAL_SQL = `(wj.conclusion IN ('success', 'failure', 'cancelled'))`;
+
+function trackedWindowFrom(repoCount: number): string {
+  return `FROM workflow_jobs wj
+       JOIN workflow_attempts wa
+         ON wa.run_id = wj.run_id AND wa.run_attempt = wj.run_attempt
+       JOIN runs r ON r.id = wa.run_id
+      WHERE r.repo_id IN (${pgPlaceholders(repoCount)})
+        AND r.date >= $${repoCount + 1}
+        AND r.date <= $${repoCount + 2}
+        AND wa.tracked = 1`;
+}
+
+function windowParams(repoRows: RepoRow[], startDate: string, endDate: string): Array<string | number> {
+  return [...repoRows.map((r) => r.id), startDate, endDate];
+}
+
+export type JobGroupRow = {
+  repoKey: string;
+  workflowFile: string;
+  workflowRef: string;
+  jobName: string;
+  resourceModel: string;
+  machineHours: number;
+  unknownCostCount: number;
+  executionCount: number;
+  avgJobTotalDuration: number | null;
+  successCount: number;
+  terminalCount: number;
+  latestDate: string;
+};
+
+/** Job-grain groups: one row per (repo, file, ref, job_name, model). */
+export async function fetchJobGroupRows(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<JobGroupRow[]> {
+  if (repoRows.length === 0) return [];
+  const client = await getDatabaseClient();
+  try {
+    // work_mem bump scoped to this query (ADR-021): the 5-key hash
+    // aggregation over ~590K window rows otherwise spills to disk.
+    await client.query('BEGIN');
+    let result: { rows: Record<string, unknown>[] };
+    try {
+      await client.query("SET LOCAL work_mem = '64MB'");
+      result = await client.query(
+        `SELECT r.repo_id, wa.workflow_file, wa.workflow_ref, wj.name AS job_name,
+                COALESCE(wj.resource_model, 'unknown') AS resource_model,
+                COUNT(*) AS execution_count,
+                SUM(${MH_SQL}) AS machine_hours,
+                COUNT(*) FILTER (WHERE ${UNKNOWN_COST_SQL}) AS unknown_cost_count,
+                AVG(wj.total_duration_seconds) FILTER (WHERE wj.total_duration_seconds >= 0) AS avg_total_duration,
+                COUNT(*) FILTER (WHERE ${TERMINAL_SQL}) AS terminal_count,
+                COUNT(*) FILTER (WHERE wj.conclusion = 'success') AS success_count,
+                MAX(r.date) AS latest_date
+             ${trackedWindowFrom(repoRows.length)}
+             GROUP BY 1, 2, 3, 4, 5`,
+        windowParams(repoRows, startDate, endDate),
+      );
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    }
+    const rows = result.rows;
+    const idToKey = new Map(repoRows.map((r) => [r.id, r.key]));
+    return rows.map((row) => ({
+      repoKey: idToKey.get(Number(row.repo_id)) ?? 'unknown',
+      workflowFile: (row.workflow_file as string | null) ?? '',
+      workflowRef: (row.workflow_ref as string | null) ?? '',
+      jobName: (row.job_name as string | null) ?? '',
+      resourceModel: String(row.resource_model),
+      machineHours: Number(row.machine_hours),
+      unknownCostCount: Number(row.unknown_cost_count),
+      executionCount: Number(row.execution_count),
+      avgJobTotalDuration:
+        row.avg_total_duration == null ? null : Number(row.avg_total_duration),
+      successCount: Number(row.success_count),
+      terminalCount: Number(row.terminal_count),
+      latestDate: String(row.latest_date),
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+export type JobPopulationStats = {
+  totalJobs: number;
+  terminalCount: number;
+  successCount: number;
+  p50TotalDuration: number | null;
+  p90TotalDuration: number | null;
+  unknownResourceSamples: number;
+};
+
+/**
+ * Whole-population job stats for the Job cards. percentile_disc matches the
+ * repository's nearest-rank convention (verified: ceil(p*N) position).
+ */
+export async function fetchJobPopulationStats(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<JobPopulationStats> {
+  if (repoRows.length === 0) {
+    return { totalJobs: 0, terminalCount: 0, successCount: 0, p50TotalDuration: null, p90TotalDuration: null, unknownResourceSamples: 0 };
+  }
+  const client = await getDatabaseClient();
+  try {
+    const { rows } = await client.query(
+      `SELECT COUNT(*) AS total_jobs,
+              COUNT(*) FILTER (WHERE ${TERMINAL_SQL}) AS terminal_count,
+              COUNT(*) FILTER (WHERE wj.conclusion = 'success') AS success_count,
+              percentile_disc(0.5) WITHIN GROUP (ORDER BY wj.total_duration_seconds)
+                FILTER (WHERE wj.conclusion = 'success' AND wj.total_duration_seconds >= 0) AS p50_total_duration,
+              percentile_disc(0.9) WITHIN GROUP (ORDER BY wj.total_duration_seconds)
+                FILTER (WHERE wj.conclusion = 'success' AND wj.total_duration_seconds >= 0) AS p90_total_duration,
+              COUNT(*) FILTER (WHERE ${UNKNOWN_COST_SQL}) AS unknown_resource_samples
+           ${trackedWindowFrom(repoRows.length)}`,
+      windowParams(repoRows, startDate, endDate),
+    );
+    const row = rows[0] ?? {};
+    return {
+      totalJobs: Number(row.total_jobs),
+      terminalCount: Number(row.terminal_count),
+      successCount: Number(row.success_count),
+      p50TotalDuration: row.p50_total_duration == null ? null : Number(row.p50_total_duration),
+      p90TotalDuration: row.p90_total_duration == null ? null : Number(row.p90_total_duration),
+      unknownResourceSamples: Number(row.unknown_resource_samples),
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export type DailyCountPoint = { date: string; key: string; count: number };
+
+/** Daily job counts per repo (all-repos series). */
+export async function fetchJobDailyCounts(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<DailyCountPoint[]> {
+  if (repoRows.length === 0) return [];
+  const client = await getDatabaseClient();
+  try {
+    const { rows } = await client.query(
+      `SELECT r.repo_id, r.date, COUNT(*) AS count
+           ${trackedWindowFrom(repoRows.length)}
+           GROUP BY 1, 2`,
+      windowParams(repoRows, startDate, endDate),
+    );
+    const idToKey = new Map(repoRows.map((r) => [r.id, r.key]));
+    return rows.map((row) => ({
+      date: String(row.date),
+      key: idToKey.get(Number(row.repo_id)) ?? 'unknown',
+      count: Number(row.count),
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+/** Daily job counts per job name (single-repo series). */
+export async function fetchJobNameDailyCounts(
+  repoId: number,
+  startDate: string,
+  endDate: string,
+): Promise<DailyCountPoint[]> {
+  const client = await getDatabaseClient();
+  try {
+    const { rows } = await client.query(
+      `SELECT wj.name AS job_name, r.date, COUNT(*) AS count
+         FROM workflow_jobs wj
+         JOIN workflow_attempts wa
+           ON wa.run_id = wj.run_id AND wa.run_attempt = wj.run_attempt
+         JOIN runs r ON r.id = wa.run_id
+        WHERE r.repo_id = $1
+          AND r.date >= $2
+          AND r.date <= $3
+          AND wa.tracked = 1
+        GROUP BY 1, 2`,
+      [repoId, startDate, endDate],
+    );
+    return rows.map((row) => ({
+      date: String(row.date),
+      key: (row.job_name as string | null) || '(unknown)',
+      count: Number(row.count),
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+export type QueueGroupRow = {
+  repoKey: string;
+  workflowFile: string;
+  workflowRef: string;
+  jobName: string;
+  resourceModel: string;
+  executionCount: number;
+  queueP90: number | null;
+  successCount: number;
+  terminalCount: number;
+  latestDate: string;
+};
+
+/** Queue groups: per job-group P90 queue via percentile_disc (nearest-rank). */
+export async function fetchQueueGroupRows(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<QueueGroupRow[]> {
+  if (repoRows.length === 0) return [];
+  const client = await getDatabaseClient();
+  try {
+    // work_mem bump scoped to this query (ADR-021): percentile_disc keeps a
+    // sorted transition state per group; the default 4MB spills at this
+    // window size.
+    await client.query('BEGIN');
+    let result: { rows: Record<string, unknown>[] };
+    try {
+      await client.query("SET LOCAL work_mem = '64MB'");
+      result = await client.query(
+        `SELECT r.repo_id, wa.workflow_file, wa.workflow_ref, wj.name AS job_name,
+                COALESCE(wj.resource_model, 'unknown') AS resource_model,
+                COUNT(*) AS execution_count,
+                percentile_disc(0.9) WITHIN GROUP (ORDER BY wj.queue_duration_seconds)
+                  FILTER (WHERE wj.queue_duration_seconds >= 0) AS queue_p90,
+                COUNT(*) FILTER (WHERE ${TERMINAL_SQL}) AS terminal_count,
+                COUNT(*) FILTER (WHERE wj.conclusion = 'success') AS success_count,
+                MAX(r.date) AS latest_date
+             ${trackedWindowFrom(repoRows.length)}
+             GROUP BY 1, 2, 3, 4, 5`,
+        windowParams(repoRows, startDate, endDate),
+      );
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    }
+    const rows = result.rows;
+    const idToKey = new Map(repoRows.map((r) => [r.id, r.key]));
+    return rows.map((row) => ({
+      repoKey: idToKey.get(Number(row.repo_id)) ?? 'unknown',
+      workflowFile: (row.workflow_file as string | null) ?? '',
+      workflowRef: (row.workflow_ref as string | null) ?? '',
+      jobName: (row.job_name as string | null) ?? '',
+      resourceModel: String(row.resource_model),
+      executionCount: Number(row.execution_count),
+      queueP90: row.queue_p90 == null ? null : Number(row.queue_p90),
+      successCount: Number(row.success_count),
+      terminalCount: Number(row.terminal_count),
+      latestDate: String(row.latest_date),
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+export type QueuePopulationStats = {
+  sampleCount: number;
+  p50QueueDuration: number | null;
+  p90QueueDuration: number | null;
+  maxQueueDuration: number | null;
+  overOneHourCount: number;
+  invalidTimingSamples: number;
+  distinctResourceModelCount: number;
+  unknownResourceSamples: number;
+};
+
+export async function fetchQueuePopulationStats(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<QueuePopulationStats> {
+  if (repoRows.length === 0) {
+    return { sampleCount: 0, p50QueueDuration: null, p90QueueDuration: null, maxQueueDuration: null, overOneHourCount: 0, invalidTimingSamples: 0, distinctResourceModelCount: 0, unknownResourceSamples: 0 };
+  }
+  const client = await getDatabaseClient();
+  try {
+    const { rows } = await client.query(
+      `SELECT COUNT(*) FILTER (WHERE wj.queue_duration_seconds >= 0) AS sample_count,
+              percentile_disc(0.5) WITHIN GROUP (ORDER BY wj.queue_duration_seconds)
+                FILTER (WHERE wj.queue_duration_seconds >= 0) AS p50_queue,
+              percentile_disc(0.9) WITHIN GROUP (ORDER BY wj.queue_duration_seconds)
+                FILTER (WHERE wj.queue_duration_seconds >= 0) AS p90_queue,
+              MAX(wj.queue_duration_seconds) FILTER (WHERE wj.queue_duration_seconds >= 0) AS max_queue,
+              COUNT(*) FILTER (WHERE wj.queue_duration_seconds > 3600) AS over_one_hour_count,
+              COUNT(*) FILTER (WHERE wj.queue_duration_seconds IS NULL OR wj.queue_duration_seconds < 0) AS invalid_timing_samples,
+              COUNT(DISTINCT wj.resource_model) FILTER (WHERE wj.resource_model IS NOT NULL) AS distinct_resource_models,
+              COUNT(*) FILTER (WHERE wj.resource_model IS NULL) AS unknown_resource_samples
+           ${trackedWindowFrom(repoRows.length)}`,
+      windowParams(repoRows, startDate, endDate),
+    );
+    const row = rows[0] ?? {};
+    return {
+      sampleCount: Number(row.sample_count),
+      p50QueueDuration: row.p50_queue == null ? null : Number(row.p50_queue),
+      p90QueueDuration: row.p90_queue == null ? null : Number(row.p90_queue),
+      maxQueueDuration: row.max_queue == null ? null : Number(row.max_queue),
+      overOneHourCount: Number(row.over_one_hour_count),
+      invalidTimingSamples: Number(row.invalid_timing_samples),
+      distinctResourceModelCount: Number(row.distinct_resource_models),
+      unknownResourceSamples: Number(row.unknown_resource_samples),
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export type QueueDailyPoint = { date: string; resourceModel: string; p90: number };
+
+/** Daily P90 queue per resource model; optional model filter (series only). */
+export async function fetchQueueDailyP90(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+  resourceModel?: string,
+): Promise<QueueDailyPoint[]> {
+  if (repoRows.length === 0) return [];
+  const client = await getDatabaseClient();
+  try {
+    const params = windowParams(repoRows, startDate, endDate);
+    const modelClause = resourceModel
+      ? ` AND wj.resource_model = $${params.length + 1}`
+      : '';
+    if (resourceModel) params.push(resourceModel);
+    const { rows } = await client.query(
+      `SELECT r.date, wj.resource_model,
+              percentile_disc(0.9) WITHIN GROUP (ORDER BY wj.queue_duration_seconds) AS p90
+           ${trackedWindowFrom(repoRows.length)}
+             AND wj.queue_duration_seconds >= 0
+             AND wj.resource_model IS NOT NULL${modelClause}
+           GROUP BY 1, 2`,
+      params,
+    );
+    return rows.map((row) => ({
+      date: String(row.date),
+      resourceModel: String(row.resource_model),
+      p90: Number(row.p90),
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+export type CostDailyPoint = { date: string; repoKey: string; machineHours: number };
+
+/** Daily machine-hours per repo for the Cost trend series. A (repo, date)
+ *  point exists only when at least one attributable job contributed — days
+ *  with unknown-cost jobs only are absent, matching the legacy series. */
+export async function fetchCostDailyMachineHours(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<CostDailyPoint[]> {
+  if (repoRows.length === 0) return [];
+  const client = await getDatabaseClient();
+  try {
+    const { rows } = await client.query(
+      `SELECT r.repo_id, r.date,
+              SUM(CASE WHEN wj.runtime_seconds >= 0 AND wj.resource_count > 0
+                       THEN wj.runtime_seconds * wj.resource_count / 3600.0 END) AS machine_hours
+           ${trackedWindowFrom(repoRows.length)}
+           GROUP BY 1, 2
+          HAVING COUNT(*) FILTER (WHERE wj.runtime_seconds >= 0 AND wj.resource_count > 0) > 0`,
+      windowParams(repoRows, startDate, endDate),
+    );
+    const idToKey = new Map(repoRows.map((r) => [r.id, r.key]));
+    return rows.map((row) => ({
+      date: String(row.date),
+      repoKey: idToKey.get(Number(row.repo_id)) ?? 'unknown',
+      machineHours: Number(row.machine_hours),
     }));
   } finally {
     client.release();
@@ -1388,123 +1626,21 @@ export async function fetchWorkflowAttemptDrilldown(
 
 // ---- Job + Queue tab read models (spec §5.4, §5.5) ---------------------
 
-export type JobRow = {
-  repoKey: string;
-  runId: number;
-  runAttempt: number;
-  jobId: number;
-  runDate: string;
-  workflowFile: string | null;
-  workflowRef: string | null;
-  jobName: string;
-  resourceModel: string | null;
-  resourceCount: number | null;
-  queueDurationSeconds: number | null;
-  runtimeSeconds: number | null;
-  totalDurationSeconds: number | null; // Job Total Duration
-  jobConclusion: string | null;
-};
-
-/**
- * Fetch tracked workflow_jobs (joined to workflow_attempts + runs) in the
- * filtered repo/date window, with job-level queue/total/runtime + resource
- * metadata. Shared population for the Job and Queue tabs (spec §5.4/§5.5).
- */
-export async function fetchJobRows(
-  repoRows: RepoRow[],
-  startDate: string,
-  endDate: string,
-): Promise<JobRow[]> {
-  if (repoRows.length === 0) return [];
-  const client = await getDatabaseClient();
-  try {
-    const placeholders = pgPlaceholders(repoRows.length);
-    const { rows } = await client.query(
-      `SELECT r.id AS run_id, r.repo_id, r.date, wa.run_attempt,
-              wa.workflow_file, wa.workflow_ref,
-              wj.job_id, wj.name AS job_name, wj.resource_model,
-              wj.resource_count, wj.queue_duration_seconds,
-              wj.runtime_seconds, wj.total_duration_seconds,
-              wj.conclusion AS job_conclusion
-       FROM workflow_jobs wj
-       JOIN workflow_attempts wa
-         ON wa.run_id = wj.run_id AND wa.run_attempt = wj.run_attempt
-       JOIN runs r ON r.id = wa.run_id
-       WHERE r.repo_id IN (${placeholders})
-         AND r.date >= $${repoRows.length + 1}
-         AND r.date <= $${repoRows.length + 2}
-         AND wa.tracked = 1
-       ORDER BY r.date DESC, r.id DESC, wa.run_attempt DESC, wj.job_id`,
-      [...repoRows.map((r) => r.id), startDate, endDate],
-    );
-    const idToKey = new Map(repoRows.map((r) => [r.id, r.key]));
-    return rows.map((row) => ({
-      repoKey: idToKey.get(Number(row.repo_id)) ?? 'unknown',
-      runId: Number(row.run_id),
-      runAttempt: Number(row.run_attempt),
-      jobId: Number(row.job_id),
-      runDate: String(row.date),
-      workflowFile: (row.workflow_file as string | null) ?? null,
-      workflowRef: (row.workflow_ref as string | null) ?? null,
-      jobName: (row.job_name as string | null) ?? '',
-      resourceModel: (row.resource_model as string | null) ?? null,
-      resourceCount: row.resource_count == null ? null : Number(row.resource_count),
-      queueDurationSeconds:
-        row.queue_duration_seconds == null
-          ? null
-          : Number(row.queue_duration_seconds),
-      runtimeSeconds:
-        row.runtime_seconds == null ? null : Number(row.runtime_seconds),
-      totalDurationSeconds:
-        row.total_duration_seconds == null
-          ? null
-          : Number(row.total_duration_seconds),
-      jobConclusion: (row.job_conclusion as string | null) ?? null,
-    }));
-  } finally {
-    client.release();
-  }
-}
-
-/** Group key for (repo, workflow_file, workflow_ref, job_name, resource_model). */
-export function jobGroupKey(row: JobRow): string {
-  return [
-    row.repoKey,
-    row.workflowFile ?? '',
-    row.workflowRef ?? '',
-    row.jobName,
-    row.resourceModel ?? 'unknown',
-  ].join('\u0001');
-}
-
 export function buildJobCards(
-  jobRows: JobRow[],
+  stats: JobPopulationStats,
+  groups: JobGroupRow[],
   oneRepo: boolean,
 ): JobCardSet {
-  const terminal = jobRows.filter((j) =>
-    j.jobConclusion ? TERMINAL_CONCLUSIONS.has(j.jobConclusion) : false,
-  );
-  const successCount = terminal.filter(
-    (j) => j.jobConclusion === 'success',
-  ).length;
-  // Percentiles over successful Job Total Duration (spec §4).
-  const successTotals = jobRows
-    .filter(
-      (j) =>
-        j.jobConclusion === 'success' &&
-        j.totalDurationSeconds != null &&
-        j.totalDurationSeconds >= 0,
-    )
-    .map((j) => j.totalDurationSeconds!);
-  const stats = computeStats(successTotals);
-  const contributingRepoCount = new Set(jobRows.map((j) => j.repoKey)).size;
-
+  // Percentiles over successful Job Total Duration arrive from SQL
+  // percentile_disc (nearest-rank convention, spec §4).
   const jobTotals = new Map<string, number>();
   if (oneRepo) {
-    for (const row of jobRows) {
-      const mh = machineHours(row.runtimeSeconds, row.resourceCount);
-      if (mh !== undefined && row.jobName) {
-        jobTotals.set(row.jobName, (jobTotals.get(row.jobName) ?? 0) + mh);
+    for (const group of groups) {
+      if (group.jobName) {
+        jobTotals.set(
+          group.jobName,
+          (jobTotals.get(group.jobName) ?? 0) + group.machineHours,
+        );
       }
     }
   }
@@ -1513,36 +1649,35 @@ export function buildJobCards(
     .map(([jobName, machineHours]) => ({ jobName, machineHours }))[0];
 
   return {
-    totalJobs: jobRows.length,
-    p50TotalDuration: stats.sampleCount > 0 ? stats.p50 : undefined,
-    p90TotalDuration: stats.sampleCount > 0 ? stats.p90 : undefined,
+    totalJobs: stats.totalJobs,
+    p50TotalDuration:
+      stats.p50TotalDuration == null ? undefined : stats.p50TotalDuration,
+    p90TotalDuration:
+      stats.p90TotalDuration == null ? undefined : stats.p90TotalDuration,
     successRate:
-      terminal.length > 0 ? (successCount / terminal.length) * 100 : 0,
-    contributingRepoCount,
+      stats.terminalCount > 0
+        ? (stats.successCount / stats.terminalCount) * 100
+        : 0,
+    contributingRepoCount: new Set(groups.map((g) => g.repoKey)).size,
     topJob,
   };
 }
 
 export function buildJobDashboardResult(
-  jobRows: JobRow[],
+  stats: JobPopulationStats,
+  groups: JobGroupRow[],
+  dailyCounts: DailyCountPoint[],
   cards: JobCardSet,
   oneRepo: boolean,
   query: Pick<DashboardQuery, 'page' | 'pageSize' | 'observationLimit'>,
 ): JobDashboardResult {
-  // Daily job count: per repo (all) or per job name (one repo).
-  const dailyByKey = new Map<string, Map<string, number>>();
-  for (const j of jobRows) {
-    const key = oneRepo ? (j.jobName || '(unknown)') : j.repoKey;
-    if (!dailyByKey.has(key)) dailyByKey.set(key, new Map());
-    const dm = dailyByKey.get(key)!;
-    dm.set(j.runDate, (dm.get(j.runDate) ?? 0) + 1);
-  }
-  const series: JobSeriesPoint[] = [];
-  for (const [key, dm] of dailyByKey) {
-    for (const [date, jobs] of dm) {
-      series.push({ date, key, jobs });
-    }
-  }
+  // Daily job count: per repo (all) or per job name (one repo); the key is
+  // resolved by the fetcher (fetchJobDailyCounts / fetchJobNameDailyCounts).
+  const series: JobSeriesPoint[] = dailyCounts.map((p) => ({
+    date: p.date,
+    key: p.key,
+    jobs: p.count,
+  }));
   series.sort((a, b) => b.date.localeCompare(a.date));
   const boundedSeries = series.slice(0, query.observationLimit);
   boundedSeries.sort((a, b) =>
@@ -1551,75 +1686,22 @@ export function buildJobDashboardResult(
       : a.date.localeCompare(b.date),
   );
 
-  // Group by (repo, workflow_file, workflow_ref, job_name, resource_model).
-  const groups = new Map<
-    string,
-    {
-      repoKey: string;
-      workflowFile: string;
-      workflowRef: string;
-      jobName: string;
-      resourceModel: string;
-      machineHours: number;
-      unknownCostCount: number;
-      totals: number[];
-      terminal: number;
-      success: number;
-      latestDate: string;
-      count: number;
-    }
-  >();
-  for (const row of jobRows) {
-    const key = jobGroupKey(row);
-    let g = groups.get(key);
-    if (!g) {
-      g = {
-        repoKey: row.repoKey,
-        workflowFile: row.workflowFile ?? '',
-        workflowRef: row.workflowRef ?? '',
-        jobName: row.jobName,
-        resourceModel: row.resourceModel ?? 'unknown',
-        machineHours: 0,
-        unknownCostCount: 0,
-        totals: [],
-        terminal: 0,
-        success: 0,
-        latestDate: '',
-        count: 0,
-      };
-      groups.set(key, g);
-    }
-    g.count += 1;
-    const mh = machineHours(row.runtimeSeconds, row.resourceCount);
-    if (mh !== undefined) g.machineHours += mh;
-    else g.unknownCostCount += 1;
-    if (
-      row.totalDurationSeconds != null &&
-      row.totalDurationSeconds >= 0
-    ) {
-      g.totals.push(row.totalDurationSeconds);
-    }
-    if (row.jobConclusion && TERMINAL_CONCLUSIONS.has(row.jobConclusion)) {
-      g.terminal += 1;
-      if (row.jobConclusion === 'success') g.success += 1;
-    }
-    if (row.runDate > g.latestDate) g.latestDate = row.runDate;
-  }
-
-  const allRows: JobTableRow[] = [...groups.values()].map((g) => ({
+  // Groups arrive pre-aggregated from SQL (fetchJobGroupRows, ADR-021):
+  // one row per (repo, workflow_file, workflow_ref, job_name, model).
+  const allRows: JobTableRow[] = groups.map((g) => ({
     repoKey: g.repoKey,
     workflowFile: g.workflowFile,
     workflowRef: g.workflowRef,
     jobName: g.jobName,
     resourceModel: g.resourceModel,
     avgJobTotalDuration:
-      g.totals.length > 0
-        ? g.totals.reduce((s, v) => s + v, 0) / g.totals.length
-        : undefined,
-    executionCount: g.count,
-    successCount: g.success,
+      g.avgJobTotalDuration == null ? undefined : g.avgJobTotalDuration,
+    executionCount: g.executionCount,
+    successCount: g.successCount,
     failureRate:
-      g.terminal > 0 ? ((g.terminal - g.success) / g.terminal) * 100 : 0,
+      g.terminalCount > 0
+        ? ((g.terminalCount - g.successCount) / g.terminalCount) * 100
+        : 0,
     machineHours: g.machineHours,
     unknownCostCount: g.unknownCostCount,
     latestDate: g.latestDate,
@@ -1635,9 +1717,7 @@ export function buildJobDashboardResult(
   const totalRows = observations.length;
   const pageStart = (query.page - 1) * query.pageSize;
   const pagedRows = observations.slice(pageStart, pageStart + query.pageSize);
-  const unknownResourceSamples = jobRows.filter(
-    (r) => machineHours(r.runtimeSeconds, r.resourceCount) === undefined,
-  ).length;
+  const unknownResourceSamples = stats.unknownResourceSamples;
 
   return {
     tab: 'job',
@@ -1741,69 +1821,39 @@ export async function fetchJobAttemptDrilldown(
   }
 }
 
-export function buildQueueCards(jobRows: JobRow[]): QueueCardSet {
-  const validQueue = jobRows
-    .filter(
-      (j) =>
-        j.queueDurationSeconds != null && j.queueDurationSeconds >= 0,
-    )
-    .map((j) => j.queueDurationSeconds!);
-  const stats = computeStats(validQueue);
-  const overOneHour = validQueue.filter((q) => q > 3600).length;
-  const distinctResourceModelCount = new Set(
-    jobRows
-      .map((j) => j.resourceModel)
-      .filter((m): m is string => Boolean(m)),
-  ).size;
+export function buildQueueCards(stats: QueuePopulationStats): QueueCardSet {
   return {
-    p50QueueDuration: stats.sampleCount > 0 ? stats.p50 : undefined,
-    p90QueueDuration: stats.sampleCount > 0 ? stats.p90 : undefined,
-    maxQueueDuration: validQueue.length > 0
-      ? validQueue.reduce((max, queue) => Math.max(max, queue), -Infinity)
-      : undefined,
+    p50QueueDuration:
+      stats.p50QueueDuration == null ? undefined : stats.p50QueueDuration,
+    p90QueueDuration:
+      stats.p90QueueDuration == null ? undefined : stats.p90QueueDuration,
+    maxQueueDuration:
+      stats.maxQueueDuration == null ? undefined : stats.maxQueueDuration,
     shareOverOneHour:
-      validQueue.length > 0 ? (overOneHour / validQueue.length) * 100 : 0,
-    distinctResourceModelCount,
+      stats.sampleCount > 0
+        ? (stats.overOneHourCount / stats.sampleCount) * 100
+        : 0,
+    distinctResourceModelCount: stats.distinctResourceModelCount,
   };
 }
 
 export function buildQueueDashboardResult(
-  jobRows: JobRow[],
+  stats: QueuePopulationStats,
+  groups: QueueGroupRow[],
+  dailyP90: QueueDailyPoint[],
   cards: QueueCardSet,
   query: Pick<DashboardQuery, 'page' | 'pageSize' | 'observationLimit'> & {
     resourceModel?: string;
   },
 ): QueueDashboardResult {
-  // Daily P90 queue per resource model (spec §5.5).
-  const byDateModel = new Map<string, Map<string, number[]>>();
-  for (const j of jobRows) {
-    if (
-      j.queueDurationSeconds == null ||
-      j.queueDurationSeconds < 0 ||
-      !j.resourceModel
-    )
-      continue;
-    if (
-      query.resourceModel &&
-      j.resourceModel !== query.resourceModel
-    )
-      continue;
-    if (!byDateModel.has(j.runDate)) byDateModel.set(j.runDate, new Map());
-    const dm = byDateModel.get(j.runDate)!;
-    const model = j.resourceModel;
-    if (!dm.has(model)) dm.set(model, []);
-    dm.get(model)!.push(j.queueDurationSeconds);
-  }
-  const series: QueueSeriesPoint[] = [];
-  for (const [date, dm] of byDateModel) {
-    for (const [resourceModel, samples] of dm) {
-      series.push({
-        date,
-        resourceModel,
-        p90: percentileOf(samples, 0.9),
-      });
-    }
-  }
+  // Daily P90 queue per resource model (spec §5.5); P90s arrive from SQL
+  // percentile_disc (nearest-rank) and the optional model filter is applied
+  // by the fetcher.
+  const series: QueueSeriesPoint[] = dailyP90.map((p) => ({
+    date: p.date,
+    resourceModel: p.resourceModel,
+    p90: p.p90,
+  }));
   series.sort((a, b) => b.date.localeCompare(a.date));
   const boundedSeries = series.slice(0, query.observationLimit);
   boundedSeries.sort((a, b) =>
@@ -1812,64 +1862,18 @@ export function buildQueueDashboardResult(
       : a.date.localeCompare(b.date),
   );
 
-  // Table: group by (repo, workflow_file, workflow_ref, job_name, resource_model).
-  const groups = new Map<
-    string,
-    {
-      repoKey: string;
-      workflowFile: string;
-      workflowRef: string;
-      jobName: string;
-      resourceModel: string;
-      queues: number[];
-      terminal: number;
-      success: number;
-      latestDate: string;
-      count: number;
-    }
-  >();
-  for (const row of jobRows) {
-    const key = jobGroupKey(row);
-    let g = groups.get(key);
-    if (!g) {
-      g = {
-        repoKey: row.repoKey,
-        workflowFile: row.workflowFile ?? '',
-        workflowRef: row.workflowRef ?? '',
-        jobName: row.jobName,
-        resourceModel: row.resourceModel ?? 'unknown',
-        queues: [],
-        terminal: 0,
-        success: 0,
-        latestDate: '',
-        count: 0,
-      };
-      groups.set(key, g);
-    }
-    g.count += 1;
-    if (
-      row.queueDurationSeconds != null &&
-      row.queueDurationSeconds >= 0
-    ) {
-      g.queues.push(row.queueDurationSeconds);
-    }
-    if (row.jobConclusion && TERMINAL_CONCLUSIONS.has(row.jobConclusion)) {
-      g.terminal += 1;
-      if (row.jobConclusion === 'success') g.success += 1;
-    }
-    if (row.runDate > g.latestDate) g.latestDate = row.runDate;
-  }
-
-  const allRows: QueueTableRow[] = [...groups.values()].map((g) => ({
+  // Groups arrive pre-aggregated from SQL (fetchQueueGroupRows, ADR-021):
+  // one row per (repo, workflow_file, workflow_ref, job_name, model).
+  const allRows: QueueTableRow[] = groups.map((g) => ({
     repoKey: g.repoKey,
     workflowFile: g.workflowFile,
     workflowRef: g.workflowRef,
     jobName: g.jobName,
     resourceModel: g.resourceModel,
-    queueP90: g.queues.length > 0 ? percentileOf(g.queues, 0.9) : undefined,
-    executionCount: g.count,
+    queueP90: g.queueP90 == null ? undefined : g.queueP90,
+    executionCount: g.executionCount,
     successRate:
-      g.terminal > 0 ? (g.success / g.terminal) * 100 : 0,
+      g.terminalCount > 0 ? (g.successCount / g.terminalCount) * 100 : 0,
     latestDate: g.latestDate,
   }));
   // ponytail: newest-first by run date (spec §3 date anchor), then
@@ -1886,13 +1890,11 @@ export function buildQueueDashboardResult(
   const pageStart = (query.page - 1) * query.pageSize;
   const pagedRows = observations.slice(pageStart, pageStart + query.pageSize);
 
-  const invalidTimingSamples = jobRows.filter(
-    (r) => r.queueDurationSeconds == null || r.queueDurationSeconds < 0,
-  ).length;
+  const invalidTimingSamples = stats.invalidTimingSamples;
   // ponytail: Queue's per-model series skips jobs without a resourceModel;
   // count those as unknown-resource samples (spec §3 partial state) instead
   // of duplicating the invalid-timing count into two distinct quality fields.
-  const unknownResourceSamples = jobRows.filter((r) => !r.resourceModel).length;
+  const unknownResourceSamples = stats.unknownResourceSamples;
 
   return {
     tab: 'queue',
@@ -1913,11 +1915,6 @@ export function buildQueueDashboardResult(
   };
 }
 
-/** Percentile over a sample set (repository convention via dashboard-metrics). */
-function percentileOf(samples: number[], p: number): number {
-  return computeStats(samples)[p === 0.5 ? 'p50' : 'p90'];
-}
-
 /**
  * Server seam entry point. Fetches the filtered population, computes the
  * full-population cards and the bounded observation result. Cached per
@@ -1931,17 +1928,18 @@ export const getDashboardReadModel = cache(
     const repoRows = await resolveRepoRows(options, input.repoKey);
 
     if (input.tab === 'cost') {
-      const [jobRows, mergedPrCount] = await Promise.all([
-        fetchCostJobRows(repoRows, input.startDate, input.endDate),
+      const [groups, dailySeries, mergedPrCount] = await Promise.all([
+        fetchWorkflowGroupRows(repoRows, input.startDate, input.endDate),
+        fetchCostDailyMachineHours(repoRows, input.startDate, input.endDate),
         fetchCostMergedPrCount(repoRows, input.startDate, input.endDate),
       ]);
       const cards = buildCostCards(
-        jobRows,
+        groups,
         mergedPrCount,
         dayCount(input.startDate, input.endDate),
         repoRows.length === 1,
       );
-      return buildCostDashboardResult(jobRows, cards, {
+      return buildCostDashboardResult(groups, dailySeries, cards, {
         page: input.page,
         pageSize: input.pageSize,
         observationLimit: input.observationLimit,
@@ -1968,22 +1966,29 @@ export const getDashboardReadModel = cache(
     }
 
     if (input.tab === 'job' || input.tab === 'queue') {
-      const jobRows = await fetchJobRows(
-        repoRows,
-        input.startDate,
-        input.endDate,
-      );
       const oneRepo = repoRows.length === 1;
       if (input.tab === 'job') {
-        const cards = buildJobCards(jobRows, oneRepo);
-        return buildJobDashboardResult(jobRows, cards, oneRepo, {
+        const [groups, stats, dailyCounts] = await Promise.all([
+          fetchJobGroupRows(repoRows, input.startDate, input.endDate),
+          fetchJobPopulationStats(repoRows, input.startDate, input.endDate),
+          oneRepo
+            ? fetchJobNameDailyCounts(repoRows[0].id, input.startDate, input.endDate)
+            : fetchJobDailyCounts(repoRows, input.startDate, input.endDate),
+        ]);
+        const cards = buildJobCards(stats, groups, oneRepo);
+        return buildJobDashboardResult(stats, groups, dailyCounts, cards, oneRepo, {
           page: input.page,
           pageSize: input.pageSize,
           observationLimit: input.observationLimit,
         });
       }
-      const cards = buildQueueCards(jobRows);
-      return buildQueueDashboardResult(jobRows, cards, {
+      const [groups, stats, dailyP90] = await Promise.all([
+        fetchQueueGroupRows(repoRows, input.startDate, input.endDate),
+        fetchQueuePopulationStats(repoRows, input.startDate, input.endDate),
+        fetchQueueDailyP90(repoRows, input.startDate, input.endDate, input.resourceModel),
+      ]);
+      const cards = buildQueueCards(stats);
+      return buildQueueDashboardResult(stats, groups, dailyP90, cards, {
         page: input.page,
         pageSize: input.pageSize,
         observationLimit: input.observationLimit,
