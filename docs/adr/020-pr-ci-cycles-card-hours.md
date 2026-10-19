@@ -50,6 +50,16 @@ latest linked run completed). Two problems surfaced with
    hangs remain auditable in the cancelled bucket. Unknown-cost jobs
    (model known, count/timing missing) and unattributed jobs (no
    `resource_model`) are counted, never zero-filled.
+4. **Gantt visualization (amendment).** The drill-down renders cycles on one
+   absolute time axis (`CiCycleGantt`): one row per push batch, one lane
+   per run, colored success/failure/cancelled (open runs dashed). The
+   header separates the PR span into busy — the **union of cycle
+   intervals** (`computeCycleBusySeconds`, overlaps counted once, never
+   the naive sum of walls) — and idle time between pushes. Tooltips are
+   mouse- and keyboard-accessible and stick to facts: per-run conclusion,
+   wall time, head SHA, run link, and failed job names (unique, capped at
+   5) with an explicit note that the root cause requires the run log;
+   no failure reason is ever fabricated from conclusion data alone.
 
 ## Trade-offs
 

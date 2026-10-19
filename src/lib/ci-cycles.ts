@@ -26,6 +26,18 @@ export type CycleRunSummary = {
   workflowFile: string | null;
   conclusion: string;
   branchMatched: boolean;
+  /** Run created_at (attempt-scoped). */
+  startedAt: string;
+  /** Latest of completed_at / updated_at; undefined while in flight. */
+  endedAt: string | undefined;
+  /** Run wall seconds (queue included); undefined while open. */
+  wallSeconds: number | undefined;
+  headSha: string | undefined;
+  htmlUrl: string | undefined;
+  /** Failed job names in this run (unique, capped). "Why" needs logs — names only. */
+  failedJobNames: string[];
+  failedJobCount: number;
+  cancelledJobCount: number;
 };
 
 export type CiCycle = {
@@ -50,6 +62,31 @@ function runEndTimestamp(run: Run): string | undefined {
   const end = run.updated_at || run.created_at;
   const ms = Date.parse(end);
   return Number.isNaN(ms) ? undefined : end;
+}
+
+const FAILED_JOB_NAME_CAP = 5;
+
+function summarizeRunJobs(run: Run): {
+  failedJobNames: string[];
+  failedJobCount: number;
+  cancelledJobCount: number;
+} {
+  const names = new Set<string>();
+  let failedJobCount = 0;
+  let cancelledJobCount = 0;
+  for (const job of run.jobs ?? []) {
+    if (job.conclusion === 'failure') {
+      failedJobCount += 1;
+      if (names.size < FAILED_JOB_NAME_CAP) names.add(job.name);
+    } else if (job.conclusion === 'cancelled') {
+      cancelledJobCount += 1;
+    }
+  }
+  return {
+    failedJobNames: [...names],
+    failedJobCount,
+    cancelledJobCount,
+  };
 }
 
 /** Group attempt-scoped runs into CI cycles (one cycle per push batch). */
@@ -78,6 +115,12 @@ export function groupRunsIntoCycles(runs: Run[]): CiCycle[] {
       workflowFile: run.workflowFile ?? null,
       conclusion: run.conclusion || run.status || 'unknown',
       branchMatched: Boolean(run.branchMatched),
+      startedAt: run.created_at,
+      endedAt: runEndTimestamp(run),
+      wallSeconds: undefined,
+      headSha: run.head_sha,
+      htmlUrl: run.html_url,
+      ...summarizeRunJobs(run),
     });
 
     const end = runEndTimestamp(run);
@@ -99,6 +142,14 @@ export function groupRunsIntoCycles(runs: Run[]): CiCycle[] {
         (Date.parse(cycle.endedAt) - Date.parse(cycle.startedAt)) / 1000,
       );
       cycle.wallSeconds = seconds < 0 ? undefined : seconds;
+    }
+    for (const run of cycle.runs) {
+      if (run.endedAt !== undefined) {
+        const seconds = Math.round(
+          (Date.parse(run.endedAt) - Date.parse(run.startedAt)) / 1000,
+        );
+        run.wallSeconds = seconds < 0 ? undefined : seconds;
+      }
     }
   }
 
@@ -214,6 +265,38 @@ export function computeCardHoursSummary(
     unknownCostCount,
     unattributedJobCount,
   };
+}
+
+/**
+ * Busy seconds = union of closed cycle intervals (ADR-020). Overlapping
+ * cycles are counted once; this is NOT the naive sum of cycle walls and is
+ * the honest counterpart to the PR-span idle time.
+ */
+export function computeCycleBusySeconds(cycles: CiCycle[]): number {
+  const intervals = cycles
+    .filter((cycle) => cycle.endedAt !== undefined)
+    .map((cycle) => ({
+      start: Date.parse(cycle.startedAt),
+      end: Date.parse(cycle.endedAt as string),
+    }))
+    .filter((iv) => Number.isFinite(iv.start) && Number.isFinite(iv.end) && iv.end >= iv.start)
+    .sort((a, b) => a.start - b.start);
+
+  let busy = 0;
+  let cursorStart = Number.NaN;
+  let cursorEnd = Number.NaN;
+  for (const iv of intervals) {
+    if (Number.isNaN(cursorEnd) || iv.start > cursorEnd) {
+      if (!Number.isNaN(cursorEnd)) busy += cursorEnd - cursorStart;
+      cursorStart = iv.start;
+      cursorEnd = iv.end;
+    } else if (iv.end > cursorEnd) {
+      cursorEnd = iv.end;
+    }
+  }
+  if (!Number.isNaN(cursorEnd)) busy += cursorEnd - cursorStart;
+
+  return Math.round(busy / 1000);
 }
 
 /**
