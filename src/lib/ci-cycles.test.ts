@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   computeCardHoursSummary,
+  computeCycleBusySeconds,
   groupRunsIntoCycles,
   mergeAttemptRows,
   summarizeCycleWalls,
@@ -101,6 +102,41 @@ describe('groupRunsIntoCycles', () => {
     ];
     expect(groupRunsIntoCycles(runs)[0].runs[0].branchMatched).toBe(true);
   });
+
+  it('rolls up failed and cancelled jobs per run with capped, unique names', () => {
+    const job = (id: number, name: string, conclusion: string) => ({
+      id,
+      runAttempt: 1,
+      name,
+      status: 'completed',
+      conclusion,
+      created_at: '',
+      started_at: '',
+      completed_at: '',
+      html_url: '',
+      queueDurationInSeconds: 0,
+      durationInSeconds: 0,
+    });
+    const runs = [
+      makeRun({
+        id: 9,
+        head_sha: 'abc',
+        created_at: '2026-10-03T15:23:36Z',
+        conclusion: 'failure',
+        jobs: [
+          job(1, 'npu-test-a', 'failure'),
+          job(2, 'npu-test-a', 'failure'), // duplicate name collapses
+          job(3, 'npu-test-b', 'failure'),
+          job(4, 'hung-job', 'cancelled'),
+          job(5, 'skipped-job', 'skipped'),
+        ],
+      }),
+    ];
+    const run = groupRunsIntoCycles(runs)[0].runs[0];
+    expect(run.failedJobCount).toBe(3);
+    expect(run.failedJobNames).toEqual(['npu-test-a', 'npu-test-b']);
+    expect(run.cancelledJobCount).toBe(1);
+  });
 });
 
 describe('summarizeCycleWalls', () => {
@@ -173,6 +209,28 @@ describe('computeCardHoursSummary', () => {
     const summary = computeCardHoursSummary([]);
     expect(summary.totalCardHours).toBe(0);
     expect(summary.unattributedJobCount).toBe(0);
+  });
+});
+
+describe('computeCycleBusySeconds', () => {
+  it('returns the interval union, counting overlaps once', () => {
+    const cycles = groupRunsIntoCycles([
+      makeRun({ id: 1, head_sha: 'a', created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T10:00:00Z' }),
+      // overlaps the first cycle by 4h
+      makeRun({ id: 2, head_sha: 'b', created_at: '2026-10-01T06:00:00Z', updated_at: '2026-10-01T12:00:00Z' }),
+      // disjoint, 1h
+      makeRun({ id: 3, head_sha: 'c', created_at: '2026-10-02T00:00:00Z', updated_at: '2026-10-02T01:00:00Z' }),
+    ]);
+    // union = [00:00→12:00] + [next 1h] = 13h, not the 10+6+1=17h naive sum
+    expect(computeCycleBusySeconds(cycles)).toBe(13 * 3600);
+  });
+
+  it('ignores open cycles and returns 0 for empty input', () => {
+    expect(computeCycleBusySeconds([])).toBe(0);
+    const open = groupRunsIntoCycles([
+      makeRun({ id: 1, head_sha: 'a', created_at: '2026-10-01T00:00:00Z', updated_at: 'not-a-date' }),
+    ]);
+    expect(computeCycleBusySeconds(open)).toBe(0);
   });
 });
 

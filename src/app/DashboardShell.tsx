@@ -39,6 +39,8 @@ import {
   groupRunsIntoCycles,
   summarizeCycleWalls,
 } from '@/lib/ci-cycles';
+import { fmtMachineHours, fmtSeconds } from '@/lib/format';
+import { CiCycleGantt } from './CiCycleGantt';
 import type {
   CostDashboardResult,
   DashboardReadResult,
@@ -73,19 +75,6 @@ type DashboardShellProps = {
   result: DashboardReadResult;
   searchParams: Record<string, string | string[] | undefined>;
 };
-
-function fmtSeconds(seconds?: number): string {
-  if (seconds === undefined) return '—';
-  const mins = Math.round(seconds / 60);
-  if (mins < 60) return `${mins}m`;
-  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
-}
-
-function fmtMachineHours(hours?: number): string {
-  if (hours === undefined) return '—';
-  if (hours < 1) return `${Math.round(hours * 60)}m`;
-  return `${hours.toFixed(1)}h`;
-}
 
 const PR_CI_RUNTIME_TOOLTIP =
   'Elapsed CI span: earliest associated completed workflow attempt created → latest associated completed attempt updated (completion-time proxy). Includes gaps between commits/retries and terminal non-success attempts; it is not cumulative job or workflow execution time.';
@@ -298,84 +287,23 @@ function PrDrillDown({
         )}
       </div>
 
-      {/* CI Cycles (ADR-020): one row per push batch, user-perceived wall time */}
+      {/* CI Cycles (ADR-020): Gantt on one absolute time axis, per-push rows */}
       <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-950">
         <div className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
           CI Cycles (per push)
         </div>
-        {ciCycles.length === 0 ? (
-          <div className="mt-1 text-[11px] text-neutral-400 dark:text-neutral-500">
-            No CI cycles — no associated runs for this PR.
+        <div className="mt-1">
+          <CiCycleGantt
+            cycles={ciCycles}
+            stats={cycleStats}
+            mergedAt={detail.merged_at}
+          />
+        </div>
+        {branchMatchedRunCount > 0 && (
+          <div className="mt-1 text-[10px] text-neutral-400 dark:text-neutral-500">
+            * {branchMatchedRunCount} run(s) attributed by branch matching within the PR
+            lifecycle (PR link incomplete); details in tooltips.
           </div>
-        ) : (
-          <>
-            <div className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
-              {cycleStats.cycleCount} cycle(s) · median wall{' '}
-              {fmtSeconds(cycleStats.medianWallSeconds)} · p90{' '}
-              {fmtSeconds(cycleStats.p90WallSeconds)} · max{' '}
-              {fmtSeconds(cycleStats.maxWallSeconds)}
-              {cycleStats.openCycleCount > 0 && (
-                <span className="text-amber-600 dark:text-amber-400">
-                  {' '}· {cycleStats.openCycleCount} open
-                </span>
-              )}
-              {branchMatchedRunCount > 0 && (
-                <span className="text-neutral-400 dark:text-neutral-500">
-                  {' '}· includes {branchMatchedRunCount} branch-matched run(s)
-                </span>
-              )}
-            </div>
-            <div className="mt-2 space-y-1">
-              {ciCycles.slice(0, 15).map((cycle) => {
-                const outlier =
-                  cycleStats.cycleCount >= 3 &&
-                  cycle.wallSeconds !== undefined &&
-                  cycleStats.medianWallSeconds > 0 &&
-                  cycle.wallSeconds > 2 * cycleStats.medianWallSeconds;
-                return (
-                  <div
-                    key={`${cycle.startedAt}:${cycle.runs[0]?.runId ?? 0}`}
-                    className="flex flex-wrap items-center gap-2 text-[11px]"
-                  >
-                    <span className="font-mono text-neutral-500 dark:text-neutral-400">
-                      {cycle.startedAt.slice(0, 16).replace('T', ' ')}
-                    </span>
-                    <span
-                      className={`font-mono ${
-                        outlier
-                          ? 'font-semibold text-amber-600 dark:text-amber-400'
-                          : 'text-neutral-700 dark:text-neutral-300'
-                      }`}
-                    >
-                      {cycle.wallSeconds === undefined ? 'open' : fmtSeconds(cycle.wallSeconds)}
-                    </span>
-                    {outlier && (
-                      <span className="rounded bg-amber-100 px-1 text-[10px] text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
-                        outlier
-                      </span>
-                    )}
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      {cycle.runs.map((run) => (
-                        <span
-                          key={`${run.runId}:${run.runAttempt}`}
-                          className="inline-flex items-center gap-1 text-neutral-500 dark:text-neutral-400"
-                        >
-                          {run.workflowFile ?? 'workflow'}
-                          {run.branchMatched && <span title="branch-matched">*</span>}
-                          <StatusDot conclusion={run.conclusion} />
-                        </span>
-                      ))}
-                    </span>
-                  </div>
-                );
-              })}
-              {ciCycles.length > 15 && (
-                <div className="text-[10px] text-neutral-400 dark:text-neutral-500">
-                  + {ciCycles.length - 15} earlier cycle(s)
-                </div>
-              )}
-            </div>
-          </>
         )}
       </div>
 
