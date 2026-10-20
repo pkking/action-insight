@@ -1536,13 +1536,17 @@ export default function DashboardShell({
   // Local tab state is the single source of truth for the nav highlight and
   // URL building: switchTab sets it immediately (instant highlight, no stale
   // URL read), and external navigations (back/forward, deep links) sync it
-  // from the server result.
+  // from the server result. Sync happens during render (the React
+  // "adjust state from props" pattern) — setState in an effect would cascade
+  // renders (react-hooks/set-state-in-effect).
   const [activeTab, setActiveTab] = useState<
     'pr' | 'cost' | 'workflow' | 'job' | 'queue'
   >(result.tab);
-  useEffect(() => {
+  const [lastSyncedResultTab, setLastSyncedResultTab] = useState(result.tab);
+  if (result.tab !== lastSyncedResultTab) {
+    setLastSyncedResultTab(result.tab);
     setActiveTab(result.tab);
-  }, [result.tab]);
+  }
   const tabDefaultDays = activeTab === 'pr' ? 7 : 14;
 
   // Sync state → URL. The tab comes from local state — reading it back from
