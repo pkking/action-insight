@@ -9,6 +9,7 @@ import {
   buildPrCards,
   buildPrDashboardResult,
   type PrMetricRow,
+  type PrSeriesPoint,
 } from './dashboard-read-model';
 
 function row(overrides: Partial<PrMetricRow> = {}): PrMetricRow {
@@ -75,6 +76,27 @@ describe('buildPrCards', () => {
 });
 
 describe('buildPrDashboardResult', () => {
+  it('maps SQL event-sweep job counts onto the capped series by index', () => {
+    const enriched = buildEnrichedRows([row({ pr_number: 1 })], REPO_ROWS);
+    const runSeries: PrSeriesPoint[] = [
+      { date: '2026-01-01T00:10:00Z', prNumber: 1, repoKey: 'a/b', ciRuntime: 100, conclusion: 'success' },
+      { date: '2026-01-02T00:10:00Z', prNumber: 1, repoKey: 'a/b', ciRuntime: 200, conclusion: 'success' },
+      { date: '2026-01-03T00:10:00Z', prNumber: 1, repoKey: 'a/b', ciRuntime: 300, conclusion: 'failure' },
+    ];
+    const result = buildPrDashboardResult(enriched, runSeries, {
+      page: 1,
+      pageSize: 20,
+      observationLimit: 2,
+    }, [
+      { pendingJobs: 3, runningJobs: 7 },
+      { pendingJobs: 1, runningJobs: 4 },
+    ]);
+    expect(result.series).toEqual([
+      { date: '2026-01-01T00:10:00Z', prNumber: 1, repoKey: 'a/b', ciRuntime: 100, conclusion: 'success', pendingJobs: 3, runningJobs: 7 },
+      { date: '2026-01-02T00:10:00Z', prNumber: 1, repoKey: 'a/b', ciRuntime: 200, conclusion: 'success', pendingJobs: 1, runningJobs: 4 },
+    ]);
+  });
+
   it('caps chart/table observations at the limit and reports truncation', () => {
     const rows = Array.from({ length: 600 }, (_, i) =>
       row({

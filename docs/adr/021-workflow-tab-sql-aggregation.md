@@ -58,12 +58,20 @@ counts and per-attempt averages).
   group grain and aggregates) plus a daily machine-hours series whose
   (repo, date) points exist only when at least one attributable job
   contributed — unknown-cost-only days are absent, matching the legacy
-  series. The PR tab's `fetchPrJobTimeline` still transfers window job
-  timestamps and remains the last row-transfer path.
-- Measured on the default 14-day all-repo window (single benchmark, not a
-  guarantee): workflow groups ~0.5s; job groups ~0.9s (5-key hash
-  aggregation over ~590K rows; the floor is per-row expression evaluation,
-  not transfer); queue groups ~0.9s; tab totals dropped from ~2.0s to
-  ~0.5–1.1s with parallel fetches.
+  series. The PR tab's pending/running series counts likewise moved into SQL
+  (`fetchPrJobConcurrencyCounts`): an event-sweep computes pending(T) =
+  C(T) − S(T) and running(T) = S(T) − D(T) over cumulative created/started/
+  completed event counts, replacing the per-point rescans of every
+  transferred job row. Cancellation events fire at GREATEST(started,
+  completed) / GREATEST(created, started) so dirty rows (completed before
+  started) never cancel early nor count forever; the parity harness
+  verified all 500 series points identical, including those rows.
+- Measured on the default windows (14-day all-repo for Job/Queue/Cost/
+  Workflow, 7-day for PR; single benchmark, not a guarantee): workflow
+  groups ~0.5s; job groups ~0.9s (5-key hash aggregation over ~590K rows;
+  the floor is per-row expression evaluation, not transfer); queue groups
+  ~0.9s; PR concurrency sweep ~0.03s (was ~0.9s of transfer + per-point
+  rescans); tab totals dropped from ~2.0s to ~0.4–1.0s with parallel
+  fetches.
 - Further gains need pre-aggregated tables/materialized views, which remain
   out of scope.
