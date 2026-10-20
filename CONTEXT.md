@@ -345,7 +345,7 @@ _Avoid_: failure analysis
 - Workflow **Timeline View** defaults to 100 rows per page
 - Cluster Views default to 100 rows per page
 - Paginated views should support 25, 50, 100, and 200 row page sizes
-- Views default to a 30-day time range and support 7, 14, 30, 60, and 90 days, capped by the retention window
+- Views default to a 7-day time range (every tab) and support 1, 7, 14, and 30 days, capped by the retention window
 - Cluster View percentile rows with fewer than 5 successful samples are marked as low sample
 - Cluster Views provide a minimum successful sample filter that defaults to 5 and can be disabled
 - Cluster View minimum sample filtering uses successful sample count, not terminal execution count

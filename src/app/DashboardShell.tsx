@@ -41,6 +41,7 @@ import {
 } from '@/lib/ci-cycles';
 import { fmtMachineHours, fmtSeconds } from '@/lib/format';
 import { CiCycleGantt } from './CiCycleGantt';
+import { TablePagination } from './TablePagination';
 import type {
   CostDashboardResult,
   DashboardReadResult,
@@ -595,31 +596,13 @@ function CostBody({
             </tbody>
           </table>
         </div>
-        {result.totalRows > result.pageSize && (
-          <div className="flex items-center justify-between border-t border-neutral-100 px-4 py-3 dark:border-neutral-800">
-            <span className="text-xs text-neutral-500 dark:text-neutral-400">
-              Page {currentPage} of {totalPages} · {result.totalRows} groups
-            </span>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={currentPage <= 1}
-                onClick={() => pushPage(currentPage - 1)}
-                className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                disabled={currentPage >= totalPages}
-                onClick={() => pushPage(currentPage + 1)}
-                className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
+        <TablePagination
+          page={currentPage}
+          totalPages={totalPages}
+          totalRows={result.totalRows}
+          itemLabel="groups"
+          onPage={pushPage}
+        />
       </div>
       {selectedAllocation && (() => {
         const repo = repoOptions.find((option) => option.key === selectedAllocation.repoKey);
@@ -918,31 +901,13 @@ function WorkflowBody({
             </tbody>
           </table>
         </div>
-        {result.totalRows > result.pageSize && (
-          <div className="flex items-center justify-between border-t border-neutral-100 px-4 py-3 dark:border-neutral-800">
-            <span className="text-xs text-neutral-500 dark:text-neutral-400">
-              Page {currentPage} of {totalPages} · {result.totalRows} groups
-            </span>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={currentPage <= 1}
-                onClick={() => pushPage(currentPage - 1)}
-                className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                disabled={currentPage >= totalPages}
-                onClick={() => pushPage(currentPage + 1)}
-                className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
+        <TablePagination
+          page={currentPage}
+          totalPages={totalPages}
+          totalRows={result.totalRows}
+          itemLabel="groups"
+          onPage={pushPage}
+        />
       </div>
     </>
   );
@@ -1239,15 +1204,13 @@ function JobBody({
             </tbody>
           </table>
         </div>
-        {result.totalRows > result.pageSize && (
-          <div className="flex items-center justify-between border-t border-neutral-100 px-4 py-3 dark:border-neutral-800">
-            <span className="text-xs text-neutral-500 dark:text-neutral-400">Page {currentPage} of {totalPages} · {result.totalRows} groups</span>
-            <div className="flex gap-2">
-              <button type="button" disabled={currentPage <= 1} onClick={() => pushPage(currentPage - 1)} className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"><ChevronLeft className="h-3.5 w-3.5" /></button>
-              <button type="button" disabled={currentPage >= totalPages} onClick={() => pushPage(currentPage + 1)} className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"><ChevronRight className="h-3.5 w-3.5" /></button>
-            </div>
-          </div>
-        )}
+        <TablePagination
+          page={currentPage}
+          totalPages={totalPages}
+          totalRows={result.totalRows}
+          itemLabel="groups"
+          onPage={pushPage}
+        />
       </div>
     </>
   );
@@ -1487,15 +1450,13 @@ function QueueBody({
             </tbody>
           </table>
         </div>
-        {result.totalRows > result.pageSize && (
-          <div className="flex items-center justify-between border-t border-neutral-100 px-4 py-3 dark:border-neutral-800">
-            <span className="text-xs text-neutral-500 dark:text-neutral-400">Page {currentPage} of {totalPages} · {result.totalRows} groups</span>
-            <div className="flex gap-2">
-              <button type="button" disabled={currentPage <= 1} onClick={() => pushPage(currentPage - 1)} className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"><ChevronLeft className="h-3.5 w-3.5" /></button>
-              <button type="button" disabled={currentPage >= totalPages} onClick={() => pushPage(currentPage + 1)} className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"><ChevronRight className="h-3.5 w-3.5" /></button>
-            </div>
-          </div>
-        )}
+        <TablePagination
+          page={currentPage}
+          totalPages={totalPages}
+          totalRows={result.totalRows}
+          itemLabel="groups"
+          onPage={pushPage}
+        />
       </div>
     </>
   );
@@ -1547,7 +1508,7 @@ export default function DashboardShell({
     setLastSyncedResultTab(result.tab);
     setActiveTab(result.tab);
   }
-  const tabDefaultDays = activeTab === 'pr' ? 7 : 14;
+  const tabDefaultDays = 7;
 
   // Sync state → URL. The tab comes from local state — reading it back from
   // urlSearchParams raced the in-flight router.replace issued by switchTab
@@ -1571,18 +1532,17 @@ export default function DashboardShell({
     router.replace(nextUrl, { scroll: false });
   }, [activeTab, days, endDate, pathname, router, selectedRepoKey, startDate, tabDefaultDays, useCustomRange]);
 
-  /** Switch the active tab, resetting the date filter to that tab's default. */
+  /** Switch the active tab, resetting the date filter to the shared default. */
   const switchTab = useCallback(
     (tab: 'pr' | 'cost' | 'workflow' | 'job' | 'queue') => {
       if (tab === activeTab) return;
-      const defaultDays = tab === 'pr' ? 7 : 14;
       setActiveTab(tab);
       setUseCustomRange(false);
-      setDays(defaultDays);
+      setDays(7);
       const params = new URLSearchParams();
       params.set('tab', tab);
       if (selectedRepoKey) params.set('repo', selectedRepoKey);
-      // days omitted → server applies the tab default (matches local defaultDays)
+      // days omitted → server applies the shared 7-day default (matches setDays)
       lastUrlRef.current = `${pathname}?${params.toString()}`;
       router.replace(lastUrlRef.current, { scroll: false });
     },
@@ -1965,31 +1925,13 @@ export default function DashboardShell({
           </div>
 
           {/* Pagination */}
-          {result.totalRows > result.pageSize && (
-            <div className="flex items-center justify-between border-t border-neutral-100 px-4 py-3 dark:border-neutral-800">
-              <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                Page {currentPage} of {totalPages} · {result.totalRows} rows
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  disabled={currentPage <= 1}
-                  onClick={() => pushPage(currentPage - 1)}
-                  className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => pushPage(currentPage + 1)}
-                  className="rounded-md border border-neutral-200 px-2 py-1 text-xs disabled:opacity-30 dark:border-neutral-700"
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          )}
+          <TablePagination
+            page={currentPage}
+            totalPages={totalPages}
+            totalRows={result.totalRows}
+            itemLabel="rows"
+            onPage={pushPage}
+          />
         </div>
         </>
         )}
