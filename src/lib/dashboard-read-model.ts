@@ -75,12 +75,6 @@ export type PrSeriesPoint = {
   runningJobs?: number;
 };
 
-type PrJobTimelinePoint = {
-  createdAt: string | null;
-  startedAt: string | null;
-  completedAt: string | null;
-};
-
 export type DailyPrCountPoint = { date: string; count: number };
 
 export type PrTableRow = {
@@ -398,32 +392,97 @@ export async function fetchPrRunSeries(
   }
 }
 
-async function fetchPrJobTimeline(
+export type PrJobConcurrencyCounts = { pendingJobs: number; runningJobs: number };
+
+/**
+ * Pending/running job counts at each series timestamp (ADR-021 pushdown for
+ * the PR tab). pending(T) = C(T) − S(T) and running(T) = S(T) − D(T), where
+ * C/S/D are cumulative counts of created/started/completed events ≤ T — an
+ * event-sweep over the window jobs instead of transferring every job row
+ * and rescanning it per series point. Guards mirror the legacy JS semantics
+ * under dirty data: a pending cancellation fires at GREATEST(created,
+ * started) and a running cancellation at GREATEST(started, completed), so
+ * jobs with completed-before-started (or started-before-created) quirks
+ * never cancel early and never count forever. Jobs without created_at never
+ * count as pending. Event rows sort before markers at equal timestamps
+ * (NULLS FIRST) so counts at T include events exactly at T.
+ */
+export async function fetchPrJobConcurrencyCounts(
   repoRows: RepoRow[],
   startDate: string,
   endDate: string,
-): Promise<PrJobTimelinePoint[]> {
-  if (repoRows.length === 0) return [];
+  timestamps: string[],
+): Promise<PrJobConcurrencyCounts[]> {
+  if (timestamps.length === 0) return [];
+  if (repoRows.length === 0) return timestamps.map(() => ({ pendingJobs: 0, runningJobs: 0 }));
   const client = await getDatabaseClient();
   try {
     const placeholders = pgPlaceholders(repoRows.length);
-    const { rows } = await client.query(
-      `SELECT wj.created_at, wj.started_at, wj.completed_at
-       FROM pr_workflow_attempts pwa
-       JOIN pr_metrics pm ON pm.id = pwa.pr_metric_id
-       JOIN workflow_jobs wj
-         ON wj.run_id = pwa.run_id AND wj.run_attempt = pwa.run_attempt
-       JOIN runs r ON r.id = wj.run_id
-       WHERE r.repo_id IN (${placeholders})
-         AND pm.merged_at >= $${repoRows.length + 1}
-         AND pm.merged_at < $${repoRows.length + 2}`,
-      [...repoRows.map((r) => r.id), `${startDate}T00:00:00Z`, `${endDate}T23:59:59Z`],
+    const params: Array<string | number | string[]> = [
+      ...repoRows.map((r) => r.id),
+      `${startDate}T00:00:00Z`,
+      `${endDate}T23:59:59Z`,
+      timestamps,
+    ];
+    // The sweep sorts ~3× window jobs event rows; keep it in memory.
+    await client.query('BEGIN');
+    let result: { rows: Record<string, unknown>[] };
+    try {
+      await client.query("SET LOCAL work_mem = '128MB'");
+      result = await client.query(
+        `WITH jobs AS (
+             SELECT wj.created_at, wj.started_at, wj.completed_at
+               FROM pr_workflow_attempts pwa
+               JOIN pr_metrics pm ON pm.id = pwa.pr_metric_id
+               JOIN workflow_jobs wj
+                 ON wj.run_id = pwa.run_id AND wj.run_attempt = pwa.run_attempt
+               JOIN runs r ON r.id = wj.run_id
+              WHERE r.repo_id IN (${placeholders})
+                AND pm.merged_at >= $${repoRows.length + 1}
+                AND pm.merged_at < $${repoRows.length + 2}
+         ), event_rows AS (
+             SELECT created_at::timestamptz AS ts, 1 AS dc, 0 AS dsp, 0 AS dsr, 0 AS dd, NULL::int AS i
+               FROM jobs WHERE created_at IS NOT NULL
+             UNION ALL
+             SELECT GREATEST(created_at::timestamptz, started_at::timestamptz), 0, 1, 0, 0, NULL
+               FROM jobs WHERE started_at IS NOT NULL AND created_at IS NOT NULL
+             UNION ALL
+             SELECT started_at::timestamptz, 0, 0, 1, 0, NULL
+               FROM jobs WHERE started_at IS NOT NULL
+             UNION ALL
+             SELECT GREATEST(started_at::timestamptz, completed_at::timestamptz), 0, 0, 0, 1, NULL
+               FROM jobs WHERE completed_at IS NOT NULL AND started_at IS NOT NULL
+             UNION ALL
+             SELECT t, 0, 0, 0, 0, i
+               FROM unnest($${repoRows.length + 3}::timestamptz[]) WITH ORDINALITY AS u(t, i)
+         ), swept AS (
+             SELECT i,
+                    SUM(dc) OVER w AS c,
+                    SUM(dsp) OVER w AS sp,
+                    SUM(dsr) OVER w AS sr,
+                    SUM(dd) OVER w AS d
+               FROM event_rows
+             WINDOW w AS (ORDER BY ts, i NULLS FIRST ROWS UNBOUNDED PRECEDING)
+         )
+         SELECT i, GREATEST(c - sp, 0)::int AS pending_jobs,
+                GREATEST(sr - d, 0)::int AS running_jobs
+           FROM swept
+          WHERE i IS NOT NULL
+          ORDER BY i`,
+        params,
+      );
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    }
+    const byIndex = new Map(
+      result.rows.map((row) => [Number(row.i), {
+        pendingJobs: Number(row.pending_jobs),
+        runningJobs: Number(row.running_jobs),
+      }]),
     );
-    return rows.map((row) => ({
-      createdAt: (row.created_at as string | null) ?? null,
-      startedAt: (row.started_at as string | null) ?? null,
-      completedAt: (row.completed_at as string | null) ?? null,
-    }));
+    return timestamps.map((_, index) => byIndex.get(index + 1) ?? { pendingJobs: 0, runningJobs: 0 });
   } finally {
     client.release();
   }
@@ -486,7 +545,7 @@ export function buildPrDashboardResult(
   enriched: EnrichedPr[],
   runSeries: PrSeriesPoint[],
   query: Pick<DashboardQuery, 'page' | 'pageSize' | 'observationLimit'>,
-  jobTimeline: PrJobTimelinePoint[] = [],
+  jobCounts: PrJobConcurrencyCounts[] = [],
 ): PrDashboardResult {
   const cards = buildPrCards(enriched);
 
@@ -496,22 +555,13 @@ export function buildPrDashboardResult(
   const observations = sorted.slice(0, query.observationLimit);
   const truncated = sorted.length > query.observationLimit;
 
-  const series = runSeries.slice(0, query.observationLimit).map((run) => {
-    const timestamp = Date.parse(run.date);
-    const pendingJobs = jobTimeline.filter((job) => {
-      const created = job.createdAt ? Date.parse(job.createdAt) : NaN;
-      const started = job.startedAt ? Date.parse(job.startedAt) : NaN;
-      return Number.isFinite(created) && created <= timestamp &&
-        (!Number.isFinite(started) || timestamp < started);
-    }).length;
-    const runningJobs = jobTimeline.filter((job) => {
-      const started = job.startedAt ? Date.parse(job.startedAt) : NaN;
-      const completed = job.completedAt ? Date.parse(job.completedAt) : NaN;
-      return Number.isFinite(started) && started <= timestamp &&
-        (!Number.isFinite(completed) || timestamp < completed);
-    }).length;
-    return { ...run, pendingJobs, runningJobs };
-  });
+  // Pending/running counts arrive from the SQL event-sweep, aligned by
+  // index with the capped series points (ADR-021).
+  const series = runSeries.slice(0, query.observationLimit).map((run, index) => ({
+    ...run,
+    pendingJobs: jobCounts[index]?.pendingJobs ?? 0,
+    runningJobs: jobCounts[index]?.runningJobs ?? 0,
+  }));
   const dailyCounts = new Map<string, number>();
   for (const row of enriched) {
     const date = (row.merged_at ?? '').slice(0, 10);
@@ -1997,17 +2047,25 @@ export const getDashboardReadModel = cache(
     }
 
     // PR tab (slice 1).
-    const [rawRows, runSeries, jobTimeline] = await Promise.all([
+    const [rawRows, runSeries] = await Promise.all([
       fetchPrMetricRows(repoRows, input.startDate, input.endDate),
       fetchPrRunSeries(repoRows, input.startDate, input.endDate),
-      fetchPrJobTimeline(repoRows, input.startDate, input.endDate),
     ]);
     const enriched = buildEnrichedRows(rawRows, repoRows);
+    const seriesTimestamps = runSeries
+      .slice(0, input.observationLimit)
+      .map((point) => point.date);
+    const jobCounts = await fetchPrJobConcurrencyCounts(
+      repoRows,
+      input.startDate,
+      input.endDate,
+      seriesTimestamps,
+    );
     return buildPrDashboardResult(enriched, runSeries, {
       page: input.page,
       pageSize: input.pageSize,
       observationLimit: input.observationLimit,
-    }, jobTimeline);
+    }, jobCounts);
   },
 );
 
