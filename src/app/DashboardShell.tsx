@@ -1533,15 +1533,25 @@ export default function DashboardShell({
   const detailAbortRef = useRef<AbortController | null>(null);
   const lastUrlRef = useRef<string>('');
 
-  const activeTab = result.tab;
+  // Local tab state is the single source of truth for the nav highlight and
+  // URL building: switchTab sets it immediately (instant highlight, no stale
+  // URL read), and external navigations (back/forward, deep links) sync it
+  // from the server result.
+  const [activeTab, setActiveTab] = useState<
+    'pr' | 'cost' | 'workflow' | 'job' | 'queue'
+  >(result.tab);
+  useEffect(() => {
+    setActiveTab(result.tab);
+  }, [result.tab]);
   const tabDefaultDays = activeTab === 'pr' ? 7 : 14;
 
-  // Sync state → URL. `tab` is read back from the current URL so a tab switch
-  // (written directly by switchTab) survives subsequent filter edits.
+  // Sync state → URL. The tab comes from local state — reading it back from
+  // urlSearchParams raced the in-flight router.replace issued by switchTab
+  // and intermittently rebuilt the URL with the PREVIOUS tab, clobbering
+  // the switch.
   useEffect(() => {
     const params = new URLSearchParams();
-    const urlTab = urlSearchParams.get('tab');
-    if (urlTab && urlTab !== 'pr') params.set('tab', urlTab);
+    if (activeTab !== 'pr') params.set('tab', activeTab);
     if (selectedRepoKey) params.set('repo', selectedRepoKey);
     if (useCustomRange) {
       params.set('useCustomRange', 'true');
@@ -1555,13 +1565,14 @@ export default function DashboardShell({
     if (lastUrlRef.current === nextUrl) return;
     lastUrlRef.current = nextUrl;
     router.replace(nextUrl, { scroll: false });
-  }, [days, endDate, pathname, router, selectedRepoKey, startDate, tabDefaultDays, urlSearchParams, useCustomRange]);
+  }, [activeTab, days, endDate, pathname, router, selectedRepoKey, startDate, tabDefaultDays, useCustomRange]);
 
   /** Switch the active tab, resetting the date filter to that tab's default. */
   const switchTab = useCallback(
     (tab: 'pr' | 'cost' | 'workflow' | 'job' | 'queue') => {
       if (tab === activeTab) return;
       const defaultDays = tab === 'pr' ? 7 : 14;
+      setActiveTab(tab);
       setUseCustomRange(false);
       setDays(defaultDays);
       const params = new URLSearchParams();

@@ -391,6 +391,37 @@ describe('DashboardShell', () => {
     expect(screen.getByTestId('chart').getAttribute('data-len')).toBe('3');
   });
 
+  it('switches the tab highlight immediately and navigates without the stale-tab clobber', async () => {
+    // Regression (URL-sync race): switchTab issues router.replace('?tab=cost')
+    // and the URL-sync effect used to rebuild the URL from a STALE
+    // useSearchParams (still the old tab), issuing a second replace that
+    // could land last and revert the switch. The tab now comes from local
+    // state: the highlight flips instantly, before the server result does.
+    replaceMock.mockReset();
+    render(<DashboardShell repoOptions={repoOptions} result={emptyResult()} searchParams={{}} />);
+
+    const costButton = screen.getByRole('button', { name: 'Cost' });
+    // Before click: PR is highlighted (result.tab === 'pr').
+    expect(screen.getByRole('button', { name: 'PR' }).className).toContain('bg-blue-100');
+    expect(costButton.className).not.toContain('bg-blue-100');
+
+    await act(async () => {
+      fireEvent.click(costButton);
+    });
+
+    // Highlight switched to Cost even though the server result prop still
+    // says 'pr' (the mock never re-renders it).
+    expect(costButton.className).toContain('bg-blue-100');
+    expect(screen.getByRole('button', { name: 'PR' }).className).not.toContain('bg-blue-100');
+
+    // Navigation carries the new tab, and no later replace reverts it to a
+    // URL without tab=cost.
+    await act(async () => {});
+    const urls = replaceMock.mock.calls.map((call: unknown[]) => String(call[0]));
+    expect(urls.some((url) => url.includes('tab=cost'))).toBe(true);
+    expect(urls.every((url) => url.includes('tab=cost') || !url.includes('tab='))).toBe(true);
+  });
+
   it('lazily fetches PR drill-down on row click and renders the Machine-Hours summary', async () => {
     mockFetchDetail([
       {
