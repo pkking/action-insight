@@ -7,7 +7,6 @@ import {
   Calendar as CalendarIcon,
   CheckCircle,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   Info,
   XCircle,
@@ -79,6 +78,42 @@ type DashboardShellProps = {
 
 const PR_CI_RUNTIME_TOOLTIP =
   'Elapsed CI span: earliest associated completed workflow attempt created → latest associated completed attempt updated (completion-time proxy). Includes gaps between commits/retries and terminal non-success attempts; it is not cumulative job or workflow execution time.';
+
+const PR_MERGE_CI_TOOLTIP =
+  'Merge-time CI status per resource class: the conclusion of the latest linked attempt that started at or before merged_at. NPU = workflow with mapped Ascend resources or NPU runner labels; GPU/other = workflows with collected jobs but no NPU evidence. “—” means no linked attempt of that class (PR link may be incomplete).';
+
+function MergeCiBadge({
+  label,
+  conclusion,
+}: {
+  label: string;
+  conclusion: string | null;
+}) {
+  const icon =
+    conclusion === 'success'
+      ? '✓'
+      : conclusion === 'failure'
+        ? '✗'
+        : conclusion === 'cancelled'
+          ? '⊘'
+          : '—';
+  const tone =
+    conclusion === 'success'
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : conclusion === 'failure'
+        ? 'text-red-600 dark:text-red-400'
+        : conclusion === 'cancelled'
+          ? 'text-amber-600 dark:text-amber-400'
+          : 'text-neutral-400 dark:text-neutral-500';
+  return (
+    <span
+      className={`mr-1.5 inline-flex items-center gap-0.5 font-mono text-[11px] font-semibold ${tone}`}
+      title={`${label}: ${conclusion ?? 'no linked attempt of this class'}`}
+    >
+      {label} {icon}
+    </span>
+  );
+}
 
 function scrollToTableRow(id: string) {
   const row = document.getElementById(id);
@@ -1860,6 +1895,12 @@ export default function DashboardShell({
                       <MetricTooltip definition={PR_CI_RUNTIME_TOOLTIP} />
                     </span>
                   </th>
+                  <th className="px-4 py-3">
+                    <span className="inline-flex items-center gap-1">
+                      Merge CI
+                      <MetricTooltip definition={PR_MERGE_CI_TOOLTIP} />
+                    </span>
+                  </th>
                   <th className="px-4 py-3">Review</th>
                   <th className="px-4 py-3">Merged</th>
                 </tr>
@@ -1867,7 +1908,7 @@ export default function DashboardShell({
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                 {result.rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-neutral-400 dark:text-neutral-500">
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-neutral-400 dark:text-neutral-500">
                       No merged PRs in range. {selectedRepo ? 'Try “All repositories” or a wider range.' : ''}
                     </td>
                   </tr>
@@ -1896,6 +1937,10 @@ export default function DashboardShell({
                           </td>
                           <td className="px-4 py-3 max-w-xs truncate" title={row.title}>{row.title}</td>
                           <td className="px-4 py-3 font-mono text-xs">{fmtSeconds(row.ciRuntime)}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <MergeCiBadge label="NPU" conclusion={row.npuCiConclusion} />
+                            <MergeCiBadge label="GPU" conclusion={row.gpuCiConclusion} />
+                          </td>
                           <td className="px-4 py-3 font-mono text-xs">
                             {fmtSeconds(row.review)}
                             {row.forcedMerge && (

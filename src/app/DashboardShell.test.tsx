@@ -95,6 +95,8 @@ function rowResult(): PrDashboardResult {
         mergeState: 'closed',
         forcedMerge: false,
         partialCiHistory: false,
+        npuCiConclusion: 'success',
+        gpuCiConclusion: 'failure',
       },
     ],
     totalRows: 1,

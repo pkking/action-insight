@@ -14,6 +14,7 @@ import {
 
 function row(overrides: Partial<PrMetricRow> = {}): PrMetricRow {
   return {
+    pr_metric_id: 1,
     repo_id: 1,
     pr_number: 1,
     title: 't',
@@ -76,6 +77,27 @@ describe('buildPrCards', () => {
 });
 
 describe('buildPrDashboardResult', () => {
+  it('maps merge-time NPU/GPU CI status onto rows keyed by pr_metric_id', () => {
+    const enriched = buildEnrichedRows(
+      [row({ pr_metric_id: 7, pr_number: 1 }), row({ pr_metric_id: 8, pr_number: 2 })],
+      REPO_ROWS,
+    );
+    const result = buildPrDashboardResult(enriched, [], {
+      page: 1,
+      pageSize: 20,
+      observationLimit: 500,
+    }, [], new Map([
+      [7, { npuConclusion: 'failure', gpuConclusion: 'success' }],
+      [8, { npuConclusion: null, gpuConclusion: null }],
+    ]));
+    const first = result.rows.find((r) => r.prNumber === 1)!;
+    expect(first.npuCiConclusion).toBe('failure');
+    expect(first.gpuCiConclusion).toBe('success');
+    const second = result.rows.find((r) => r.prNumber === 2)!;
+    expect(second.npuCiConclusion).toBeNull();
+    expect(second.gpuCiConclusion).toBeNull();
+  });
+
   it('maps SQL event-sweep job counts onto the capped series by index', () => {
     const enriched = buildEnrichedRows([row({ pr_number: 1 })], REPO_ROWS);
     const runSeries: PrSeriesPoint[] = [
