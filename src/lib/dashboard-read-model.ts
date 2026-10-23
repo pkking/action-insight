@@ -88,6 +88,9 @@ export type PrTableRow = {
   mergeState: string;
   forcedMerge: boolean;
   partialCiHistory: boolean;
+  /** Merge-time CI status per resource class (ADR-022); null = no linked attempt of that class. */
+  npuCiConclusion: string | null;
+  gpuCiConclusion: string | null;
 };
 
 export type PrDashboardResult = DashboardResult<PrCardSet, PrSeriesPoint, PrTableRow> & {
@@ -310,6 +313,7 @@ async function resolveRepoRows(
 // ---- PR tab read model --------------------------------------------------
 
 export type PrMetricRow = {
+  pr_metric_id: number;
   repo_id: number;
   pr_number: number;
   title: string;
@@ -339,7 +343,7 @@ export async function fetchPrMetricRows(
   try {
     const placeholders = pgPlaceholders(repoRows.length);
     const { rows } = await client.query(
-      `SELECT pm.repo_id, pm.pr_number, pm.title, pm.html_url, pm.branch,
+      `SELECT pm.id AS pr_metric_id, pm.repo_id, pm.pr_number, pm.title, pm.html_url, pm.branch,
               pm.author, pm.state, pm.conclusion, pm.created_at,
               pm.ci_started_at, pm.ci_completed_at, pm.merged_at,
               pm.partial_ci_history
@@ -351,7 +355,101 @@ export async function fetchPrMetricRows(
        ORDER BY pm.merged_at DESC`,
       [...repoRows.map((r) => r.id), `${startDate}T00:00:00Z`, `${endDate}T23:59:59Z`],
     );
-    return rows as PrMetricRow[];
+    return rows.map((row) => ({
+      ...row,
+      pr_metric_id: Number(row.pr_metric_id),
+      repo_id: Number(row.repo_id),
+    })) as PrMetricRow[];
+  } finally {
+    client.release();
+  }
+}
+
+export type PrMergeCiStatus = {
+  npuConclusion: string | null;
+  gpuConclusion: string | null;
+};
+
+/**
+ * Merge-time NPU/GPU CI status per PR (ADR-022). For each merged PR in the
+ * window, the conclusion of the LATEST linked attempt that started at or
+ * before merged_at, per resource class:
+ *
+ * - NPU: the (repo, workflow_file) shows NPU evidence among its PR-linked
+ *   jobs — a mapped Ascend resource_model (any linux-aarch64-* except the
+ *   cpu group) or an NPU-ish runner label (910/310p/ascend/npu/atlas).
+ * - GPU/other: workflows with collected jobs but no NPU evidence (unmapped
+ *   x86/GPU runners — e.g. sglang pr-test.yml on GB300, VeOmni l20-8).
+ *
+ * Workflows without collected jobs have no class and contribute nothing
+ * (the badge renders “—”). Status derives from pr_workflow_attempts links
+ * only; partially-linked PRs (partial_ci_history) may show “—” or an older
+ * attempt until rebuild rounds complete the links.
+ */
+export async function fetchPrMergeCiStatus(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<Map<number, PrMergeCiStatus>> {
+  if (repoRows.length === 0) return new Map();
+  const client = await getDatabaseClient();
+  try {
+    const placeholders = pgPlaceholders(repoRows.length);
+    const { rows } = await client.query(
+      `WITH pr_attempt_jobs AS (
+           SELECT pm.id AS pr_metric_id, r.repo_id, r.workflow_file,
+                  wa.run_id, wa.run_attempt, wa.conclusion, wa.created_at,
+                  wj.resource_model, wj.labels_json, wj.job_id
+             FROM pr_metrics pm
+             JOIN pr_workflow_attempts pwa ON pwa.pr_metric_id = pm.id
+             JOIN workflow_attempts wa
+               ON wa.run_id = pwa.run_id AND wa.run_attempt = pwa.run_attempt
+             JOIN runs r ON r.id = wa.run_id
+             LEFT JOIN workflow_jobs wj
+               ON wj.run_id = wa.run_id AND wj.run_attempt = wa.run_attempt
+            WHERE pm.repo_id IN (${placeholders})
+              AND pm.merged_at IS NOT NULL
+              AND pm.merged_at >= $${repoRows.length + 1}
+              AND pm.merged_at < $${repoRows.length + 2}
+              AND wa.created_at <= pm.merged_at
+       ), classified AS (
+           SELECT pr_metric_id, repo_id, workflow_file,
+                  COALESCE(
+                    BOOL_OR(
+                      (resource_model IS NOT NULL AND resource_model <> 'linux-aarch64-cpu')
+                      OR (resource_model IS NULL AND labels_json ~* '(910|310p|ascend|npu|atlas)')
+                    ),
+                    false
+                  ) AS is_npu
+             FROM pr_attempt_jobs
+            GROUP BY 1, 2, 3
+           HAVING COUNT(job_id) > 0
+       ), latest AS (
+           SELECT DISTINCT ON (paj.pr_metric_id, is_npu)
+                  paj.pr_metric_id, is_npu, conclusion
+             FROM pr_attempt_jobs paj
+             JOIN classified c
+               ON c.repo_id = paj.repo_id
+              AND c.workflow_file = paj.workflow_file
+              AND c.pr_metric_id = paj.pr_metric_id
+            ORDER BY paj.pr_metric_id, is_npu, paj.created_at DESC, paj.run_id DESC, paj.run_attempt DESC
+       )
+       SELECT pr_metric_id,
+              MAX(conclusion) FILTER (WHERE is_npu) AS npu_conclusion,
+              MAX(conclusion) FILTER (WHERE NOT is_npu) AS gpu_conclusion
+         FROM latest
+        GROUP BY 1`,
+      [...repoRows.map((r) => r.id), `${startDate}T00:00:00Z`, `${endDate}T23:59:59Z`],
+    );
+    return new Map(
+      rows.map((row) => [
+        Number(row.pr_metric_id),
+        {
+          npuConclusion: (row.npu_conclusion as string | null) ?? null,
+          gpuConclusion: (row.gpu_conclusion as string | null) ?? null,
+        },
+      ]),
+    );
   } finally {
     client.release();
   }
@@ -546,6 +644,7 @@ export function buildPrDashboardResult(
   runSeries: PrSeriesPoint[],
   query: Pick<DashboardQuery, 'page' | 'pageSize' | 'observationLimit'>,
   jobCounts: PrJobConcurrencyCounts[] = [],
+  mergeCiStatus: Map<number, PrMergeCiStatus> = new Map(),
 ): PrDashboardResult {
   const cards = buildPrCards(enriched);
 
@@ -579,6 +678,8 @@ export function buildPrDashboardResult(
     mergeState: row.state,
     forcedMerge: row.timing.forcedMerge,
     partialCiHistory: Boolean(row.partial_ci_history),
+    npuCiConclusion: mergeCiStatus.get(row.pr_metric_id)?.npuConclusion ?? null,
+    gpuCiConclusion: mergeCiStatus.get(row.pr_metric_id)?.gpuConclusion ?? null,
   }));
 
   const totalRows = rows.length;
@@ -2047,9 +2148,10 @@ export const getDashboardReadModel = cache(
     }
 
     // PR tab (slice 1).
-    const [rawRows, runSeries] = await Promise.all([
+    const [rawRows, runSeries, mergeCiStatus] = await Promise.all([
       fetchPrMetricRows(repoRows, input.startDate, input.endDate),
       fetchPrRunSeries(repoRows, input.startDate, input.endDate),
+      fetchPrMergeCiStatus(repoRows, input.startDate, input.endDate),
     ]);
     const enriched = buildEnrichedRows(rawRows, repoRows);
     const seriesTimestamps = runSeries
@@ -2065,7 +2167,7 @@ export const getDashboardReadModel = cache(
       page: input.page,
       pageSize: input.pageSize,
       observationLimit: input.observationLimit,
-    }, jobCounts);
+    }, jobCounts, mergeCiStatus);
   },
 );
 
