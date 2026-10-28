@@ -22,7 +22,7 @@ const repoConfig = config.repos[0];
 function run(overrides: Partial<Run> = {}): Run {
   return {
     id: 100,
-    runAttempt: 2,
+    runAttempt: 1,
     name: 'CI',
     head_branch: 'feature',
     status: 'completed',
@@ -66,7 +66,7 @@ function run(overrides: Partial<Run> = {}): Run {
 
 describe('buildWorkflowAttempts', () => {
   it('stores tracked workflow attempts with attempt identity and eligible steps', () => {
-    const [attempt] = buildWorkflowAttempts([run()], config, repoConfig, '2026-07-03T01:00:00Z');
+    const [attempt] = buildWorkflowAttempts([run({ runAttempt: 2 })], config, repoConfig, '2026-07-03T01:00:00Z');
 
     expect(attempt).toEqual(expect.objectContaining({
       run_id: 100,
@@ -75,9 +75,9 @@ describe('buildWorkflowAttempts', () => {
       workflow_file: 'ci.yml',
       workflow_ref: 'main',
       match_kind: 'exact_ref',
-      queue_duration_seconds: 90,
+      queue_duration_seconds: null,
       runtime_seconds: 600,
-      total_duration_seconds: 660,
+      total_duration_seconds: 600,
       pr_numbers: [42],
     }));
     expect(attempt.jobs[0]).toEqual(expect.objectContaining({
@@ -105,6 +105,31 @@ describe('buildWorkflowAttempts', () => {
       run({ jobs: [{ ...run().jobs![0], started_at: '' }] }),
     ], config, repoConfig);
     expect(withoutStartedJob.queue_duration_seconds).toBeNull();
+  });
+
+  it('excludes the idle gap between attempts from rerun durations (ADR-023)', () => {
+    // Run triggered 10-08 14:38, re-run days later: run_started_at is the
+    // rerun's start; created_at still points at the original trigger.
+    const [rerun] = buildWorkflowAttempts([
+      run({
+        runAttempt: 2,
+        created_at: '2026-10-08T14:38:52Z',
+        run_started_at: '2026-10-11T01:51:43Z',
+        updated_at: '2026-10-11T02:20:39Z',
+        durationInSeconds: 213_000, // legacy created-based value, must be ignored
+      }),
+    ], config, repoConfig);
+    // Total = run_started → completed (matches GitHub UI), not created → completed.
+    expect(rerun.total_duration_seconds).toBe(1736); // 28m56s, per GitHub UI
+    expect(rerun.runtime_seconds).toBe(1736);
+    // The pre-rerun idle gap is NOT queue; a rerun's queue is unknown.
+    expect(rerun.queue_duration_seconds).toBeNull();
+
+    // Attempt 1 keeps created-based semantics (queue included) — the base
+    // fixture: created 00:00, first job started 00:01:30, updated 00:11.
+    const [first] = buildWorkflowAttempts([run()], config, repoConfig);
+    expect(first.total_duration_seconds).toBe(660);
+    expect(first.queue_duration_seconds).toBe(90);
   });
 
   it('keeps run metadata for untracked workflows without persisting step rows', () => {
