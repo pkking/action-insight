@@ -104,7 +104,13 @@ export function enrichRunWithWorkflowMetadata(
     ?.map((job) => job.started_at)
     .filter((startedAt): startedAt is string => Boolean(startedAt))
     .sort((left, right) => left.localeCompare(right))[0];
-  const queueDuration = secondsBetween(run.created_at, firstJobStartedAt);
+  // ADR-023: a rerun attempt's trigger time is unknowable — the run's
+  // created_at stays at the ORIGINAL trigger, so created→started would count
+  // the idle gap between attempts as queue. Rerun queue is unknown (null).
+  const queueDuration =
+    getRunAttempt(run) > 1
+      ? null
+      : secondsBetween(run.created_at, firstJobStartedAt);
   const runtime = secondsBetween(runStartedAt, run.updated_at);
 
   return {
@@ -141,7 +147,18 @@ export function buildWorkflowAttempts(
     const runStartedAt = run.run_started_at ?? null;
     const queueDuration = run.queueDurationInSeconds ?? null;
     const runtime = run.runtimeInSeconds ?? null;
-    const total = secondsBetween(run.created_at, run.updated_at) ?? run.durationInSeconds ?? null;
+    // ADR-023: for rerun attempts (run_attempt > 1) the total duration is
+    // run_started_at → completed (matching GitHub UI semantics); the run's
+    // created_at still points at the ORIGINAL trigger, so created→completed
+    // would count the idle gap between attempts as duration.
+    const total =
+      getRunAttempt(run) > 1
+        ? (secondsBetween(runStartedAt ?? run.created_at, run.updated_at) ??
+          run.durationInSeconds ??
+          null)
+        : (secondsBetween(run.created_at, run.updated_at) ??
+          run.durationInSeconds ??
+          null);
     const shouldPersistSteps = match.tracked && eligibleSteps(run, match.stepThresholdSeconds);
 
     const jobs = (run.jobs ?? []).map((job): WorkflowAttemptJobRow => {
