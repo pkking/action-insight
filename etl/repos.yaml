@@ -98,18 +98,15 @@ repos:
   - file: npu_vllm_unit_tests.yml
 - repo: ascend/pytorch
   workflows:
-  - file: npu-full-test.yml
-    report_name: PyTorch NPU Full Test (v2.7.1)
-    comparison_name: Full Test
-  - file: npu-sync-test.yml
-    report_name: PyTorch NPU Sync Test
-    comparison_name: Sync Test
-  - file: npu-test.yml
-    report_name: NPU Build and Test
-    comparison_name: Build and Test
-  - file: torch-npu-upstream-test-trigger.yml
-    report_name: Torch NPU Upstream v2.7.1 Trigger
-    comparison_name: Upstream Test
+  - file: nightly.yml
+    report_name: Nightly Build Integration
+    comparison_name: Nightly
+  - file: nightly-a3.yml
+    report_name: Nightly Build and Test A3
+    comparison_name: Nightly
+  - file: a5-torch-npu-test.yml
+    report_name: A5 torch_npu Test
+    comparison_name: A5
   - file: pytorch_ci_trigger_pr.yml
     report_name: PyTorch CI Trigger (PR)
     comparison_name: PR Trigger
