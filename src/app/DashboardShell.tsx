@@ -556,6 +556,7 @@ function CostBody({
                     stroke={repoColors.get(repoKey)}
                     strokeWidth={2}
                     dot={false}
+                    connectNulls
                   />
                 ))}
               </LineChart>
@@ -862,6 +863,7 @@ function WorkflowBody({
                     stroke={keyColors.get(key)}
                     strokeWidth={2}
                     dot={false}
+                    connectNulls
                   />
                 ))}
               </LineChart>
@@ -1170,7 +1172,7 @@ function JobBody({
                 <Tooltip />
                 <Legend />
                 {keysInSeries.map((key) => (
-                  <Line key={key} type="monotone" dataKey={key} stroke={keyColors.get(key)} strokeWidth={2} dot={false} />
+                  <Line key={key} type="monotone" dataKey={key} stroke={keyColors.get(key)} strokeWidth={2} dot={false} connectNulls />
                 ))}
               </LineChart>
             </ResponsiveContainer>
@@ -1434,7 +1436,7 @@ function QueueBody({
                 <Tooltip formatter={(value) => fmtSeconds(Number(value))} />
                 <Legend />
                 {modelsInSeries.map((m) => (
-                  <Line key={m} type="monotone" dataKey={m} stroke={modelColors.get(m)} strokeWidth={2} dot={false} />
+                  <Line key={m} type="monotone" dataKey={m} stroke={modelColors.get(m)} strokeWidth={2} dot={false} connectNulls />
                 ))}
               </LineChart>
             </ResponsiveContainer>
