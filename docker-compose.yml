@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
-    restart: unless-stopped
+    restart: always # ADR-038: survive host/WSL restarts (2026-11-10 outage)
     environment:
       POSTGRES_DB: action_insight
       POSTGRES_USER: action_insight
