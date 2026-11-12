@@ -23,14 +23,26 @@ vi.mock('recharts', () => ({
   ComposedChart: ({ data, children }: { data?: unknown[]; children?: React.ReactNode }) => (
     <div data-testid="chart" data-len={data?.length ?? 0}>{children}</div>
   ),
-  LineChart: ({ data, 'data-testid': testId }: { data?: unknown[]; 'data-testid'?: string }) => (
-    <div data-testid={testId ?? 'cost-chart'} data-len={data?.length ?? 0} />
+  LineChart: ({
+    data,
+    'data-testid': testId,
+    children,
+  }: { data?: unknown[]; 'data-testid'?: string; children?: React.ReactNode }) => (
+    <div
+      data-testid={testId ?? 'cost-chart'}
+      data-len={data?.length ?? 0}
+      data-chart-data={JSON.stringify(data ?? [])}
+    >
+      {children}
+    </div>
   ),
   Bar: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
   Cell: ({ onClick }: { onClick?: () => void }) => onClick ? (
     <button type="button" aria-label="Open chart details" onClick={onClick} />
   ) : null,
-  Line: () => null,
+  Line: ({ dataKey, connectNulls }: { dataKey?: string | number; connectNulls?: boolean }) => (
+    <div data-testid={`line-${String(dataKey)}`} data-connect-nulls={connectNulls === true ? 'true' : 'false'} />
+  ),
   Pie: () => null,
   PieChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
   XAxis: () => null,
@@ -628,5 +640,61 @@ describe('DashboardShell', () => {
   it('renders the Queue empty state', () => {
     render(<DashboardShell repoOptions={repoOptions} result={emptyQueueResult()} searchParams={{}} />);
     expect(screen.getByText(/No valid queue samples in range/i)).toBeInTheDocument();
+  });
+
+  // Regression (reported at ?tab=queue&repo=vllm-project/vllm-ascend): a sparse
+  // resource model only sampled on some days pivots to an ABSENT key on the
+  // days without samples (undefined in Recharts), and <Line> must opt into
+  // connectNulls or the polyline visually breaks. The old `Line: () => null`
+  // mock swallowed every Line prop, so a connectNulls regression could never
+  // fail here.
+  it('Queue tab: sparse model leaves an absent key on its gap day and Line uses connectNulls', () => {
+    const result = {
+      ...queueResult(),
+      cards: { ...queueResult().cards, distinctResourceModelCount: 2 },
+      series: [
+        { date: '2026-01-01', resourceModel: 'npu-a3', p90: 900 },
+        { date: '2026-01-02', resourceModel: 'npu-a2', p90: 300 },
+        { date: '2026-01-03', resourceModel: 'npu-a3', p90: 950 },
+      ],
+    };
+    render(<DashboardShell repoOptions={repoOptions} result={result} searchParams={{}} />);
+
+    // (a) The sparse model's Line opts into connectNulls.
+    expect(screen.getByTestId('line-npu-a3').getAttribute('data-connect-nulls')).toBe('true');
+
+    // (b) The pivot data passed to LineChart still has the 2026-01-02 row, but
+    // npu-a3's key is absent on it — the null source of the reported break.
+    const chartData = JSON.parse(
+      screen.getByTestId('cost-chart').getAttribute('data-chart-data') ?? '[]',
+    ) as Array<Record<string, unknown>>;
+    const day2 = chartData.find((row) => row.date === '2026-01-02');
+    expect(day2).toBeDefined();
+    expect(day2 && 'npu-a3' in day2).toBe(false);
+    expect(day2 && day2['npu-a2']).toBe(300);
+  });
+
+  // Same sparse-pivot guard for the Cost tab: a repo absent on a day leaves an
+  // absent key in the (date × repo) pivot, so its daily Line needs connectNulls.
+  it('Cost tab: repo absent on a day leaves an absent key in the pivot and Line uses connectNulls', () => {
+    const result = {
+      ...costResult(),
+      series: [
+        { date: '2026-01-01', repoKey: 'owner/repo', machineHours: 4 },
+        { date: '2026-01-02', repoKey: 'other/repo', machineHours: 2 },
+        { date: '2026-01-03', repoKey: 'owner/repo', machineHours: 4 },
+      ],
+    };
+    render(<DashboardShell repoOptions={repoOptions} result={result} searchParams={{}} />);
+
+    expect(screen.getByTestId('line-owner/repo').getAttribute('data-connect-nulls')).toBe('true');
+
+    const chartData = JSON.parse(
+      screen.getByTestId('cost-chart').getAttribute('data-chart-data') ?? '[]',
+    ) as Array<Record<string, unknown>>;
+    const day2 = chartData.find((row) => row.date === '2026-01-02');
+    expect(day2).toBeDefined();
+    expect(day2 && 'owner/repo' in day2).toBe(false);
+    expect(day2 && day2['other/repo']).toBe(2);
   });
 });
