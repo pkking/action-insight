@@ -697,4 +697,54 @@ describe('DashboardShell', () => {
     expect(day2 && 'owner/repo' in day2).toBe(false);
     expect(day2 && day2['other/repo']).toBe(2);
   });
+
+  // Same sparse-pivot guard for the Workflow tab: a repo absent on a day
+  // leaves an absent key in the (date × repo) pivot behind "Daily Attempts",
+  // so its daily Line needs connectNulls or the polyline visually breaks.
+  it('Workflow tab: repo absent on a day leaves an absent key in the pivot and Line uses connectNulls', () => {
+    const result = {
+      ...workflowResult(),
+      series: [
+        { date: '2026-01-01', key: 'owner/repo', attempts: 3 },
+        { date: '2026-01-02', key: 'other/repo', attempts: 2 },
+        { date: '2026-01-03', key: 'owner/repo', attempts: 4 },
+      ],
+    };
+    render(<DashboardShell repoOptions={repoOptions} result={result} searchParams={{}} />);
+
+    expect(screen.getByTestId('line-owner/repo').getAttribute('data-connect-nulls')).toBe('true');
+
+    const chartData = JSON.parse(
+      screen.getByTestId('cost-chart').getAttribute('data-chart-data') ?? '[]',
+    ) as Array<Record<string, unknown>>;
+    const day2 = chartData.find((row) => row.date === '2026-01-02');
+    expect(day2).toBeDefined();
+    expect(day2 && 'owner/repo' in day2).toBe(false);
+    expect(day2 && day2['other/repo']).toBe(2);
+  });
+
+  // Same sparse-pivot guard for the Job tab: a repo absent on a day leaves an
+  // absent key in the (date × repo) pivot behind "Daily Jobs", so its daily
+  // Line needs connectNulls or the polyline visually breaks.
+  it('Job tab: repo absent on a day leaves an absent key in the pivot and Line uses connectNulls', () => {
+    const result = {
+      ...jobResult(),
+      series: [
+        { date: '2026-01-01', key: 'owner/repo', jobs: 3 },
+        { date: '2026-01-02', key: 'other/repo', jobs: 2 },
+        { date: '2026-01-03', key: 'owner/repo', jobs: 4 },
+      ],
+    };
+    render(<DashboardShell repoOptions={repoOptions} result={result} searchParams={{}} />);
+
+    expect(screen.getByTestId('line-owner/repo').getAttribute('data-connect-nulls')).toBe('true');
+
+    const chartData = JSON.parse(
+      screen.getByTestId('cost-chart').getAttribute('data-chart-data') ?? '[]',
+    ) as Array<Record<string, unknown>>;
+    const day2 = chartData.find((row) => row.date === '2026-01-02');
+    expect(day2).toBeDefined();
+    expect(day2 && 'owner/repo' in day2).toBe(false);
+    expect(day2 && day2['other/repo']).toBe(2);
+  });
 });
