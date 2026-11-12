@@ -77,10 +77,22 @@ function findRepoConfig(config: ReposConfig, repo: string): RepoConfigEntry {
   return config.repos.find((entry) => entry.repo === repo) ?? { repo, workflows: [] };
 }
 
-function parseArgs(argv: string[]): { repos: string[]; days: number; help: boolean } {
+export interface BackfillCliArgs {
+  repos: string[];
+  days: number;
+  help: boolean;
+  max?: number;
+  listOnly: boolean;
+  fetchOnce: boolean;
+}
+
+export function parseArgs(argv: string[]): BackfillCliArgs {
   const repos: string[] = [];
   let days = 14;
   let help = false;
+  let max: number | undefined;
+  let listOnly = false;
+  let fetchOnce = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -112,6 +124,28 @@ function parseArgs(argv: string[]): { repos: string[]; days: number; help: boole
       continue;
     }
 
+    if (arg === '--max') {
+      if (!next || next.startsWith('-')) {
+        throw new Error('--max requires an integer value');
+      }
+      max = Number(next);
+      if (!Number.isInteger(max) || max <= 0) {
+        throw new Error('--max must be a positive integer');
+      }
+      index += 1;
+      continue;
+    }
+
+    if (arg === '--list-only') {
+      listOnly = true;
+      continue;
+    }
+
+    if (arg === '--fetch-once') {
+      fetchOnce = true;
+      continue;
+    }
+
     throw new Error(`Unknown option: ${arg}`);
   }
 
@@ -119,6 +153,9 @@ function parseArgs(argv: string[]): { repos: string[]; days: number; help: boole
     repos,
     days,
     help,
+    max,
+    listOnly,
+    fetchOnce,
   };
 }
 
@@ -131,6 +168,12 @@ Backfill jobs for configured workflow attempts that already exist in PostgreSQL 
 Options:
   --repo, -r <owner/repo>   Backfill one repo. Can be repeated.
   --days <n>                Limit to attempts created in the last n days (default: 14)
+  --fetch-once              Fetch-once idempotent mode: only query completed attempts whose jobs were
+                            never fetched (wa.jobs_fetched_at IS NULL, skipping action_required/startup_failure
+                            runs that never start jobs), and also mark empty job lists as fetched.
+                            Default: off (stock behavior).
+  --max <n>                 Limit the number of attempts backfilled per repo in this run (default: unlimited)
+  --list-only               Print eligible missing attempt counts per repo without fetching or writing.
   --help, -h                Show this help.
 `.trim();
 }
@@ -210,9 +253,16 @@ export async function fetchJobsForRunAttempt(
   });
 }
 
-export function buildMissingAttemptsQuery(workflowFiles: string[]): string {
+export function buildMissingAttemptsQuery(workflowFiles: string[], options?: { fetchOnce?: boolean }): string {
   const configuredFiles = workflowFiles.length > 0
     ? ` OR r.workflow_file IN (${pgPlaceholders(workflowFiles.length, 3)})`
+    : '';
+  const fetchOnceFilters = options?.fetchOnce
+    ? `
+            AND r.status = 'completed'
+            AND r.conclusion IS DISTINCT FROM 'action_required'
+            AND r.conclusion IS DISTINCT FROM 'startup_failure'
+            AND wa.jobs_fetched_at IS NULL`
     : '';
   return `SELECT r.id AS run_id,
                  wa.run_attempt,
@@ -232,7 +282,7 @@ export function buildMissingAttemptsQuery(workflowFiles: string[]): string {
           FROM workflow_attempts wa
           JOIN runs r ON r.id = wa.run_id
           WHERE r.repo_id = $1
-            AND (wa.tracked = 1${configuredFiles})
+            AND (wa.tracked = 1${configuredFiles})${fetchOnceFilters}
             AND r.created_at::date >= $2::date
             AND NOT EXISTS (
               SELECT 1
@@ -247,6 +297,7 @@ async function fetchMissingAttempts(
   repo: string,
   days: number,
   workflowFiles: string[],
+  fetchOnce = false,
 ): Promise<MissingAttemptRow[]> {
   const client = await getDatabaseClient();
   try {
@@ -262,7 +313,7 @@ async function fetchMissingAttempts(
   const repoId = Number(repoRows[0].id);
 
   const { rows } = await client.query(
-    buildMissingAttemptsQuery(workflowFiles),
+    buildMissingAttemptsQuery(workflowFiles, { fetchOnce }),
     [repoId, sinceDate, ...workflowFiles],
   );
 
@@ -288,7 +339,14 @@ async function fetchMissingAttempts(
   }
 }
 
-export async function backfillRepo(repo: string, config: ReposConfig, days: number, token: string): Promise<void> {
+export interface BackfillOptions {
+  /** Fetch-once idempotent mode (ADR-038): completed-only query filter + mark empty job lists as fetched. */
+  fetchOnce?: boolean;
+  /** Limit the number of attempts processed per repo in this run. */
+  max?: number;
+}
+
+export async function backfillRepo(repo: string, config: ReposConfig, days: number, token: string, options: BackfillOptions = {}): Promise<void> {
   const [owner, repoName] = repo.split('/');
   if (!owner || !repoName) {
     throw new Error(`Invalid repo format: ${repo}. Expected owner/repo`);
@@ -296,17 +354,18 @@ export async function backfillRepo(repo: string, config: ReposConfig, days: numb
 
   const repoConfig = findRepoConfig(config, repo);
   const workflowFiles = repoConfig.workflows.map((workflow) => workflow.file);
-  const missingAttempts = await fetchMissingAttempts(repo, days, workflowFiles);
-  console.log(`${repo}: ${missingAttempts.length} missing workflow attempts in the last ${days} day(s)`);
+  const missingAttempts = await fetchMissingAttempts(repo, days, workflowFiles, options.fetchOnce ?? false);
+  const list = options.max && options.max > 0 ? missingAttempts.slice(0, options.max) : missingAttempts;
+  console.log(`${repo}: ${list.length} missing workflow attempts in the last ${days} day(s)`);
 
-  if (missingAttempts.length === 0) {
+  if (list.length === 0) {
     return;
   }
 
   const octokit = createOctokit(token);
   let completed = 0;
 
-  for (const attempt of missingAttempts) {
+  for (const attempt of list) {
     const jobs = await fetchJobsForRunAttempt(octokit, owner, repoName, attempt.run_id, attempt.run_attempt);
     const run: Run = {
       id: attempt.run_id,
@@ -330,12 +389,24 @@ export async function backfillRepo(repo: string, config: ReposConfig, days: numb
 
     const enriched = enrichRunWithWorkflowMetadata(run, config, repoConfig);
     const attempts = buildWorkflowAttempts([enriched], config, repoConfig);
+    if (options.fetchOnce && (enriched.jobs ?? []).length === 0 && attempts.length > 0) {
+      attempts[0].jobs_fetched_at = new Date().toISOString();
+    }
     await writeWorkflowAttempts(repo, attempts);
 
     completed += 1;
-    if (completed % 25 === 0 || completed === missingAttempts.length) {
-      console.log(`${repo}: backfilled ${completed}/${missingAttempts.length} missing attempts`);
+    if (completed % 25 === 0 || completed === list.length) {
+      console.log(`${repo}: backfilled ${completed}/${list.length} missing attempts`);
     }
+  }
+}
+
+export async function listEligibleMissingAttempts(targetRepos: string[], config: ReposConfig, days: number, fetchOnce: boolean): Promise<void> {
+  for (const repo of targetRepos) {
+    const repoConfig = findRepoConfig(config, repo);
+    const workflowFiles = repoConfig.workflows.map((workflow) => workflow.file);
+    const missingAttempts = await fetchMissingAttempts(repo, days, workflowFiles, fetchOnce);
+    console.log(`${repo}: ${missingAttempts.length} eligible missing attempts`);
   }
 }
 
@@ -346,15 +417,20 @@ async function main() {
     return;
   }
 
+  const config = readReposConfig();
+  const targetRepos = args.repos.length > 0 ? args.repos : config.repos.map((entry) => entry.repo);
+
+  if (args.listOnly) {
+    await listEligibleMissingAttempts(targetRepos, config, args.days, args.fetchOnce);
+    return;
+  }
+
   const tokens = resolveGitHubTokens();
   if (tokens.length === 0) {
     throw new Error('No GitHub token found. Add gh-token.txt or run gh auth login.');
   }
 
-  const config = readReposConfig();
-  const targetRepos = args.repos.length > 0 ? args.repos : config.repos.map((entry) => entry.repo);
-
-  await Promise.all(targetRepos.map((repo, index) => backfillRepo(repo, config, args.days, tokens[index % tokens.length])));
+  await Promise.all(targetRepos.map((repo, index) => backfillRepo(repo, config, args.days, tokens[index % tokens.length], { fetchOnce: args.fetchOnce, max: args.max })));
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
