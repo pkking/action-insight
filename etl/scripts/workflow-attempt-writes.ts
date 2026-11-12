@@ -32,6 +32,14 @@ export async function writeWorkflowAttemptsToClient(
   try {
     for (const batch of chunkArray(attempts, WORKFLOW_ATTEMPT_UPSERT_BATCH_SIZE)) {
       for (const attempt of batch) {
+        // ADR-038 constraint 1: queue_duration_seconds is a derived value
+        // (created_at -> first job started_at) and an invariant once an attempt
+        // has completed. A NULL in the incoming row comes from re-persisting a
+        // dehydrated in-memory run (cache-fresh runs skip job hydration, so
+        // buildWorkflowAttempts derives queue=NULL); COALESCE keeps the stored
+        // value instead of wiping it. Fresh inserts are unaffected by the
+        // conflict clause, and rerun attempts (run_attempt > 1) stay NULL by
+        // design (ADR-023).
         await client.query(
           toPgSql(`INSERT INTO workflow_attempts (
                 run_id, run_attempt, status, conclusion, created_at, run_started_at,
@@ -42,7 +50,8 @@ export async function writeWorkflowAttemptsToClient(
               ON CONFLICT(run_id, run_attempt) DO UPDATE SET
                 status=excluded.status, conclusion=excluded.conclusion, created_at=excluded.created_at,
                 run_started_at=excluded.run_started_at, completed_at=excluded.completed_at,
-                updated_at=excluded.updated_at, queue_duration_seconds=excluded.queue_duration_seconds,
+                updated_at=excluded.updated_at,
+                queue_duration_seconds=COALESCE(excluded.queue_duration_seconds, workflow_attempts.queue_duration_seconds),
                 runtime_seconds=excluded.runtime_seconds, total_duration_seconds=excluded.total_duration_seconds,
                 tracked=excluded.tracked, workflow_file=excluded.workflow_file,
                 workflow_ref=excluded.workflow_ref, match_kind=excluded.match_kind,
