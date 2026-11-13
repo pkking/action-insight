@@ -40,8 +40,8 @@ vi.mock('recharts', () => ({
   Cell: ({ onClick }: { onClick?: () => void }) => onClick ? (
     <button type="button" aria-label="Open chart details" onClick={onClick} />
   ) : null,
-  Line: ({ dataKey, connectNulls }: { dataKey?: string | number; connectNulls?: boolean }) => (
-    <div data-testid={`line-${String(dataKey)}`} data-connect-nulls={connectNulls === true ? 'true' : 'false'} />
+  Line: ({ dataKey, dot, connectNulls }: { dataKey?: string | number; dot?: boolean | object; connectNulls?: boolean }) => (
+    <div data-testid={`line-${String(dataKey)}`} data-dot={dot !== false ? 'true' : 'false'} data-connect-nulls={connectNulls === true ? 'true' : 'false'} />
   ),
   Pie: () => null,
   PieChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
@@ -662,6 +662,7 @@ describe('DashboardShell', () => {
 
     // (a) The sparse model's Line opts into connectNulls.
     expect(screen.getByTestId('line-npu-a3').getAttribute('data-connect-nulls')).toBe('true');
+    expect(screen.getByTestId('line-npu-a3').getAttribute('data-dot')).toBe('true');
 
     // (b) The pivot data passed to LineChart still has the 2026-01-02 row, but
     // npu-a3's key is absent on it — the null source of the reported break.
@@ -688,6 +689,7 @@ describe('DashboardShell', () => {
     render(<DashboardShell repoOptions={repoOptions} result={result} searchParams={{}} />);
 
     expect(screen.getByTestId('line-owner/repo').getAttribute('data-connect-nulls')).toBe('true');
+    expect(screen.getByTestId('line-owner/repo').getAttribute('data-dot')).toBe('true');
 
     const chartData = JSON.parse(
       screen.getByTestId('cost-chart').getAttribute('data-chart-data') ?? '[]',
@@ -713,6 +715,7 @@ describe('DashboardShell', () => {
     render(<DashboardShell repoOptions={repoOptions} result={result} searchParams={{}} />);
 
     expect(screen.getByTestId('line-owner/repo').getAttribute('data-connect-nulls')).toBe('true');
+    expect(screen.getByTestId('line-owner/repo').getAttribute('data-dot')).toBe('true');
 
     const chartData = JSON.parse(
       screen.getByTestId('cost-chart').getAttribute('data-chart-data') ?? '[]',
@@ -738,6 +741,7 @@ describe('DashboardShell', () => {
     render(<DashboardShell repoOptions={repoOptions} result={result} searchParams={{}} />);
 
     expect(screen.getByTestId('line-owner/repo').getAttribute('data-connect-nulls')).toBe('true');
+    expect(screen.getByTestId('line-owner/repo').getAttribute('data-dot')).toBe('true');
 
     const chartData = JSON.parse(
       screen.getByTestId('cost-chart').getAttribute('data-chart-data') ?? '[]',

@@ -555,7 +555,7 @@ function CostBody({
                     dataKey={repoKey}
                     stroke={repoColors.get(repoKey)}
                     strokeWidth={2}
-                    dot={false}
+                    dot={{ r: 3 }}
                     connectNulls
                   />
                 ))}
@@ -862,7 +862,7 @@ function WorkflowBody({
                     dataKey={key}
                     stroke={keyColors.get(key)}
                     strokeWidth={2}
-                    dot={false}
+                    dot={{ r: 3 }}
                     connectNulls
                   />
                 ))}
@@ -1172,7 +1172,7 @@ function JobBody({
                 <Tooltip />
                 <Legend />
                 {keysInSeries.map((key) => (
-                  <Line key={key} type="monotone" dataKey={key} stroke={keyColors.get(key)} strokeWidth={2} dot={false} connectNulls />
+                  <Line key={key} type="monotone" dataKey={key} stroke={keyColors.get(key)} strokeWidth={2} dot={{ r: 3 }} connectNulls />
                 ))}
               </LineChart>
             </ResponsiveContainer>
@@ -1436,7 +1436,7 @@ function QueueBody({
                 <Tooltip formatter={(value) => fmtSeconds(Number(value))} />
                 <Legend />
                 {modelsInSeries.map((m) => (
-                  <Line key={m} type="monotone" dataKey={m} stroke={modelColors.get(m)} strokeWidth={2} dot={false} connectNulls />
+                  <Line key={m} type="monotone" dataKey={m} stroke={modelColors.get(m)} strokeWidth={2} dot={{ r: 3 }} connectNulls />
                 ))}
               </LineChart>
             </ResponsiveContainer>
