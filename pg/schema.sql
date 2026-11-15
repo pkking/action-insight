@@ -265,3 +265,20 @@ CREATE TABLE IF NOT EXISTS pr_workflow_attempts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_pr_workflow_attempts_pr ON pr_workflow_attempts(pr_metric_id);
+
+-- =====================================================================
+-- ADR-040: cancel-actor evidence from check-run annotations.
+-- Idempotent migration block: safe to re-apply against live databases
+-- (ADD COLUMN IF NOT EXISTS / CREATE INDEX IF NOT EXISTS are no-ops
+-- after the first apply). Fresh containers get these via initdb replay
+-- of this same file.
+-- =====================================================================
+ALTER TABLE workflow_attempts ADD COLUMN IF NOT EXISTS cancelled_by TEXT;            -- 取消者 login，NULL=无显式取消者
+ALTER TABLE workflow_attempts ADD COLUMN IF NOT EXISTS cancel_evidence TEXT;         -- 'job_annotation' | 'check_run_annotation' | 'none' | 'gone' | 'no_cancelled_check_run'
+ALTER TABLE workflow_attempts ADD COLUMN IF NOT EXISTS cancel_message TEXT;         -- 原始 annotation message（审计留档）
+ALTER TABLE workflow_attempts ADD COLUMN IF NOT EXISTS cancel_annotation_fetched_at TEXT;  -- ISO 时间戳；NULL=未采集（幂等标记）
+
+-- Collector resume query: pending cancelled attempts by runtime DESC.
+CREATE INDEX IF NOT EXISTS idx_workflow_attempts_cancel_pending
+  ON workflow_attempts (runtime_seconds DESC)
+  WHERE conclusion = 'cancelled' AND cancel_annotation_fetched_at IS NULL;

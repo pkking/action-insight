@@ -142,6 +142,30 @@ class ConfigTests(unittest.TestCase):
              if any(workflow.get("report_name") for workflow in item.get("workflows", []))},
         )
 
+    def test_ascend_pytorch_workflow_inventory_and_report_names(self):
+        import yaml
+        config_path = Path(__file__).parents[4] / "etl" / "repos.yaml"
+        config = yaml.safe_load(config_path.read_text())
+        workflows = next(repo["workflows"] for repo in config["repos"] if repo["repo"] == "ascend/pytorch")
+        expected = [
+            ("nightly.yml", "Nightly Build Integration", "Nightly"),
+            ("nightly-a3.yml", "Nightly Build and Test A3", "Nightly"),
+            ("a5-torch-npu-test.yml", "A5 torch_npu Test", "A5"),
+            ("pytorch_ci_trigger_pr.yml", "PyTorch CI Trigger (PR)", "PR Trigger"),
+            ("pytorch_ci_trigger_push.yml", "PyTorch CI Trigger (Push)", "Push Trigger"),
+        ]
+        self.assertEqual([(w["file"], w["report_name"], w["comparison_name"]) for w in workflows], expected)
+        self.assertNotIn("npu-test.yml", {w["file"] for w in workflows})
+        drilldown = yaml.safe_load((config_path.parents[1] / "config" / "drilldown-workflows.yaml").read_text())
+        drilldown_files = {w["file"] for repo in drilldown["repositories"]
+                           if repo["repo"] == "ascend/pytorch" for w in repo["workflows"]}
+        self.assertNotIn("npu-test.yml", drilldown_files)
+        self.assertIn("pytorch_ci_trigger_pr.yml", drilldown_files)
+        self.assertEqual(len(workflows), len({w["file"] for w in workflows}))
+        self.assertEqual(len(workflows), len({w["report_name"] for w in workflows}))
+        entries = MODULE.parse_config_entries(str(config_path))["ascend/pytorch"]
+        self.assertEqual([(w["file"], w["name"], w["comparison_name"]) for w in entries], expected)
+
     def test_unified_config_preserves_resources_and_drilldown_inventory(self):
         import yaml
         root = Path(__file__).parents[4]

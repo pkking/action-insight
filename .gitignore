@@ -43,8 +43,11 @@ next-env.d.ts
 .gstack/
 .worktrees/
 
-# local reports and Python cache for ci-efficiency-report skill work
-/reports/
+# Keep reports private/local; only audit source and tests are trackable
+/reports/*
+!/reports/
+!/reports/pr-card-hours-coverage-audit.py
+!/reports/test_pr_card_hours_coverage_audit.py
 __pycache__/
 *.pyc
 *.pyo
