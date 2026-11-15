@@ -44,7 +44,7 @@ def test_native_queue_reruns_dedup_and_coverage():
     assert buckets['x/y', '2026-08-01']['models']['linux-aarch64-a3'] == .5
     assert buckets['x/y', '2026-08-02']['attempts']['failure'] == 1
     assert issues['total']['npu_attempts_undated'] == 0
-    assert len(audit) == 92
+    assert len(audit) == len(DAYS)  # 2026-08-01..11-08 window: 100 day cells
     row = next(r for r in audit if r['date'] == '2026-08-03')
     assert (row['runs'], row['attempts'], row['zero_job_attempts'], row['missing_prior_attempts']) == (1, 1, 1, 1)
     assert sum(r['runs'] for r in audit) == 1
