@@ -56,6 +56,11 @@ DEFAULT_STEP_NAMES = SKILL_DIR / "references" / "step-names.json"
 DEFAULT_PG_URL = "postgresql://action_insight:action_insight@localhost:5433/action_insight"
 DEFAULT_DAYS = 30
 
+# Also works when this script is loaded directly via importlib in tests.
+if str(SKILL_DIR) not in sys.path:
+    sys.path.insert(0, str(SKILL_DIR))
+from scripts.runner_resource_evidence import resource_evidence
+
 
 def load_env(path: Path) -> dict:
     env = {}
@@ -444,7 +449,19 @@ def safe_div(a: float, b: float) -> float:
     return round(float(a) / float(b), 3) if b else 0.0
 
 
-def _resource_type_and_cards(job: dict) -> tuple[str, int] | None:
+def _resource_type_and_cards(job: dict) -> tuple[str, float] | None:
+    evidence = resource_evidence({
+        "labels_json": json.dumps(job.get("labels") or []),
+        "resource_model": job.get("card_model"),
+        "resource_count": job.get("card_count"),
+        "repo": job.get("repo"), "workflow": job.get("workflow"),
+    })
+    if evidence[0] in ("npu", "conflict"):
+        if evidence[0] != "npu" or evidence[2] is None:
+            return None
+        model = evidence[1].removeprefix("linux-aarch64-").upper()
+        kind = "A2" if "A2" in model else "A3" if "A3" in model else model
+        return kind, evidence[2]
     model, count = job.get("card_model"), job.get("card_count")
     if not isinstance(model, str) or not isinstance(count, int) or count <= 0:
         for label in job.get("labels") or []:
@@ -456,7 +473,7 @@ def _resource_type_and_cards(job: dict) -> tuple[str, int] | None:
         return None
     kind = model.removeprefix("linux-aarch64-").upper()
     kind = "A2" if "A2" in kind else "A3" if "A3" in kind else kind
-    return kind, (count + 1) // 2 if kind == "A3" else count
+    return kind, count / 2 if kind == "A3" else count
 
 
 def _card_hours(job: dict) -> float | None:
@@ -572,14 +589,14 @@ def _cpu_hours(job: dict) -> float | None:
         return None
 
 
-def _model_summary(jobs: list[dict]) -> dict[str, int]:
-    """Total card count per device model across jobs."""
-    out: dict[str, int] = {}
+def _model_summary(jobs: list[dict]) -> dict[str, float]:
+    """Total physical cards per model without changing the raw job rows."""
+    out: dict[str, float] = {}
     for j in jobs:
         model = j.get("card_model")
-        count = j.get("card_count")
-        if isinstance(model, str) and isinstance(count, int) and count > 0:
-            out[model] = out.get(model, 0) + count
+        resource = _resource_type_and_cards(j)
+        if isinstance(model, str) and resource:
+            out[model] = out.get(model, 0) + resource[1]
     return out
 
 
@@ -611,7 +628,7 @@ def workflow_resource_summary(jobs: list[dict], static_resources: dict[str, int]
         for kind, count in resources.items():
             maximums[kind] = max(maximums[kind], count)
     return "；".join(
-        f"{kind} × {count}{'核' if kind == 'x86 CPU' else '卡'}"
+        f"{kind} × {count:g}{'核' if kind == 'x86 CPU' else '卡'}"
         for kind, count in sorted(maximums.items())
     ) or "未识别"
 
