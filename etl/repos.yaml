@@ -149,6 +149,55 @@ repos:
     report_name: Nightly-A3
     comparison_name: Nightly
   comparison_group: vllm
+# --- ADR-041: 平台集成仓库采集扩展（workflow 名与标签已按 ADR-041 §1.2/附录 B 核实，2026-11-20）---
+# 仅采有加速器证据的 workflow；CPU 工作流（ubuntu-latest / linux-*-cpu-*）不采。
+# 不设 report_name / comparison_group（ADR-041 §2.3：采集范围 ≠ 报告范围）。
+- repo: sgl-project/sgl-kernel-npu
+  workflows:
+  - file: pr-test-kernels.yml
+  - file: pr-test-deepep-npu.yml
+  - file: daily-test-kernels.yml
+  - file: daily-build-test.yml
+  - file: pr-test-mega-moe.yml
+  - file: kernel-coverage.yml
+  - file: kernel-coverage-pr-smoke.yml
+- repo: vllm-ascend/vllm-ascend-recipes
+  workflows:
+  - file: pr-recipe-verify.yml
+  - file: recipe-e2e.yml
+  - file: nightly-recipe-verify.yml
+  - file: verify_multi_node.yaml
+- repo: XPU-Forces/mojo_opset
+  workflows:
+  - file: npu-910b.yml
+  - file: ascend-a2-smoke.yml
+  - file: ascend-a3-smoke.yml
+- repo: verl-project/uni-agent
+  workflows:
+  - file: ci-npu.yml
+  - file: ci-gpu.yml
+- repo: verl-project/verl-omni
+  workflows:
+  - file: npu_smoke.yml
+  - file: gpu_smoke.yml
+  - file: l3_nightly.yml
+- repo: Ascend/sglang
+  workflows:
+  - file: full-test-npu.yml
+  - file: pr-test-npu.yml
+- repo: fla-org/flash-linear-attention
+  workflows:
+  - file: ascend-a2-ci.yml
+  - file: ascend-a2-benchmark-ci.yml
+  - file: agent-ascend-a2-tests.yml
+  - file: agent-ascend-a5-tests.yml
+  - file: nvidia-h100.yml
+  - file: nvidia-h100-smoke.yml
+  - file: agent-h100-tests.yml
+- repo: Ascend/cann-container-image
+  workflows:
+  - file: build_cann.yml
+  - file: batch_build_and_push_cann.yml
 resource_pools:
   A3: 364
   A2: 104
