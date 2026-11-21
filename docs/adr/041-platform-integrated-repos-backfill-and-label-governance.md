@@ -452,6 +452,8 @@ npm run lint && npm test
 | host 尾组 | a3-800i-8-cn12-001（Ascend/pytorch job 136337062994） | 4 NPU × 2 die = 8 die | **N=die，÷2 折卡** |
 | a2b4 | a2b4-2（recipes job 136040735330） | 2 台 910B4 NPU 设备（各 1 chip） | **N=物理卡**（与 ADR-024 A2 族语义一致；verification-targets.yaml 的 "Single Card" 为 recipe 配置标签，非硬件描述）。已按卡折算，如有反证一行可回退 |
 | mojo-fed / a2-fed | a2-mojo-fed-4（模式同 a2b4） | A2 族 | **N=卡** |
+| 910b-N（VeOmni 自托管池） | `self-hosted, 910b-8`（job 125767221016） | npu-smi：16×910B2C 芯片行 = 8 卡×2 芯片；workflow 声明 static_resources {"Ascend 910B": 8} 印证 | **N=物理卡**（进入通用治理层与 CARD_MODELS） |
+| l20-N（VeOmni 自托管池） | `self-hosted, l20-8`（job 126472526201） | NVIDIA L20 机器池；workflow 声明 static_resources {"L20": 8}；与 verl L20x8 同族 | **N=GPU 卡**（报告侧 GPU 规则） |
 
 遗留问题 1（a2b4 / recipes-fed 语义）据此关闭；实施落地见批次 4。0 卡家族（a3-800t-0 / a2b3-0）保持 quantity_unknown 不折卡。
 

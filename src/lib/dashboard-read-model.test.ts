@@ -8,6 +8,9 @@ import {
   buildEnrichedRows,
   buildPrCards,
   buildPrDashboardResult,
+  classifyResourceClass,
+  GPU_LABEL_PATTERN,
+  NPU_LABEL_PATTERN,
   type PrMetricRow,
   type PrSeriesPoint,
 } from './dashboard-read-model';
@@ -40,6 +43,62 @@ describe('buildEnrichedRows', () => {
     expect(enriched[0].repoKey).toBe('owner/repo');
     expect(enriched[0].timing).not.toHaveProperty('queue');
     expect(enriched[0].timing.ciRuntime).toBe(3000);
+  });
+});
+
+describe('classifyResourceClass', () => {
+  it('a repo without GPU hardware must not show a GPU badge: CPU-only workflows classify as neither', () => {
+    // vllm-ascend lint/setup jobs used to render "GPU ✓" under the old
+    // "not-NPU implies GPU/other" catch-all. Positive evidence is now required.
+    expect(classifyResourceClass(null, '["ubuntu-latest"]')).toBeNull();
+    expect(classifyResourceClass(null, '["self-hosted"]')).toBeNull();
+    expect(classifyResourceClass('linux-aarch64-cpu', '["linux-aarch64-cpu-24"]')).toBeNull();
+  });
+
+  it('NPU likewise requires NPU evidence; bare a2 tokens never classify NPU', () => {
+    expect(classifyResourceClass(null, '["macos-latest"]')).toBeNull();
+    // gcp-a2-highgpu is a GPU machine type: the bare a2 in its name must not
+    // leak into the NPU class.
+    expect(classifyResourceClass(null, '["gcp-a2-highgpu-2g-run-1-1","variant-vllm"]')).toBe('gpu');
+  });
+
+  it('classifies the governed NPU label families', () => {
+    for (const labels of [
+      '["linux-aarch64-a3-800i-8-cn12-001"]',
+      '["self-hosted","910b-8"]',
+      '["linux-amd64-a5-4"]',
+      '["linux-aarch64-a2b4-2"]',
+      '["nightly-a3"]',
+    ]) {
+      expect(classifyResourceClass(null, labels)).toBe('npu');
+    }
+    expect(classifyResourceClass('linux-aarch64-a3', null)).toBe('npu');
+  });
+
+  it('classifies explicit GPU evidence families', () => {
+    for (const labels of [
+      '["1-gpu-5090"]',
+      '["nvidia-h100-1"]',
+      '["self-hosted","l20-8"]',
+      '["uv_cu130_dev5"]',
+      '["self-hosted","amd","gfx942"]',
+      '["gcp-a2-highgpu-2g-run-1-1"]',
+    ]) {
+      expect(classifyResourceClass(null, labels)).toBe('gpu');
+    }
+  });
+
+  it('NPU evidence wins when a workflow mixes classes', () => {
+    expect(classifyResourceClass(null, '["linux-amd64-a5-4","nvidia"]')).toBe('npu');
+  });
+
+  it('patterns never match bare amd64 platform tokens', () => {
+    // linux-amd64-* is a platform prefix, not GPU evidence; the GPU pattern must
+    // not contain the bare token amd and the NPU pattern must not match gcp-a2.
+    const npu = new RegExp(NPU_LABEL_PATTERN, 'i');
+    const gpu = new RegExp(GPU_LABEL_PATTERN, 'i');
+    expect(gpu.test('linux-amd64-a5-4')).toBe(false);
+    expect(npu.test('gcp-a2-highgpu-2g-run-1-1')).toBe(false);
   });
 });
 

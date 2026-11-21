@@ -12,7 +12,7 @@ A3_MODELS = frozenset({
 CARD_MODELS = frozenset({
     'linux-aarch64-a2', 'linux-aarch64-a2b1', 'linux-aarch64-a2b3',
     'linux-aarch64-a2b1b3', 'linux-aarch64-a2b4', 'linux-aarch64-310p',
-    'linux-aarch64-a5', 'linux-amd64-a5',
+    'linux-aarch64-a5', 'linux-amd64-a5', 'linux-aarch64-910b',
 })
 RULE_VERSION = 'governed-runner-v5-user-confirmed-card-units'
 RULE_SOURCE = 'user confirmation: A2/A5/310P N cards; A3 N/2 cards'
