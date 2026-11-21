@@ -4,7 +4,7 @@
 
 ## 背景
 
-Ascend GHA Runners 平台集成清单（https://ascend-gha-runners.github.io/docs/Repo/，2026-11-20 核对，共 22 个仓库）与本地库（docker `action-insight-postgres-1:5433`，采集持续入库）的对照发现三块缺口：
+Ascend GHA Runners 平台集成清单（https://ascend-gha-runners.github.io/docs/Repo/ ，2026-11-20 核对，共 22 个仓库）与本地库（docker `action-insight-postgres-1:5433`，采集持续入库）的对照发现三块缺口：
 
 1. **采集缺口**：本地只采了 13 个，9 个未采集（sgl-project/sgl-kernel-npu、vllm-ascend/vllm-ascend-recipes、XPU-Forces/mojo_opset、verl-project/uni-agent、verl-project/verl-omni、vllm-project/vllm-omni、Ascend/sglang、fla-org/flash-linear-attention、Ascend/cann-container-image）。
 2. **报告范围缺口**：`verl-project/verl-SpeCo` 本地已有数据（2026-11 月 PR-event NPU 卡时 1,313，全部事件 1,504），但不在 `config/drilldown-workflows.yaml` allowlist，从未进过趋势报告（npu_daily_trends / npu_waste_superseded / npu_efficiency 均以 allowlist 为范围）。

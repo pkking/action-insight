@@ -59,7 +59,9 @@ repos:
   - file: release-docker-npu-nightly.yml
 - repo: tile-ai/tilelang-mlir-ascend
   workflows:
-  - file: base_ci.yml
+  - file: ci.yml
+    # base_ci.yml (state=deleted 2026-11): its Ascend job moved into ci.yml with
+    # the same structure as tile-ai/tilelang (runs-on linux-amd64-a5-4 + CANN image).
     report_name: Base CI
     comparison_name: PR
   comparison_group: tilelang
