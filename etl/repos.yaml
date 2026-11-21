@@ -5,6 +5,7 @@ repos:
 - repo: areal-project/AReaL
   workflows:
   - file: test-areal.yml
+    npu_drilldown: true
     report_name: AReaL CI on GCP runner
     comparison_name: PR
   - file: nightly.yml
@@ -14,15 +15,18 @@ repos:
 - repo: alibaba/ROLL
   workflows:
   - file: ci-npu-mindspeed.yml
+    npu_drilldown: true
     report_name: MindSpeed NPU Tests
     comparison_name: PR
   - file: ci-npu-test.yml
+    npu_drilldown: true
     report_name: Tests
     comparison_name: PR
   comparison_group: roll
 - repo: hiyouga/LlamaFactory
   workflows:
   - file: tests_npu.yml
+    npu_drilldown: true
     report_name: tests_npu
     comparison_name: PR
   - file: tests.yml
@@ -32,6 +36,7 @@ repos:
 - repo: modelscope/ms-swift
   workflows:
   - file: citest_npu.yaml
+    npu_drilldown: true
     report_name: citest-npu
     comparison_name: PR
   - file: citest.yaml
@@ -41,6 +46,7 @@ repos:
 - repo: sgl-project/sglang
   workflows:
   - file: pr-test-npu.yml
+    npu_drilldown: true
     report_name: PR Test (NPU)
     comparison_name: PR
   - file: pr-test.yml
@@ -60,6 +66,7 @@ repos:
 - repo: tile-ai/tilelang-mlir-ascend
   workflows:
   - file: ci.yml
+    npu_drilldown: true
     # base_ci.yml (state=deleted 2026-11): its Ascend job moved into ci.yml with
     # the same structure as tile-ai/tilelang (runs-on linux-amd64-a5-4 + CANN image).
     report_name: Base CI
@@ -68,18 +75,21 @@ repos:
 - repo: tile-ai/tilelang
   workflows:
   - file: ci.yml
+    npu_drilldown: true
     report_name: CI
     comparison_name: PR
   comparison_group: tilelang
 - repo: triton-lang/triton
   workflows:
   - file: ci.yml
+    npu_drilldown: true
     report_name: Integration Tests
     comparison_name: PR
   comparison_group: triton
 - repo: triton-lang/triton-ascend
   workflows:
   - file: ci.yml
+    npu_drilldown: true
     report_name: Integration Tests
     comparison_name: PR
   comparison_group: triton
@@ -89,9 +99,11 @@ repos:
   - file: vllm.yml
   - file: nightly_ascend.yml
   - file: e2e_ppo_trainer_veomni_vllm_ascend.yml
+    npu_drilldown: true
     report_name: e2e_ppo_trainer_veomni_vllm_ascend
     comparison_name: VeOmni + vLLM PPO
   - file: e2e_ppo_trainer_veomni_vllm.yml
+    npu_drilldown: true
     report_name: e2e_ppo_trainer_veomni_vllm
     comparison_name: VeOmni + vLLM PPO
   comparison_group: verl
@@ -110,6 +122,7 @@ repos:
     report_name: A5 torch_npu Test
     comparison_name: A5
   - file: pytorch_ci_trigger_pr.yml
+    npu_drilldown: true
     report_name: PyTorch CI Trigger (PR)
     comparison_name: PR Trigger
   - file: pytorch_ci_trigger_push.yml
@@ -124,6 +137,7 @@ repos:
     static_resources:
       L20: 8
   - file: npu_e2e_test.yml
+    npu_drilldown: true
     report_name: NPU e2e tests
     comparison_name: E2E
     static_resources:
@@ -134,6 +148,7 @@ repos:
     static_resources:
       L20: 8
   - file: npu_unit_tests.yml
+    npu_drilldown: true
     report_name: NPU unit tests
     comparison_name: Unit
     static_resources:
@@ -142,6 +157,7 @@ repos:
 - repo: vllm-project/vllm-ascend
   workflows:
   - file: pr_test.yaml
+    npu_drilldown: true
     report_name: E2E
     comparison_name: PR
   - file: schedule_nightly_test_a2.yaml

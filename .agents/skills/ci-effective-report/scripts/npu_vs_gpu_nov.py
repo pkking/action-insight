@@ -107,8 +107,11 @@ def main():
     parser.add_argument('--scope', choices=('integrated', 'allowlist'), default='integrated',
                         help='integrated: all repos on the ascend-gha-runners platform list; allowlist: drilldown-workflows.yaml repos')
     args = parser.parse_args()
-    config = ROOT / 'config/drilldown-workflows.yaml'
-    allow = {r['repo']: sorted({w['file'] for w in r['workflows']}) for r in yaml.safe_load(config.read_text())['repositories']}
+    # ADR-042: drilldown scope comes from npu_drilldown flags in the unified inventory.
+    inventory = ROOT / 'etl' / 'repos.yaml'
+    allow = {r['repo']: sorted({w['file'] for w in r['workflows'] if w.get('npu_drilldown')})
+             for r in yaml.safe_load(inventory.read_text())['repos']}
+    allow = {repo: files for repo, files in allow.items() if files}
     scope = INTEGRATED_REPOS if args.scope == 'integrated' else {r: None for r in allow}
     url = os.getenv('PG_DATABASE_URL') or load_env(ROOT / '.env').get('PG_DATABASE_URL') or DEFAULT_PG_URL
 

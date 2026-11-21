@@ -4,6 +4,9 @@ export interface WorkflowRule {
   file: string;
   ref?: string;
   stepsMinWorkflowDurationSeconds?: number;
+  /** ADR-042: NPU drill-down report scope flag (report-only metadata). */
+  npuDrilldown?: boolean;
+  reportName?: string;
 }
 
 export interface RepoConfigEntry {
@@ -68,6 +71,12 @@ function normalizeWorkflowRule(value: unknown, path: string): WorkflowRule {
     throw new Error(`${path}.ref must be an exact ref or glob using letters, numbers, _, -, ., /, and *`);
   }
 
+  const npuDrilldown = value.npu_drilldown;
+  if (npuDrilldown !== undefined && typeof npuDrilldown !== 'boolean') {
+    throw new Error(`${path}.npu_drilldown must be a boolean`);
+  }
+  const reportName = typeof value.report_name === 'string' ? value.report_name.trim() : undefined;
+
   return {
     file,
     ...(ref ? { ref } : {}),
@@ -75,6 +84,8 @@ function normalizeWorkflowRule(value: unknown, path: string): WorkflowRule {
       value.steps_min_workflow_duration_seconds,
       `${path}.steps_min_workflow_duration_seconds`,
     ),
+    ...(npuDrilldown !== undefined ? { npuDrilldown } : {}),
+    ...(reportName !== undefined && reportName !== '' ? { reportName } : {}),
   };
 }
 
