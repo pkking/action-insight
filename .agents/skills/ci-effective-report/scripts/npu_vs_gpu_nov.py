@@ -40,6 +40,9 @@ VERL_GPU_CARDS = 8
 # naming encodes the GPU count; AReaL runner labels embed the run id after it).
 GPU_MODEL_COUNT_RE = re.compile(r'"nvidia-[a-z0-9]+-([1-9]\d*)"', re.I)
 GCP_GPU_COUNT_RE = re.compile(r'"gcp-a2-highgpu-([1-9][0-9]*)g', re.I)
+# VeOmni self-hosted GPU pool: l20-<N> = N x NVIDIA L20 (workflow declares
+# static_resources {"L20": 8} for l20-8; same hardware family as verl's L20x8).
+L20_COUNT_RE = re.compile(r'"l20-([1-9]\d*)"', re.I)
 
 # Ascend GHA runners platform integration list, checked 2026-11-20.
 # Source: https://ascend-gha-runners.github.io/docs/Repo/
@@ -104,15 +107,18 @@ def clamp_hours(start, end, lo, hi):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path)
-    parser.add_argument('--scope', choices=('integrated', 'allowlist'), default='integrated',
-                        help='integrated: all repos on the ascend-gha-runners platform list; allowlist: drilldown-workflows.yaml repos')
+    parser.add_argument('--scope', choices=('integrated', 'allowlist', 'inventory'), default='integrated',
+                        help='integrated: ascend-gha-runners platform list; allowlist: npu_drilldown workflows; inventory: every repo in etl/repos.yaml')
     args = parser.parse_args()
     # ADR-042: drilldown scope comes from npu_drilldown flags in the unified inventory.
     inventory = ROOT / 'etl' / 'repos.yaml'
+    inv_repos = [r['repo'] for r in yaml.safe_load(inventory.read_text())['repos']]
     allow = {r['repo']: sorted({w['file'] for w in r['workflows'] if w.get('npu_drilldown')})
              for r in yaml.safe_load(inventory.read_text())['repos']}
     allow = {repo: files for repo, files in allow.items() if files}
-    scope = INTEGRATED_REPOS if args.scope == 'integrated' else {r: None for r in allow}
+    scope = (INTEGRATED_REPOS if args.scope == 'integrated'
+             else allow if args.scope == 'allowlist'
+             else {repo: None for repo in inv_repos})
     url = os.getenv('PG_DATABASE_URL') or load_env(ROOT / '.env').get('PG_DATABASE_URL') or DEFAULT_PG_URL
 
     db = PostgresClient(url)
@@ -152,7 +158,7 @@ def main():
     npu_h = defaultdict(lambda: defaultdict(float)); gpu_h = defaultdict(lambda: defaultdict(float))
     npu_jobs = defaultdict(lambda: defaultdict(int)); gpu_jobs = defaultdict(lambda: defaultdict(int))
     npu_unknown_qty = defaultdict(int); unknown_qty = defaultdict(int)
-    wall = defaultdict(float)
+    gpu_wall = defaultdict(lambda: defaultdict(float)); npu_wall = defaultdict(lambda: defaultdict(float))
     for r in rows:
         if r['status'] != 'completed' or r['conclusion'] == 'skipped':
             continue
@@ -163,6 +169,8 @@ def main():
         cls = bucket(r['event'])
         kind, model, cards, _reason = resource_evidence(r)
         if kind == 'npu':
+            npu_wall[r['repo']][cls] += hours
+            npu_wall[r['repo']]['all'] += hours
             if cards is not None:
                 npu_h[r['repo']][cls] += hours * cards
                 npu_h[r['repo']]['all'] += hours * cards
@@ -171,20 +179,20 @@ def main():
             else:
                 npu_unknown_qty[r['repo']] += 1
             continue
-        m = GPU_QTY.search(r['labels_json'] or '') or GPU_MODEL_COUNT_RE.search(r['labels_json'] or '') or GCP_GPU_COUNT_RE.search(r['labels_json'] or '')
+        m = GPU_QTY.search(r['labels_json'] or '') or GPU_MODEL_COUNT_RE.search(r['labels_json'] or '') or GCP_GPU_COUNT_RE.search(r['labels_json'] or '') or L20_COUNT_RE.search(r['labels_json'] or '')
         if m:
             gpu_h[r['repo']][cls] += hours * int(m[1]); gpu_h[r['repo']]['all'] += hours * int(m[1])
             gpu_jobs[r['repo']][cls] += 1; gpu_jobs[r['repo']]['all'] += 1
-            wall[r['repo']] += hours
+            gpu_wall[r['repo']][cls] += hours; gpu_wall[r['repo']]['all'] += hours
         elif (r['labels_json'] or '').strip('[]"') and VERL_GPU_LABELS.fullmatch((r['labels_json'] or '').strip('[]"')):
             gpu_h[r['repo']][cls] += hours * VERL_GPU_CARDS; gpu_h[r['repo']]['all'] += hours * VERL_GPU_CARDS
             gpu_jobs[r['repo']][cls] += 1; gpu_jobs[r['repo']]['all'] += 1
-            wall[r['repo']] += hours
+            gpu_wall[r['repo']][cls] += hours; gpu_wall[r['repo']]['all'] += hours
         elif kind == 'gpu':
             # GPU confirmed by evidence rules but label carries no card count
             # (e.g. bare nvidia labels, gcp-a2-highgpu-*): jobs visible, hours unknown.
             unknown_qty[r['repo']] += 1
-            wall[r['repo']] += hours
+            gpu_wall[r['repo']][cls] += hours; gpu_wall[r['repo']]['all'] += hours
 
     local_repos = sorted(set(npu_h) | set(gpu_h) | set(unknown_qty) | set(npu_unknown_qty))
 
@@ -210,8 +218,11 @@ def main():
                           'gpu_card_hours_pr': round(h_g['pr'], 1), 'gpu_card_hours_all': round(h_g['all'], 1),
                           'npu_jobs_pr': npu_jobs[db_key]['pr'], 'npu_jobs_all': npu_jobs[db_key]['all'],
                           'npu_unknown_qty_jobs': npu_unknown_qty[db_key],
+                          'gpu_jobs_pr': gpu_jobs[db_key]['pr'],
                           'gpu_jobs_all': gpu_jobs[db_key]['all'], 'gpu_unknown_qty_jobs': unknown_qty[db_key],
-                          'gpu_job_wall_hours': round(wall[db_key], 1), 'probe': INTEGRATED_PROBE_20261120.get(repo)})
+                          'npu_job_wall_hours_pr': round(npu_wall[db_key]['pr'], 1), 'npu_job_wall_hours_all': round(npu_wall[db_key]['all'], 1),
+                          'gpu_job_wall_hours_pr': round(gpu_wall[db_key]['pr'], 1), 'gpu_job_wall_hours_all': round(gpu_wall[db_key]['all'], 1),
+                          'probe': INTEGRATED_PROBE_20261120.get(repo)})
     report = {'provenance': {'snapshot_utc': dt(snapshot).isoformat(), 'window': ['2026-11-01', cutoff.date().isoformat()],
                              'scope': args.scope,
                              'integrated_source': 'https://ascend-gha-runners.github.io/docs/Repo/ (checked 2026-11-20)',

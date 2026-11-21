@@ -20,6 +20,10 @@ HOST_TAIL_LABEL_RE = re.compile(r'^(linux-aarch64-' + MODEL + r')-([1-9]\d*)(?:-
 # mojo_opset), with optional repo-name infix before 'fed'. Verified via job logs:
 # a3-800i-recipes-fed-4 exposes 2 NPUs x 2 dies (N=dies, /2 for a3 family).
 FED_LABEL_RE = re.compile(r'^(linux-aarch64-' + MODEL + r')-(?:[a-z0-9]+-)*fed-([1-9]\d*)$', re.I)
+# VeOmni self-hosted pool label 910b-<N>: N physical 910B cards (each card exposes
+# two 910B2C chips in npu-smi; verified job log shows 16 chips for 910b-8, and the
+# workflow declares static_resources {"Ascend 910B": 8}).
+N910B_LABEL_RE = re.compile(r'^910b-([1-9]\d*)$', re.I)
 NPU_HINT = re.compile(r'^(?:linux-aarch64-' + MODEL + r'|910b|910c|ascend|npu)(?:-|$)', re.I)
 CPU = re.compile(r'^(?:linux-(?:aarch64|amd64|arm64)-cpu(?:-|$)|ubuntu(?:-|$)|macos(?:-|$)|windows(?:-|$))', re.I)
 GPU = re.compile(r'^(?:nvidia(?:-|$)|amd(?:-|$)|gfx[0-9]|\d+-gpu(?:-|$)|gcp-a2-highgpu(?:-|$))', re.I)
@@ -38,9 +42,13 @@ def _v3_resource_evidence(job):
     kinds = set()
     evidence = []
     for label in labels:
+        m910 = N910B_LABEL_RE.fullmatch(label)
         match = LABEL_RE.fullmatch(label) or AMD64_A5_LABEL_RE.fullmatch(label) \
             or HOST_TAIL_LABEL_RE.fullmatch(label) or FED_LABEL_RE.fullmatch(label)
-        if match:
+        if m910:
+            kinds.add('npu')
+            evidence.append(('linux-aarch64-910b', int(m910.group(1)), int(m910.group(1)), 'governed_suffix'))
+        elif match:
             kinds.add('npu')
             unit = match.group(3) if match.lastindex and match.lastindex >= 3 else None
             lm, n = match.group(1), int(match.group(2))
@@ -95,9 +103,10 @@ def _current_standard_evidence(job):
         return ('npu', evidence[1], None, 'quantity_unknown')
     labels = [x.lower() for x in labels]
     matches = [m for x in labels for m in (LABEL_RE.fullmatch(x), AMD64_A5_LABEL_RE.fullmatch(x),
-                                            HOST_TAIL_LABEL_RE.fullmatch(x), FED_LABEL_RE.fullmatch(x)) if m]
+                                            HOST_TAIL_LABEL_RE.fullmatch(x), FED_LABEL_RE.fullmatch(x),
+                                            N910B_LABEL_RE.fullmatch(x)) if m]
     # Unsupported accelerator-like suffixes cannot be rescued by metadata.
-    governed = (LABEL_RE, AMD64_A5_LABEL_RE, HOST_TAIL_LABEL_RE, FED_LABEL_RE)
+    governed = (LABEL_RE, AMD64_A5_LABEL_RE, HOST_TAIL_LABEL_RE, FED_LABEL_RE, N910B_LABEL_RE)
     if any(NPU_HINT.match(x) and not any(r.fullmatch(x) for r in governed) and not MODEL_RE.fullmatch(x) for x in labels):
         return ('npu', evidence[1], None, 'unsupported_label')
     count = job.get('resource_count')
@@ -105,7 +114,7 @@ def _current_standard_evidence(job):
         return ('npu', evidence[1], None, 'metadata_label_conflict')
     if matches:
         match = matches[0]
-        raw = int(match.group(2))
+        raw = int(match.group(2)) if match.lastindex and match.lastindex >= 2 else int(match.group(1))
         unit = match.group(3) if match.lastindex and match.lastindex >= 3 else None
         unit = 'cards' if unit and unit.startswith('card') else 'dies' if unit else 'raw'
     else:
