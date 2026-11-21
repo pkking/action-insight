@@ -378,14 +378,47 @@ export type PrMergeCiStatus = {
  * - NPU: the (repo, workflow_file) shows NPU evidence among its PR-linked
  *   jobs — a mapped Ascend resource_model (any linux-aarch64-* except the
  *   cpu group) or an NPU-ish runner label (910/310p/ascend/npu/atlas).
- * - GPU/other: workflows with collected jobs but no NPU evidence (unmapped
- *   x86/GPU runners — e.g. sglang pr-test.yml on GB300, VeOmni l20-8).
+ * - GPU: workflows whose jobs carry explicit GPU evidence (nvidia/N-gpu/
+ *   gfx/L20/uv_cu labels — e.g. sglang pr-test.yml on GB300, VeOmni l20-8).
+ *   CPU-only or unmapped workflows (ubuntu-latest lint jobs) have no class:
+ *   a repo without GPU hardware shows no GPU badge, and vice versa for NPU.
+ *   This replaces the original ADR-022 "GPU/other" catch-all, which used to
+ *   render GPU ✓ for vllm-ascend PRs from their lint-only workflows.
  *
  * Workflows without collected jobs have no class and contribute nothing
  * (the badge renders “—”). Status derives from pr_workflow_attempts links
  * only; partially-linked PRs (partial_ci_history) may show “—” or an older
  * attempt until rebuild rounds complete the links.
  */
+/**
+ * Positive hardware-evidence patterns for merge-time badges (ADR-022 follow-up).
+ * A workflow contributes an NPU/GPU badge only when its jobs carry explicit
+ * evidence of that class; CPU-only or unmapped jobs show no badge at all.
+ * Bare model tokens (a2/a3/a5) are never matched — gcp-a2-highgpu is a GPU
+ * machine type, so only full platform-prefixed forms count as NPU evidence.
+ */
+export const NPU_LABEL_PATTERN =
+  '(910|310p|ascend|npu|atlas|linux-aarch64-(a2b[0-9]|a2|a3|a5|310p)|linux-amd64-a5|nightly-a3)';
+export const GPU_LABEL_PATTERN = '(nvidia|[0-9]+-gpu|gcp-a2-highgpu|gfx[0-9]|l20|uv_cu)';
+
+export type ResourceClass = 'npu' | 'gpu' | null;
+
+/** Test mirror of the SQL classification inside fetchPrMergeCiStatus. */
+export function classifyResourceClass(
+  resourceModel: string | null | undefined,
+  labelsJson: string | null | undefined,
+): ResourceClass {
+  const model = resourceModel ?? null;
+  const labels = labelsJson ?? null;
+  const labelText = labels ?? '';
+  const isNpu =
+    (model !== null && model !== 'linux-aarch64-cpu') ||
+    (model === null && new RegExp(NPU_LABEL_PATTERN, 'i').test(labelText));
+  if (isNpu) return 'npu';
+  if (new RegExp(GPU_LABEL_PATTERN, 'i').test(labelText)) return 'gpu';
+  return null;
+}
+
 export async function fetchPrMergeCiStatus(
   repoRows: RepoRow[],
   startDate: string,
@@ -414,29 +447,32 @@ export async function fetchPrMergeCiStatus(
               AND wa.created_at <= pm.merged_at
        ), classified AS (
            SELECT pr_metric_id, repo_id, workflow_file,
-                  COALESCE(
-                    BOOL_OR(
-                      (resource_model IS NOT NULL AND resource_model <> 'linux-aarch64-cpu')
-                      OR (resource_model IS NULL AND labels_json ~* '(910|310p|ascend|npu|atlas)')
-                    ),
-                    false
-                  ) AS is_npu
+                  BOOL_OR(
+                    (resource_model IS NOT NULL AND resource_model <> 'linux-aarch64-cpu')
+                    OR (resource_model IS NULL AND labels_json ~* '${NPU_LABEL_PATTERN}')
+                  ) AS is_npu,
+                  BOOL_OR(labels_json ~* '${GPU_LABEL_PATTERN}') AS is_gpu
              FROM pr_attempt_jobs
             GROUP BY 1, 2, 3
-           HAVING COUNT(job_id) > 0
+            HAVING COUNT(job_id) > 0
+       ), classes AS (
+           SELECT pr_metric_id, repo_id, workflow_file,
+                  CASE WHEN is_npu THEN 'npu' WHEN is_gpu THEN 'gpu' END AS cls
+             FROM classified
        ), latest AS (
-           SELECT DISTINCT ON (paj.pr_metric_id, is_npu)
-                  paj.pr_metric_id, is_npu, conclusion
+           SELECT DISTINCT ON (paj.pr_metric_id, c.cls)
+                  paj.pr_metric_id, c.cls, conclusion
              FROM pr_attempt_jobs paj
-             JOIN classified c
+             JOIN classes c
                ON c.repo_id = paj.repo_id
               AND c.workflow_file = paj.workflow_file
               AND c.pr_metric_id = paj.pr_metric_id
-            ORDER BY paj.pr_metric_id, is_npu, paj.created_at DESC, paj.run_id DESC, paj.run_attempt DESC
+            WHERE c.cls IS NOT NULL
+            ORDER BY paj.pr_metric_id, c.cls, paj.created_at DESC, paj.run_id DESC, paj.run_attempt DESC
        )
        SELECT pr_metric_id,
-              MAX(conclusion) FILTER (WHERE is_npu) AS npu_conclusion,
-              MAX(conclusion) FILTER (WHERE NOT is_npu) AS gpu_conclusion
+              MAX(conclusion) FILTER (WHERE cls = 'npu') AS npu_conclusion,
+              MAX(conclusion) FILTER (WHERE cls = 'gpu') AS gpu_conclusion
          FROM latest
         GROUP BY 1`,
       [...repoRows.map((r) => r.id), `${startDate}T00:00:00Z`, `${endDate}T23:59:59Z`],

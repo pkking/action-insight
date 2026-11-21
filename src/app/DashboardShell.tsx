@@ -80,7 +80,7 @@ const PR_CI_RUNTIME_TOOLTIP =
   'Elapsed CI span: earliest associated completed workflow attempt created → latest associated completed attempt updated (completion-time proxy). Includes gaps between commits/retries and terminal non-success attempts; it is not cumulative job or workflow execution time.';
 
 const PR_MERGE_CI_TOOLTIP =
-  'Merge-time CI status per resource class: the conclusion of the latest linked attempt that started at or before merged_at. NPU = workflow with mapped Ascend resources or NPU runner labels; GPU/other = workflows with collected jobs but no NPU evidence. “—” means no linked attempt of that class (PR link may be incomplete).';
+  'Merge-time CI status per resource class: the conclusion of the latest linked attempt that started at or before merged_at. NPU = workflow with Ascend evidence; GPU = workflow with explicit GPU evidence (nvidia/N-gpu/L20/uv_cu labels). CPU-only workflows have no class; “—” means no linked attempt of that class (PR link may be incomplete).';
 
 function MergeCiBadge({
   label,
