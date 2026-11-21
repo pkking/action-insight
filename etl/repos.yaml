@@ -5,6 +5,7 @@ repos:
 - repo: areal-project/AReaL
   workflows:
   - file: test-areal.yml
+    npu_drilldown: true
     report_name: AReaL CI on GCP runner
     comparison_name: PR
   - file: nightly.yml
@@ -14,15 +15,18 @@ repos:
 - repo: alibaba/ROLL
   workflows:
   - file: ci-npu-mindspeed.yml
+    npu_drilldown: true
     report_name: MindSpeed NPU Tests
     comparison_name: PR
   - file: ci-npu-test.yml
+    npu_drilldown: true
     report_name: Tests
     comparison_name: PR
   comparison_group: roll
 - repo: hiyouga/LlamaFactory
   workflows:
   - file: tests_npu.yml
+    npu_drilldown: true
     report_name: tests_npu
     comparison_name: PR
   - file: tests.yml
@@ -32,6 +36,7 @@ repos:
 - repo: modelscope/ms-swift
   workflows:
   - file: citest_npu.yaml
+    npu_drilldown: true
     report_name: citest-npu
     comparison_name: PR
   - file: citest.yaml
@@ -41,6 +46,7 @@ repos:
 - repo: sgl-project/sglang
   workflows:
   - file: pr-test-npu.yml
+    npu_drilldown: true
     report_name: PR Test (NPU)
     comparison_name: PR
   - file: pr-test.yml
@@ -59,25 +65,31 @@ repos:
   - file: release-docker-npu-nightly.yml
 - repo: tile-ai/tilelang-mlir-ascend
   workflows:
-  - file: base_ci.yml
+  - file: ci.yml
+    npu_drilldown: true
+    # base_ci.yml (state=deleted 2026-11): its Ascend job moved into ci.yml with
+    # the same structure as tile-ai/tilelang (runs-on linux-amd64-a5-4 + CANN image).
     report_name: Base CI
     comparison_name: PR
   comparison_group: tilelang
 - repo: tile-ai/tilelang
   workflows:
   - file: ci.yml
+    npu_drilldown: true
     report_name: CI
     comparison_name: PR
   comparison_group: tilelang
 - repo: triton-lang/triton
   workflows:
   - file: ci.yml
+    npu_drilldown: true
     report_name: Integration Tests
     comparison_name: PR
   comparison_group: triton
 - repo: triton-lang/triton-ascend
   workflows:
   - file: ci.yml
+    npu_drilldown: true
     report_name: Integration Tests
     comparison_name: PR
   comparison_group: triton
@@ -87,9 +99,11 @@ repos:
   - file: vllm.yml
   - file: nightly_ascend.yml
   - file: e2e_ppo_trainer_veomni_vllm_ascend.yml
+    npu_drilldown: true
     report_name: e2e_ppo_trainer_veomni_vllm_ascend
     comparison_name: VeOmni + vLLM PPO
   - file: e2e_ppo_trainer_veomni_vllm.yml
+    npu_drilldown: true
     report_name: e2e_ppo_trainer_veomni_vllm
     comparison_name: VeOmni + vLLM PPO
   comparison_group: verl
@@ -108,6 +122,7 @@ repos:
     report_name: A5 torch_npu Test
     comparison_name: A5
   - file: pytorch_ci_trigger_pr.yml
+    npu_drilldown: true
     report_name: PyTorch CI Trigger (PR)
     comparison_name: PR Trigger
   - file: pytorch_ci_trigger_push.yml
@@ -122,6 +137,7 @@ repos:
     static_resources:
       L20: 8
   - file: npu_e2e_test.yml
+    npu_drilldown: true
     report_name: NPU e2e tests
     comparison_name: E2E
     static_resources:
@@ -132,6 +148,7 @@ repos:
     static_resources:
       L20: 8
   - file: npu_unit_tests.yml
+    npu_drilldown: true
     report_name: NPU unit tests
     comparison_name: Unit
     static_resources:
@@ -140,6 +157,7 @@ repos:
 - repo: vllm-project/vllm-ascend
   workflows:
   - file: pr_test.yaml
+    npu_drilldown: true
     report_name: E2E
     comparison_name: PR
   - file: schedule_nightly_test_a2.yaml
@@ -149,6 +167,55 @@ repos:
     report_name: Nightly-A3
     comparison_name: Nightly
   comparison_group: vllm
+# --- ADR-041: 平台集成仓库采集扩展（workflow 名与标签已按 ADR-041 §1.2/附录 B 核实，2026-11-20）---
+# 仅采有加速器证据的 workflow；CPU 工作流（ubuntu-latest / linux-*-cpu-*）不采。
+# 不设 report_name / comparison_group（ADR-041 §2.3：采集范围 ≠ 报告范围）。
+- repo: sgl-project/sgl-kernel-npu
+  workflows:
+  - file: pr-test-kernels.yml
+  - file: pr-test-deepep-npu.yml
+  - file: daily-test-kernels.yml
+  - file: daily-build-test.yml
+  - file: pr-test-mega-moe.yml
+  - file: kernel-coverage.yml
+  - file: kernel-coverage-pr-smoke.yml
+- repo: vllm-ascend/vllm-ascend-recipes
+  workflows:
+  - file: pr-recipe-verify.yml
+  - file: recipe-e2e.yml
+  - file: nightly-recipe-verify.yml
+  - file: verify_multi_node.yaml
+- repo: XPU-Forces/mojo_opset
+  workflows:
+  - file: npu-910b.yml
+  - file: ascend-a2-smoke.yml
+  - file: ascend-a3-smoke.yml
+- repo: verl-project/uni-agent
+  workflows:
+  - file: ci-npu.yml
+  - file: ci-gpu.yml
+- repo: verl-project/verl-omni
+  workflows:
+  - file: npu_smoke.yml
+  - file: gpu_smoke.yml
+  - file: l3_nightly.yml
+- repo: Ascend/sglang
+  workflows:
+  - file: full-test-npu.yml
+  - file: pr-test-npu.yml
+- repo: fla-org/flash-linear-attention
+  workflows:
+  - file: ascend-a2-ci.yml
+  - file: ascend-a2-benchmark-ci.yml
+  - file: agent-ascend-a2-tests.yml
+  - file: agent-ascend-a5-tests.yml
+  - file: nvidia-h100.yml
+  - file: nvidia-h100-smoke.yml
+  - file: agent-h100-tests.yml
+- repo: Ascend/cann-container-image
+  workflows:
+  - file: build_cann.yml
+  - file: batch_build_and_push_cann.yml
 resource_pools:
   A3: 364
   A2: 104

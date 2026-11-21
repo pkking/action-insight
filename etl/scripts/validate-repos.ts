@@ -145,12 +145,25 @@ export async function validateReposConfigFile(options: CliOptions): Promise<void
   const config = parseReposConfig(content, { requireWorkflows: true });
   const errors = options.online ? await validateOnline(config) : [];
 
+  // ADR-042: drilldown workflows are report targets and must carry a report name.
+  let drilldownCount = 0;
+  for (const repo of config.repos) {
+    for (const workflow of repo.workflows) {
+      if (workflow.npuDrilldown) {
+        drilldownCount += 1;
+        if (!workflow.reportName) {
+          errors.push(`${repo.repo} ${workflow.file}: npu_drilldown requires report_name`);
+        }
+      }
+    }
+  }
+
   if (errors.length > 0) {
     throw new Error(`Repository config validation failed:\n${errors.map((error) => `- ${error}`).join('\n')}`);
   }
 
   console.log(
-    `Validated ${config.repos.length} repo(s) and ${config.repos.reduce((sum, repo) => sum + repo.workflows.length, 0)} workflow rule(s).`,
+    `Validated ${config.repos.length} repo(s) and ${config.repos.reduce((sum, repo) => sum + repo.workflows.length, 0)} workflow rule(s). NPU drilldown: ${drilldownCount}.`,
   );
 }
 

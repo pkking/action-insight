@@ -156,15 +156,17 @@ class ConfigTests(unittest.TestCase):
         ]
         self.assertEqual([(w["file"], w["report_name"], w["comparison_name"]) for w in workflows], expected)
         self.assertNotIn("npu-test.yml", {w["file"] for w in workflows})
-        drilldown = yaml.safe_load((config_path.parents[1] / "config" / "drilldown-workflows.yaml").read_text())
-        drilldown_files = {w["file"] for repo in drilldown["repositories"]
-                           if repo["repo"] == "ascend/pytorch" for w in repo["workflows"]}
-        self.assertNotIn("npu-test.yml", drilldown_files)
-        self.assertIn("pytorch_ci_trigger_pr.yml", drilldown_files)
+        # ADR-042: drilldown scope derives from npu_drilldown flags in the unified
+        # inventory; the standalone config/drilldown-workflows.yaml no longer exists.
+        drilldown = {w["file"] for w in workflows if w.get("npu_drilldown")}
+        self.assertNotIn("npu-test.yml", drilldown)
+        self.assertIn("pytorch_ci_trigger_pr.yml", drilldown)
         self.assertEqual(len(workflows), len({w["file"] for w in workflows}))
         self.assertEqual(len(workflows), len({w["report_name"] for w in workflows}))
         entries = MODULE.parse_config_entries(str(config_path))["ascend/pytorch"]
         self.assertEqual([(w["file"], w["name"], w["comparison_name"]) for w in entries], expected)
+        drilldown_entries = MODULE.parse_config_entries(str(config_path), drilldown_only=True)["ascend/pytorch"]
+        self.assertEqual({w["file"] for w in drilldown_entries}, {"pytorch_ci_trigger_pr.yml"})
 
     def test_unified_config_preserves_resources_and_drilldown_inventory(self):
         import yaml
@@ -181,11 +183,18 @@ class ConfigTests(unittest.TestCase):
         self.assertNotIn("sgl-project/sglang-omni", entries)  # collection only
         self.assertNotIn("verl-project/verl-SpeCo", entries)
         files = {repo["repo"]: {workflow["file"] for workflow in repo["workflows"]} for repo in config["repos"]}
-        drilldown = yaml.safe_load((root / "config" / "drilldown-workflows.yaml").read_text())
-        for repo in drilldown["repositories"]:
-            self.assertIn(repo["repo"], files)
-            for workflow in repo["workflows"]:
-                self.assertIn(workflow["file"], files[repo["repo"]])
+        # ADR-042: drilldown scope lives in the inventory flags; every flagged
+        # workflow must exist in the collection inventory (same file by construction).
+        flagged = {(repo["repo"], workflow["file"])
+                   for repo in config["repos"] for workflow in repo["workflows"] if workflow.get("npu_drilldown")}
+        self.assertEqual(len(flagged), 16)
+        for repo_name, workflow_file in flagged:
+            self.assertIn((repo_name, workflow_file), {(r, w) for r, wlist in files.items() for w in wlist})
+        # Every drilldown entry must also be a report target.
+        self.assertTrue(all(
+            workflow.get("report_name")
+            for repo in config["repos"] for workflow in repo["workflows"] if workflow.get("npu_drilldown")
+        ))
 
     def test_unified_reports_require_explicit_report_name(self):
         import tempfile

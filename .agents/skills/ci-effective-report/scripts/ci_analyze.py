@@ -51,7 +51,7 @@ SKILL_DIR = SCRIPT_DIR.parent
 REPO_ROOT = SKILL_DIR.parents[2]
 ENV_FILE = REPO_ROOT / ".env"
 DEFAULT_CONFIG = REPO_ROOT / "etl" / "repos.yaml"
-DEFAULT_DRILLDOWN_CONFIG = REPO_ROOT / "config" / "drilldown-workflows.yaml"
+
 DEFAULT_STEP_NAMES = SKILL_DIR / "references" / "step-names.json"
 DEFAULT_PG_URL = "postgresql://action_insight:action_insight@localhost:5433/action_insight"
 DEFAULT_DAYS = 30
@@ -185,8 +185,12 @@ def _resolve_workflow_names(client, files: list[str]) -> list[str]:
     return list(names)
 
 
-def parse_config_entries(path: str) -> dict[str, list[dict]]:
-    """读取项目对比配置，保留 workflow 显示名和稳定文件名。"""
+def parse_config_entries(path: str, drilldown_only: bool = False) -> dict[str, list[dict]]:
+    """读取项目对比配置，保留 workflow 显示名和稳定文件名。
+
+    drilldown_only：ADR-042 起下钻范围直接来自统一 inventory 中带 npu_drilldown
+    标志的 workflow，不再维护独立的 config/drilldown-workflows.yaml。"""
+
     try:
         import yaml
     except ImportError:
@@ -201,6 +205,8 @@ def parse_config_entries(path: str) -> dict[str, list[dict]]:
             continue
         workflows = []
         for workflow in item.get("workflows", []):
+            if unified and drilldown_only and not workflow.get("npu_drilldown"):
+                continue
             name = workflow.get("report_name") if unified else workflow.get("name")
             if not name:
                 continue
@@ -2286,7 +2292,7 @@ def main():
     parser.add_argument("--skip-steps", action="store_true", help="跳过 steps 数据（加速查询）")
     parser.add_argument("--output", "-o", help="输出 Excel 文件路径（默认自动生成）")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="统一仓库/workflow 配置（默认 etl/repos.yaml）")
-    parser.add_argument("--drilldown-config", default=str(DEFAULT_DRILLDOWN_CONFIG), help="下钻 workflow 白名单配置；默认 config/drilldown-workflows.yaml")
+
     parser.add_argument("--pg-url", help="PostgreSQL 连接串；默认读取 PG_DATABASE_URL")
     parser.add_argument("--success-only", action="store_true", help="job/workflow 耗时统计只算 conclusion=success 的样本（目的2 口径，ADR-005）")
     parser.add_argument("--min-duration", type=float, default=5, help="耗时下限(分钟)：低于此值的 run/job/step 不计入统计(avg/p50/p90)与关键路径，默认 5")
@@ -2511,9 +2517,10 @@ def main():
     # 下钻 HTML uses a separate, explicit workflow allowlist. This prevents
     # scheduled and GPU workflows from entering a PR/NPU diagnostic by name.
     if not args.no_drilldown:
-        drilldown_entries = parse_config_entries(args.drilldown_config)
+        # ADR-042: drilldown scope derives from the unified inventory flags.
+        drilldown_entries = parse_config_entries(args.config, drilldown_only=True)
         if not drilldown_entries:
-            parser.error(f"下钻 workflow 配置为空或不存在: {args.drilldown_config}")
+            parser.error(f"统一配置 {args.config} 中没有任何 npu_drilldown workflow")
         drilldown_repos_data = {}
         for repo_name in repo_names:
             entries = drilldown_entries.get(repo_name, [])
