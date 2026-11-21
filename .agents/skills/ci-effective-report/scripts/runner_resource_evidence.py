@@ -5,9 +5,21 @@ import re
 from .card_quantity import physical_cards
 
 # Explicit model inventory; not substring matching. Suffixes are raw collector values.
-MODEL = r'(?:a2|a2b1|a2b3|a2b1b3|310p|a5|a3|a3-800i|a3-800t|nightly-a3)'
+MODEL = r'(?:a2b1b3|a2b4|a2b1|a2b3|a3-800i|a3-800t|nightly-a3|310p|a2|a5|a3)'
 MODEL_RE = re.compile(r'^linux-aarch64-(' + MODEL + r')$', re.I)
 LABEL_RE = re.compile(r'^(linux-aarch64-' + MODEL + r')-([1-9]\d*)(?:-(cards?|dies?))?$', re.I)
+# amd64-a5 hosts carry the same governed NPU card suffixes (verified: CANN images,
+# USE_ASCEND=ON, test_suite nightly-acc-test-4-npu-a5); counts are raw cards like aarch64.
+AMD64_A5_LABEL_RE = re.compile(r'^(linux-amd64-a5)-([1-9]\d*)(?:-(cards?|dies?))?$', re.I)
+# ADR-041 family 1: host-tail labels like linux-aarch64-a3-800i-8-cn12-001 — the N
+# suffix is the governed count, the trailing <host>-<ddd> names the physical host.
+# Verified via job logs (npu-smi): a3-800i-8-cn12-001 exposes 4 NPUs x 2 dies = 8
+# dies, so the N keeps the model family's existing unit semantics (a3 dies /2).
+HOST_TAIL_LABEL_RE = re.compile(r'^(linux-aarch64-' + MODEL + r')-([1-9]\d*)(?:-(cards?|dies?))?-[a-z][a-z0-9]*-[0-9]{3}$', re.I)
+# ADR-041 families 2/3: -fed-<N> across 5 repos (vllm-ascend/sglang/verl/recipes/
+# mojo_opset), with optional repo-name infix before 'fed'. Verified via job logs:
+# a3-800i-recipes-fed-4 exposes 2 NPUs x 2 dies (N=dies, /2 for a3 family).
+FED_LABEL_RE = re.compile(r'^(linux-aarch64-' + MODEL + r')-(?:[a-z0-9]+-)*fed-([1-9]\d*)$', re.I)
 NPU_HINT = re.compile(r'^(?:linux-aarch64-' + MODEL + r'|910b|910c|ascend|npu)(?:-|$)', re.I)
 CPU = re.compile(r'^(?:linux-(?:aarch64|amd64|arm64)-cpu(?:-|$)|ubuntu(?:-|$)|macos(?:-|$)|windows(?:-|$))', re.I)
 GPU = re.compile(r'^(?:nvidia(?:-|$)|amd(?:-|$)|gfx[0-9]|\d+-gpu(?:-|$)|gcp-a2-highgpu(?:-|$))', re.I)
@@ -26,10 +38,12 @@ def _v3_resource_evidence(job):
     kinds = set()
     evidence = []
     for label in labels:
-        match = LABEL_RE.fullmatch(label)
+        match = LABEL_RE.fullmatch(label) or AMD64_A5_LABEL_RE.fullmatch(label) \
+            or HOST_TAIL_LABEL_RE.fullmatch(label) or FED_LABEL_RE.fullmatch(label)
         if match:
             kinds.add('npu')
-            lm, n, unit = match.group(1), int(match.group(2)), match.group(3)
+            unit = match.group(3) if match.lastindex and match.lastindex >= 3 else None
+            lm, n = match.group(1), int(match.group(2))
             if unit and unit.startswith('die') and not lm in ('linux-aarch64-a3', 'linux-aarch64-a3-800i', 'linux-aarch64-a3-800t', 'linux-aarch64-nightly-a3'):
                 evidence.append((lm, n, None, 'unsupported_unit'))
             else:
@@ -80,9 +94,11 @@ def _current_standard_evidence(job):
     except (TypeError, ValueError):
         return ('npu', evidence[1], None, 'quantity_unknown')
     labels = [x.lower() for x in labels]
-    matches = [LABEL_RE.fullmatch(x) for x in labels if LABEL_RE.fullmatch(x)]
+    matches = [m for x in labels for m in (LABEL_RE.fullmatch(x), AMD64_A5_LABEL_RE.fullmatch(x),
+                                            HOST_TAIL_LABEL_RE.fullmatch(x), FED_LABEL_RE.fullmatch(x)) if m]
     # Unsupported accelerator-like suffixes cannot be rescued by metadata.
-    if any(NPU_HINT.match(x) and not LABEL_RE.fullmatch(x) and not MODEL_RE.fullmatch(x) for x in labels):
+    governed = (LABEL_RE, AMD64_A5_LABEL_RE, HOST_TAIL_LABEL_RE, FED_LABEL_RE)
+    if any(NPU_HINT.match(x) and not any(r.fullmatch(x) for r in governed) and not MODEL_RE.fullmatch(x) for x in labels):
         return ('npu', evidence[1], None, 'unsupported_label')
     count = job.get('resource_count')
     if count is not None and (type(count) is not int or count <= 0):
@@ -90,7 +106,7 @@ def _current_standard_evidence(job):
     if matches:
         match = matches[0]
         raw = int(match.group(2))
-        unit = match.group(3)
+        unit = match.group(3) if match.lastindex and match.lastindex >= 3 else None
         unit = 'cards' if unit and unit.startswith('card') else 'dies' if unit else 'raw'
     else:
         raw, unit = count, 'raw'
@@ -113,7 +129,9 @@ def resource_evidence(job):
     if scope == ('vllm-project/vllm-ascend', 'pr_test.yaml') and hk_matches:
         pattern = r'linux-aarch64-(?:a2b1b3|a2b1)-(1)-hk-001'
         model = 'linux-aarch64-' + hk_matches[0].group(1)
-    elif scope == ('sgl-project/sglang', 'pr-test-npu.yml'):
+    elif scope in (('sgl-project/sglang', 'pr-test-npu.yml'), ('sgl-project/sglang', 'nightly-test-npu.yml')):
+        # Family 5b (ADR-041): same-shape trailing-hyphen a3 labels on the nightly
+        # workflow carry the same die semantics user-confirmed for pr-test-npu.yml.
         pattern = r'linux-aarch64-a3-(2|4|8|16)-'
         model = 'linux-aarch64-a3'
     elif scope == ('vllm-project/vllm-ascend', 'pr_test.yaml'):
@@ -121,6 +139,11 @@ def resource_evidence(job):
         model = 'linux-aarch64-a3'
     elif scope == ('triton-lang/triton-ascend', 'ci.yml'):
         pattern = r'linux-amd64-a5-(1|2|4)'
+        model = 'linux-amd64-a5'
+    elif scope == ('tile-ai/tilelang', 'ci.yml'):
+        # ascend job ("Test for AscendC"/"Test for PTO") runs on A5 NPU hosts with a
+        # CANN container image (USE_ASCEND=ON); same hardware family as triton-ascend.
+        pattern = r'linux-amd64-a5-(1|2|4|8)'
         model = 'linux-amd64-a5'
     else:
         return _current_standard_evidence(job)
