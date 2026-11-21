@@ -377,8 +377,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, help='new JSON output path; refuses to overwrite')
     args = parser.parse_args()
-    config = ROOT / 'config/drilldown-workflows.yaml'
-    allow = {r['repo']: sorted({w['file'] for w in r['workflows']}) for r in yaml.safe_load(config.read_text())['repositories']}
+    # ADR-042: drilldown scope comes from npu_drilldown flags in the unified inventory.
+    inventory = ROOT / 'etl' / 'repos.yaml'
+    allow = {r['repo']: sorted({w['file'] for w in r['workflows'] if w.get('npu_drilldown')})
+             for r in yaml.safe_load(inventory.read_text())['repos']}
+    allow = {repo: files for repo, files in allow.items() if files}
     url = os.getenv('PG_DATABASE_URL') or load_env(ROOT / '.env').get('PG_DATABASE_URL') or DEFAULT_PG_URL
     db = PostgresClient(url)
     try:

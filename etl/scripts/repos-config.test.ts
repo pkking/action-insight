@@ -107,4 +107,37 @@ repos:
 
     expect(getRepoNames(config)).toEqual(['acme/widgets']);
   });
+
+  it('parses npu_drilldown flags with report names (ADR-042)', () => {
+    const config = parseReposConfig(`
+repos:
+  - repo: acme/widgets
+    workflows:
+      - file: ci.yml
+        report_name: CI
+        npu_drilldown: true
+      - file: nightly.yml
+        npu_drilldown: false
+      - file: other.yml
+        report_name: Other
+`);
+
+    const workflows = config.repos[0].workflows;
+    expect(workflows[0]).toMatchObject({ file: 'ci.yml', npuDrilldown: true, reportName: 'CI' });
+    expect(workflows[1]).toMatchObject({ file: 'nightly.yml', npuDrilldown: false });
+    expect(workflows[1].reportName).toBeUndefined();
+    expect(workflows[2].npuDrilldown).toBeUndefined();
+  });
+
+  it('rejects non-boolean npu_drilldown flags', () => {
+    expect(() =>
+      parseReposConfig(`
+repos:
+  - repo: acme/widgets
+    workflows:
+      - file: ci.yml
+        npu_drilldown: yes-please
+`),
+    ).toThrow('npu_drilldown must be a boolean');
+  });
 });
