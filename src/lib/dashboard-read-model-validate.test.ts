@@ -55,6 +55,12 @@ describe('validateDashboardQuery', () => {
 });
 
 describe('parsePrDashboardQuery', () => {
+  it('defaults only Runs to vllm-ascend and distinguishes explicit all', () => {
+    expect(parsePrDashboardQuery(new URLSearchParams('tab=runs')).repoKey).toBe('vllm-project/vllm-ascend');
+    expect(parsePrDashboardQuery(new URLSearchParams('tab=runs&repo=all')).repoKey).toBeUndefined();
+    expect(parsePrDashboardQuery(new URLSearchParams('tab=runs&repo=owner%2Frepo')).repoKey).toBe('owner/repo');
+    expect(parsePrDashboardQuery(new URLSearchParams('tab=cost')).repoKey).toBeUndefined();
+  });
   it('defaults to a 7-day window ending today when no params', () => {
     const q = parsePrDashboardQuery(new URLSearchParams());
     expect(q.tab).toBe('pr');

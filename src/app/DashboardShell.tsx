@@ -747,7 +747,7 @@ function RunsBody({ result }: { result: RunsDashboardResult }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <CostCard
           label="Total Attempts"
           definition="Every tracked workflow attempt in the window, all trigger events (ADR-021 tracked set)."
@@ -758,6 +758,11 @@ function RunsBody({ result }: { result: RunsDashboardResult }) {
           label="Success Rate"
           definition="Successful terminal attempts ÷ all terminal attempts (spec §4)."
           value={cards.totalAttempts > 0 ? `${Math.round(cards.successRate)}%` : '—'}
+        />
+        <CostCard
+          label="Average Runtime"
+          definition="Average runtime over successful attempts with non-negative runtime, across the entire window."
+          value={cards.avgRuntime !== undefined ? fmtSeconds(cards.avgRuntime) : '—'}
         />
         <CostCard
           label="P50 Runtime"
@@ -771,6 +776,20 @@ function RunsBody({ result }: { result: RunsDashboardResult }) {
         />
       </div>
 
+      <div className="rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <h2 className="mb-2 text-lg font-bold">Attempt Runtime</h2>
+        <p className="mb-4 text-xs text-neutral-500 dark:text-neutral-400">Current table page. Average, P50 and P90 cover successful attempts with valid non-negative runtime across the full window.</p>
+        {result.rows.some((row) => row.runtimeSeconds != null && row.runtimeSeconds >= 0) ? (
+          <div className="h-64"><ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={result.rows.map((row) => ({ ...row, duration: row.runtimeSeconds != null && row.runtimeSeconds >= 0 ? row.runtimeSeconds : null }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" className="dark:opacity-20" />
+              <XAxis dataKey="runId" hide /><YAxis tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
+              <Tooltip formatter={(value) => [fmtSeconds(Number(value)), 'Runtime']} />
+              <Bar dataKey="duration">{result.rows.map((row) => <Cell key={`${row.repoKey}-${row.runId}-${row.runAttempt}`} fill={row.conclusion === 'success' ? '#34d399' : row.conclusion === 'failure' ? '#f87171' : '#9ca3af'} />)}</Bar>
+            </ComposedChart>
+          </ResponsiveContainer></div>
+        ) : <div className="py-12 text-center text-sm text-neutral-500 dark:text-neutral-400">No valid runtimes on this page.</div>}
+      </div>
       <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 text-xs uppercase tracking-wide text-neutral-400 dark:bg-neutral-800 dark:text-neutral-500">
@@ -1823,11 +1842,11 @@ export default function DashboardShell({
             </label>
             <select
               id="repo-select"
-              value={selectedRepoKey}
+              value={selectedRepoKey || (activeTab === 'runs' ? 'vllm-project/vllm-ascend' : 'all')}
               onChange={(e) => setSelectedRepoKey(e.target.value)}
               className="min-w-48 rounded-md border border-neutral-200 bg-white px-2 py-1 text-sm text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
             >
-              <option value="">All repositories</option>
+              <option value="all">All repositories</option>
               {repoOptions.map((repo) => (
                 <option key={repo.key} value={repo.key}>{repo.key}</option>
               ))}

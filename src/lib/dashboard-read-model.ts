@@ -2130,6 +2130,7 @@ export type RunsStatsRow = {
   terminal: number;
   p50RuntimeSeconds: number | null;
   p90RuntimeSeconds: number | null;
+  avgRuntimeSeconds?: number | null;
   events: RunsEventCount[];
 };
 
@@ -2138,6 +2139,7 @@ export type RunsCardSet = {
   successRate: number; // success / terminal attempts (0-100)
   p50Runtime?: number;
   p90Runtime?: number;
+  avgRuntime?: number;
   eventBreakdown: RunsEventCount[];
 };
 
@@ -2178,7 +2180,7 @@ export async function fetchRunsPage(
           AND r.date >= $${repoRows.length + 1}
           AND r.date <= $${repoRows.length + 2}
           AND wa.tracked = 1
-        ORDER BY wa.created_at DESC, wa.run_id DESC, wa.run_attempt DESC
+        ORDER BY wa.created_at DESC NULLS LAST, wa.run_id DESC, wa.run_attempt DESC
         LIMIT $${repoRows.length + 3} OFFSET $${repoRows.length + 4}`,
       [...repoRows.map((r) => r.id), startDate, endDate, limit, offset],
     );
@@ -2221,6 +2223,7 @@ export async function fetchRunsStats(
       `SELECT COUNT(*) AS total,
               COUNT(*) FILTER (WHERE wa.conclusion = 'success') AS success,
               COUNT(*) FILTER (WHERE wa.conclusion IS NOT NULL) AS terminal,
+              AVG(wa.runtime_seconds) FILTER (WHERE wa.conclusion = 'success' AND wa.runtime_seconds IS NOT NULL AND wa.runtime_seconds >= 0) AS avg_runtime,
               PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY wa.runtime_seconds)
                 FILTER (WHERE wa.conclusion = 'success' AND wa.runtime_seconds IS NOT NULL AND wa.runtime_seconds >= 0) AS p50,
               PERCENTILE_DISC(0.9) WITHIN GROUP (ORDER BY wa.runtime_seconds)
@@ -2249,6 +2252,7 @@ export async function fetchRunsStats(
       total: Number(head.total ?? 0),
       success: Number(head.success ?? 0),
       terminal: Number(head.terminal ?? 0),
+      avgRuntimeSeconds: head.avg_runtime == null ? null : Number(head.avg_runtime),
       p50RuntimeSeconds: head.p50 == null ? null : Number(head.p50),
       p90RuntimeSeconds: head.p90 == null ? null : Number(head.p90),
       events: eventRows.map((e: Record<string, unknown>) => ({
@@ -2265,6 +2269,7 @@ export function buildRunsCards(stats: RunsStatsRow): RunsCardSet {
   return {
     totalAttempts: stats.total,
     successRate: stats.terminal > 0 ? (stats.success / stats.terminal) * 100 : 0,
+    avgRuntime: stats.avgRuntimeSeconds ?? undefined,
     p50Runtime: stats.p50RuntimeSeconds ?? undefined,
     p90Runtime: stats.p90RuntimeSeconds ?? undefined,
     eventBreakdown: stats.events,
@@ -2427,7 +2432,8 @@ export function parseDashboardQuery(params: URLSearchParams): DashboardQuery {
     tabRaw && TABS.includes(tabRaw as DashboardTab)
       ? (tabRaw as DashboardTab)
       : 'pr';
-  const repoKey = params.get('repo') || undefined;
+  const rawRepo = params.get('repo');
+  const repoKey = rawRepo === 'all' ? undefined : rawRepo || (tab === 'runs' ? 'vllm-project/vllm-ascend' : undefined);
   const resourceModel = params.get('resourceModel') || undefined;
   const days = intParam(params, 'days', DEFAULT_DAY_WINDOW[tab]);
   const startDate = params.get('startDate') || defaultDate(days);
