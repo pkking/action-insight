@@ -8,6 +8,8 @@ import {
   buildEnrichedRows,
   buildPrCards,
   buildPrDashboardResult,
+  buildRunsCards,
+  buildRunsDashboardResult,
   classifyResourceClass,
   GPU_LABEL_PATTERN,
   NPU_LABEL_PATTERN,
@@ -99,6 +101,45 @@ describe('classifyResourceClass', () => {
     const gpu = new RegExp(GPU_LABEL_PATTERN, 'i');
     expect(gpu.test('linux-amd64-a5-4')).toBe(false);
     expect(npu.test('gcp-a2-highgpu-2g-run-1-1')).toBe(false);
+  });
+});
+
+describe('runs tab', () => {
+  it('builds cards with success rate, percentiles and event breakdown', () => {
+    const cards = buildRunsCards({
+      total: 100,
+      success: 70,
+      terminal: 80,
+      p50RuntimeSeconds: 120,
+      p90RuntimeSeconds: 480,
+      events: [
+        { event: 'pull_request', count: 60 },
+        { event: 'repository_dispatch', count: 40 },
+      ],
+    });
+    expect(cards.totalAttempts).toBe(100);
+    expect(cards.successRate).toBeCloseTo(87.5);
+    expect(cards.p50Runtime).toBe(120);
+    expect(cards.p90Runtime).toBe(480);
+    expect(cards.eventBreakdown).toHaveLength(2);
+  });
+
+  it('success rate is zero when nothing is terminal, not a division crash', () => {
+    expect(buildRunsCards({ total: 5, success: 0, terminal: 0, p50RuntimeSeconds: null, p90RuntimeSeconds: null, events: [] }).successRate).toBe(0);
+  });
+
+  it('paginates server-side: totalRows from stats, truncated beyond the page', () => {
+    const result = buildRunsDashboardResult(
+      [{ repoKey: 'o/r', runId: 1, runAttempt: 1, workflowFile: 'ci.yml', event: 'repository_dispatch', status: 'completed', conclusion: 'success', createdAt: '2026-11-20T01:00:00Z', queueDurationSeconds: 0, runtimeSeconds: 60, runUrl: 'https://github.com/o/r/actions/runs/1' }],
+      [{ date: '2026-11-20', count: 41 }],
+      { totalAttempts: 41, successRate: 100, eventBreakdown: [{ event: 'repository_dispatch', count: 41 }] },
+      { page: 1, pageSize: 20, observationLimit: 500 },
+    );
+    expect(result.tab).toBe('runs');
+    expect(result.totalRows).toBe(41);
+    expect(result.rows).toHaveLength(1);
+    expect(result.truncated).toBe(true);
+    expect(result.series).toEqual([{ date: '2026-11-20', count: 41 }]);
   });
 });
 

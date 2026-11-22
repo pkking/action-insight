@@ -13,7 +13,7 @@ import {
 // ponytail: one internal query module is the seam (ADR-008, spec §6).
 // Callers never assemble SQL or recompute metrics.
 
-export type DashboardTab = 'pr' | 'cost' | 'workflow' | 'job' | 'queue';
+export type DashboardTab = 'pr' | 'cost' | 'workflow' | 'job' | 'queue' | 'runs';
 
 export type DashboardQuery = {
   tab: DashboardTab;
@@ -52,7 +52,8 @@ export type DashboardReadResult =
   | CostDashboardResult
   | WorkflowDashboardResult
   | JobDashboardResult
-  | QueueDashboardResult;
+  | QueueDashboardResult
+  | RunsDashboardResult;
 
 // ---- PR tab types -------------------------------------------------------
 
@@ -255,7 +256,7 @@ export type QueueDashboardResult = DashboardResult<
 // ---- Query input validation --------------------------------------------
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const TABS: readonly DashboardTab[] = ['pr', 'cost', 'workflow', 'job', 'queue'];
+const TABS: readonly DashboardTab[] = ['pr', 'cost', 'workflow', 'job', 'queue', 'runs'];
 
 export function validateDashboardQuery(input: DashboardQuery): void {
   if (!TABS.includes(input.tab)) {
@@ -2107,6 +2108,195 @@ export function buildQueueDashboardResult(
  * full-population cards and the bounded observation result. Cached per
  * identical query via React `cache` (spec §6: no GitHub API on reads).
  */
+export type RunsTableRow = {
+  repoKey: string;
+  runId: number;
+  runAttempt: number;
+  workflowFile: string | null;
+  event: string;
+  status: string;
+  conclusion: string | null;
+  createdAt: string | null;
+  queueDurationSeconds: number | null;
+  runtimeSeconds: number | null;
+  runUrl: string | null;
+};
+
+export type RunsEventCount = { event: string; count: number };
+
+export type RunsStatsRow = {
+  total: number;
+  success: number;
+  terminal: number;
+  p50RuntimeSeconds: number | null;
+  p90RuntimeSeconds: number | null;
+  events: RunsEventCount[];
+};
+
+export type RunsCardSet = {
+  totalAttempts: number;
+  successRate: number; // success / terminal attempts (0-100)
+  p50Runtime?: number;
+  p90Runtime?: number;
+  eventBreakdown: RunsEventCount[];
+};
+
+export type RunsSeriesPoint = { date: string; count: number };
+
+export type RunsDashboardResult = DashboardResult<
+  RunsCardSet,
+  RunsSeriesPoint,
+  RunsTableRow
+> & { tab: 'runs' };
+
+/**
+ * Flat workflow-run-attempt list (Runs tab): every tracked attempt in the
+ * window regardless of trigger event — pull_request, push, schedule,
+ * repository_dispatch, workflow_dispatch. SQL-side pagination (LIMIT/OFFSET
+ * with a window count, ADR-021 pushdown): 7-day all-repo windows hold tens
+ * of thousands of attempts and must not be transferred to Node whole.
+ */
+export async function fetchRunsPage(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+  limit: number,
+  offset: number,
+): Promise<{ rows: RunsTableRow[]; total: number }> {
+  if (repoRows.length === 0) return { rows: [], total: 0 };
+  const client = await getDatabaseClient();
+  try {
+    const placeholders = pgPlaceholders(repoRows.length);
+    const { rows } = await client.query(
+      `SELECT wa.run_id, r.repo_id, wa.run_attempt, wa.workflow_file,
+              r.event, wa.status, wa.conclusion, wa.created_at,
+              wa.queue_duration_seconds, wa.runtime_seconds, r.html_url,
+              COUNT(*) OVER() AS total_count
+         FROM workflow_attempts wa
+         JOIN runs r ON r.id = wa.run_id
+        WHERE r.repo_id IN (${placeholders})
+          AND r.date >= $${repoRows.length + 1}
+          AND r.date <= $${repoRows.length + 2}
+          AND wa.tracked = 1
+        ORDER BY wa.created_at DESC, wa.run_id DESC, wa.run_attempt DESC
+        LIMIT $${repoRows.length + 3} OFFSET $${repoRows.length + 4}`,
+      [...repoRows.map((r) => r.id), startDate, endDate, limit, offset],
+    );
+    const idToKey = new Map(repoRows.map((r) => [r.id, r.key]));
+    return {
+      rows: rows.map((row) => ({
+        repoKey: idToKey.get(Number(row.repo_id)) ?? 'unknown',
+        runId: Number(row.run_id),
+        runAttempt: Number(row.run_attempt),
+        workflowFile: (row.workflow_file as string | null) ?? null,
+        event: String(row.event ?? 'unknown'),
+        status: String(row.status),
+        conclusion: (row.conclusion as string | null) ?? null,
+        createdAt: (row.created_at as string | null) ?? null,
+        queueDurationSeconds:
+          row.queue_duration_seconds == null ? null : Number(row.queue_duration_seconds),
+        runtimeSeconds: row.runtime_seconds == null ? null : Number(row.runtime_seconds),
+        runUrl: (row.html_url as string | null) ?? null,
+      })),
+      total: rows.length > 0 ? Number(rows[0].total_count) : 0,
+    };
+  } finally {
+    client.release();
+  }
+}
+
+/** Aggregate stats for the Runs tab cards, computed entirely in SQL. */
+export async function fetchRunsStats(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<RunsStatsRow> {
+  if (repoRows.length === 0) {
+    return { total: 0, success: 0, terminal: 0, p50RuntimeSeconds: null, p90RuntimeSeconds: null, events: [] };
+  }
+  const client = await getDatabaseClient();
+  try {
+    const placeholders = pgPlaceholders(repoRows.length);
+    const { rows } = await client.query(
+      `SELECT COUNT(*) AS total,
+              COUNT(*) FILTER (WHERE wa.conclusion = 'success') AS success,
+              COUNT(*) FILTER (WHERE wa.conclusion IS NOT NULL) AS terminal,
+              PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY wa.runtime_seconds)
+                FILTER (WHERE wa.conclusion = 'success' AND wa.runtime_seconds IS NOT NULL AND wa.runtime_seconds >= 0) AS p50,
+              PERCENTILE_DISC(0.9) WITHIN GROUP (ORDER BY wa.runtime_seconds)
+                FILTER (WHERE wa.conclusion = 'success' AND wa.runtime_seconds IS NOT NULL AND wa.runtime_seconds >= 0) AS p90
+         FROM workflow_attempts wa
+         JOIN runs r ON r.id = wa.run_id
+        WHERE r.repo_id IN (${placeholders})
+          AND r.date >= $${repoRows.length + 1}
+          AND r.date <= $${repoRows.length + 2}
+          AND wa.tracked = 1`,
+      [...repoRows.map((r) => r.id), startDate, endDate],
+    );
+    const { rows: eventRows } = await client.query(
+      `SELECT r.event, COUNT(*) AS count
+         FROM workflow_attempts wa
+         JOIN runs r ON r.id = wa.run_id
+        WHERE r.repo_id IN (${placeholders})
+          AND r.date >= $${repoRows.length + 1}
+          AND r.date <= $${repoRows.length + 2}
+          AND wa.tracked = 1
+        GROUP BY r.event ORDER BY count DESC`,
+      [...repoRows.map((r) => r.id), startDate, endDate],
+    );
+    const head = rows[0] ?? {};
+    return {
+      total: Number(head.total ?? 0),
+      success: Number(head.success ?? 0),
+      terminal: Number(head.terminal ?? 0),
+      p50RuntimeSeconds: head.p50 == null ? null : Number(head.p50),
+      p90RuntimeSeconds: head.p90 == null ? null : Number(head.p90),
+      events: eventRows.map((e: Record<string, unknown>) => ({
+        event: String(e.event ?? 'unknown'),
+        count: Number(e.count ?? 0),
+      })),
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export function buildRunsCards(stats: RunsStatsRow): RunsCardSet {
+  return {
+    totalAttempts: stats.total,
+    successRate: stats.terminal > 0 ? (stats.success / stats.terminal) * 100 : 0,
+    p50Runtime: stats.p50RuntimeSeconds ?? undefined,
+    p90Runtime: stats.p90RuntimeSeconds ?? undefined,
+    eventBreakdown: stats.events,
+  };
+}
+
+export function buildRunsDashboardResult(
+  pageRows: RunsTableRow[],
+  daily: RunsSeriesPoint[],
+  cards: RunsCardSet,
+  query: Pick<DashboardQuery, 'page' | 'pageSize' | 'observationLimit'>,
+): RunsDashboardResult {
+  const boundedSeries = daily.slice(0, query.observationLimit);
+  return {
+    tab: 'runs',
+    cards,
+    series: boundedSeries,
+    rows: pageRows,
+    page: query.page,
+    pageSize: query.pageSize,
+    totalRows: cards.totalAttempts,
+    displayedObservationCount: pageRows.length,
+    truncated: cards.totalAttempts > query.page * query.pageSize,
+    quality: {
+      invalidTimingSamples: pageRows.filter((r) => r.runtimeSeconds == null).length,
+      unknownResourceSamples: 0,
+      partialHistorySamples: 0,
+      legacyFallbackSamples: 0,
+    },
+  };
+}
+
 export const getDashboardReadModel = cache(
   async (input: DashboardQuery): Promise<DashboardReadResult> => {
     validateDashboardQuery(input);
@@ -2150,6 +2340,17 @@ export const getDashboardReadModel = cache(
           observationLimit: input.observationLimit,
         },
       );
+    }
+
+    if (input.tab === 'runs') {
+      const stats = await fetchRunsStats(repoRows, input.startDate, input.endDate);
+      const pageNumber = Math.min(input.page, Math.max(1, Math.ceil(stats.total / input.pageSize)));
+      const page = await fetchRunsPage(repoRows, input.startDate, input.endDate, input.pageSize, (pageNumber - 1) * input.pageSize);
+      return buildRunsDashboardResult(page.rows, [], buildRunsCards(stats), {
+        page: pageNumber,
+        pageSize: input.pageSize,
+        observationLimit: input.observationLimit,
+      });
     }
 
     if (input.tab === 'job' || input.tab === 'queue') {
@@ -2213,6 +2414,7 @@ const DEFAULT_DAY_WINDOW: Record<DashboardTab, number> = {
   workflow: 7,
   job: 7,
   queue: 7,
+  runs: 7,
 };
 
 /**
