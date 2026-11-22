@@ -2149,7 +2149,7 @@ export type RunsDashboardResult = DashboardResult<
   RunsCardSet,
   RunsSeriesPoint,
   RunsTableRow
-> & { tab: 'runs' };
+> & { tab: 'runs'; chart: RunsChartData };
 
 /**
  * Flat workflow-run-attempt list (Runs tab): every tracked attempt in the
@@ -2202,6 +2202,54 @@ export async function fetchRunsPage(
       })),
       total: rows.length > 0 ? Number(rows[0].total_count) : 0,
     };
+  } finally {
+    client.release();
+  }
+}
+
+export type RunsChartData = { repos: string[]; outcomes: string[]; points: [number, string, number, number | null, number | null, number][] };
+
+/** Minimal, unpaginated attempt data for the Runs chart. IDs remain strings to
+ * avoid losing PostgreSQL BIGINT precision in JavaScript. */
+export async function fetchRunsChart(
+  repoRows: RepoRow[],
+  startDate: string,
+  endDate: string,
+): Promise<RunsChartData> {
+  const repos = repoRows.map((repo) => repo.key);
+  const outcomes: string[] = [];
+  const points: [number, string, number, number | null, number | null, number][] = [];
+  if (repoRows.length === 0) return { repos, outcomes, points };
+  const client = await getDatabaseClient();
+  try {
+    const placeholders = pgPlaceholders(repoRows.length);
+    const { rows } = await client.query(
+      `SELECT r.repo_id, wa.run_id, wa.run_attempt,
+              COALESCE(wa.run_started_at, wa.created_at) AS plot_time,
+              wa.runtime_seconds, COALESCE(wa.conclusion, wa.status, 'unknown') AS outcome
+         FROM workflow_attempts wa JOIN runs r ON r.id = wa.run_id
+        WHERE r.repo_id IN (${placeholders})
+          AND r.date >= $${repoRows.length + 1} AND r.date <= $${repoRows.length + 2}
+          AND wa.tracked = 1
+        ORDER BY wa.created_at NULLS LAST, wa.run_id, wa.run_attempt`,
+      [...repoRows.map((repo) => repo.id), startDate, endDate],
+    );
+    const indexes = new Map(repoRows.map((repo, index) => [repo.id, index]));
+    const outcomeIndexes = new Map<string, number>();
+    for (const row of rows) {
+      const outcome = String(row.outcome);
+      let outcomeIndex = outcomeIndexes.get(outcome);
+      if (outcomeIndex === undefined) {
+        outcomeIndex = outcomes.length;
+        outcomes.push(outcome);
+        outcomeIndexes.set(outcome, outcomeIndex);
+      }
+      const time = row.plot_time == null ? NaN : Date.parse(String(row.plot_time));
+      const seconds = row.runtime_seconds == null ? NaN : Number(row.runtime_seconds);
+      points.push([indexes.get(Number(row.repo_id))!, String(row.run_id), Number(row.run_attempt),
+        Number.isFinite(time) ? time : null, Number.isFinite(seconds) ? seconds : null, outcomeIndex]);
+    }
+    return { repos, outcomes, points };
   } finally {
     client.release();
   }
@@ -2281,10 +2329,12 @@ export function buildRunsDashboardResult(
   daily: RunsSeriesPoint[],
   cards: RunsCardSet,
   query: Pick<DashboardQuery, 'page' | 'pageSize' | 'observationLimit'>,
+  chart: RunsChartData = { repos: [], outcomes: [], points: [] },
 ): RunsDashboardResult {
   const boundedSeries = daily.slice(0, query.observationLimit);
   return {
     tab: 'runs',
+    chart,
     cards,
     series: boundedSeries,
     rows: pageRows,
@@ -2348,14 +2398,14 @@ export const getDashboardReadModel = cache(
     }
 
     if (input.tab === 'runs') {
-      const stats = await fetchRunsStats(repoRows, input.startDate, input.endDate);
+      const [stats, chart] = await Promise.all([fetchRunsStats(repoRows, input.startDate, input.endDate), fetchRunsChart(repoRows, input.startDate, input.endDate)]);
       const pageNumber = Math.min(input.page, Math.max(1, Math.ceil(stats.total / input.pageSize)));
       const page = await fetchRunsPage(repoRows, input.startDate, input.endDate, input.pageSize, (pageNumber - 1) * input.pageSize);
       return buildRunsDashboardResult(page.rows, [], buildRunsCards(stats), {
         page: pageNumber,
         pageSize: input.pageSize,
         observationLimit: input.observationLimit,
-      });
+      }, chart);
     }
 
     if (input.tab === 'job' || input.tab === 'queue') {

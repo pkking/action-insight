@@ -252,7 +252,7 @@ function workflowResult(): WorkflowDashboardResult {
 
 function emptyRunsResult(): RunsDashboardResult {
   return {
-    tab: 'runs',
+    tab: 'runs', chart: { repos: [], outcomes: [], points: [] },
     cards: { totalAttempts: 0, successRate: 0, eventBreakdown: [] },
     series: [],
     rows: [],

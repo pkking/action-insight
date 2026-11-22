@@ -726,6 +726,31 @@ function RunEventBadge({ event }: { event: string }) {
   );
 }
 
+function RunsAttemptChart({ chart }: { chart: RunsDashboardResult['chart'] }) {
+  const paths = ['', '', '', ''];
+  const points = chart.points;
+  let max = 1;
+  for (const point of points) if (point[4] != null && point[4] >= 0) max = Math.max(max, point[4]);
+  let missing = 0;
+  points.forEach((point, index) => {
+    const duration = point[4];
+    const invalid = duration == null || duration < 0;
+    if (invalid) missing++;
+    const outcome = chart.outcomes[point[5]];
+    const category = invalid ? 3 : outcome === 'success' ? 0 : outcome === 'failure' ? 1 : 2;
+    const x = ((index + 0.5) * 1000 / points.length).toFixed(3);
+    const y = invalid ? 205 : 200 - 195 * duration / max;
+    paths[category] += `M${x} ${invalid ? 205 : 200}V${y.toFixed(2)}`;
+  });
+  if (!points.length) return <div className="py-12 text-center text-sm text-neutral-500">No attempts in this window.</div>;
+  return <div>
+    <div className="text-xs text-neutral-500 dark:text-neutral-400">Max: {fmtSeconds(max)} · {points.length.toLocaleString()} attempts · {missing.toLocaleString()} missing or invalid durations</div>
+    <svg viewBox="0 0 1000 210" preserveAspectRatio="none" className="h-64 w-full" role="img" aria-label={`Runtime for ${points.length} attempts; ${missing} missing or invalid durations`}>
+      {paths.map((path, i) => <path key={i} d={path} fill="none" stroke={['#34d399', '#f87171', '#9ca3af', '#a78bfa'][i]} strokeWidth="1" />)}
+    </svg>
+  </div>;
+}
+
 function RunsBody({ result }: { result: RunsDashboardResult }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -778,17 +803,8 @@ function RunsBody({ result }: { result: RunsDashboardResult }) {
 
       <div className="rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
         <h2 className="mb-2 text-lg font-bold">Attempt Runtime</h2>
-        <p className="mb-4 text-xs text-neutral-500 dark:text-neutral-400">Current table page. Average, P50 and P90 cover successful attempts with valid non-negative runtime across the full window.</p>
-        {result.rows.some((row) => row.runtimeSeconds != null && row.runtimeSeconds >= 0) ? (
-          <div className="h-64"><ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={result.rows.map((row) => ({ ...row, duration: row.runtimeSeconds != null && row.runtimeSeconds >= 0 ? row.runtimeSeconds : null }))}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" className="dark:opacity-20" />
-              <XAxis dataKey="runId" hide /><YAxis tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
-              <Tooltip formatter={(value) => [fmtSeconds(Number(value)), 'Runtime']} />
-              <Bar dataKey="duration">{result.rows.map((row) => <Cell key={`${row.repoKey}-${row.runId}-${row.runAttempt}`} fill={row.conclusion === 'success' ? '#34d399' : row.conclusion === 'failure' ? '#f87171' : '#9ca3af'} />)}</Bar>
-            </ComposedChart>
-          </ResponsiveContainer></div>
-        ) : <div className="py-12 text-center text-sm text-neutral-500 dark:text-neutral-400">No valid runtimes on this page.</div>}
+        <p className="mb-4 text-xs text-neutral-500 dark:text-neutral-400">All tracked attempts in the selected window, ordered by creation time. Green: success; red: failure; gray: other. Missing or invalid durations are marked below the baseline.</p>
+        <RunsAttemptChart chart={result.chart} />
       </div>
       <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
         <table className="w-full text-sm">
