@@ -286,6 +286,7 @@ type RepoRow = { id: number; key: string };
 async function resolveRepoRows(
   options: RepoOption[],
   repoKey?: string,
+  allowMissing = false,
 ): Promise<RepoRow[]> {
   if (!repoKey) {
     // All tracked repositories. Resolve ids in one query.
@@ -299,6 +300,7 @@ async function resolveRepoRows(
   }
   const target = options.find((o) => o.key === repoKey);
   if (!target) {
+    if (allowMissing) return [];
     throw new Error(`Repository not tracked: ${repoKey}`);
   }
   const { rows } = await query(
@@ -306,6 +308,7 @@ async function resolveRepoRows(
     [target.owner, target.repo],
   );
   if (rows.length === 0) {
+    if (allowMissing) return [];
     throw new Error(`Repository not found in database: ${repoKey}`);
   }
   return [{ id: Number(rows[0].id), key: repoKey }];
@@ -2151,11 +2154,23 @@ export type RunsDashboardResult = DashboardResult<
   RunsTableRow
 > & { tab: 'runs'; chart: RunsChartData };
 
+// Timestamp columns are TEXT. Require an explicit offset and validate before casting;
+// never use the parent run's trigger time to place a rerun.
+function runsPopulation(repoCount: number): string {
+  const valid = (column: string) => `CASE WHEN ${column} ~ '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$' AND pg_input_is_valid(${column}, 'timestamptz') THEN ${column}::timestamptz END`;
+  return `FROM workflow_attempts wa JOIN runs r ON r.id = wa.run_id
+    CROSS JOIN LATERAL (SELECT CASE WHEN wa.run_attempt > 1 THEN ${valid('wa.run_started_at')}
+      ELSE COALESCE(${valid('wa.created_at')}, ${valid('r.created_at')}, ${valid('wa.run_started_at')}) END AS window_at) timing
+    WHERE r.repo_id IN (${pgPlaceholders(repoCount)}) AND wa.tracked = 1
+      AND timing.window_at >= ($${repoCount + 1}::date::timestamp AT TIME ZONE 'UTC')
+      AND timing.window_at < (($${repoCount + 2}::date + 1)::timestamp AT TIME ZONE 'UTC')`;
+}
+
 /**
  * Flat workflow-run-attempt list (Runs tab): every tracked attempt in the
  * window regardless of trigger event — pull_request, push, schedule,
  * repository_dispatch, workflow_dispatch. SQL-side pagination (LIMIT/OFFSET
- * with a window count, ADR-021 pushdown): 7-day all-repo windows hold tens
+ * with a separate stats count, ADR-021 pushdown): 7-day all-repo windows hold tens
  * of thousands of attempts and must not be transferred to Node whole.
  */
 export async function fetchRunsPage(
@@ -2164,23 +2179,16 @@ export async function fetchRunsPage(
   endDate: string,
   limit: number,
   offset: number,
-): Promise<{ rows: RunsTableRow[]; total: number }> {
-  if (repoRows.length === 0) return { rows: [], total: 0 };
+): Promise<{ rows: RunsTableRow[] }> {
+  if (repoRows.length === 0) return { rows: [] };
   const client = await getDatabaseClient();
   try {
-    const placeholders = pgPlaceholders(repoRows.length);
     const { rows } = await client.query(
       `SELECT wa.run_id, r.repo_id, wa.run_attempt, wa.workflow_file,
-              r.event, wa.status, wa.conclusion, wa.created_at,
-              wa.queue_duration_seconds, wa.runtime_seconds, r.html_url,
-              COUNT(*) OVER() AS total_count
-         FROM workflow_attempts wa
-         JOIN runs r ON r.id = wa.run_id
-        WHERE r.repo_id IN (${placeholders})
-          AND r.date >= $${repoRows.length + 1}
-          AND r.date <= $${repoRows.length + 2}
-          AND wa.tracked = 1
-        ORDER BY wa.created_at DESC NULLS LAST, wa.run_id DESC, wa.run_attempt DESC
+              r.event, wa.status, wa.conclusion, timing.window_at AS created_at,
+              CASE WHEN wa.run_attempt > 1 THEN NULL ELSE wa.queue_duration_seconds END AS queue_duration_seconds, wa.runtime_seconds, r.html_url
+         ${runsPopulation(repoRows.length)}
+        ORDER BY timing.window_at DESC, wa.run_id DESC, wa.run_attempt DESC
         LIMIT $${repoRows.length + 3} OFFSET $${repoRows.length + 4}`,
       [...repoRows.map((r) => r.id), startDate, endDate, limit, offset],
     );
@@ -2194,13 +2202,12 @@ export async function fetchRunsPage(
         event: String(row.event ?? 'unknown'),
         status: String(row.status),
         conclusion: (row.conclusion as string | null) ?? null,
-        createdAt: (row.created_at as string | null) ?? null,
+        createdAt: row.created_at == null ? null : new Date(row.created_at).toISOString(),
         queueDurationSeconds:
           row.queue_duration_seconds == null ? null : Number(row.queue_duration_seconds),
         runtimeSeconds: row.runtime_seconds == null ? null : Number(row.runtime_seconds),
         runUrl: (row.html_url as string | null) ?? null,
       })),
-      total: rows.length > 0 ? Number(rows[0].total_count) : 0,
     };
   } finally {
     client.release();
@@ -2222,16 +2229,12 @@ export async function fetchRunsChart(
   if (repoRows.length === 0) return { repos, outcomes, points };
   const client = await getDatabaseClient();
   try {
-    const placeholders = pgPlaceholders(repoRows.length);
     const { rows } = await client.query(
       `SELECT r.repo_id, wa.run_id, wa.run_attempt,
-              COALESCE(wa.run_started_at, wa.created_at) AS plot_time,
+              timing.window_at AS plot_time,
               wa.runtime_seconds, COALESCE(wa.conclusion, wa.status, 'unknown') AS outcome
-         FROM workflow_attempts wa JOIN runs r ON r.id = wa.run_id
-        WHERE r.repo_id IN (${placeholders})
-          AND r.date >= $${repoRows.length + 1} AND r.date <= $${repoRows.length + 2}
-          AND wa.tracked = 1
-        ORDER BY wa.created_at NULLS LAST, wa.run_id, wa.run_attempt`,
+         ${runsPopulation(repoRows.length)}
+        ORDER BY timing.window_at, wa.run_id, wa.run_attempt`,
       [...repoRows.map((repo) => repo.id), startDate, endDate],
     );
     const indexes = new Map(repoRows.map((repo, index) => [repo.id, index]));
@@ -2266,7 +2269,6 @@ export async function fetchRunsStats(
   }
   const client = await getDatabaseClient();
   try {
-    const placeholders = pgPlaceholders(repoRows.length);
     const { rows } = await client.query(
       `SELECT COUNT(*) AS total,
               COUNT(*) FILTER (WHERE wa.conclusion = 'success') AS success,
@@ -2276,22 +2278,12 @@ export async function fetchRunsStats(
                 FILTER (WHERE wa.conclusion = 'success' AND wa.runtime_seconds IS NOT NULL AND wa.runtime_seconds >= 0) AS p50,
               PERCENTILE_DISC(0.9) WITHIN GROUP (ORDER BY wa.runtime_seconds)
                 FILTER (WHERE wa.conclusion = 'success' AND wa.runtime_seconds IS NOT NULL AND wa.runtime_seconds >= 0) AS p90
-         FROM workflow_attempts wa
-         JOIN runs r ON r.id = wa.run_id
-        WHERE r.repo_id IN (${placeholders})
-          AND r.date >= $${repoRows.length + 1}
-          AND r.date <= $${repoRows.length + 2}
-          AND wa.tracked = 1`,
+         ${runsPopulation(repoRows.length)}`,
       [...repoRows.map((r) => r.id), startDate, endDate],
     );
     const { rows: eventRows } = await client.query(
       `SELECT r.event, COUNT(*) AS count
-         FROM workflow_attempts wa
-         JOIN runs r ON r.id = wa.run_id
-        WHERE r.repo_id IN (${placeholders})
-          AND r.date >= $${repoRows.length + 1}
-          AND r.date <= $${repoRows.length + 2}
-          AND wa.tracked = 1
+         ${runsPopulation(repoRows.length)}
         GROUP BY r.event ORDER BY count DESC`,
       [...repoRows.map((r) => r.id), startDate, endDate],
     );
@@ -2357,7 +2349,8 @@ export const getDashboardReadModel = cache(
     validateDashboardQuery(input);
 
     const options = await getTrackedRepoOptions();
-    const repoRows = await resolveRepoRows(options, input.repoKey);
+    const allowMissingRepo = input.tab === 'runs' && input.repoKey === 'vllm-project/vllm-ascend';
+    const repoRows = await resolveRepoRows(options, input.repoKey, allowMissingRepo);
 
     if (input.tab === 'cost') {
       const [groups, dailySeries, mergedPrCount] = await Promise.all([

@@ -16,9 +16,9 @@ Version 1 will not add dashboard aggregate tables, materialized views, or GitHub
 
 ### Runs tab extension
 
-Runs lists **already tracked** workflow attempts for all event types, not just PRs; it does not broaden ETL collection. The date window uses the original run `runs.date`, including for subsequent attempts. Cards and event counts cover the full filtered population: success rate is successful conclusions divided by non-null conclusions; runtime P50/P90 use PostgreSQL `percentile_disc` over non-negative, non-null runtimes of successful attempts only. Empty samples have no percentile. No daily aggregate is queried for this tab.
+Runs lists **already tracked** workflow attempts for all event types, not just PRs; it does not broaden ETL collection. The table, chart, and cards use the same UTC window, defined in [ADR-024](024-runs-attempt-chart.md). Cards and event counts cover the full filtered population. No daily aggregate is queried for this tab.
 
-The table uses SQL LIMIT/OFFSET ordered by attempt creation, run ID and attempt number descending. Its total comes from the full-population statistics query, and the server clamps an out-of-range page to the last available page (page 1 for an empty window). Pagination is encoded in the URL; changing the primary filters or tab resets it. Unlike the capped observation-based tabs, Runs can navigate the entire filtered population. Concurrent ingestion can change offsets between requests; this is not snapshot pagination. Direct aggregation and deep offsets cost database work, traded for bounded response size and no additional ETL or API calls.
+The table uses SQL LIMIT/OFFSET ordered by the window timestamp, run ID and attempt number descending. Its total comes from the full-population statistics query, and the server clamps an out-of-range page to the last available page (page 1 for an empty window). Pagination is encoded in the URL; changing the primary filters or tab resets it. Unlike the capped observation-based tabs, Runs can navigate the entire filtered population. Concurrent ingestion can change offsets between requests; this is not snapshot pagination. Direct aggregation and deep offsets cost database work, traded for bounded response size and no additional ETL or API calls.
 
 ## Rationale
 

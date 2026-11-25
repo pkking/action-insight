@@ -13,10 +13,11 @@ import type {
 } from '@/lib/dashboard-read-model';
 
 const replaceMock = vi.fn();
+let mockSearch = 'tab=runs&page=3';
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: replaceMock }),
   usePathname: () => '/',
-  useSearchParams: () => new URLSearchParams('tab=runs&page=3'),
+  useSearchParams: () => new URLSearchParams(mockSearch),
 }));
 
 vi.mock('recharts', () => ({
@@ -56,6 +57,18 @@ vi.mock('recharts', () => ({
 const repoOptions = [{ owner: 'owner', repo: 'repo', key: 'owner/repo' }];
 
 describe('Runs URL pagination regression', () => {
+  afterEach(() => { mockSearch = 'tab=runs&page=3'; });
+
+  it('accepts an external Runs deep link without replacing it with stale filters', () => {
+    mockSearch = 'repo=owner%2Frepo';
+    replaceMock.mockClear();
+    const { rerender } = render(<DashboardShell repoOptions={repoOptions} result={emptyResult()} searchParams={{ repo: 'owner/repo' }} />);
+    mockSearch = 'tab=runs&repo=all&page=3';
+    rerender(<DashboardShell repoOptions={repoOptions} result={{ ...emptyRunsResult(), page: 3, totalRows: 90 }} searchParams={{ tab: 'runs', repo: 'all', page: '3' }} />);
+    expect((screen.getByLabelText('Repository') as HTMLSelectElement).value).toBe('all');
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
   it('preserves an initial page deep link', () => {
     replaceMock.mockClear();
     render(<DashboardShell repoOptions={repoOptions} result={{ ...emptyRunsResult(), page: 3, totalRows: 60 }} searchParams={{ tab: 'runs', page: '3' }} />);

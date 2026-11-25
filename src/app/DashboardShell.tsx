@@ -38,6 +38,7 @@ import {
   groupRunsIntoCycles,
   summarizeCycleWalls,
 } from '@/lib/ci-cycles';
+import RunsAttemptChart from './RunsAttemptChart';
 import { fmtMachineHours, fmtSeconds } from '@/lib/format';
 import { CiCycleGantt } from './CiCycleGantt';
 import { TablePagination } from './TablePagination';
@@ -726,30 +727,6 @@ function RunEventBadge({ event }: { event: string }) {
   );
 }
 
-function RunsAttemptChart({ chart }: { chart: RunsDashboardResult['chart'] }) {
-  const paths = ['', '', '', ''];
-  const points = chart.points;
-  let max = 1;
-  for (const point of points) if (point[4] != null && point[4] >= 0) max = Math.max(max, point[4]);
-  let missing = 0;
-  points.forEach((point, index) => {
-    const duration = point[4];
-    const invalid = duration == null || duration < 0;
-    if (invalid) missing++;
-    const outcome = chart.outcomes[point[5]];
-    const category = invalid ? 3 : outcome === 'success' ? 0 : outcome === 'failure' ? 1 : 2;
-    const x = ((index + 0.5) * 1000 / points.length).toFixed(3);
-    const y = invalid ? 205 : 200 - 195 * duration / max;
-    paths[category] += `M${x} ${invalid ? 205 : 200}V${y.toFixed(2)}`;
-  });
-  if (!points.length) return <div className="py-12 text-center text-sm text-neutral-500">No attempts in this window.</div>;
-  return <div>
-    <div className="text-xs text-neutral-500 dark:text-neutral-400">Max: {fmtSeconds(max)} · {points.length.toLocaleString()} attempts · {missing.toLocaleString()} missing or invalid durations</div>
-    <svg viewBox="0 0 1000 210" preserveAspectRatio="none" className="h-64 w-full" role="img" aria-label={`Runtime for ${points.length} attempts; ${missing} missing or invalid durations`}>
-      {paths.map((path, i) => <path key={i} d={path} fill="none" stroke={['#34d399', '#f87171', '#9ca3af', '#a78bfa'][i]} strokeWidth="1" />)}
-    </svg>
-  </div>;
-}
 
 function RunsBody({ result }: { result: RunsDashboardResult }) {
   const router = useRouter();
@@ -785,17 +762,17 @@ function RunsBody({ result }: { result: RunsDashboardResult }) {
           value={cards.totalAttempts > 0 ? `${Math.round(cards.successRate)}%` : '—'}
         />
         <CostCard
-          label="Average Runtime"
+          label="Average Runtime (successful)"
           definition="Average runtime over successful attempts with non-negative runtime, across the entire window."
           value={cards.avgRuntime !== undefined ? fmtSeconds(cards.avgRuntime) : '—'}
         />
         <CostCard
-          label="P50 Runtime"
+          label="P50 Runtime (successful)"
           definition="Median attempt runtime over successful attempts."
           value={cards.p50Runtime !== undefined ? fmtSeconds(cards.p50Runtime) : '—'}
         />
         <CostCard
-          label="P90 Runtime"
+          label="P90 Runtime (successful)"
           definition="90th-percentile attempt runtime over successful attempts."
           value={cards.p90Runtime !== undefined ? fmtSeconds(cards.p90Runtime) : '—'}
         />
@@ -803,14 +780,14 @@ function RunsBody({ result }: { result: RunsDashboardResult }) {
 
       <div className="rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
         <h2 className="mb-2 text-lg font-bold">Attempt Runtime</h2>
-        <p className="mb-4 text-xs text-neutral-500 dark:text-neutral-400">All tracked attempts in the selected window, ordered by creation time. Green: success; red: failure; gray: other. Missing or invalid durations are marked below the baseline.</p>
+        <p className="mb-4 text-xs text-neutral-500 dark:text-neutral-400">Tracked attempts ordered by UTC window time. Attempts without a usable window time are excluded. Green: success; red: failure; gray: other. Missing or invalid durations are marked below the baseline.</p>
         <RunsAttemptChart chart={result.chart} />
       </div>
       <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 text-xs uppercase tracking-wide text-neutral-400 dark:bg-neutral-800 dark:text-neutral-500">
             <tr>
-              <th className="px-3 py-2 text-left">Created (UTC)</th>
+              <th className="px-3 py-2 text-left">Window time (UTC)</th>
               <th className="px-3 py-2 text-left">Repo</th>
               <th className="px-3 py-2 text-left">Workflow</th>
               <th className="px-3 py-2 text-left">Event</th>
@@ -1730,22 +1707,41 @@ export default function DashboardShell({
   const [activeTab, setActiveTab] = useState<
     'pr' | 'cost' | 'workflow' | 'job' | 'queue' | 'runs'
   >(result.tab);
-  const [lastSyncedResultTab, setLastSyncedResultTab] = useState(result.tab);
-  if (result.tab !== lastSyncedResultTab) {
-    setLastSyncedResultTab(result.tab);
-    setActiveTab(result.tab);
-  }
   const tabDefaultDays = 7;
+  const serverRepo = typeof searchParams.repo === 'string' ? searchParams.repo : '';
+  const serverCustomRange = searchParams.useCustomRange === 'true';
+  const serverStart = typeof searchParams.startDate === 'string' ? searchParams.startDate : '';
+  const serverEnd = typeof searchParams.endDate === 'string' ? searchParams.endDate : '';
+  const parsedServerDays = typeof searchParams.days === 'string' ? parseInt(searchParams.days, 10) : NaN;
+  const serverDays = parsedServerDays > 0 ? parsedServerDays : tabDefaultDays;
+  const serverFilterSignature = JSON.stringify([result.tab, serverRepo, serverCustomRange, serverStart, serverEnd, serverDays, searchParams.page]);
+  const [lastSyncedServerFilters, setLastSyncedServerFilters] = useState(serverFilterSignature);
+  if (lastSyncedServerFilters !== serverFilterSignature) {
+    setLastSyncedServerFilters(serverFilterSignature);
+    setActiveTab(result.tab);
+    setSelectedRepoKey(serverRepo);
+    setUseCustomRange(serverCustomRange);
+    setStartDate(serverStart);
+    setEndDate(serverEnd);
+    setDays(serverDays);
+  }
 
   const filterSignature = JSON.stringify([activeTab, selectedRepoKey, useCustomRange, startDate, endDate, days]);
   const lastFilterSignature = useRef(filterSignature);
+  const lastServerFilterSignature = useRef(serverFilterSignature);
 
   // Sync state → URL. The tab comes from local state — reading it back from
   // urlSearchParams raced the in-flight router.replace issued by switchTab
   // and intermittently rebuilt the URL with the PREVIOUS tab, clobbering
   // the switch.
   useEffect(() => {
-    // Preserve pagination and secondary filters until a primary filter changes.
+    // A navigation owns its URL; only local filter changes should rewrite it.
+    if (lastServerFilterSignature.current !== serverFilterSignature) {
+      lastServerFilterSignature.current = serverFilterSignature;
+      lastFilterSignature.current = filterSignature;
+      lastUrlRef.current = '';
+      return;
+    }
     if (lastFilterSignature.current === filterSignature) return;
     lastFilterSignature.current = filterSignature;
     const params = new URLSearchParams();
@@ -1763,7 +1759,7 @@ export default function DashboardShell({
     if (lastUrlRef.current === nextUrl) return;
     lastUrlRef.current = nextUrl;
     router.replace(nextUrl, { scroll: false });
-  }, [activeTab, days, endDate, filterSignature, pathname, router, selectedRepoKey, startDate, tabDefaultDays, useCustomRange]);
+  }, [activeTab, days, endDate, filterSignature, pathname, router, selectedRepoKey, serverFilterSignature, startDate, tabDefaultDays, useCustomRange]);
 
   /** Switch the active tab, resetting the date filter to the shared default. */
   const switchTab = useCallback(
