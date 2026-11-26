@@ -226,6 +226,7 @@ async function writeRunsToClient(client: PoolClient, repoId: number, runs: RunRo
              status=excluded.status, conclusion=excluded.conclusion, event=excluded.event,
              updated_at=excluded.updated_at, html_url=excluded.html_url,
              duration_seconds=excluded.duration_seconds, steps_checked_at=excluded.steps_checked_at,
+             date=excluded.date,
              workflow_file=excluded.workflow_file, workflow_ref=excluded.workflow_ref,
              workflow_path=excluded.workflow_path, workflow_parse_status=excluded.workflow_parse_status`,
           [

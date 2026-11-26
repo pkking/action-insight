@@ -19,8 +19,9 @@ Every stored `created_at` value carries an explicit UTC offset (verified across 
       SET date = to_char(created_at::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD')
     WHERE date <> to_char(created_at::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD');
    ```
-   The statement is idempotent and safe to re-run.
-3. Leave collection **window-edge** labels (retention start, "today", created-filter cursors) on host-local time: they only slide the fetch boundary by the offset and overlap safely with ETag-cached windows; converting them would change collector behavior beyond the data bug being fixed here.
+   The statement is idempotent and safe to re-run. Additionally, the `runs` upsert now sets `date=excluded.date` on conflict, so rows written with a stale host-local date by an old collector during the deployment window self-heal on the next sweep instead of persisting the error.
+3. Deployment order: the hourly cron runs the collector from the shared main checkout, so until the fixed collector is deployed there, newly created runs (UTC 00:00–07:00) can still be filed one day early. After deployment, re-run the migration statement once and verify the shifted count is zero; rows inside the cron's `--days 3` sweep window are corrected automatically by the upsert.
+4. Leave collection **window-edge** labels (retention start, "today", created-filter cursors) on host-local time: they only slide the fetch boundary by the offset and overlap safely with ETag-cached windows; converting them would change collector behavior beyond the data bug being fixed here.
 
 ## Consequences
 
@@ -29,3 +30,4 @@ Every stored `created_at` value carries an explicit UTC offset (verified across 
 - `collection_state` retained-date lists self-heal on the next sweeps (the state merges dates computed by `runDateKey`); retention keeps at most one extra day of shifted runs during the transition.
 - Cross-checks against GitHub `created` filters now align without boundary noise; the PR #309 review's "2 missing LlamaFactory runs" were this boundary effect, not missing data.
 - `backfill-missing-jobs.ts` `since` boundary remains host-local; it widens the backfill window by at most the offset, which is the safe direction.
+- Upserting `date` on conflict makes every sweep re-normalize the stored date, so future regressions in date derivation surface as data changes on the next sweep rather than persisting silently.
