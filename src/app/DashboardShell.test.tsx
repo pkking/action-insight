@@ -75,10 +75,29 @@ describe('Runs URL pagination regression', () => {
     expect(replaceMock).not.toHaveBeenCalled();
   });
 
+  it('distinguishes unfinished attempts from an all-failed terminal set', () => {
+    const result = { ...runsResult(), cards: { ...runsResult().cards, successRate: null } };
+    const { rerender } = render(<DashboardShell repoOptions={repoOptions} result={result} searchParams={{ tab: 'runs' }} />);
+    expect(screen.getByText('Success Rate').parentElement?.parentElement?.textContent).toContain('—');
+    rerender(<DashboardShell repoOptions={repoOptions} result={{ ...result, cards: { ...result.cards, successRate: 0 } }} searchParams={{ tab: 'runs' }} />);
+    expect(screen.getByText('Success Rate').parentElement?.parentElement?.textContent).toContain('0%');
+  });
+
+  it('shows the missing default and switches directly to all', async () => {
+    replaceMock.mockClear();
+    render(<DashboardShell repoOptions={repoOptions} result={{ ...emptyRunsResult(), page: 3, totalRows: 60 }} searchParams={{ tab: 'runs', page: '3' }} />);
+    const select = screen.getByLabelText('Repository') as HTMLSelectElement;
+    expect(select.value).toBe('vllm-project/vllm-ascend');
+    expect(replaceMock).not.toHaveBeenCalled();
+    fireEvent.change(select, { target: { value: 'all' } });
+    expect(select.value).toBe('all');
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/?tab=runs&repo=all', { scroll: false }));
+  });
+
   it('resets page when the repository filter changes', async () => {
     replaceMock.mockClear();
     render(<DashboardShell repoOptions={repoOptions} result={{ ...emptyRunsResult(), page: 3, totalRows: 60 }} searchParams={{ tab: 'runs', page: '3' }} />);
-    fireEvent.change(screen.getByDisplayValue('All repositories'), { target: { value: 'owner/repo' } });
+    fireEvent.change(screen.getByLabelText('Repository'), { target: { value: 'owner/repo' } });
     await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/?tab=runs&repo=owner%2Frepo', { scroll: false }));
   });
 });
@@ -266,7 +285,7 @@ function workflowResult(): WorkflowDashboardResult {
 function emptyRunsResult(): RunsDashboardResult {
   return {
     tab: 'runs', chart: { repos: [], outcomes: [], points: [] },
-    cards: { totalAttempts: 0, successRate: 0, eventBreakdown: [] },
+    cards: { totalAttempts: 0, successRate: null, eventBreakdown: [] },
     series: [],
     rows: [],
     page: 1,

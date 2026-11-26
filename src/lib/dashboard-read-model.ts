@@ -2139,7 +2139,7 @@ export type RunsStatsRow = {
 
 export type RunsCardSet = {
   totalAttempts: number;
-  successRate: number; // success / terminal attempts (0-100)
+  successRate: number | null; // success / terminal attempts (0-100)
   p50Runtime?: number;
   p90Runtime?: number;
   avgRuntime?: number;
@@ -2308,7 +2308,7 @@ export async function fetchRunsStats(
 export function buildRunsCards(stats: RunsStatsRow): RunsCardSet {
   return {
     totalAttempts: stats.total,
-    successRate: stats.terminal > 0 ? (stats.success / stats.terminal) * 100 : 0,
+    successRate: stats.terminal > 0 ? (stats.success / stats.terminal) * 100 : null,
     avgRuntime: stats.avgRuntimeSeconds ?? undefined,
     p50Runtime: stats.p50RuntimeSeconds ?? undefined,
     p90Runtime: stats.p90RuntimeSeconds ?? undefined,
