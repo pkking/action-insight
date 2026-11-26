@@ -151,6 +151,8 @@ class ConfigTests(unittest.TestCase):
             ("nightly.yml", "Nightly Build Integration", "Nightly"),
             ("nightly-a3.yml", "Nightly Build and Test A3", "Nightly"),
             ("a5-torch-npu-test.yml", "A5 torch_npu Test", "A5"),
+            ("nightly-upstream-release-a5.yml", "Nightly Upstream Release A5", "Nightly"),
+            ("nightly-upstream-release-a3.yml", "Nightly Upstream Release A3", "Nightly"),
             ("pytorch_ci_trigger_pr.yml", "PyTorch CI Trigger (PR)", "PR Trigger"),
             ("pytorch_ci_trigger_push.yml", "PyTorch CI Trigger (Push)", "Push Trigger"),
         ]
@@ -187,7 +189,7 @@ class ConfigTests(unittest.TestCase):
         # workflow must exist in the collection inventory (same file by construction).
         flagged = {(repo["repo"], workflow["file"])
                    for repo in config["repos"] for workflow in repo["workflows"] if workflow.get("npu_drilldown")}
-        self.assertEqual(len(flagged), 16)
+        self.assertEqual(len(flagged), 18)
         for repo_name, workflow_file in flagged:
             self.assertIn((repo_name, workflow_file), {(r, w) for r, wlist in files.items() for w in wlist})
         # Every drilldown entry must also be a report target.
