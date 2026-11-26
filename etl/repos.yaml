@@ -11,6 +11,12 @@ repos:
   - file: nightly.yml
     report_name: Nightly CI
     comparison_name: Nightly
+  # ascend-pr-tests.yml is the Ascend-side PR CI (ADR-044); test-areal.yml
+  # covers the GCP GPU runner and tests.yml-class CPU paths are out of scope.
+  - file: ascend-pr-tests.yml
+    npu_drilldown: true
+    report_name: Ascend PR Tests
+    comparison_name: PR
   comparison_group: areal
 - repo: alibaba/ROLL
   workflows:
@@ -31,6 +37,11 @@ repos:
     comparison_name: PR
   - file: tests.yml
     report_name: tests
+    comparison_name: PR
+  # tests_cuda.yml is the CUDA-side PR CI (ADR-044); tests.yml itself runs
+  # on macos/windows CPU runners.
+  - file: tests_cuda.yml
+    report_name: tests_cuda
     comparison_name: PR
   comparison_group: llamafactory
 - repo: modelscope/ms-swift
@@ -127,6 +138,15 @@ repos:
   - file: a5-torch-npu-test.yml
     report_name: A5 torch_npu Test
     comparison_name: A5
+  # nightly.yml / nightly-a3.yml stopped ~11/15 and were replaced by the
+  # nightly-upstream-release-* pair (ADR-044); kept configured in case they
+  # are re-enabled.
+  - file: nightly-upstream-release-a5.yml
+    report_name: Nightly Upstream Release A5
+    comparison_name: Nightly
+  - file: nightly-upstream-release-a3.yml
+    report_name: Nightly Upstream Release A3
+    comparison_name: Nightly
   - file: pytorch_ci_trigger_pr.yml
     npu_drilldown: true
     report_name: PyTorch CI Trigger (PR)
