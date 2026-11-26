@@ -38,6 +38,7 @@ import {
   groupRunsIntoCycles,
   summarizeCycleWalls,
 } from '@/lib/ci-cycles';
+import RunsAttemptChart from './RunsAttemptChart';
 import { fmtMachineHours, fmtSeconds } from '@/lib/format';
 import { CiCycleGantt } from './CiCycleGantt';
 import { TablePagination } from './TablePagination';
@@ -48,6 +49,7 @@ import type {
   PrTableRow,
   QueueDashboardResult,
   WorkflowDashboardResult,
+  RunsDashboardResult,
   WorkflowTableRow,
 } from '@/lib/dashboard-read-model';
 import type { RepoOption } from '@/lib/server-homepage-data';
@@ -66,6 +68,7 @@ const TABS = [
   { key: 'pr', label: 'PR' },
   { key: 'cost', label: 'Cost' },
   { key: 'workflow', label: 'Workflow' },
+  { key: 'runs', label: 'Runs' },
   { key: 'job', label: 'Job' },
   { key: 'queue', label: 'Queue' },
 ] as const;
@@ -707,6 +710,170 @@ type WorkflowDrilldownAttempt = {
 };
 
 /** Workflow tab body: attempt cards, daily attempt-count chart, grouped table (spec §5.3). */
+const RUN_EVENT_STYLES: Record<string, string> = {
+  'pull_request': 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  'push': 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300',
+  'schedule': 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+  'repository_dispatch': 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+  'workflow_dispatch': 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
+};
+
+function RunEventBadge({ event }: { event: string }) {
+  const style = RUN_EVENT_STYLES[event] ?? 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400';
+  return (
+    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${style}`}>
+      {event}
+    </span>
+  );
+}
+
+
+function RunsBody({ result }: { result: RunsDashboardResult }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const urlSearchParams = useSearchParams();
+  const cards = result.cards;
+
+  const totalPages = Math.max(1, Math.ceil(result.totalRows / result.pageSize));
+  const currentPage = Math.min(result.page, totalPages);
+
+  function pushPage(page: number) {
+    const params = new URLSearchParams(urlSearchParams.toString());
+    params.set('page', String(page));
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  const eventSummary = cards.eventBreakdown
+    .map((e) => `${e.event} ${e.count.toLocaleString('en-US')}`)
+    .join(' · ');
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <CostCard
+          label="Total Attempts"
+          definition="Every tracked workflow attempt in the window, all trigger events (ADR-021 tracked set)."
+          value={cards.totalAttempts.toLocaleString('en-US')}
+          sub={eventSummary || undefined}
+        />
+        <CostCard
+          label="Success Rate"
+          definition="Successful terminal attempts ÷ all terminal attempts (spec §4)."
+          value={cards.totalAttempts > 0 ? `${Math.round(cards.successRate)}%` : '—'}
+        />
+        <CostCard
+          label="Average Runtime (successful)"
+          definition="Average runtime over successful attempts with non-negative runtime, across the entire window."
+          value={cards.avgRuntime !== undefined ? fmtSeconds(cards.avgRuntime) : '—'}
+        />
+        <CostCard
+          label="P50 Runtime (successful)"
+          definition="Median attempt runtime over successful attempts."
+          value={cards.p50Runtime !== undefined ? fmtSeconds(cards.p50Runtime) : '—'}
+        />
+        <CostCard
+          label="P90 Runtime (successful)"
+          definition="90th-percentile attempt runtime over successful attempts."
+          value={cards.p90Runtime !== undefined ? fmtSeconds(cards.p90Runtime) : '—'}
+        />
+      </div>
+
+      <div className="rounded-xl border border-neutral-100 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <h2 className="mb-2 text-lg font-bold">Attempt Runtime</h2>
+        <p className="mb-4 text-xs text-neutral-500 dark:text-neutral-400">Tracked attempts ordered by UTC window time. Attempts without a usable window time are excluded. Green: success; red: failure; gray: other. Missing or invalid durations are marked below the baseline.</p>
+        <RunsAttemptChart chart={result.chart} />
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+        <table className="w-full text-sm">
+          <thead className="bg-neutral-50 text-xs uppercase tracking-wide text-neutral-400 dark:bg-neutral-800 dark:text-neutral-500">
+            <tr>
+              <th className="px-3 py-2 text-left">Window time (UTC)</th>
+              <th className="px-3 py-2 text-left">Repo</th>
+              <th className="px-3 py-2 text-left">Workflow</th>
+              <th className="px-3 py-2 text-left">Event</th>
+              <th className="px-3 py-2 text-left">Run</th>
+              <th className="px-3 py-2 text-left">Conclusion</th>
+              <th className="px-3 py-2 text-right">Queue</th>
+              <th className="px-3 py-2 text-right">Runtime</th>
+              <th className="px-3 py-2 text-left">GitHub</th>
+            </tr>
+          </thead>
+          <tbody>
+            {result.rows.map((row) => (
+              <tr
+                key={`${row.repoKey}-${row.runId}-${row.runAttempt}`}
+                className="border-t border-neutral-100 dark:border-neutral-800"
+              >
+                <td className="whitespace-nowrap px-3 py-2 text-neutral-500 dark:text-neutral-400">
+                  {row.createdAt ? row.createdAt.replace('T', ' ').slice(0, 19) : '—'}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2">{row.repoKey}</td>
+                <td className="max-w-56 truncate px-3 py-2" title={row.workflowFile ?? undefined}>
+                  {row.workflowFile ?? '(unknown)'}
+                </td>
+                <td className="px-3 py-2"><RunEventBadge event={row.event} /></td>
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
+                  {row.runId}#{row.runAttempt}
+                </td>
+                <td className="px-3 py-2">
+                  <span
+                    className={
+                      row.conclusion === 'success'
+                        ? 'text-green-600 dark:text-green-400'
+                        : row.conclusion === 'failure'
+                          ? 'text-red-500'
+                          : row.conclusion === 'cancelled'
+                            ? 'text-amber-500'
+                            : 'text-neutral-400'
+                    }
+                  >
+                    {row.conclusion ?? row.status}
+                  </span>
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 text-right text-neutral-500 dark:text-neutral-400">
+                  {row.queueDurationSeconds != null ? fmtSeconds(row.queueDurationSeconds) : '—'}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 text-right">
+                  {row.runtimeSeconds != null ? fmtSeconds(row.runtimeSeconds) : '—'}
+                </td>
+                <td className="px-3 py-2">
+                  {row.runUrl ? (
+                    <a
+                      href={`${row.runUrl}/attempts/${row.runAttempt}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      open
+                    </a>
+                  ) : (
+                    '—'
+                  )}
+                </td>
+              </tr>
+            ))}
+            {result.rows.length === 0 && (
+              <tr>
+                <td colSpan={9} className="px-3 py-6 text-center text-neutral-400">
+                  No tracked workflow attempts in this window.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <TablePagination
+        page={currentPage}
+        totalPages={totalPages}
+        totalRows={result.totalRows}
+        itemLabel="attempts"
+        onPage={pushPage}
+      />
+    </div>
+  );
+}
+
 function WorkflowBody({
   result,
   repoOptions,
@@ -1538,20 +1705,45 @@ export default function DashboardShell({
   // "adjust state from props" pattern) — setState in an effect would cascade
   // renders (react-hooks/set-state-in-effect).
   const [activeTab, setActiveTab] = useState<
-    'pr' | 'cost' | 'workflow' | 'job' | 'queue'
+    'pr' | 'cost' | 'workflow' | 'job' | 'queue' | 'runs'
   >(result.tab);
-  const [lastSyncedResultTab, setLastSyncedResultTab] = useState(result.tab);
-  if (result.tab !== lastSyncedResultTab) {
-    setLastSyncedResultTab(result.tab);
-    setActiveTab(result.tab);
-  }
   const tabDefaultDays = 7;
+  const serverRepo = typeof searchParams.repo === 'string' ? searchParams.repo : '';
+  const serverCustomRange = searchParams.useCustomRange === 'true';
+  const serverStart = typeof searchParams.startDate === 'string' ? searchParams.startDate : '';
+  const serverEnd = typeof searchParams.endDate === 'string' ? searchParams.endDate : '';
+  const parsedServerDays = typeof searchParams.days === 'string' ? parseInt(searchParams.days, 10) : NaN;
+  const serverDays = parsedServerDays > 0 ? parsedServerDays : tabDefaultDays;
+  const serverFilterSignature = JSON.stringify([result.tab, serverRepo, serverCustomRange, serverStart, serverEnd, serverDays, searchParams.page]);
+  const [lastSyncedServerFilters, setLastSyncedServerFilters] = useState(serverFilterSignature);
+  if (lastSyncedServerFilters !== serverFilterSignature) {
+    setLastSyncedServerFilters(serverFilterSignature);
+    setActiveTab(result.tab);
+    setSelectedRepoKey(serverRepo);
+    setUseCustomRange(serverCustomRange);
+    setStartDate(serverStart);
+    setEndDate(serverEnd);
+    setDays(serverDays);
+  }
+
+  const filterSignature = JSON.stringify([activeTab, selectedRepoKey, useCustomRange, startDate, endDate, days]);
+  const lastFilterSignature = useRef(filterSignature);
+  const lastServerFilterSignature = useRef(serverFilterSignature);
 
   // Sync state → URL. The tab comes from local state — reading it back from
   // urlSearchParams raced the in-flight router.replace issued by switchTab
   // and intermittently rebuilt the URL with the PREVIOUS tab, clobbering
   // the switch.
   useEffect(() => {
+    // A navigation owns its URL; only local filter changes should rewrite it.
+    if (lastServerFilterSignature.current !== serverFilterSignature) {
+      lastServerFilterSignature.current = serverFilterSignature;
+      lastFilterSignature.current = filterSignature;
+      lastUrlRef.current = '';
+      return;
+    }
+    if (lastFilterSignature.current === filterSignature) return;
+    lastFilterSignature.current = filterSignature;
     const params = new URLSearchParams();
     if (activeTab !== 'pr') params.set('tab', activeTab);
     if (selectedRepoKey) params.set('repo', selectedRepoKey);
@@ -1567,11 +1759,11 @@ export default function DashboardShell({
     if (lastUrlRef.current === nextUrl) return;
     lastUrlRef.current = nextUrl;
     router.replace(nextUrl, { scroll: false });
-  }, [activeTab, days, endDate, pathname, router, selectedRepoKey, startDate, tabDefaultDays, useCustomRange]);
+  }, [activeTab, days, endDate, filterSignature, pathname, router, selectedRepoKey, serverFilterSignature, startDate, tabDefaultDays, useCustomRange]);
 
   /** Switch the active tab, resetting the date filter to the shared default. */
   const switchTab = useCallback(
-    (tab: 'pr' | 'cost' | 'workflow' | 'job' | 'queue') => {
+    (tab: 'pr' | 'cost' | 'workflow' | 'job' | 'queue' | 'runs') => {
       if (tab === activeTab) return;
       setActiveTab(tab);
       setUseCustomRange(false);
@@ -1662,11 +1854,11 @@ export default function DashboardShell({
             </label>
             <select
               id="repo-select"
-              value={selectedRepoKey}
+              value={selectedRepoKey || (activeTab === 'runs' ? 'vllm-project/vllm-ascend' : 'all')}
               onChange={(e) => setSelectedRepoKey(e.target.value)}
               className="min-w-48 rounded-md border border-neutral-200 bg-white px-2 py-1 text-sm text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
             >
-              <option value="">All repositories</option>
+              <option value="all">All repositories</option>
               {repoOptions.map((repo) => (
                 <option key={repo.key} value={repo.key}>{repo.key}</option>
               ))}
@@ -1730,6 +1922,7 @@ export default function DashboardShell({
               tab.key === 'pr' ||
               tab.key === 'cost' ||
               tab.key === 'workflow' ||
+              tab.key === 'runs' ||
               tab.key === 'job' ||
               tab.key === 'queue';
             return (
@@ -1740,7 +1933,7 @@ export default function DashboardShell({
                 onClick={() =>
                   enabled &&
                   switchTab(
-                    tab.key as 'pr' | 'cost' | 'workflow' | 'job' | 'queue',
+                    tab.key as 'pr' | 'cost' | 'workflow' | 'job' | 'queue' | 'runs',
                   )
                 }
                 className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -1997,6 +2190,10 @@ export default function DashboardShell({
 
         {result.tab === 'queue' && (
           <QueueBody result={result} repoOptions={repoOptions} />
+        )}
+
+        {result.tab === 'runs' && (
+          <RunsBody result={result} />
         )}
 
         <footer className="pb-4 text-center text-xs text-neutral-400 dark:text-neutral-600">

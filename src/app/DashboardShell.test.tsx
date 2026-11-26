@@ -8,14 +8,16 @@ import type {
   JobDashboardResult,
   PrDashboardResult,
   QueueDashboardResult,
+  RunsDashboardResult,
   WorkflowDashboardResult,
 } from '@/lib/dashboard-read-model';
 
 const replaceMock = vi.fn();
+let mockSearch = 'tab=runs&page=3';
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: replaceMock }),
   usePathname: () => '/',
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(mockSearch),
 }));
 
 vi.mock('recharts', () => ({
@@ -53,6 +55,33 @@ vi.mock('recharts', () => ({
 }));
 
 const repoOptions = [{ owner: 'owner', repo: 'repo', key: 'owner/repo' }];
+
+describe('Runs URL pagination regression', () => {
+  afterEach(() => { mockSearch = 'tab=runs&page=3'; });
+
+  it('accepts an external Runs deep link without replacing it with stale filters', () => {
+    mockSearch = 'repo=owner%2Frepo';
+    replaceMock.mockClear();
+    const { rerender } = render(<DashboardShell repoOptions={repoOptions} result={emptyResult()} searchParams={{ repo: 'owner/repo' }} />);
+    mockSearch = 'tab=runs&repo=all&page=3';
+    rerender(<DashboardShell repoOptions={repoOptions} result={{ ...emptyRunsResult(), page: 3, totalRows: 90 }} searchParams={{ tab: 'runs', repo: 'all', page: '3' }} />);
+    expect((screen.getByLabelText('Repository') as HTMLSelectElement).value).toBe('all');
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it('preserves an initial page deep link', () => {
+    replaceMock.mockClear();
+    render(<DashboardShell repoOptions={repoOptions} result={{ ...emptyRunsResult(), page: 3, totalRows: 60 }} searchParams={{ tab: 'runs', page: '3' }} />);
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it('resets page when the repository filter changes', async () => {
+    replaceMock.mockClear();
+    render(<DashboardShell repoOptions={repoOptions} result={{ ...emptyRunsResult(), page: 3, totalRows: 60 }} searchParams={{ tab: 'runs', page: '3' }} />);
+    fireEvent.change(screen.getByDisplayValue('All repositories'), { target: { value: 'owner/repo' } });
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/?tab=runs&repo=owner%2Frepo', { scroll: false }));
+  });
+});
 
 function emptyResult(): PrDashboardResult {
   return {
@@ -230,6 +259,51 @@ function workflowResult(): WorkflowDashboardResult {
       },
     ],
     totalRows: 1,
+    displayedObservationCount: 1,
+  };
+}
+
+function emptyRunsResult(): RunsDashboardResult {
+  return {
+    tab: 'runs', chart: { repos: [], outcomes: [], points: [] },
+    cards: { totalAttempts: 0, successRate: 0, eventBreakdown: [] },
+    series: [],
+    rows: [],
+    page: 1,
+    pageSize: 20,
+    totalRows: 0,
+    displayedObservationCount: 0,
+    truncated: false,
+    quality: { invalidTimingSamples: 0, unknownResourceSamples: 0, partialHistorySamples: 0, legacyFallbackSamples: 0 },
+  };
+}
+
+function runsResult(): RunsDashboardResult {
+  return {
+    ...emptyRunsResult(),
+    cards: {
+      totalAttempts: 2,
+      successRate: 50,
+      p50Runtime: 600,
+      p90Runtime: 900,
+      eventBreakdown: [{ event: 'repository_dispatch', count: 2 }],
+    },
+    rows: [
+      {
+        repoKey: 'ascend/pytorch',
+        runId: 123,
+        runAttempt: 1,
+        workflowFile: 'pytorch_ci_trigger_pr.yml',
+        event: 'repository_dispatch',
+        status: 'completed',
+        conclusion: 'success',
+        createdAt: '2026-11-20T12:00:00Z',
+        queueDurationSeconds: 0,
+        runtimeSeconds: 600,
+        runUrl: 'https://github.com/Ascend/pytorch/actions/runs/123',
+      },
+    ],
+    totalRows: 2,
     displayedObservationCount: 1,
   };
 }
@@ -750,5 +824,25 @@ describe('DashboardShell', () => {
     expect(day2).toBeDefined();
     expect(day2 && 'owner/repo' in day2).toBe(false);
     expect(day2 && day2['other/repo']).toBe(2);
+  });
+});
+
+describe('Runs tab', () => {
+  it('lists attempts of every trigger event with repo, workflow, timing and a GitHub link', async () => {
+    render(<DashboardShell repoOptions={repoOptions} result={runsResult()} searchParams={{}} />);
+    expect(screen.getByText('Runs')).toBeTruthy();
+    // attempt row for a dispatch-driven repo (no PR universe needed)
+    expect(screen.getByText('pytorch_ci_trigger_pr.yml')).toBeTruthy();
+    expect(screen.getByText('repository_dispatch')).toBeTruthy();
+    expect(screen.getByText('123#1')).toBeTruthy();
+    const link = screen.getByText('open') as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe('https://github.com/Ascend/pytorch/actions/runs/123/attempts/1');
+    // cards surface the event breakdown
+    expect(screen.getByText(/repository_dispatch 2/)).toBeTruthy();
+  });
+
+  it('renders an explicit empty state when the window has no tracked attempts', () => {
+    render(<DashboardShell repoOptions={repoOptions} result={emptyRunsResult()} searchParams={{}} />);
+    expect(screen.getByText('No tracked workflow attempts in this window.')).toBeTruthy();
   });
 });

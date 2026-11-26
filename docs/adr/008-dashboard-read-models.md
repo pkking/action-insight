@@ -14,6 +14,12 @@ Machine-Hours are derived at read time as `Job Runtime × Resource Count ÷ 3600
 
 Version 1 will not add dashboard aggregate tables, materialized views, or GitHub API calls. Existing React/server caching and PostgreSQL remain the reuse points. Add query indexes only when `EXPLAIN` or measured production latency demonstrates a need; introduce pre-aggregation only if the direct read model cannot meet the agreed latency target under retained data volume.
 
+### Runs tab extension
+
+Runs lists **already tracked** workflow attempts for all event types, not just PRs; it does not broaden ETL collection. The table, chart, and cards use the same UTC window, defined in [ADR-024](024-runs-attempt-chart.md). Cards and event counts cover the full filtered population. No daily aggregate is queried for this tab.
+
+The table uses SQL LIMIT/OFFSET ordered by the window timestamp, run ID and attempt number descending. Its total comes from the full-population statistics query, and the server clamps an out-of-range page to the last available page (page 1 for an empty window). Pagination is encoded in the URL; changing the primary filters or tab resets it. Unlike the capped observation-based tabs, Runs can navigate the entire filtered population. Concurrent ingestion can change offsets between requests; this is not snapshot pagination. Direct aggregation and deep offsets cost database work, traded for bounded response size and no additional ETL or API calls.
+
 ## Rationale
 
 The required raw fields and attempt identities already exist following ADR-005. Server-side aggregation avoids sending all retained workflow/job records to the browser, keeps metric definitions in one testable module, and does not spend GitHub API quota. A coherent per-tab result prevents cards, charts, and tables from silently using different filters or definitions.
