@@ -13,6 +13,7 @@ import {
   resolveCollectionHeartbeatMs,
   resolveCollectionSlowOperationMs,
   reserveRateLimitBudget,
+  runDateKey,
   RateLimitAbortError,
   runCollection,
   runSharedCollectionPlan,
@@ -72,6 +73,24 @@ function mockRepoState(options: {
   vi.mocked(getCollectedDates).mockResolvedValue(options.dates ?? []);
 }
 
+
+describe('runDateKey (ADR-045 UTC date attribution)', () => {
+  it('derives the UTC calendar date regardless of a host timezone behind UTC', () => {
+    // Discovered 2026-11-26: a MST host dated these 2026-11-01 runs as 2026-10-31.
+    expect(runDateKey('2026-11-01T01:04:29Z')).toBe('2026-11-01');
+    expect(runDateKey('2026-11-01T06:59:59Z')).toBe('2026-11-01');
+  });
+
+  it('normalizes explicit offsets to UTC before deriving the date', () => {
+    expect(runDateKey('2026-11-01T00:30:00+08:00')).toBe('2026-10-31');
+    expect(runDateKey('2026-10-31T20:00:00-05:00')).toBe('2026-11-01');
+  });
+
+  it('falls back to a sentinel value for unparseable input instead of throwing', () => {
+    expect(runDateKey('not-a-date')).toBe('Invalid Date');
+    expect(runDateKey(undefined)).toBe('Invalid Date');
+  });
+});
 
 describe('fetchJobsForRunAttempt', () => {
   it('retrieves every job page', async () => {
