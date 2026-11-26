@@ -759,7 +759,7 @@ function RunsBody({ result }: { result: RunsDashboardResult }) {
         <CostCard
           label="Success Rate"
           definition="Successful terminal attempts ÷ all terminal attempts (spec §4)."
-          value={cards.totalAttempts > 0 ? `${Math.round(cards.successRate)}%` : '—'}
+          value={cards.successRate !== null ? `${Math.round(cards.successRate)}%` : '—'}
         />
         <CostCard
           label="Average Runtime (successful)"
@@ -1859,6 +1859,7 @@ export default function DashboardShell({
               className="min-w-48 rounded-md border border-neutral-200 bg-white px-2 py-1 text-sm text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
             >
               <option value="all">All repositories</option>
+              {activeTab === 'runs' && (selectedRepoKey || 'vllm-project/vllm-ascend') === 'vllm-project/vllm-ascend' && !repoOptions.some((repo) => repo.key === 'vllm-project/vllm-ascend') && <option value="vllm-project/vllm-ascend">vllm-project/vllm-ascend</option>}
               {repoOptions.map((repo) => (
                 <option key={repo.key} value={repo.key}>{repo.key}</option>
               ))}

@@ -125,7 +125,7 @@ describe('runs tab', () => {
   });
 
   it('success rate is zero when nothing is terminal, not a division crash', () => {
-    expect(buildRunsCards({ total: 5, success: 0, terminal: 0, p50RuntimeSeconds: null, p90RuntimeSeconds: null, events: [] }).successRate).toBe(0);
+    expect(buildRunsCards({ total: 5, success: 0, terminal: 0, p50RuntimeSeconds: null, p90RuntimeSeconds: null, events: [] }).successRate).toBeNull();
   });
 
   it('paginates server-side: totalRows from stats, truncated beyond the page', () => {
