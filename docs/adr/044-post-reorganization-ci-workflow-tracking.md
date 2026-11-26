@@ -13,7 +13,7 @@ Repos in this ecosystem reorganized their CI during November 2026, and `etl/repo
 - `hiyouga/LlamaFactory`: the configured `tests.yml` runs on macos/windows CPU runners; the CUDA-side PR CI `tests_cuda.yml` (157 November runs) was untracked, leaving LlamaFactory GPU/NPU comparison one-sided.
 - `areal-project/AReaL`: only the GCP GPU `test-areal.yml` was tracked; the Ascend-side `ascend-pr-tests.yml` (50 November PR runs) was untracked.
 
-Checked and deliberately excluded: `Ascend/sglang` `pr-test.yml` (360 November runs) is ubuntu-latest CPU orchestration only — its NPU tests remain in the tracked `full-test-npu.yml`/`pr-test-npu.yml`; `verl` e2e variant workflows (each ≤ a few runs/week, below the ADR-041 allowlist bar individually); `Ascend/cann-container-image` `*_test` build workflows (build-only, no test timing); lint/labeler/docs workflows everywhere.
+Checked and deliberately excluded: `Ascend/sglang` `pr-test.yml` (360 November runs) — its own jobs run on ubuntu-latest, but it triggers the reusable `pr-test-extra.yml` whose GPU partitions (`1-gpu-small`, `1-gpu-large`, `2-gpu-large`, `4-gpu-b200`) hold the repo's GPU-side PR test time; tracking it is deferred until its GPU runner-label family gets card-count governance rules (the NPU-focused repo's tracked `full-test-npu.yml`/`pr-test-npu.yml` keep its NPU coverage complete). Also excluded: `verl` e2e variant workflows (each ≤ a few runs/week, below the ADR-041 allowlist bar individually); `Ascend/cann-container-image` `*_test` build workflows (build-only, no test timing); lint/labeler/docs workflows everywhere.
 
 ## Decision
 
