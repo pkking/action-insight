@@ -461,6 +461,17 @@ export async function fetchJobsForRunAttempt(
     (operation, context) => withRetry(operation, 3, 2000, undefined, context));
 }
 
+/**
+ * UTC calendar date of a run's created_at (ADR-045). Must never use the
+ * host-local timezone: collection runs on a MST host and 25% of stored
+ * dates were off by one day before this rule existed.
+ */
+export function runDateKey(createdAt?: string | null): string {
+  const ms = createdAt == null ? NaN : Date.parse(createdAt);
+  if (!Number.isFinite(ms)) return 'Invalid Date';
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
 async function persistCollectedRuns(
   repo: string,
   state: RepoCollectionState,
@@ -473,7 +484,7 @@ async function persistCollectedRuns(
 ): Promise<RepoCollectionState> {
   const runsByDate: Record<string, Run[]> = {};
   for (const run of runs) {
-    const date = format(new Date(run.created_at), 'yyyy-MM-dd');
+    const date = runDateKey(run.created_at);
     if (!runsByDate[date]) runsByDate[date] = [];
     runsByDate[date].push(run);
   }
