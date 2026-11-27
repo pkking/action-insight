@@ -41,6 +41,8 @@ function group(overrides: Partial<WorkflowGroupRow> = {}): WorkflowGroupRow {
     successCount: 1,
     terminalCount: 1,
     avgWorkflowTotalDuration: 3600,
+    totalDurationSamples: 1,
+    totalDurationEligibleCount: 1,
     latestDate: '2026-01-01',
     ...overrides,
   };
@@ -64,10 +66,15 @@ describe('buildWorkflowCards', () => {
       attempt({ runId: 1, conclusion: 'success', totalDurationSeconds: 100 }),
       attempt({ runId: 2, conclusion: 'success', totalDurationSeconds: 200 }),
       attempt({ runId: 3, conclusion: 'failure', totalDurationSeconds: 9999 }), // excluded from percentile
+      attempt({ runId: 4, totalDurationSeconds: null }),
+      attempt({ runId: 5, totalDurationSeconds: -1 }),
+      attempt({ runId: 6, totalDurationSeconds: Infinity }),
     ];
     const cards = buildWorkflowCards(attempts, [], false);
     expect(cards.p50TotalDuration).toBe(100);
     expect(cards.p90TotalDuration).toBe(200);
+    expect(cards.successfulTotalDurationSamples).toBe(2);
+    expect(cards.successfulTotalDurationEligibleCount).toBe(5);
   });
 
   it('returns undefined percentiles when there are no successful samples', () => {
@@ -130,7 +137,7 @@ describe('buildWorkflowDashboardResult', () => {
 
   it('maps pre-aggregated groups to table rows with failure rate over terminal attempts', () => {
     const groups = [
-      group({ resourceModel: 'npu-a3', attemptCount: 10, successCount: 7, terminalCount: 9, machineHours: 40, avgWorkflowTotalDuration: 3600 }),
+      group({ resourceModel: 'npu-a3', attemptCount: 10, successCount: 7, terminalCount: 9, machineHours: 40, avgWorkflowTotalDuration: 3600, totalDurationSamples: 6, totalDurationEligibleCount: 10 }),
       group({ resourceModel: 'npu-a2', attemptCount: 4, successCount: 4, terminalCount: 4, machineHours: 8 }),
     ];
     const cards = buildWorkflowCards([], groups, false);
@@ -145,6 +152,8 @@ describe('buildWorkflowDashboardResult', () => {
     expect(a3.machineHours).toBe(40);
     expect(a3.failureRate).toBeCloseTo(((9 - 7) / 9) * 100);
     expect(a3.avgWorkflowTotalDuration).toBe(3600);
+    expect(a3.totalDurationSamples).toBe(6);
+    expect(a3.totalDurationEligibleCount).toBe(10);
     expect(result.rows.find((r) => r.resourceModel === 'npu-a2')!.failureRate).toBe(0);
   });
 

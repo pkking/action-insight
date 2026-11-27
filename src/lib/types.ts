@@ -49,6 +49,15 @@ export interface Run {
   created_at: string;
   run_started_at?: string;
   updated_at: string;
+  /** Parent run timestamps retained for lifecycle and merge eligibility. */
+  parentCreatedAt?: string;
+  parentUpdatedAt?: string;
+  /** Independently verified attempt timing; absent endpoints remain unknown. */
+  attemptTiming?: {
+    triggerAt?: string;
+    completedAt?: string;
+    runtimeSeconds?: number;
+  };
   html_url: string;
   durationInSeconds: number;
   queueDurationInSeconds?: number;

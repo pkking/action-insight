@@ -289,15 +289,25 @@ async function fetchRunsFromClient(client: PoolClient, repo: string, dates: stri
   return allRuns;
 }
 
-async function fetchWorkflowAttemptRunsFromClient(client: PoolClient, repoId: number, dates: string[]): Promise<Run[]> {
+function evidenceDuration(value: unknown, key: 'queue_duration_seconds' | 'runtime_seconds' | 'total_duration_seconds'): number | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const evidence = value as Record<string, unknown>;
+  const duration = evidence[key];
+  return evidence.version === 1 && typeof duration === 'number' && Number.isFinite(duration) && duration >= 0
+    ? duration
+    : undefined;
+}
+
+export async function fetchWorkflowAttemptRunsFromClient(client: PoolClient, repoId: number, dates: string[]): Promise<Run[]> {
   const allRuns: Run[] = [];
   for (const date of dates) {
     const { rows } = await client.query(
       `SELECT r.id, r.name, r.head_branch, r.head_sha, r.event, r.html_url,
+                   r.created_at AS parent_created_at, r.updated_at AS parent_updated_at,
                    r.workflow_path, r.workflow_parse_status,
                    wa.run_attempt, wa.status, wa.conclusion, wa.created_at, wa.run_started_at,
-                   wa.completed_at, wa.updated_at, wa.queue_duration_seconds,
-                   wa.runtime_seconds, wa.total_duration_seconds, wa.workflow_file,
+                   wa.completed_at, wa.updated_at, to_jsonb(wa)->'timing_evidence' AS timing_evidence,
+                   wa.workflow_file,
                    wa.workflow_ref, wa.match_kind, wa.step_policy_hash
             FROM workflow_attempts wa
             JOIN runs r ON r.id = wa.run_id
@@ -326,10 +336,10 @@ async function fetchWorkflowAttemptRunsFromClient(client: PoolClient, repoId: nu
       const chunk = attemptKeys.slice(i, i + chunkSize);
       const clauses = chunk.map((_, idx) => `(run_id = $${idx * 2 + 1} AND run_attempt = $${idx * 2 + 2})`).join(' OR ');
       const chunkRows = await client.query(
-          `SELECT run_id, run_attempt, job_id, name, status, conclusion, created_at,
-                       started_at, completed_at, html_url, queue_duration_seconds,
-                       runtime_seconds, total_duration_seconds, duration_seconds
-                FROM workflow_jobs
+          `SELECT wj.run_id, wj.run_attempt, wj.job_id, wj.name, wj.status, wj.conclusion, wj.created_at,
+                       wj.started_at, wj.completed_at, wj.html_url,
+                       to_jsonb(wj)->'timing_evidence' AS timing_evidence
+                FROM workflow_jobs wj
                 WHERE ${clauses}
                 ORDER BY run_id, run_attempt, started_at ASC`,
           chunk.flatMap((key) => [key.runId, key.runAttempt]),
@@ -358,11 +368,14 @@ async function fetchWorkflowAttemptRunsFromClient(client: PoolClient, repoId: nu
         event: row.event as string | undefined,
         created_at: row.created_at as string,
         run_started_at: row.run_started_at as string | undefined,
+        // Keep the existing PR lifecycle envelope; this timestamp is not timing evidence.
         updated_at: (row.completed_at as string) || (row.updated_at as string),
+        parentCreatedAt: row.parent_created_at as string | undefined,
+        parentUpdatedAt: row.parent_updated_at as string | undefined,
         html_url: row.html_url as string,
-        durationInSeconds: Number(row.total_duration_seconds ?? row.runtime_seconds ?? 0),
-        queueDurationInSeconds: row.queue_duration_seconds == null ? undefined : Number(row.queue_duration_seconds),
-        runtimeInSeconds: row.runtime_seconds == null ? undefined : Number(row.runtime_seconds),
+        durationInSeconds: evidenceDuration(row.timing_evidence, 'total_duration_seconds') as number,
+        queueDurationInSeconds: evidenceDuration(row.timing_evidence, 'queue_duration_seconds'),
+        runtimeInSeconds: evidenceDuration(row.timing_evidence, 'runtime_seconds'),
         workflowFile: row.workflow_file as string | undefined,
         workflowRef: row.workflow_ref as string | undefined,
         workflowPath: row.workflow_path as string | undefined,
@@ -380,10 +393,10 @@ async function fetchWorkflowAttemptRunsFromClient(client: PoolClient, repoId: nu
           started_at: job.started_at as string,
           completed_at: job.completed_at as string,
           html_url: job.html_url as string,
-          queueDurationInSeconds: Number(job.queue_duration_seconds ?? 0),
-          durationInSeconds: Number(job.runtime_seconds ?? job.duration_seconds ?? 0),
-          runtimeInSeconds: job.runtime_seconds == null ? undefined : Number(job.runtime_seconds),
-          totalDurationInSeconds: job.total_duration_seconds == null ? undefined : Number(job.total_duration_seconds),
+          queueDurationInSeconds: evidenceDuration(job.timing_evidence, 'queue_duration_seconds') as number,
+          durationInSeconds: evidenceDuration(job.timing_evidence, 'runtime_seconds') as number,
+          runtimeInSeconds: evidenceDuration(job.timing_evidence, 'runtime_seconds'),
+          totalDurationInSeconds: evidenceDuration(job.timing_evidence, 'total_duration_seconds'),
         })),
       });
     }

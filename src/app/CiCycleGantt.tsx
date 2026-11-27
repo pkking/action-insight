@@ -43,9 +43,9 @@ export function CiCycleGantt({
   const span = useMemo(() => {
     if (chronological.length === 0) return null;
     const starts = chronological.map((c) => Date.parse(c.startedAt));
-    const ends = chronological.map((c) =>
-      c.endedAt ? Date.parse(c.endedAt) : Number.NEGATIVE_INFINITY,
-    );
+    const ends = chronological.flatMap((c) => c.runs.map((run) =>
+      run.endedAt ? Date.parse(run.endedAt) : Number.NEGATIVE_INFINITY,
+    ));
     const mergedMs = mergedAt ? Date.parse(mergedAt) : Number.NEGATIVE_INFINITY;
     const start = Math.min(...starts);
     let end = Math.max(...ends, mergedMs);
@@ -64,6 +64,7 @@ export function CiCycleGantt({
   }
 
   const spanSeconds = Math.round((span.end - span.start) / 1000);
+  const incompleteCoverage = cycles.some((cycle) => cycle.incompleteCoverage);
   const idleSeconds = Math.max(0, spanSeconds - busySeconds);
   const pct = (ms: number) =>
     Math.min(
@@ -108,15 +109,13 @@ export function CiCycleGantt({
   return (
     <div className="relative" ref={containerRef}>
       <div className="text-[11px] text-neutral-500 dark:text-neutral-400">
-        PR span {fmtDurationAuto(spanSeconds)} = CI cycles (union){' '}
-        {fmtDurationAuto(busySeconds)} + idle between pushes{' '}
-        {fmtDurationAuto(idleSeconds)} · median wall{' '}
-        {fmtSeconds(stats.medianWallSeconds)}
-        {stats.openCycleCount > 0 && (
-          <span className="text-amber-600 dark:text-amber-400">
-            {' '}
-            · {stats.openCycleCount} open
-          </span>
+        PR span {fmtDurationAuto(spanSeconds)} · verified CI intervals (union){' '}
+        {fmtDurationAuto(busySeconds)} · {incompleteCoverage
+          ? 'coverage incomplete; remaining time unknown'
+          : `idle between pushes ${fmtDurationAuto(idleSeconds)}`} · median push wall{' '}
+        {stats.cycleCount > stats.openCycleCount ? fmtSeconds(stats.medianWallSeconds) : '—'}
+        {incompleteCoverage && (
+          <span className="text-amber-600 dark:text-amber-400"> · timing coverage incomplete</span>
         )}
       </div>
 
@@ -153,10 +152,9 @@ export function CiCycleGantt({
                 </span>
                 <div className="relative h-full min-w-0 flex-1">
                   {cycle.runs.map((run, lane) => {
+                    if (!run.startedAt || !run.endedAt || run.wallSeconds === undefined) return null;
                     const left = pct(Date.parse(run.startedAt));
-                    const runEndMs = run.endedAt
-                      ? Date.parse(run.endedAt)
-                      : span.end;
+                    const runEndMs = Date.parse(run.endedAt);
                     const width = Math.max(0.4, pct(runEndMs) - left);
                     const colorClass =
                       RUN_BAR_COLORS[run.conclusion] ??
@@ -230,7 +228,7 @@ export function CiCycleGantt({
             {format(parseISO(hoveredCycle.startedAt), 'yyyy-MM-dd HH:mm')} · wall{' '}
             <span className="font-mono">
               {hoveredCycle.wallSeconds === undefined
-                ? 'open'
+                ? 'unknown'
                 : fmtSeconds(hoveredCycle.wallSeconds)}
             </span>
           </div>
@@ -264,7 +262,8 @@ export function CiCycleGantt({
                 <div className="pl-3 text-neutral-500 dark:text-neutral-400">
                   {run.conclusion} ·{' '}
                   <span className="font-mono">
-                    {run.wallSeconds === undefined ? 'open' : fmtSeconds(run.wallSeconds)}
+                    {run.wallSeconds === undefined ? 'wall unknown' : `wall ${fmtSeconds(run.wallSeconds)}`}
+                    {' · Runtime '}{run.runtimeSeconds === undefined ? 'unknown' : fmtSeconds(run.runtimeSeconds)}
                   </span>
                   {run.headSha && (
                     <span className="ml-1 font-mono text-neutral-400 dark:text-neutral-500">

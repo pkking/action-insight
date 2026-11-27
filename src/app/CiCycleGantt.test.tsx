@@ -1,3 +1,4 @@
+import fixture from '../../tests/fixtures/attempt-timing-40h.json';
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 
@@ -5,8 +6,12 @@ import { CiCycleGantt } from './CiCycleGantt';
 import { groupRunsIntoCycles, summarizeCycleWalls } from '@/lib/ci-cycles';
 import type { Run } from '@/lib/types';
 
-function makeRun(overrides: Partial<Run> & Pick<Run, 'id' | 'created_at'>): Run {
+type TimingRun = Run & { attemptTiming?: { triggerAt?: string; completedAt?: string; runtimeSeconds?: number } };
+
+function makeRun(overrides: Partial<TimingRun> & Pick<Run, 'id' | 'created_at'>): TimingRun {
   return {
+    runAttempt: 1,
+    attemptTiming: overrides.runAttempt === 2 ? undefined : { triggerAt: overrides.created_at, completedAt: overrides.updated_at ?? overrides.created_at },
     name: 'test workflow',
     head_branch: 'feature/x',
     head_sha: 'abc1234',
@@ -115,12 +120,22 @@ describe('CiCycleGantt', () => {
     expect(screen.getByText(/No CI cycles/i)).toBeInTheDocument();
   });
 
-  it('marks an open run with a dashed bar instead of an end timestamp', () => {
-    const { cycles, stats } = build([
-      [makeRun({ id: 1, created_at: '2026-10-17T07:03:34Z', updated_at: 'not-a-date', conclusion: 'unknown', workflowFile: 'pr-test.yml' })],
-    ]);
-    render(<CiCycleGantt cycles={cycles} stats={stats} />);
-    const bar = screen.getByTestId('cycle-bar');
-    expect(bar.className).toContain('border-dashed');
+  it('shows an unknown attempt without drawing it or calling the uncovered span idle', () => {
+    const [first, rerun] = fixture.attempts;
+    const created_at = first.trigger!;
+    const { cycles, stats } = build([[
+      makeRun({ id: fixture.run_id, created_at, runAttempt: 1,
+        attemptTiming: { triggerAt: created_at, completedAt: first.completed_at } }),
+      makeRun({ id: fixture.run_id, created_at, runAttempt: 2, conclusion: 'success',
+        attemptTiming: { runtimeSeconds: fixture.expected.rerun_runtime_seconds } }),
+    ]]);
+    const { container } = render(<CiCycleGantt cycles={cycles} stats={stats} mergedAt={rerun.completed_at} />);
+    expect(screen.getAllByTestId('cycle-bar')).toHaveLength(1);
+    expect(container.textContent).toContain('coverage incomplete');
+    expect(container.textContent).not.toContain('idle between pushes');
+    fireEvent.focus(screen.getByTestId('cycle-row'));
+    expect(screen.getByTestId('cycle-tooltip').textContent).toContain('success');
+    expect(screen.getByTestId('cycle-tooltip').textContent).toContain('Runtime 1h 29m');
+    expect(screen.getByTestId('cycle-tooltip').textContent).toContain('wall unknown');
   });
 });

@@ -380,7 +380,7 @@ function PrDrillDown({
                   )}
                   <span className="flex-1" />
                   <span className="font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
-                    {fmtSeconds(job.runtimeInSeconds)}
+                    {fmtSeconds(job.durationInSeconds ?? undefined)}
                   </span>
                   <span className="font-mono text-[11px] text-blue-600 dark:text-blue-400">
                     {fmtMachineHours(mh)}
@@ -623,7 +623,7 @@ function CostBody({
                         </button>
                       ) : '—'}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs">{fmtSeconds(row.avgWorkflowTotalDuration)}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{fmtSeconds(row.avgWorkflowTotalDuration)}{coverage(row.totalDurationSamples, row.totalDurationEligibleCount, "Valid E2E samples", "attempts") && <div className="text-neutral-500 dark:text-neutral-400">{coverage(row.totalDurationSamples, row.totalDurationEligibleCount, "Valid E2E samples", "attempts")}</div>}</td>
                     <td className="px-4 py-3 font-mono text-xs">{row.attemptCount}</td>
                     <td className="px-4 py-3 font-mono text-xs text-emerald-600 dark:text-emerald-400">{row.successCount}</td>
                     <td className="px-4 py-3 font-mono text-xs">{Math.round(row.failureRate)}%</td>
@@ -670,6 +670,10 @@ function CostBody({
       })()}
     </>
   );
+}
+
+function coverage(samples: number | null | undefined, eligible: number | null | undefined, label: string, unit: string): string | undefined {
+  return samples != null && eligible != null ? `${label}: ${samples} / ${eligible} ${unit}` : undefined;
 }
 
 function CostCard({
@@ -743,6 +747,9 @@ function RunsBody({ result }: { result: RunsDashboardResult }) {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
+  const runtimeCoverage = cards.successfulRuntimeSamples != null && cards.successfulRuntimeEligibleCount != null
+    ? `Valid runtime samples: ${cards.successfulRuntimeSamples} / ${cards.successfulRuntimeEligibleCount} successful attempts`
+    : undefined;
   const eventSummary = cards.eventBreakdown
     .map((e) => `${e.event} ${e.count.toLocaleString('en-US')}`)
     .join(' · ');
@@ -765,16 +772,19 @@ function RunsBody({ result }: { result: RunsDashboardResult }) {
           label="Average Runtime (successful)"
           definition="Average runtime over successful attempts with non-negative runtime, across the entire window."
           value={cards.avgRuntime !== undefined ? fmtSeconds(cards.avgRuntime) : '—'}
+          sub={runtimeCoverage}
         />
         <CostCard
           label="P50 Runtime (successful)"
           definition="Median attempt runtime over successful attempts."
           value={cards.p50Runtime !== undefined ? fmtSeconds(cards.p50Runtime) : '—'}
+          sub={runtimeCoverage}
         />
         <CostCard
           label="P90 Runtime (successful)"
           definition="90th-percentile attempt runtime over successful attempts."
           value={cards.p90Runtime !== undefined ? fmtSeconds(cards.p90Runtime) : '—'}
+          sub={runtimeCoverage}
         />
       </div>
 
@@ -969,12 +979,12 @@ function WorkflowBody({
         <CostCard
           label="P50 Total"
           definition="Median Workflow Total Duration over successful attempts (spec §4)."
-          value={cards.p50TotalDuration !== undefined ? fmtSeconds(cards.p50TotalDuration) : '—'}
+          value={cards.p50TotalDuration !== undefined ? fmtSeconds(cards.p50TotalDuration) : '—'} sub={coverage(cards.successfulTotalDurationSamples, cards.successfulTotalDurationEligibleCount, "Valid total duration samples", "successful attempts")}
         />
         <CostCard
           label="P90 Total"
           definition="90th-percentile Workflow Total Duration over successful attempts (spec §4)."
-          value={cards.p90TotalDuration !== undefined ? fmtSeconds(cards.p90TotalDuration) : '—'}
+          value={cards.p90TotalDuration !== undefined ? fmtSeconds(cards.p90TotalDuration) : '—'} sub={coverage(cards.successfulTotalDurationSamples, cards.successfulTotalDurationEligibleCount, "Valid total duration samples", "successful attempts")}
         />
         <CostCard
           label="Success Rate"
@@ -1085,7 +1095,7 @@ function WorkflowBody({
                           {row.workflowFile || '—'}
                         </td>
                         <td className="px-4 py-3 text-xs">{row.resourceModel || '—'}</td>
-                        <td className="px-4 py-3 font-mono text-xs">{fmtSeconds(row.avgWorkflowTotalDuration)}</td>
+                        <td className="px-4 py-3 font-mono text-xs">{fmtSeconds(row.avgWorkflowTotalDuration)}{coverage(row.totalDurationSamples, row.totalDurationEligibleCount, "Valid E2E samples", "attempts") && <div className="text-neutral-500 dark:text-neutral-400">{coverage(row.totalDurationSamples, row.totalDurationEligibleCount, "Valid E2E samples", "attempts")}</div>}</td>
                         <td className="px-4 py-3 font-mono text-xs">{row.attemptCount}</td>
                         <td className="px-4 py-3 font-mono text-xs text-emerald-600 dark:text-emerald-400">{row.successCount}</td>
                         <td className="px-4 py-3 font-mono text-xs">{Math.round(row.failureRate)}%</td>
@@ -1094,7 +1104,7 @@ function WorkflowBody({
                       {isOpen && (
                         <tr>
                           <td colSpan={8} className="bg-neutral-50/50 dark:bg-neutral-950/40">
-                            <WorkflowDrillDown attempts={attempts} loading={loadingKey === key} />
+                            <WorkflowDrillDown attempts={attemptsInSelectedWindow(attempts, new URLSearchParams(urlSearchParams.toString()))} loading={loadingKey === key} />
                           </td>
                         </tr>
                       )}
@@ -1117,7 +1127,23 @@ function WorkflowBody({
   );
 }
 
-/** Stacked queue/runtime chart + attempt list for an expanded workflow row (spec §5.3). */
+function attemptsInSelectedWindow<T extends { runDate: string }>(attempts: T[] | undefined, params: URLSearchParams): T[] | undefined {
+  if (!attempts) return undefined;
+  const now = new Date();
+  const rawDays = parseInt(params.get('days') || '', 10);
+  const days = Number.isFinite(rawDays) && rawDays >= 1 ? rawDays : 7;
+  const end = params.get('endDate') || now.toISOString().slice(0, 10);
+  now.setUTCDate(now.getUTCDate() - days);
+  const start = params.get('startDate') || now.toISOString().slice(0, 10);
+  return attempts.filter(({ runDate }) => {
+    const date = new Date(runDate);
+    if (Number.isNaN(date.getTime())) return false;
+    const day = date.toISOString().slice(0, 10);
+    return day >= start && day <= end;
+  });
+}
+
+/** Independent workflow timing measures and attempt list. */
 function WorkflowDrillDown({
   attempts,
   loading,
@@ -1130,8 +1156,9 @@ function WorkflowDrillDown({
       (attempts ?? []).map((a) => ({
         id: `workflow-attempt-${a.runId}-${a.runAttempt}`,
         label: `#${a.runId}/${a.runAttempt}`,
-        queue: a.queueDurationSeconds ?? 0,
-        runtime: a.runtimeSeconds ?? 0,
+        queue: a.queueDurationSeconds,
+        runtime: a.runtimeSeconds,
+        total: a.totalDurationSeconds,
         conclusion: a.conclusion,
         runDate: a.runDate,
       })),
@@ -1149,25 +1176,29 @@ function WorkflowDrillDown({
   if (!attempts || attempts.length === 0) {
     return (
       <div className="px-6 py-4 text-sm text-neutral-500 dark:text-neutral-400">
-        No tracked attempts for this workflow/resource group.
+        No tracked attempts in the selected range among the latest 100 for this workflow/resource group.
       </div>
     );
   }
 
   return (
     <div className="space-y-3 px-6 py-4">
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">Showing attempts in the selected range among the latest 100 for this group, by parent run date.</p>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" className="dark:opacity-20" />
             <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#888' }} tickLine={false} axisLine={false} interval="preserveStartEnd" angle={-30} textAnchor="end" height={50} />
             <YAxis tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
-            <Tooltip formatter={(value) => fmtSeconds(Number(value))} />
+            <Tooltip formatter={(value) => fmtSeconds(value == null ? undefined : Number(value))} />
             <Legend />
-            <Bar dataKey="queue" name="Queue" stackId="a" fill="#60a5fa">
+            <Bar dataKey="total" name="Workflow E2E (trigger to completion)" fill="#a78bfa">
+              {chartData.map((entry) => <Cell key={`total-${entry.id}`} className="cursor-pointer" onClick={() => scrollToTableRow(entry.id)} />)}
+            </Bar>
+            <Bar dataKey="queue" name="Trigger to first job start" fill="#60a5fa">
               {chartData.map((entry) => <Cell key={`queue-${entry.id}`} className="cursor-pointer" onClick={() => scrollToTableRow(entry.id)} />)}
             </Bar>
-            <Bar dataKey="runtime" name="Runtime" stackId="a" fill="#34d399">
+            <Bar dataKey="runtime" name="Runtime (start to completion)" fill="#34d399">
               {chartData.map((entry) => <Cell key={`runtime-${entry.id}`} className="cursor-pointer" onClick={() => scrollToTableRow(entry.id)} />)}
             </Bar>
           </ComposedChart>
@@ -1179,8 +1210,9 @@ function WorkflowDrillDown({
             <tr>
               <th className="px-2 py-1">Run / Attempt</th>
               <th className="px-2 py-1">Date</th>
-              <th className="px-2 py-1">Queue</th>
+              <th className="px-2 py-1">Trigger to first job start</th>
               <th className="px-2 py-1">Runtime</th>
+              <th className="px-2 py-1">Workflow E2E</th>
               <th className="px-2 py-1">Conclusion</th>
             </tr>
           </thead>
@@ -1191,6 +1223,7 @@ function WorkflowDrillDown({
                 <td className="px-2 py-1 text-neutral-500 dark:text-neutral-400">{a.runDate}</td>
                 <td className="px-2 py-1 font-mono">{fmtSeconds(a.queueDurationSeconds ?? undefined)}</td>
                 <td className="px-2 py-1 font-mono">{fmtSeconds(a.runtimeSeconds ?? undefined)}</td>
+                <td className="px-2 py-1 font-mono">{fmtSeconds(a.totalDurationSeconds ?? undefined)}</td>
                 <td className="px-2 py-1"><StatusDot conclusion={a.conclusion ?? ''} /></td>
               </tr>
             ))}
@@ -1302,8 +1335,8 @@ function JobBody({
     <>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <CostCard label="Total Jobs" definition="Tracked workflow_jobs in the window (spec §5.4)." value={String(cards.totalJobs)} />
-        <CostCard label="P50 Total" definition="Median Job Total Duration over successful jobs (spec §4)." value={cards.p50TotalDuration !== undefined ? fmtSeconds(cards.p50TotalDuration) : '—'} />
-        <CostCard label="P90 Total" definition="90th-percentile Job Total Duration over successful jobs (spec §4)." value={cards.p90TotalDuration !== undefined ? fmtSeconds(cards.p90TotalDuration) : '—'} />
+        <CostCard label="P50 Total" definition="Median Job Total Duration over successful jobs (spec §4)." value={cards.p50TotalDuration !== undefined ? fmtSeconds(cards.p50TotalDuration) : '—'} sub={coverage(cards.successfulTotalDurationSamples, cards.successfulTotalDurationEligibleCount, "Valid total duration samples", "successful jobs")} />
+        <CostCard label="P90 Total" definition="90th-percentile Job Total Duration over successful jobs (spec §4)." value={cards.p90TotalDuration !== undefined ? fmtSeconds(cards.p90TotalDuration) : '—'} sub={coverage(cards.successfulTotalDurationSamples, cards.successfulTotalDurationEligibleCount, "Valid total duration samples", "successful jobs")} />
         <CostCard label="Success Rate" definition="Successful terminal jobs ÷ all terminal jobs (spec §4)." value={cards.totalJobs > 0 ? `${Math.round(cards.successRate)}%` : '—'} />
         {isOneRepo ? (
           <CostCard label="Top Job" definition="Highest-Machine-Hour job in the selected repository." value={cards.topJob?.jobName || '—'} sub={fmtMachineHours(cards.topJob?.machineHours)} />
@@ -1397,7 +1430,7 @@ function JobBody({
                       {isOpen && (
                         <tr>
                           <td colSpan={9} className="bg-neutral-50/50 dark:bg-neutral-950/40">
-                            <JobDrillDown attempts={attempts} loading={loadingKey === key} />
+                            <JobDrillDown attempts={attemptsInSelectedWindow(attempts, new URLSearchParams(urlSearchParams.toString()))} loading={loadingKey === key} />
                           </td>
                         </tr>
                       )}
@@ -1428,7 +1461,7 @@ type JobTableRowLike = {
   resourceModel: string;
 };
 
-/** Stacked queue/runtime chart + job attempt list for an expanded job row (spec §5.4). */
+/** Independent job timing measures and attempt list. */
 function JobDrillDown({
   attempts,
   loading,
@@ -1441,8 +1474,8 @@ function JobDrillDown({
       (attempts ?? []).map((a) => ({
         id: `job-attempt-${a.runId}-${a.runAttempt}-${a.jobId}`,
         label: `#${a.runId}/${a.runAttempt}/${a.jobId}`,
-        queue: a.queueDurationSeconds ?? 0,
-        runtime: a.runtimeSeconds ?? 0,
+        queue: a.queueDurationSeconds,
+        runtime: a.runtimeSeconds,
         conclusion: a.conclusion,
         runDate: a.runDate,
       })),
@@ -1453,23 +1486,24 @@ function JobDrillDown({
     return <div className="px-6 py-4 text-sm text-neutral-500 dark:text-neutral-400">Loading job attempts…</div>;
   }
   if (!attempts || attempts.length === 0) {
-    return <div className="px-6 py-4 text-sm text-neutral-500 dark:text-neutral-400">No tracked attempts for this job/resource group.</div>;
+    return <div className="px-6 py-4 text-sm text-neutral-500 dark:text-neutral-400">No tracked attempts in the selected range among the latest 100 for this job/resource group.</div>;
   }
 
   return (
     <div className="space-y-3 px-6 py-4">
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">Showing attempts in the selected range among the latest 100 for this group, by parent run date.</p>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" className="dark:opacity-20" />
             <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#888' }} tickLine={false} axisLine={false} interval="preserveStartEnd" angle={-30} textAnchor="end" height={50} />
             <YAxis tick={{ fontSize: 11, fill: '#888' }} tickLine={false} axisLine={false} />
-            <Tooltip formatter={(value) => fmtSeconds(Number(value))} />
+            <Tooltip formatter={(value) => fmtSeconds(value == null ? undefined : Number(value))} />
             <Legend />
-            <Bar dataKey="queue" name="Queue" stackId="a" fill="#60a5fa">
+            <Bar dataKey="queue" name="Job pre-start wait" fill="#60a5fa">
               {chartData.map((entry) => <Cell key={`queue-${entry.id}`} className="cursor-pointer" onClick={() => scrollToTableRow(entry.id)} />)}
             </Bar>
-            <Bar dataKey="runtime" name="Runtime" stackId="a" fill="#34d399">
+            <Bar dataKey="runtime" name="Runtime" fill="#34d399">
               {chartData.map((entry) => <Cell key={`runtime-${entry.id}`} className="cursor-pointer" onClick={() => scrollToTableRow(entry.id)} />)}
             </Bar>
           </ComposedChart>
@@ -1481,7 +1515,7 @@ function JobDrillDown({
             <tr>
               <th className="px-2 py-1">Run/Attempt/Job</th>
               <th className="px-2 py-1">Date</th>
-              <th className="px-2 py-1">Queue</th>
+              <th className="px-2 py-1">Job pre-start wait</th>
               <th className="px-2 py-1">Runtime</th>
               <th className="px-2 py-1">Model</th>
               <th className="px-2 py-1">Conclusion</th>
@@ -1560,9 +1594,9 @@ function QueueBody({
   return (
     <>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <CostCard label="P50 Queue" definition="Median Job Queue Duration over valid queue samples (spec §5.5)." value={cards.p50QueueDuration !== undefined ? fmtSeconds(cards.p50QueueDuration) : '—'} />
-        <CostCard label="P90 Queue" definition="90th-percentile Job Queue Duration over valid samples (spec §5.5)." value={cards.p90QueueDuration !== undefined ? fmtSeconds(cards.p90QueueDuration) : '—'} />
-        <CostCard label="Max Queue" definition="Longest valid Job Queue Duration in the window." value={cards.maxQueueDuration !== undefined ? fmtSeconds(cards.maxQueueDuration) : '—'} />
+        <CostCard label="P50 Queue" definition="Median Job Queue Duration over valid queue samples (spec §5.5)." value={cards.p50QueueDuration !== undefined ? fmtSeconds(cards.p50QueueDuration) : '—'} sub={coverage(cards.queueDurationSamples, cards.queueDurationEligibleCount, "Valid queue samples", "jobs")} />
+        <CostCard label="P90 Queue" definition="90th-percentile Job Queue Duration over valid samples (spec §5.5)." value={cards.p90QueueDuration !== undefined ? fmtSeconds(cards.p90QueueDuration) : '—'} sub={coverage(cards.queueDurationSamples, cards.queueDurationEligibleCount, "Valid queue samples", "jobs")} />
+        <CostCard label="Max Queue" definition="Longest valid Job Queue Duration in the window." value={cards.maxQueueDuration !== undefined ? fmtSeconds(cards.maxQueueDuration) : '—'} sub={coverage(cards.queueDurationSamples, cards.queueDurationEligibleCount, "Valid queue samples", "jobs")} />
         <CostCard label="Share > 1h" definition="Valid queue samples exceeding one hour ÷ all valid samples (spec §5.5)." value={cards.p90QueueDuration !== undefined ? `${Math.round(cards.shareOverOneHour)}%` : '—'} />
         <CostCard label="Resource Models" definition="Distinct Resource Models contributing queue samples." value={String(cards.distinctResourceModelCount)} />
       </div>

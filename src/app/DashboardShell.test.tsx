@@ -23,7 +23,7 @@ vi.mock('next/navigation', () => ({
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   ComposedChart: ({ data, children }: { data?: unknown[]; children?: React.ReactNode }) => (
-    <div data-testid="chart" data-len={data?.length ?? 0}>{children}</div>
+    <div data-testid="chart" data-len={data?.length ?? 0} data-chart-data={JSON.stringify(data ?? [])}>{children}</div>
   ),
   LineChart: ({
     data,
@@ -38,7 +38,7 @@ vi.mock('recharts', () => ({
       {children}
     </div>
   ),
-  Bar: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  Bar: ({ children, dataKey, name, stackId }: { children?: React.ReactNode; dataKey?: string; name?: string; stackId?: string }) => <div data-testid={`bar-${dataKey}`} data-name={name} data-stack-id={stackId}>{children}</div>,
   Cell: ({ onClick }: { onClick?: () => void }) => onClick ? (
     <button type="button" aria-label="Open chart details" onClick={onClick} />
   ) : null,
@@ -457,6 +457,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   global.fetch = originalFetch;
+  mockSearch = 'tab=runs&page=3';
 });
 
 describe('DashboardShell', () => {
@@ -599,6 +600,7 @@ describe('DashboardShell', () => {
   });
 
   it('scrolls to the matching workflow attempt when a drill-down bar is clicked', async () => {
+    mockSearch = 'tab=workflow&startDate=2026-01-01&endDate=2026-01-02';
     const scrollIntoView = vi.fn();
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
@@ -846,7 +848,64 @@ describe('DashboardShell', () => {
   });
 });
 
+describe('Timing coverage', () => {
+  it.each(['workflow', 'cost'] as const)('shows E2E row coverage for %s when available', (tab) => {
+    const result = tab === 'workflow' ? workflowResult() : costResult();
+    result.rows[0].totalDurationSamples = 0;
+    result.rows[0].totalDurationEligibleCount = 2;
+    render(<DashboardShell repoOptions={repoOptions} result={result} searchParams={{ tab }} />);
+    expect(screen.getByText('Valid E2E samples: 0 / 2 attempts')).toBeTruthy();
+  });
+
+  it.each(['workflow', 'job', 'queue'] as const)('shows card coverage for %s only when both counts exist', (tab) => {
+    const result = tab === 'workflow' ? workflowResult() : tab === 'job' ? jobResult() : queueResult();
+    if (result.tab === 'queue') {
+      result.cards.queueDurationSamples = 0;
+      result.cards.queueDurationEligibleCount = 2;
+    } else {
+      result.cards.successfulTotalDurationSamples = 0;
+      result.cards.successfulTotalDurationEligibleCount = 2;
+    }
+    const { unmount } = render(<DashboardShell repoOptions={repoOptions} result={result} searchParams={{ tab }} />);
+    expect(screen.getAllByText(/Valid (total duration|queue) samples: 0 \/ 2/).length).toBeGreaterThan(0);
+    unmount();
+    const missing = tab === 'workflow' ? workflowResult() : tab === 'job' ? jobResult() : queueResult();
+    render(<DashboardShell repoOptions={repoOptions} result={missing} searchParams={{ tab }} />);
+    expect(screen.queryByText(/Valid (total duration|queue) samples:/)).toBeNull();
+  });
+});
+
+describe('Workflow and job timing drilldowns', () => {
+  afterEach(() => { mockSearch = 'tab=runs&page=3'; });
+
+  it.each(['workflow', 'job'] as const)('preserves unknown and zero values in the %s chart within the selected window', async (tab) => {
+    mockSearch = `tab=${tab}&startDate=2026-01-01&endDate=2026-01-02`;
+    const attempt = { runId: 10, runAttempt: 2, jobId: 20, repoKey: 'owner/repo', queueDurationSeconds: null, runtimeSeconds: 0, totalDurationSeconds: null, conclusion: 'success', resourceModel: 'npu-a3', runDate: '2026-01-02T12:00:00Z' };
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({ data: [attempt, { ...attempt, runId: 11, runDate: '2026-01-03T00:00:00Z' }] })));
+    render(<DashboardShell repoOptions={repoOptions} result={tab === 'workflow' ? workflowResult() : jobResult()} searchParams={{ tab, startDate: '2026-01-01', endDate: '2026-01-02' }} />);
+    fireEvent.click(screen.getByText(tab === 'workflow' ? 'ci.yml' : 'build'));
+    const chart = await screen.findByTestId('chart');
+    const data = JSON.parse(chart.getAttribute('data-chart-data') ?? '[]');
+    expect(data).toHaveLength(1);
+    expect(data[0]).toMatchObject({ queue: null, runtime: 0 });
+    expect(screen.getByTestId('bar-queue').getAttribute('data-name')).toBe(tab === 'workflow' ? 'Trigger to first job start' : 'Job pre-start wait');
+    expect(screen.getByTestId('bar-queue').hasAttribute('data-stack-id')).toBe(false);
+    expect(screen.getByTestId('bar-runtime').hasAttribute('data-stack-id')).toBe(false);
+    if (tab === 'workflow') {
+      expect(data[0].total).toBeNull();
+      expect(screen.getByTestId('bar-total').hasAttribute('data-stack-id')).toBe(false);
+    }
+  });
+});
+
 describe('Runs tab', () => {
+  it('shows successful runtime coverage on each duration card', () => {
+    const result = runsResult();
+    result.cards.successfulRuntimeSamples = 1;
+    result.cards.successfulRuntimeEligibleCount = 2;
+    render(<DashboardShell repoOptions={repoOptions} result={result} searchParams={{}} />);
+    expect(screen.getAllByText('Valid runtime samples: 1 / 2 successful attempts')).toHaveLength(3);
+  });
   it('lists attempts of every trigger event with repo, workflow, timing and a GitHub link', async () => {
     render(<DashboardShell repoOptions={repoOptions} result={runsResult()} searchParams={{}} />);
     expect(screen.getByText('Runs')).toBeTruthy();

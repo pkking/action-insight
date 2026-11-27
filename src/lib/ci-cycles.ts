@@ -22,16 +22,17 @@ import { percentile } from './dashboard-metrics';
 
 export type CycleRunSummary = {
   runId: number;
-  runAttempt: number;
+  runAttempt: number | undefined;
   workflowFile: string | null;
   conclusion: string;
   branchMatched: boolean;
-  /** Run created_at (attempt-scoped). */
-  startedAt: string;
-  /** Latest of completed_at / updated_at; undefined while in flight. */
+  /** Verified attempt trigger; absent when the trigger is unknown. */
+  startedAt: string | undefined;
+  /** Verified completion, only used with a verified trigger. */
   endedAt: string | undefined;
   /** Run wall seconds (queue included); undefined while open. */
   wallSeconds: number | undefined;
+  runtimeSeconds: number | undefined;
   headSha: string | undefined;
   htmlUrl: string | undefined;
   /** Failed job names in this run (unique, capped). "Why" needs logs — names only. */
@@ -48,8 +49,10 @@ export type CiCycle = {
    * Undefined when no run in the batch has a usable end timestamp.
    */
   endedAt: string | undefined;
-  /** User-perceived wall seconds (queue included); undefined while any run lacks an end. */
+  /** Observed verified first-attempt push wall; coverage may be incomplete. */
   wallSeconds: number | undefined;
+  /** At least one observed attempt lacks a verified trigger-to-completion interval. */
+  incompleteCoverage: boolean;
   runs: CycleRunSummary[];
 };
 
@@ -58,10 +61,22 @@ function cycleKey(run: Run): string {
   return `${run.head_sha ?? ''}#${run.created_at}`;
 }
 
-function runEndTimestamp(run: Run): string | undefined {
-  const end = run.updated_at || run.created_at;
-  const ms = Date.parse(end);
-  return Number.isNaN(ms) ? undefined : end;
+/** The mapper must only populate endpoints and runtime after ADR-043 evidence validation. */
+type VerifiedAttemptTiming = {
+  triggerAt?: string;
+  completedAt?: string;
+  runtimeSeconds?: number;
+};
+type RunWithAttemptTiming = Run & { attemptTiming?: VerifiedAttemptTiming };
+
+function attemptInterval(run: RunWithAttemptTiming): { start: string; end: string; seconds: number } | undefined {
+  const start = run.attemptTiming?.triggerAt;
+  const end = run.attemptTiming?.completedAt;
+  if (!start || !end) return undefined;
+  const startMs = Date.parse(start);
+  const endMs = Date.parse(end);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return undefined;
+  return { start, end, seconds: (endMs - startMs) / 1000 };
 }
 
 const FAILED_JOB_NAME_CAP = 5;
@@ -90,72 +105,42 @@ function summarizeRunJobs(run: Run): {
 }
 
 /** Group attempt-scoped runs into CI cycles (one cycle per push batch). */
-export function groupRunsIntoCycles(runs: Run[]): CiCycle[] {
+export function groupRunsIntoCycles(runs: RunWithAttemptTiming[]): CiCycle[] {
   const buckets = new Map<string, CiCycle>();
 
   for (const run of runs) {
     const key = cycleKey(run);
-    const startMs = Date.parse(run.created_at);
-    if (Number.isNaN(startMs)) continue;
-
+    if (!Number.isFinite(Date.parse(run.created_at))) continue;
     let cycle = buckets.get(key);
     if (!cycle) {
-      cycle = {
-        startedAt: run.created_at,
-        endedAt: undefined,
-        wallSeconds: undefined,
-        runs: [],
-      };
+      cycle = { startedAt: run.created_at, endedAt: undefined, wallSeconds: undefined, incompleteCoverage: false, runs: [] };
       buckets.set(key, cycle);
     }
-
+    const interval = attemptInterval(run);
+    const runtime = run.attemptTiming?.runtimeSeconds;
+    cycle.incompleteCoverage ||= !interval;
     cycle.runs.push({
       runId: run.id,
-      runAttempt: run.runAttempt ?? 1,
+      runAttempt: run.runAttempt,
       workflowFile: run.workflowFile ?? null,
       conclusion: run.conclusion || run.status || 'unknown',
       branchMatched: Boolean(run.branchMatched),
-      startedAt: run.created_at,
-      endedAt: runEndTimestamp(run),
-      wallSeconds: undefined,
+      startedAt: interval?.start,
+      endedAt: interval?.end,
+      wallSeconds: interval?.seconds,
+      runtimeSeconds: typeof runtime === 'number' && Number.isFinite(runtime) && runtime >= 0 ? runtime : undefined,
       headSha: run.head_sha,
       htmlUrl: run.html_url,
       ...summarizeRunJobs(run),
     });
-
-    const end = runEndTimestamp(run);
-    if (end) {
-      const endMs = Date.parse(end);
-      if (
-        cycle.endedAt === undefined ||
-        endMs > Date.parse(cycle.endedAt)
-      ) {
-        cycle.endedAt = end;
-      }
+    // Push wall uses verified first attempts only, never rerun completion.
+    if (run.runAttempt === 1 && interval && Date.parse(interval.start) === Date.parse(cycle.startedAt) &&
+        (!cycle.endedAt || Date.parse(interval.end) > Date.parse(cycle.endedAt))) {
+      cycle.endedAt = interval.end;
+      cycle.wallSeconds = (Date.parse(interval.end) - Date.parse(cycle.startedAt)) / 1000;
     }
   }
-
-  const cycles = [...buckets.values()];
-  for (const cycle of cycles) {
-    if (cycle.endedAt !== undefined) {
-      const seconds = Math.round(
-        (Date.parse(cycle.endedAt) - Date.parse(cycle.startedAt)) / 1000,
-      );
-      cycle.wallSeconds = seconds < 0 ? undefined : seconds;
-    }
-    for (const run of cycle.runs) {
-      if (run.endedAt !== undefined) {
-        const seconds = Math.round(
-          (Date.parse(run.endedAt) - Date.parse(run.startedAt)) / 1000,
-        );
-        run.wallSeconds = seconds < 0 ? undefined : seconds;
-      }
-    }
-  }
-
-  return cycles.sort(
-    (a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt),
-  );
+  return [...buckets.values()].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
 }
 
 export type CycleWallStats = {
@@ -267,18 +252,11 @@ export function computeCardHoursSummary(
   };
 }
 
-/**
- * Busy seconds = union of closed cycle intervals (ADR-020). Overlapping
- * cycles are counted once; this is NOT the naive sum of cycle walls and is
- * the honest counterpart to the PR-span idle time.
- */
+/** Union of all verified attempt intervals, including those in partially covered cycles. */
 export function computeCycleBusySeconds(cycles: CiCycle[]): number {
-  const intervals = cycles
-    .filter((cycle) => cycle.endedAt !== undefined)
-    .map((cycle) => ({
-      start: Date.parse(cycle.startedAt),
-      end: Date.parse(cycle.endedAt as string),
-    }))
+  const intervals = cycles.flatMap((cycle) => cycle.runs)
+    .filter((run) => run.startedAt !== undefined && run.endedAt !== undefined && run.wallSeconds !== undefined)
+    .map((run) => ({ start: Date.parse(run.startedAt!), end: Date.parse(run.endedAt!) }))
     .filter((iv) => Number.isFinite(iv.start) && Number.isFinite(iv.end) && iv.end >= iv.start)
     .sort((a, b) => a.start - b.start);
 
