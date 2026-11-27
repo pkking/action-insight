@@ -5,6 +5,8 @@
 - **技术栈**：Next.js, TypeScript, Tailwind CSS, Recharts, Lucide React, date-fns。
 - **核心组件**：采用 Server/Client Components 结合 (`'use client'`指令处理 React Hooks)。
 
+**计时契约（必读）**：处理 Workflow attempt（含 rerun）计时、Job 启动等待／runner 排队、PR 中的 attempt 计时或 CI 耗时比较报告时，先读并遵守 [ADR-043](docs/adr/043-workflow-attempt-trigger-evidence.md)；口径以该 ADR 为准。
+
 ## 核心业务逻辑 (Core Business Logic)
 1.  **数据抓取与缓存**：通过 GitHub API 获取 Runs 和 Jobs 数据，并在本地进行缓存处理。
 2.  **筛选与匹配规则**：
