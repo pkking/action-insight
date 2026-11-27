@@ -125,6 +125,8 @@ export type CostTableRow = {
   workflowRef: string;
   resourceModel: string;
   avgWorkflowTotalDuration?: number; // avg over distinct attempts in group
+  totalDurationSamples?: number;
+  totalDurationEligibleCount?: number;
   attemptCount: number; // distinct attempts contributing jobs to this group
   successCount: number; // terminal attempts with conclusion='success'
   failureRate: number; // failures / terminal attempts (0-100)
@@ -146,6 +148,8 @@ export type WorkflowCardSet = {
   totalAttempts: number;
   p50TotalDuration?: number; // successful attempts only (spec §4)
   p90TotalDuration?: number;
+  successfulTotalDurationSamples?: number;
+  successfulTotalDurationEligibleCount?: number;
   successRate: number; // success / terminal attempts (0-100)
   contributingRepoCount: number;
   topWorkflow?: { workflowFile: string; machineHours: number }; // one repo
@@ -163,6 +167,8 @@ export type WorkflowTableRow = {
   workflowRef: string;
   resourceModel: string;
   avgWorkflowTotalDuration?: number;
+  totalDurationSamples?: number;
+  totalDurationEligibleCount?: number;
   attemptCount: number;
   successCount: number;
   failureRate: number;
@@ -187,6 +193,8 @@ export type JobCardSet = {
   totalJobs: number;
   p50TotalDuration?: number; // successful Job Total Duration (spec §4)
   p90TotalDuration?: number;
+  successfulTotalDurationSamples?: number;
+  successfulTotalDurationEligibleCount?: number;
   successRate: number; // success / terminal jobs (0-100)
   contributingRepoCount: number;
   topJob?: { jobName: string; machineHours: number }; // one repo
@@ -223,6 +231,8 @@ export type QueueCardSet = {
   p50QueueDuration?: number; // valid queue samples only
   p90QueueDuration?: number;
   maxQueueDuration?: number; // longest valid queue sample
+  queueDurationSamples?: number;
+  queueDurationEligibleCount?: number;
   shareOverOneHour: number; // valid samples > 3600s ÷ valid samples (0-100)
   distinctResourceModelCount: number;
 };
@@ -1022,6 +1032,8 @@ function buildCostTableRow(
       g.avgWorkflowTotalDuration == null
         ? undefined
         : g.avgWorkflowTotalDuration,
+    totalDurationSamples: g.totalDurationSamples,
+    totalDurationEligibleCount: g.totalDurationEligibleCount,
     attemptCount: g.attemptCount,
     successCount: g.successCount,
     failureRate:
@@ -1055,6 +1067,17 @@ export type WorkflowAttemptRow = {
   createdAt: string | null;
 };
 
+// JSONB evidence is optional on older schemas; legacy duration columns alone
+// do not establish that a measurement belongs to this attempt.
+function timingEvidenceSql(alias: 'wa' | 'wj', metric: 'queue_duration_seconds' | 'runtime_seconds' | 'total_duration_seconds'): string {
+  const evidence = `(to_jsonb(${alias})->'timing_evidence')`;
+  const value = `(${evidence}->>'${metric}')::numeric`;
+  return `(CASE WHEN ${evidence}->'version' = '1'::jsonb
+    AND jsonb_typeof(${evidence}->'${metric}') = 'number'
+    THEN CASE WHEN ${value} >= 0 AND ${value} <= 1.7976931348623157e308::numeric
+      THEN ${value} ELSE NULL END ELSE NULL END)`;
+}
+
 /**
  * Fetch tracked workflow_attempts in the filtered repo/date window. The
  * Workflow tab is attempt-scoped: cards + daily chart use this population.
@@ -1071,8 +1094,9 @@ export async function fetchWorkflowAttemptRows(
     const { rows } = await client.query(
       `SELECT r.id AS run_id, r.repo_id, r.date, wa.run_attempt,
               wa.workflow_file, wa.workflow_ref, wa.status, wa.conclusion,
-              wa.created_at, wa.queue_duration_seconds, wa.runtime_seconds,
-              wa.total_duration_seconds
+              wa.created_at, ${timingEvidenceSql('wa', 'queue_duration_seconds')} AS queue_duration_seconds,
+              ${timingEvidenceSql('wa', 'runtime_seconds')} AS runtime_seconds,
+              ${timingEvidenceSql('wa', 'total_duration_seconds')} AS total_duration_seconds
        FROM workflow_attempts wa
        JOIN runs r ON r.id = wa.run_id
        WHERE r.repo_id IN (${placeholders})
@@ -1120,6 +1144,8 @@ export type WorkflowGroupRow = {
   successCount: number;
   terminalCount: number;
   avgWorkflowTotalDuration: number | null;
+  totalDurationSamples: number;
+  totalDurationEligibleCount: number;
   latestDate: string;
 };
 
@@ -1152,7 +1178,7 @@ export async function fetchWorkflowGroupRows(
         `WITH tracked AS (
              SELECT r.repo_id, r.date, wa.run_id, wa.run_attempt,
                     wa.workflow_file, wa.workflow_ref,
-                    wa.conclusion, wa.total_duration_seconds
+                    wa.conclusion, ${timingEvidenceSql('wa', 'total_duration_seconds')} AS total_duration_seconds
                FROM workflow_attempts wa
                JOIN runs r ON r.id = wa.run_id
               WHERE r.repo_id IN (${placeholders})
@@ -1179,6 +1205,8 @@ export async function fetchWorkflowGroupRows(
                 COUNT(*) AS attempt_count,
                 COUNT(*) FILTER (WHERE conclusion = 'success') AS success_count,
                 COUNT(*) FILTER (WHERE conclusion IN ('success', 'failure', 'cancelled')) AS terminal_count,
+                COUNT(total_duration_seconds) AS total_duration_samples,
+                COUNT(*) AS total_duration_eligible_count,
                 AVG(total_duration_seconds) FILTER (WHERE total_duration_seconds >= 0) AS avg_total_duration
            FROM per_group_attempt
           GROUP BY 1, 2, 3, 4`,
@@ -1201,6 +1229,8 @@ export async function fetchWorkflowGroupRows(
       attemptCount: Number(row.attempt_count),
       successCount: Number(row.success_count),
       terminalCount: Number(row.terminal_count),
+      totalDurationSamples: Number(row.total_duration_samples),
+      totalDurationEligibleCount: Number(row.total_duration_eligible_count),
       avgWorkflowTotalDuration:
         row.avg_total_duration == null ? null : Number(row.avg_total_duration),
       latestDate: String(row.latest_date),
@@ -1269,7 +1299,7 @@ export async function fetchJobGroupRows(
                 COUNT(*) AS execution_count,
                 SUM(${MH_SQL}) AS machine_hours,
                 COUNT(*) FILTER (WHERE ${UNKNOWN_COST_SQL}) AS unknown_cost_count,
-                AVG(wj.total_duration_seconds) FILTER (WHERE wj.total_duration_seconds >= 0) AS avg_total_duration,
+                AVG(${timingEvidenceSql('wj', 'total_duration_seconds')}) AS avg_total_duration,
                 COUNT(*) FILTER (WHERE ${TERMINAL_SQL}) AS terminal_count,
                 COUNT(*) FILTER (WHERE wj.conclusion = 'success') AS success_count,
                 MAX(r.date) AS latest_date
@@ -1308,6 +1338,7 @@ export type JobPopulationStats = {
   totalJobs: number;
   terminalCount: number;
   successCount: number;
+  successfulTotalDurationSamples: number;
   p50TotalDuration: number | null;
   p90TotalDuration: number | null;
   unknownResourceSamples: number;
@@ -1323,7 +1354,7 @@ export async function fetchJobPopulationStats(
   endDate: string,
 ): Promise<JobPopulationStats> {
   if (repoRows.length === 0) {
-    return { totalJobs: 0, terminalCount: 0, successCount: 0, p50TotalDuration: null, p90TotalDuration: null, unknownResourceSamples: 0 };
+    return { totalJobs: 0, terminalCount: 0, successCount: 0, successfulTotalDurationSamples: 0, p50TotalDuration: null, p90TotalDuration: null, unknownResourceSamples: 0 };
   }
   const client = await getDatabaseClient();
   try {
@@ -1331,10 +1362,11 @@ export async function fetchJobPopulationStats(
       `SELECT COUNT(*) AS total_jobs,
               COUNT(*) FILTER (WHERE ${TERMINAL_SQL}) AS terminal_count,
               COUNT(*) FILTER (WHERE wj.conclusion = 'success') AS success_count,
-              percentile_disc(0.5) WITHIN GROUP (ORDER BY wj.total_duration_seconds)
-                FILTER (WHERE wj.conclusion = 'success' AND wj.total_duration_seconds >= 0) AS p50_total_duration,
-              percentile_disc(0.9) WITHIN GROUP (ORDER BY wj.total_duration_seconds)
-                FILTER (WHERE wj.conclusion = 'success' AND wj.total_duration_seconds >= 0) AS p90_total_duration,
+              COUNT(${timingEvidenceSql('wj', 'total_duration_seconds')}) FILTER (WHERE wj.conclusion = 'success') AS successful_total_duration_samples,
+              percentile_disc(0.5) WITHIN GROUP (ORDER BY ${timingEvidenceSql('wj', 'total_duration_seconds')})
+                FILTER (WHERE wj.conclusion = 'success') AS p50_total_duration,
+              percentile_disc(0.9) WITHIN GROUP (ORDER BY ${timingEvidenceSql('wj', 'total_duration_seconds')})
+                FILTER (WHERE wj.conclusion = 'success') AS p90_total_duration,
               COUNT(*) FILTER (WHERE ${UNKNOWN_COST_SQL}) AS unknown_resource_samples
            ${trackedWindowFrom(repoRows.length)}`,
       windowParams(repoRows, startDate, endDate),
@@ -1344,6 +1376,7 @@ export async function fetchJobPopulationStats(
       totalJobs: Number(row.total_jobs),
       terminalCount: Number(row.terminal_count),
       successCount: Number(row.success_count),
+      successfulTotalDurationSamples: Number(row.successful_total_duration_samples),
       p50TotalDuration: row.p50_total_duration == null ? null : Number(row.p50_total_duration),
       p90TotalDuration: row.p90_total_duration == null ? null : Number(row.p90_total_duration),
       unknownResourceSamples: Number(row.unknown_resource_samples),
@@ -1445,8 +1478,7 @@ export async function fetchQueueGroupRows(
         `SELECT r.repo_id, wa.workflow_file, wa.workflow_ref, wj.name AS job_name,
                 COALESCE(wj.resource_model, 'unknown') AS resource_model,
                 COUNT(*) AS execution_count,
-                percentile_disc(0.9) WITHIN GROUP (ORDER BY wj.queue_duration_seconds)
-                  FILTER (WHERE wj.queue_duration_seconds >= 0) AS queue_p90,
+                percentile_disc(0.9) WITHIN GROUP (ORDER BY ${timingEvidenceSql('wj', 'queue_duration_seconds')}) AS queue_p90,
                 COUNT(*) FILTER (WHERE ${TERMINAL_SQL}) AS terminal_count,
                 COUNT(*) FILTER (WHERE wj.conclusion = 'success') AS success_count,
                 MAX(r.date) AS latest_date
@@ -1480,6 +1512,7 @@ export async function fetchQueueGroupRows(
 
 export type QueuePopulationStats = {
   sampleCount: number;
+  eligibleCount: number;
   p50QueueDuration: number | null;
   p90QueueDuration: number | null;
   maxQueueDuration: number | null;
@@ -1495,19 +1528,18 @@ export async function fetchQueuePopulationStats(
   endDate: string,
 ): Promise<QueuePopulationStats> {
   if (repoRows.length === 0) {
-    return { sampleCount: 0, p50QueueDuration: null, p90QueueDuration: null, maxQueueDuration: null, overOneHourCount: 0, invalidTimingSamples: 0, distinctResourceModelCount: 0, unknownResourceSamples: 0 };
+    return { sampleCount: 0, eligibleCount: 0, p50QueueDuration: null, p90QueueDuration: null, maxQueueDuration: null, overOneHourCount: 0, invalidTimingSamples: 0, distinctResourceModelCount: 0, unknownResourceSamples: 0 };
   }
   const client = await getDatabaseClient();
   try {
     const { rows } = await client.query(
-      `SELECT COUNT(*) FILTER (WHERE wj.queue_duration_seconds >= 0) AS sample_count,
-              percentile_disc(0.5) WITHIN GROUP (ORDER BY wj.queue_duration_seconds)
-                FILTER (WHERE wj.queue_duration_seconds >= 0) AS p50_queue,
-              percentile_disc(0.9) WITHIN GROUP (ORDER BY wj.queue_duration_seconds)
-                FILTER (WHERE wj.queue_duration_seconds >= 0) AS p90_queue,
-              MAX(wj.queue_duration_seconds) FILTER (WHERE wj.queue_duration_seconds >= 0) AS max_queue,
-              COUNT(*) FILTER (WHERE wj.queue_duration_seconds > 3600) AS over_one_hour_count,
-              COUNT(*) FILTER (WHERE wj.queue_duration_seconds IS NULL OR wj.queue_duration_seconds < 0) AS invalid_timing_samples,
+      `SELECT COUNT(*) AS eligible_count,
+              COUNT(${timingEvidenceSql('wj', 'queue_duration_seconds')}) AS sample_count,
+              percentile_disc(0.5) WITHIN GROUP (ORDER BY ${timingEvidenceSql('wj', 'queue_duration_seconds')}) AS p50_queue,
+              percentile_disc(0.9) WITHIN GROUP (ORDER BY ${timingEvidenceSql('wj', 'queue_duration_seconds')}) AS p90_queue,
+              MAX(${timingEvidenceSql('wj', 'queue_duration_seconds')}) AS max_queue,
+              COUNT(*) FILTER (WHERE ${timingEvidenceSql('wj', 'queue_duration_seconds')} > 3600) AS over_one_hour_count,
+              COUNT(*) FILTER (WHERE ${timingEvidenceSql('wj', 'queue_duration_seconds')} IS NULL) AS invalid_timing_samples,
               COUNT(DISTINCT wj.resource_model) FILTER (WHERE wj.resource_model IS NOT NULL) AS distinct_resource_models,
               COUNT(*) FILTER (WHERE wj.resource_model IS NULL) AS unknown_resource_samples
            ${trackedWindowFrom(repoRows.length)}`,
@@ -1516,6 +1548,7 @@ export async function fetchQueuePopulationStats(
     const row = rows[0] ?? {};
     return {
       sampleCount: Number(row.sample_count),
+      eligibleCount: Number(row.eligible_count),
       p50QueueDuration: row.p50_queue == null ? null : Number(row.p50_queue),
       p90QueueDuration: row.p90_queue == null ? null : Number(row.p90_queue),
       maxQueueDuration: row.max_queue == null ? null : Number(row.max_queue),
@@ -1548,9 +1581,9 @@ export async function fetchQueueDailyP90(
     if (resourceModel) params.push(resourceModel);
     const { rows } = await client.query(
       `SELECT r.date, wj.resource_model,
-              percentile_disc(0.9) WITHIN GROUP (ORDER BY wj.queue_duration_seconds) AS p90
+              percentile_disc(0.9) WITHIN GROUP (ORDER BY ${timingEvidenceSql('wj', 'queue_duration_seconds')}) AS p90
            ${trackedWindowFrom(repoRows.length)}
-             AND wj.queue_duration_seconds >= 0
+             AND ${timingEvidenceSql('wj', 'queue_duration_seconds')} IS NOT NULL
              AND wj.resource_model IS NOT NULL${modelClause}
            GROUP BY 1, 2`,
       params,
@@ -1611,7 +1644,7 @@ export function buildWorkflowCards(
   ).length;
   // Percentiles over successful samples only (spec §4).
   const successTotals = attempts
-    .filter((a) => a.conclusion === 'success' && a.totalDurationSeconds != null && a.totalDurationSeconds >= 0)
+    .filter((a) => a.conclusion === 'success' && a.totalDurationSeconds != null && Number.isFinite(a.totalDurationSeconds) && a.totalDurationSeconds >= 0)
     .map((a) => a.totalDurationSeconds!);
   const stats = computeStats(successTotals);
 
@@ -1637,6 +1670,8 @@ export function buildWorkflowCards(
 
   return {
     totalAttempts: attempts.length,
+    successfulTotalDurationSamples: stats.sampleCount,
+    successfulTotalDurationEligibleCount: successCount,
     p50TotalDuration: stats.sampleCount > 0 ? stats.p50 : undefined,
     p90TotalDuration: stats.sampleCount > 0 ? stats.p90 : undefined,
     successRate:
@@ -1692,6 +1727,8 @@ export function buildWorkflowDashboardResult(
       g.avgWorkflowTotalDuration == null
         ? undefined
         : g.avgWorkflowTotalDuration,
+    totalDurationSamples: g.totalDurationSamples,
+    totalDurationEligibleCount: g.totalDurationEligibleCount,
     attemptCount: g.attemptCount,
     successCount: g.successCount,
     failureRate:
@@ -1781,8 +1818,9 @@ export async function fetchWorkflowAttemptDrilldown(
     }
     const { rows } = await client.query(
       `SELECT r.id AS run_id, r.date, wa.run_attempt, wa.status, wa.conclusion,
-              wa.queue_duration_seconds, wa.runtime_seconds,
-              wa.total_duration_seconds
+              ${timingEvidenceSql('wa', 'queue_duration_seconds')} AS queue_duration_seconds,
+              ${timingEvidenceSql('wa', 'runtime_seconds')} AS runtime_seconds,
+              ${timingEvidenceSql('wa', 'total_duration_seconds')} AS total_duration_seconds
        FROM workflow_attempts wa
        JOIN runs r ON r.id = wa.run_id
        WHERE r.repo_id = $1
@@ -1841,6 +1879,8 @@ export function buildJobCards(
 
   return {
     totalJobs: stats.totalJobs,
+    successfulTotalDurationSamples: stats.successfulTotalDurationSamples,
+    successfulTotalDurationEligibleCount: stats.successCount,
     p50TotalDuration:
       stats.p50TotalDuration == null ? undefined : stats.p50TotalDuration,
     p90TotalDuration:
@@ -1973,8 +2013,10 @@ export async function fetchJobAttemptDrilldown(
       clauses += ` AND wj.resource_model = $${params.length}`;
     }
     const { rows } = await client.query(
-      `SELECT r.id AS run_id, r.date, wa.run_attempt, wj.job_id, wj.queue_duration_seconds,
-              wj.runtime_seconds, wj.total_duration_seconds, wj.resource_model,
+      `SELECT r.id AS run_id, r.date, wa.run_attempt, wj.job_id,
+              ${timingEvidenceSql('wj', 'queue_duration_seconds')} AS queue_duration_seconds,
+              ${timingEvidenceSql('wj', 'runtime_seconds')} AS runtime_seconds,
+              ${timingEvidenceSql('wj', 'total_duration_seconds')} AS total_duration_seconds, wj.resource_model,
               wj.conclusion
        FROM workflow_jobs wj
        JOIN workflow_attempts wa
@@ -2020,6 +2062,8 @@ export function buildQueueCards(stats: QueuePopulationStats): QueueCardSet {
       stats.p90QueueDuration == null ? undefined : stats.p90QueueDuration,
     maxQueueDuration:
       stats.maxQueueDuration == null ? undefined : stats.maxQueueDuration,
+    queueDurationSamples: stats.sampleCount,
+    queueDurationEligibleCount: stats.eligibleCount,
     shareOverOneHour:
       stats.sampleCount > 0
         ? (stats.overOneHourCount / stats.sampleCount) * 100
@@ -2134,6 +2178,7 @@ export type RunsStatsRow = {
   p50RuntimeSeconds: number | null;
   p90RuntimeSeconds: number | null;
   avgRuntimeSeconds?: number | null;
+  successfulRuntimeSamples?: number;
   events: RunsEventCount[];
 };
 
@@ -2143,6 +2188,8 @@ export type RunsCardSet = {
   p50Runtime?: number;
   p90Runtime?: number;
   avgRuntime?: number;
+  successfulRuntimeSamples?: number;
+  successfulRuntimeEligibleCount?: number;
   eventBreakdown: RunsEventCount[];
 };
 
@@ -2186,7 +2233,8 @@ export async function fetchRunsPage(
     const { rows } = await client.query(
       `SELECT wa.run_id, r.repo_id, wa.run_attempt, wa.workflow_file,
               r.event, wa.status, wa.conclusion, timing.window_at AS created_at,
-              CASE WHEN wa.run_attempt > 1 THEN NULL ELSE wa.queue_duration_seconds END AS queue_duration_seconds, wa.runtime_seconds, r.html_url
+              ${timingEvidenceSql('wa', 'queue_duration_seconds')} AS queue_duration_seconds,
+              ${timingEvidenceSql('wa', 'runtime_seconds')} AS runtime_seconds, r.html_url
          ${runsPopulation(repoRows.length)}
         ORDER BY timing.window_at DESC, wa.run_id DESC, wa.run_attempt DESC
         LIMIT $${repoRows.length + 3} OFFSET $${repoRows.length + 4}`,
@@ -2232,7 +2280,7 @@ export async function fetchRunsChart(
     const { rows } = await client.query(
       `SELECT r.repo_id, wa.run_id, wa.run_attempt,
               timing.window_at AS plot_time,
-              wa.runtime_seconds, COALESCE(wa.conclusion, wa.status, 'unknown') AS outcome
+              ${timingEvidenceSql('wa', 'runtime_seconds')} AS runtime_seconds, COALESCE(wa.conclusion, wa.status, 'unknown') AS outcome
          ${runsPopulation(repoRows.length)}
         ORDER BY timing.window_at, wa.run_id, wa.run_attempt`,
       [...repoRows.map((repo) => repo.id), startDate, endDate],
@@ -2265,7 +2313,7 @@ export async function fetchRunsStats(
   endDate: string,
 ): Promise<RunsStatsRow> {
   if (repoRows.length === 0) {
-    return { total: 0, success: 0, terminal: 0, p50RuntimeSeconds: null, p90RuntimeSeconds: null, events: [] };
+    return { total: 0, success: 0, terminal: 0, successfulRuntimeSamples: 0, p50RuntimeSeconds: null, p90RuntimeSeconds: null, events: [] };
   }
   const client = await getDatabaseClient();
   try {
@@ -2273,11 +2321,10 @@ export async function fetchRunsStats(
       `SELECT COUNT(*) AS total,
               COUNT(*) FILTER (WHERE wa.conclusion = 'success') AS success,
               COUNT(*) FILTER (WHERE wa.conclusion IS NOT NULL) AS terminal,
-              AVG(wa.runtime_seconds) FILTER (WHERE wa.conclusion = 'success' AND wa.runtime_seconds IS NOT NULL AND wa.runtime_seconds >= 0) AS avg_runtime,
-              PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY wa.runtime_seconds)
-                FILTER (WHERE wa.conclusion = 'success' AND wa.runtime_seconds IS NOT NULL AND wa.runtime_seconds >= 0) AS p50,
-              PERCENTILE_DISC(0.9) WITHIN GROUP (ORDER BY wa.runtime_seconds)
-                FILTER (WHERE wa.conclusion = 'success' AND wa.runtime_seconds IS NOT NULL AND wa.runtime_seconds >= 0) AS p90
+              AVG(${timingEvidenceSql('wa', 'runtime_seconds')}) FILTER (WHERE wa.conclusion = 'success') AS avg_runtime,
+              percentile_disc(0.5) WITHIN GROUP (ORDER BY ${timingEvidenceSql('wa', 'runtime_seconds')}) FILTER (WHERE wa.conclusion = 'success') AS p50,
+              percentile_disc(0.9) WITHIN GROUP (ORDER BY ${timingEvidenceSql('wa', 'runtime_seconds')}) FILTER (WHERE wa.conclusion = 'success') AS p90,
+              COUNT(${timingEvidenceSql('wa', 'runtime_seconds')}) FILTER (WHERE wa.conclusion = 'success') AS successful_runtime_samples
          ${runsPopulation(repoRows.length)}`,
       [...repoRows.map((r) => r.id), startDate, endDate],
     );
@@ -2292,6 +2339,7 @@ export async function fetchRunsStats(
       total: Number(head.total ?? 0),
       success: Number(head.success ?? 0),
       terminal: Number(head.terminal ?? 0),
+      successfulRuntimeSamples: Number(head.successful_runtime_samples ?? 0),
       avgRuntimeSeconds: head.avg_runtime == null ? null : Number(head.avg_runtime),
       p50RuntimeSeconds: head.p50 == null ? null : Number(head.p50),
       p90RuntimeSeconds: head.p90 == null ? null : Number(head.p90),
@@ -2310,6 +2358,8 @@ export function buildRunsCards(stats: RunsStatsRow): RunsCardSet {
     totalAttempts: stats.total,
     successRate: stats.terminal > 0 ? (stats.success / stats.terminal) * 100 : null,
     avgRuntime: stats.avgRuntimeSeconds ?? undefined,
+    successfulRuntimeSamples: stats.successfulRuntimeSamples ?? 0,
+    successfulRuntimeEligibleCount: stats.success,
     p50Runtime: stats.p50RuntimeSeconds ?? undefined,
     p90Runtime: stats.p90RuntimeSeconds ?? undefined,
     eventBreakdown: stats.events,

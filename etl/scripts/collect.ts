@@ -29,6 +29,8 @@ import type { GitHubApiPayload, PullRequestRef, Step } from '../../src/lib/types
 import { getRepoNames, parseReposConfig, type RepoConfigEntry, type ReposConfig } from './repos-config.ts';
 import { buildWorkflowAttempts, enrichRunWithWorkflowMetadata } from './workflow-attempts.ts';
 
+type CollectedRun = Run & { jobsFetchedAt?: string };
+
 const { buildCollectionWindows, splitCollectionWindow, toCreatedRange } = collectionWindows;
 
 const __filename = fileURLToPath(import.meta.url);
@@ -685,20 +687,28 @@ export async function collectRepo(
     return { runs: allRuns, saturated: false, unchanged: false, validator };
   }
 
-  function normalizeJobs(jobsData: GitHubRunJobsResponse): Job[] {
+  function normalizeJobs(jobsData: GitHubRunJobsResponse, scope: { runId: number; runAttempt: number }): Job[] {
+    const duration = (start: unknown, end: unknown): number | undefined => {
+      if (typeof start !== 'string' || typeof end !== 'string') return undefined;
+      const milliseconds = Date.parse(end) - Date.parse(start);
+      return Number.isFinite(milliseconds) && milliseconds >= 0 ? milliseconds / 1000 : undefined;
+    };
     return jobsData.jobs.map(j => {
-      const startedMs = new Date(j.started_at).getTime();
-      const createdMs = j.created_at ? new Date(j.created_at).getTime() : startedMs;
-      const completedMs = j.completed_at ? new Date(j.completed_at).getTime() : startedMs;
+      const queue = duration(j.created_at, j.started_at);
+      const runtime = j.status === 'completed' ? duration(j.started_at, j.completed_at) : undefined;
+      const total = j.status === 'completed' ? duration(j.created_at, j.completed_at) : undefined;
+      // The attempt-specific endpoint supplies scope only when the job's own run ID agrees.
+      const githubPayload = j.run_id === scope.runId && j.run_attempt === undefined
+        ? { ...j, run_attempt: scope.runAttempt } : j;
       const labels = Array.isArray(j.labels) && j.labels.every((label): label is string => typeof label === 'string') ? j.labels : undefined;
       const steps = Array.isArray(j.steps) ? j.steps.flatMap((rawStep, index) => {
         if (!rawStep || typeof rawStep !== 'object') return [];
         const step = rawStep as Record<string, unknown>;
         const started_at = typeof step.started_at === 'string' ? step.started_at : undefined;
         const completed_at = typeof step.completed_at === 'string' ? step.completed_at : undefined;
-        return [{ name: typeof step.name === 'string' ? step.name : `Step ${index + 1}`, status: typeof step.status === 'string' ? step.status : 'unknown', conclusion: typeof step.conclusion === 'string' ? step.conclusion : 'unknown', started_at, completed_at, number: typeof step.number === 'number' ? step.number : index + 1, duration_seconds: started_at && completed_at ? Math.max(0, Math.floor((new Date(completed_at).getTime() - new Date(started_at).getTime()) / 1000)) : 0 }];
+        return [{ name: typeof step.name === 'string' ? step.name : `Step ${index + 1}`, status: typeof step.status === 'string' ? step.status : 'unknown', conclusion: typeof step.conclusion === 'string' ? step.conclusion : 'unknown', started_at, completed_at, number: typeof step.number === 'number' ? step.number : index + 1, duration_seconds: duration(started_at, completed_at) }];
       }) : undefined;
-      return { id: j.id, name: j.name, status: j.status, conclusion: j.conclusion ?? 'unknown', created_at: j.created_at ?? new Date().toISOString(), started_at: j.started_at, completed_at: j.completed_at ?? new Date().toISOString(), html_url: j.html_url, queueDurationInSeconds: Math.max(0, (startedMs - createdMs) / 1000), durationInSeconds: Math.max(0, (completedMs - startedMs) / 1000), runtimeInSeconds: Math.max(0, (completedMs - startedMs) / 1000), totalDurationInSeconds: Math.max(0, (completedMs - createdMs) / 1000), labels, runner_id: typeof j.runner_id === 'number' ? j.runner_id : undefined, runner_name: typeof j.runner_name === 'string' ? j.runner_name : undefined, runner_group_id: typeof j.runner_group_id === 'number' ? j.runner_group_id : undefined, runner_group_name: typeof j.runner_group_name === 'string' ? j.runner_group_name : undefined, ...parseRunnerResourceLabels(labels), githubPayload: j, steps: steps?.length ? steps : undefined };
+      return { id: j.id, name: j.name, status: j.status, conclusion: j.conclusion ?? 'unknown', created_at: j.created_at ?? '', started_at: j.started_at ?? '', completed_at: j.completed_at ?? '', html_url: j.html_url, queueDurationInSeconds: queue ?? 0, durationInSeconds: runtime ?? 0, runtimeInSeconds: runtime, totalDurationInSeconds: total, labels, runner_id: typeof j.runner_id === 'number' ? j.runner_id : undefined, runner_name: typeof j.runner_name === 'string' ? j.runner_name : undefined, runner_group_id: typeof j.runner_group_id === 'number' ? j.runner_group_id : undefined, runner_group_name: typeof j.runner_group_name === 'string' ? j.runner_group_name : undefined, ...parseRunnerResourceLabels(labels), githubPayload, steps: steps?.length ? steps : undefined };
     });
   }
 
@@ -718,9 +728,12 @@ export async function collectRepo(
       return !fresh;
     });
     let cursor = 0;
-    const fetchOne = async (run: Run): Promise<void> => {
+    const fetchOne = async (run: CollectedRun): Promise<void> => {
       try {
-        run.jobs = normalizeJobs(await fetchJobsForRunAttempt(octokit, owner, repoName, run.id, run.runAttempt ?? 1));
+        const scope = { runId: run.id, runAttempt: run.runAttempt ?? 1 };
+        const jobs = await fetchJobsForRunAttempt(octokit, owner, repoName, scope.runId, scope.runAttempt);
+        run.jobs = normalizeJobs(jobs, scope);
+        run.jobsFetchedAt = new Date().toISOString();
       } catch (err) {
         if (isGitHubRateLimitError(err)) {
           const details = getRateLimitDetails(err);

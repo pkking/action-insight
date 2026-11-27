@@ -3,7 +3,18 @@ import type { ReposConfig, RepoConfigEntry } from './repos-config.ts';
 import { resolveWorkflowMatch, stepPolicyHash, type WorkflowMatchKind } from './workflow-match.ts';
 import { parseWorkflowPath, type WorkflowParseStatus } from './workflow-path.ts';
 
+export interface TimingEvidence {
+  version: 1;
+  queue_duration_seconds?: number;
+  runtime_seconds?: number;
+  total_duration_seconds?: number;
+  completion_source?: string;
+  completed_at?: string;
+  trigger_at?: string;
+}
+
 export interface WorkflowAttemptJobRow {
+  timing_evidence?: TimingEvidence;
   run_id: number;
   run_attempt: number;
   job_id: number;
@@ -28,6 +39,7 @@ export interface WorkflowAttemptJobRow {
 }
 
 export interface WorkflowAttemptRow {
+  timing_evidence?: TimingEvidence;
   run_id: number;
   run_attempt: number;
   status: string;
@@ -58,7 +70,20 @@ function secondsBetween(start?: string | null, end?: string | null): number | nu
   const startMs = Date.parse(start);
   const endMs = Date.parse(end);
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
-  return Math.max(0, (endMs - startMs) / 1000);
+  return endMs < startMs ? null : (endMs - startMs) / 1000;
+}
+
+function rawTimestamp(value: unknown): string | null {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : null;
+}
+
+function addDuration(evidence: TimingEvidence, key: 'queue_duration_seconds' | 'runtime_seconds' | 'total_duration_seconds', start: unknown, end: unknown): void {
+  const duration = secondsBetween(rawTimestamp(start), rawTimestamp(end));
+  if (duration !== null) evidence[key] = duration;
+}
+
+function nonemptyEvidence(evidence: TimingEvidence): TimingEvidence | undefined {
+  return Object.keys(evidence).length > 1 ? evidence : undefined;
 }
 
 function getWorkflowPath(run: Run): string | null {
@@ -88,7 +113,8 @@ function getPrNumbers(run: Run): number[] {
 }
 
 function eligibleSteps(run: Run, thresholdSeconds: number): boolean {
-  return run.conclusion === 'success' && (run.durationInSeconds ?? 0) > thresholdSeconds;
+  const duration = getRunAttempt(run) > 1 ? run.runtimeInSeconds : run.durationInSeconds;
+  return run.conclusion === 'success' && duration != null && duration > thresholdSeconds;
 }
 
 export function enrichRunWithWorkflowMetadata(
@@ -111,7 +137,11 @@ export function enrichRunWithWorkflowMetadata(
     getRunAttempt(run) > 1
       ? null
       : secondsBetween(run.created_at, firstJobStartedAt);
-  const runtime = secondsBetween(runStartedAt, run.updated_at);
+  // updated_at is only a completion proxy for completed attempts.
+  const startMs = runStartedAt ? Date.parse(runStartedAt) : NaN;
+  const endMs = run.updated_at ? Date.parse(run.updated_at) : NaN;
+  const runtime = run.status === 'completed' && Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs
+    ? (endMs - startMs) / 1000 : null;
 
   return {
     ...run,
@@ -147,25 +177,77 @@ export function buildWorkflowAttempts(
     const runStartedAt = run.run_started_at ?? null;
     const queueDuration = run.queueDurationInSeconds ?? null;
     const runtime = run.runtimeInSeconds ?? null;
-    // ADR-023: for rerun attempts (run_attempt > 1) the total duration is
-    // run_started_at → completed (matching GitHub UI semantics); the run's
-    // created_at still points at the ORIGINAL trigger, so created→completed
-    // would count the idle gap between attempts as duration.
-    const total =
-      getRunAttempt(run) > 1
-        ? (secondsBetween(runStartedAt ?? run.created_at, run.updated_at) ??
-          run.durationInSeconds ??
-          null)
-        : (secondsBetween(run.created_at, run.updated_at) ??
-          run.durationInSeconds ??
-          null);
+    // A rerun's request time is unknown; runtime is not trigger-to-completion.
+    const total = getRunAttempt(run) > 1 || run.status !== 'completed' ? null :
+      secondsBetween(run.created_at, run.updated_at);
     const shouldPersistSteps = match.tracked && eligibleSteps(run, match.stepThresholdSeconds);
 
+    // Evidence is independent of the legacy display/step-eligibility values.
+    const raw = inputRun.githubPayload;
+    const boundRun = raw && raw.id === inputRun.id && raw.run_attempt === getRunAttempt(inputRun)
+      && raw.status === inputRun.status && typeof raw.status === 'string';
+    const runEvidence: TimingEvidence = { version: 1 };
+    if (boundRun) {
+      const completedAt = raw.status === 'completed' ? rawTimestamp(raw.completed_at) : null;
+      if (completedAt) {
+        addDuration(runEvidence, 'runtime_seconds', raw.run_started_at, completedAt);
+        if (getRunAttempt(inputRun) === 1) addDuration(runEvidence, 'total_duration_seconds', raw.created_at, completedAt);
+        if (runEvidence.runtime_seconds !== undefined || runEvidence.total_duration_seconds !== undefined) {
+          runEvidence.completion_source = 'github_run.completed_at';
+          runEvidence.completed_at = completedAt;
+        }
+      }
+    }
+    // A fetch marker must belong to this assembly and postdate the attempt's
+    // endpoints; raw job identity binds every member to the same attempt.
+    const fetchedAt = (inputRun as Run & { jobsFetchedAt?: string }).jobsFetchedAt;
+    const fetchedMs = fetchedAt ? Date.parse(fetchedAt) : NaN;
+    const rawStart = boundRun ? rawTimestamp(raw.run_started_at) : null;
+    const rawCompletion = boundRun ? rawTimestamp(raw.completed_at) : null;
+    const collectionBound = Boolean(Array.isArray(inputRun.jobs) && Number.isFinite(fetchedMs)
+      && (!rawStart || fetchedMs >= Date.parse(rawStart))
+      && (!rawCompletion || fetchedMs >= Date.parse(rawCompletion))
+      && inputRun.jobs.every((job) => {
+        const payload = job.githubPayload;
+        return payload?.id === job.id && payload.run_id === inputRun.id
+          && payload.run_attempt === getRunAttempt(inputRun) && payload.status === job.status
+          && [payload.created_at, payload.started_at, payload.completed_at].every((value) => {
+            const timestamp = rawTimestamp(value);
+            return !timestamp || Date.parse(timestamp) <= fetchedMs;
+          });
+      }));
+    if (collectionBound && boundRun && getRunAttempt(inputRun) === 1 && raw) {
+      const starts = inputRun.jobs!.map((job) => rawTimestamp(job.githubPayload?.started_at));
+      if (starts.length > 0 && starts.every((start): start is string => start !== null)) {
+        starts.sort((left, right) => Date.parse(left) - Date.parse(right));
+        addDuration(runEvidence, 'queue_duration_seconds', raw.created_at, starts[0]);
+      }
+    }
+
+    if (boundRun && raw.run_attempt === 1 &&
+      (runEvidence.total_duration_seconds !== undefined || runEvidence.queue_duration_seconds !== undefined)) {
+      runEvidence.trigger_at = rawTimestamp(raw.created_at)!;
+    }
+
     const jobs = (run.jobs ?? []).map((job): WorkflowAttemptJobRow => {
-      const jobRuntime = secondsBetween(job.started_at, job.completed_at) ?? job.durationInSeconds ?? null;
+      const jobEvidence: TimingEvidence = { version: 1 };
+      if (collectionBound && job.githubPayload) {
+        const payload = job.githubPayload;
+        addDuration(jobEvidence, 'queue_duration_seconds', payload.created_at, payload.started_at);
+        if (payload.status === 'completed') {
+          addDuration(jobEvidence, 'runtime_seconds', payload.started_at, payload.completed_at);
+          addDuration(jobEvidence, 'total_duration_seconds', payload.created_at, payload.completed_at);
+          if (jobEvidence.runtime_seconds !== undefined || jobEvidence.total_duration_seconds !== undefined) {
+            jobEvidence.completion_source = 'github_job.completed_at';
+            jobEvidence.completed_at = rawTimestamp(payload.completed_at)!;
+          }
+        }
+      }
+      const jobRuntime = secondsBetween(job.started_at, job.completed_at);
       const jobTotal = secondsBetween(job.created_at, job.completed_at);
       return {
         run_id: run.id,
+        ...(nonemptyEvidence(jobEvidence) ? { timing_evidence: jobEvidence } : {}),
         run_attempt: run.runAttempt ?? 1,
         job_id: job.id,
         name: job.name,
@@ -173,11 +255,11 @@ export function buildWorkflowAttempts(
         conclusion: job.conclusion || null,
         created_at: job.created_at || null,
         started_at: job.started_at || null,
-        completed_at: job.completed_at || null,
+        completed_at: jobEvidence.completed_at ?? job.completed_at ?? null,
         html_url: job.html_url || null,
         queue_duration_seconds: secondsBetween(job.created_at, job.started_at),
         runtime_seconds: jobRuntime,
-        total_duration_seconds: jobTotal ?? (jobRuntime !== null ? (secondsBetween(job.created_at, job.started_at) ?? 0) + jobRuntime : null),
+        total_duration_seconds: jobTotal,
         labels: job.labels,
         runner_id: job.runner_id,
         runner_name: job.runner_name,
@@ -191,12 +273,13 @@ export function buildWorkflowAttempts(
 
     return {
       run_id: run.id,
+      ...(nonemptyEvidence(runEvidence) ? { timing_evidence: runEvidence } : {}),
       run_attempt: run.runAttempt ?? 1,
       status: run.status,
       conclusion: run.conclusion || null,
       created_at: run.created_at || null,
       run_started_at: runStartedAt,
-      completed_at: run.updated_at || null,
+      completed_at: run.status === 'completed' ? ((runEvidence.completion_source ? rawTimestamp(raw?.completed_at) : null) ?? run.updated_at ?? null) : null,
       updated_at: run.updated_at || null,
       queue_duration_seconds: queueDuration,
       runtime_seconds: runtime,
@@ -207,7 +290,7 @@ export function buildWorkflowAttempts(
       workflow_path: run.workflowPath ?? null,
       workflow_parse_status: run.workflowParseStatus ?? 'file_unavailable',
       match_kind: run.workflowMatchKind ?? null,
-      jobs_fetched_at: jobs.length > 0 ? nowIso : null,
+      jobs_fetched_at: Array.isArray(inputRun.jobs) && rawTimestamp(fetchedAt) ? fetchedAt! : null,
       steps_eligibility_checked_at: match.tracked ? nowIso : null,
       steps_collected_at: shouldPersistSteps && jobs.some((job) => (job.steps?.length ?? 0) > 0) ? nowIso : null,
       step_policy_hash: run.stepPolicyHash ?? stepPolicyHash(match),

@@ -24,6 +24,8 @@ function group(overrides: Partial<WorkflowGroupRow> = {}): WorkflowGroupRow {
     successCount: 1,
     terminalCount: 1,
     avgWorkflowTotalDuration: 3600,
+    totalDurationSamples: 1,
+    totalDurationEligibleCount: 1,
     latestDate: '2026-01-01',
     ...overrides,
   };
@@ -74,7 +76,7 @@ describe('dayCount', () => {
 describe('buildCostDashboardResult', () => {
   it('maps groups to rows with share of filtered total and terminal-only failure rate', () => {
     const groups = [
-      group({ machineHours: 30, attemptCount: 10, successCount: 7, terminalCount: 9, avgWorkflowTotalDuration: 3600 }),
+      group({ machineHours: 30, attemptCount: 10, successCount: 7, terminalCount: 9, avgWorkflowTotalDuration: 3600, totalDurationSamples: 6, totalDurationEligibleCount: 10 }),
       group({ resourceModel: 'npu-a2', machineHours: 10, attemptCount: 4, successCount: 4, terminalCount: 4, avgWorkflowTotalDuration: null }),
     ];
     const cards = buildCostCards(groups, 0, 1, false);
@@ -86,6 +88,8 @@ describe('buildCostDashboardResult', () => {
     expect(a3.attemptCount).toBe(10);
     expect(a3.failureRate).toBeCloseTo(((9 - 7) / 9) * 100);
     expect(a3.avgWorkflowTotalDuration).toBe(3600);
+    expect(a3.totalDurationSamples).toBe(6);
+    expect(a3.totalDurationEligibleCount).toBe(10);
     expect(result.rows.find((r) => r.resourceModel === 'npu-a2')!.avgWorkflowTotalDuration).toBeUndefined();
   });
 

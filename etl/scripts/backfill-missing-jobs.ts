@@ -9,7 +9,7 @@ import { fetchAdaptiveJobsForRunAttempt, InvalidJobsResponseError } from './gith
 import { getDatabaseClient } from '../../src/lib/db.ts';
 import { writeWorkflowAttempts } from './pg-storage.ts';
 import { pgPlaceholders } from './pg-utils.ts';
-import { buildWorkflowAttempts, enrichRunWithWorkflowMetadata } from './workflow-attempts.ts';
+import { buildWorkflowAttempts, enrichRunWithWorkflowMetadata, type TimingEvidence } from './workflow-attempts.ts';
 import { parseReposConfig, type RepoConfigEntry, type ReposConfig } from './repos-config.ts';
 import type { Run, Step } from '../../src/lib/types.ts';
 
@@ -29,6 +29,8 @@ interface MissingAttemptRow {
   workflow_path: string | null;
   workflow_parse_status: string | null;
   run_started_at: string | null;
+  completed_at: string | null;
+  timing_evidence: TimingEvidence | null;
 }
 
 interface JobRow {
@@ -50,6 +52,7 @@ interface JobRow {
   resource_model?: string;
   resource_count?: number;
   steps?: Step[];
+  githubPayload?: Record<string, unknown>;
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -248,6 +251,8 @@ export async function fetchJobsForRunAttempt(
       runner_group_id: typeof job.runner_group_id === 'number' ? job.runner_group_id : undefined,
       runner_group_name: typeof job.runner_group_name === 'string' ? job.runner_group_name : undefined,
       ...parseRunnerResourceLabels(labels),
+      githubPayload: job.run_id === runId && job.run_attempt === undefined
+        ? { ...job, run_attempt: runAttempt } : job,
       steps,
     };
   });
@@ -259,9 +264,9 @@ export function buildMissingAttemptsQuery(workflowFiles: string[], options?: { f
     : '';
   const fetchOnceFilters = options?.fetchOnce
     ? `
-            AND r.status = 'completed'
-            AND r.conclusion IS DISTINCT FROM 'action_required'
-            AND r.conclusion IS DISTINCT FROM 'startup_failure'
+            AND wa.status = 'completed'
+            AND wa.conclusion IS DISTINCT FROM 'action_required'
+            AND wa.conclusion IS DISTINCT FROM 'startup_failure'
             AND wa.jobs_fetched_at IS NULL`
     : '';
   return `SELECT r.id AS run_id,
@@ -269,16 +274,18 @@ export function buildMissingAttemptsQuery(workflowFiles: string[], options?: { f
                  r.name,
                  r.head_branch,
                  r.head_sha,
-                 r.status,
-                 r.conclusion,
+                 wa.status,
+                 wa.conclusion,
                  r.event,
-                 r.created_at,
-                 r.updated_at,
+                 wa.created_at,
+                 wa.updated_at,
                  r.html_url,
                  r.duration_seconds,
                  r.workflow_path,
                  r.workflow_parse_status,
-                 wa.run_started_at
+                 wa.run_started_at,
+                 wa.completed_at,
+                 to_jsonb(wa)->'timing_evidence' AS timing_evidence
           FROM workflow_attempts wa
           JOIN runs r ON r.id = wa.run_id
           WHERE r.repo_id = $1
@@ -333,6 +340,8 @@ async function fetchMissingAttempts(
     workflow_path: typeof row.workflow_path === 'string' ? row.workflow_path : null,
     workflow_parse_status: typeof row.workflow_parse_status === 'string' ? row.workflow_parse_status : null,
     run_started_at: typeof row.run_started_at === 'string' ? row.run_started_at : null,
+    completed_at: typeof row.completed_at === 'string' ? row.completed_at : null,
+    timing_evidence: row.timing_evidence && typeof row.timing_evidence === 'object' ? row.timing_evidence as TimingEvidence : null,
   }));
   } finally {
     client.release();
@@ -367,7 +376,7 @@ export async function backfillRepo(repo: string, config: ReposConfig, days: numb
 
   for (const attempt of list) {
     const jobs = await fetchJobsForRunAttempt(octokit, owner, repoName, attempt.run_id, attempt.run_attempt);
-    const run: Run = {
+    const run: Run & { jobsFetchedAt?: string } = {
       id: attempt.run_id,
       runAttempt: attempt.run_attempt,
       name: attempt.name,
@@ -382,17 +391,43 @@ export async function backfillRepo(repo: string, config: ReposConfig, days: numb
       durationInSeconds: attempt.duration_seconds ?? Math.max(0, (Date.parse(attempt.updated_at) - Date.parse(attempt.created_at)) / 1000),
       pull_requests: [],
       jobs,
+      jobsFetchedAt: new Date().toISOString(),
       workflowPath: attempt.workflow_path ?? undefined,
       workflowParseStatus: (attempt.workflow_parse_status as Run['workflowParseStatus']) ?? undefined,
       run_started_at: attempt.run_started_at ?? undefined,
     };
 
     const enriched = enrichRunWithWorkflowMetadata(run, config, repoConfig);
-    const attempts = buildWorkflowAttempts([enriched], config, repoConfig);
-    if (options.fetchOnce && (enriched.jobs ?? []).length === 0 && attempts.length > 0) {
-      attempts[0].jobs_fetched_at = new Date().toISOString();
+    const [assembled] = buildWorkflowAttempts([enriched], config, repoConfig);
+    // A jobs-only fetch cannot verify or replace the stored workflow endpoints.
+    assembled.completed_at = attempt.completed_at;
+    const oldEvidence = attempt.timing_evidence;
+    if (oldEvidence?.version === 1 && assembled.created_at === attempt.created_at
+      && assembled.run_started_at === attempt.run_started_at && assembled.completed_at === attempt.completed_at
+      && (oldEvidence.trigger_at === undefined || (attempt.run_attempt === 1 && oldEvidence.trigger_at === attempt.created_at))) {
+      const retained: TimingEvidence = { version: 1 };
+      if (oldEvidence.completion_source === 'github_run.completed_at' && attempt.completed_at
+        && oldEvidence.completed_at === attempt.completed_at) {
+        const seconds = (start: string | null) => start ? (Date.parse(attempt.completed_at!) - Date.parse(start)) / 1000 : NaN;
+        if (typeof oldEvidence.runtime_seconds === 'number' && oldEvidence.runtime_seconds >= 0
+          && oldEvidence.runtime_seconds === seconds(attempt.run_started_at))
+          retained.runtime_seconds = oldEvidence.runtime_seconds;
+        if (attempt.run_attempt === 1 && typeof oldEvidence.total_duration_seconds === 'number'
+          && oldEvidence.total_duration_seconds >= 0 && oldEvidence.total_duration_seconds === seconds(attempt.created_at))
+          retained.total_duration_seconds = oldEvidence.total_duration_seconds;
+        if (retained.runtime_seconds !== undefined || retained.total_duration_seconds !== undefined) {
+          retained.completion_source = oldEvidence.completion_source;
+          retained.completed_at = oldEvidence.completed_at;
+        }
+      }
+      if (oldEvidence.trigger_at && attempt.run_attempt === 1 && Number.isFinite(Date.parse(oldEvidence.trigger_at))
+        && (retained.total_duration_seconds !== undefined || (typeof oldEvidence.queue_duration_seconds === 'number'
+          && Number.isFinite(oldEvidence.queue_duration_seconds) && oldEvidence.queue_duration_seconds >= 0))) {
+        retained.trigger_at = oldEvidence.trigger_at;
+      }
+      if (Object.keys(retained).length > 1) assembled.timing_evidence = retained;
     }
-    await writeWorkflowAttempts(repo, attempts);
+    await writeWorkflowAttempts(repo, [assembled]);
 
     completed += 1;
     if (completed % 25 === 0 || completed === list.length) {

@@ -22,6 +22,7 @@ function jobStats(overrides: Partial<JobPopulationStats> = {}): JobPopulationSta
     totalJobs: 0,
     terminalCount: 0,
     successCount: 0,
+    successfulTotalDurationSamples: 0,
     p50TotalDuration: null,
     p90TotalDuration: null,
     unknownResourceSamples: 0,
@@ -50,6 +51,7 @@ function jobGroup(overrides: Partial<JobGroupRow> = {}): JobGroupRow {
 function queueStats(overrides: Partial<QueuePopulationStats> = {}): QueuePopulationStats {
   return {
     sampleCount: 0,
+    eligibleCount: 0,
     p50QueueDuration: null,
     p90QueueDuration: null,
     maxQueueDuration: null,
@@ -84,13 +86,16 @@ describe('buildJobCards', () => {
     const stats = jobStats({
       totalJobs: 3,
       terminalCount: 2,
-      successCount: 1,
+      successCount: 2,
+      successfulTotalDurationSamples: 1,
       p50TotalDuration: 100,
       p90TotalDuration: 200,
     });
     const cards = buildJobCards(stats, [], false);
     expect(cards.totalJobs).toBe(3);
-    expect(cards.successRate).toBe(50);
+    expect(cards.successRate).toBe(100);
+    expect(cards.successfulTotalDurationSamples).toBe(1);
+    expect(cards.successfulTotalDurationEligibleCount).toBe(2);
     expect(cards.p50TotalDuration).toBe(100);
     expect(cards.p90TotalDuration).toBe(200);
   });
@@ -196,6 +201,7 @@ describe('buildQueueCards', () => {
   it('passes SQL P50/P90/max through and computes share over one hour', () => {
     const stats = queueStats({
       sampleCount: 10,
+      eligibleCount: 14,
       p50QueueDuration: 60,
       p90QueueDuration: 4000,
       maxQueueDuration: 7200,
@@ -203,6 +209,8 @@ describe('buildQueueCards', () => {
       distinctResourceModelCount: 3,
     });
     const cards = buildQueueCards(stats);
+    expect(cards.queueDurationSamples).toBe(10);
+    expect(cards.queueDurationEligibleCount).toBe(14);
     expect(cards.p50QueueDuration).toBe(60);
     expect(cards.p90QueueDuration).toBe(4000);
     expect(cards.maxQueueDuration).toBe(7200);

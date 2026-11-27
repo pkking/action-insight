@@ -55,18 +55,51 @@ function mapRunRow(row: Record<string, unknown>): Run {
   };
 }
 
+function timingEvidence(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const evidence = value as Record<string, unknown>;
+  return evidence.version === 1 ? evidence : undefined;
+}
+
+function evidenceDuration(evidence: Record<string, unknown> | undefined, key: string): number | undefined {
+  const value = evidence?.[key];
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function validTimestamp(value: unknown): string | undefined {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : undefined;
+}
+
 function mapAttemptRunRow(row: Record<string, unknown>): Run {
+  const evidence = timingEvidence(row.timing_evidence);
+  const runtime = evidenceDuration(evidence, 'runtime_seconds');
+  const evidenceTrigger = validTimestamp(evidence?.trigger_at);
+  const storedTrigger = validTimestamp(row.attempt_created_at);
+  const triggerAt = Number(row.run_attempt) === 1 && evidenceTrigger && storedTrigger
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(evidenceTrigger)
+    && Date.parse(evidenceTrigger) === Date.parse(storedTrigger) ? evidenceTrigger : undefined;
+  // The source marker alone does not bind wa.completed_at: the current ETL
+  // writes run.updated_at there, which can differ from raw completed_at.
+  const evidenceCompletion = validTimestamp(evidence?.completed_at);
+  const storedCompletion = validTimestamp(row.completed_at);
+  const completedAt = evidence?.completion_source === 'github_run.completed_at' &&
+    evidenceCompletion && storedCompletion && Date.parse(evidenceCompletion) === Date.parse(storedCompletion)
+    ? storedCompletion : undefined;
   return {
     ...mapRunRow(row),
     runAttempt: Number(row.run_attempt),
     status: (row.attempt_status as string) || (row.status as string),
     conclusion: (row.attempt_conclusion as string) || (row.conclusion as string) || '',
-    created_at: (row.attempt_created_at as string) || (row.created_at as string),
+    // CI cycles group by the parent push creation, not the attempt trigger.
+    created_at: row.created_at as string,
+    attemptTiming: { triggerAt, completedAt, runtimeSeconds: runtime },
     run_started_at: row.run_started_at as string | undefined,
-    updated_at: (row.completed_at as string) || (row.attempt_updated_at as string) || (row.updated_at as string),
-    durationInSeconds: Number(row.total_duration_seconds ?? row.duration_seconds),
-    queueDurationInSeconds: row.queue_duration_seconds == null ? undefined : Number(row.queue_duration_seconds),
-    runtimeInSeconds: row.runtime_seconds == null ? undefined : Number(row.runtime_seconds),
+    updated_at: (row.completed_at as string) || (row.attempt_updated_at as string) || '',
+    parentCreatedAt: row.created_at as string,
+    parentUpdatedAt: row.updated_at as string,
+    durationInSeconds: evidenceDuration(evidence, 'total_duration_seconds') as number,
+    queueDurationInSeconds: evidenceDuration(evidence, 'queue_duration_seconds'),
+    runtimeInSeconds: runtime,
     workflowFile: (row.attempt_workflow_file ?? row.workflow_file) as string | undefined,
     workflowRef: (row.attempt_workflow_ref ?? row.workflow_ref) as string | undefined,
     workflowMatchKind: row.match_kind as Run['workflowMatchKind'],
@@ -175,12 +208,13 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
         toPgSql(`SELECT r.*, wa.run_attempt, wa.status AS attempt_status,
                      wa.conclusion AS attempt_conclusion, wa.created_at AS attempt_created_at,
                      wa.run_started_at, wa.completed_at, wa.updated_at AS attempt_updated_at,
-                     wa.queue_duration_seconds, wa.runtime_seconds, wa.total_duration_seconds,
+                     to_jsonb(wa)->'timing_evidence' AS timing_evidence,
                      wa.tracked, wa.workflow_file AS attempt_workflow_file, wa.workflow_ref AS attempt_workflow_ref, wa.match_kind, wa.step_policy_hash,
                      wj.job_id, wj.name AS job_name, wj.status AS job_status,
                      wj.conclusion AS job_conclusion, wj.created_at AS job_created_at,
                      wj.started_at AS job_started_at, wj.completed_at AS job_completed_at,
                      wj.html_url AS job_html_url,
+                     to_jsonb(wj)->'timing_evidence' AS job_timing_evidence,
                      wj.queue_duration_seconds AS job_queue_duration_seconds,
                      wj.runtime_seconds AS job_runtime_seconds,
                      wj.total_duration_seconds AS job_total_duration_seconds,
@@ -208,6 +242,7 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
       }
       if (row.job_id != null) {
         const run = runMap.get(key)!;
+        const jobEvidence = timingEvidence(row.job_timing_evidence);
         run.jobs!.push({
           id: Number(row.job_id),
           runAttempt: Number(row.run_attempt),
@@ -218,10 +253,12 @@ export async function fetchPullRequestDetail(owner: string, repo: string, number
           started_at: (row.job_started_at as string) || '',
           completed_at: (row.job_completed_at as string) || '',
           html_url: row.job_html_url as string,
-          queueDurationInSeconds: Number(row.job_queue_duration_seconds ?? 0),
-          durationInSeconds: Number(row.job_runtime_seconds ?? row.job_total_duration_seconds ?? 0),
+          // Job's shared type requires numbers, but missing evidence is unknown.
+          queueDurationInSeconds: evidenceDuration(jobEvidence, 'queue_duration_seconds') as number,
+          durationInSeconds: evidenceDuration(jobEvidence, 'runtime_seconds') as number,
+          // Legacy runtime remains the input to PR card-hours accounting.
           runtimeInSeconds: row.job_runtime_seconds == null ? undefined : Number(row.job_runtime_seconds),
-          totalDurationInSeconds: row.job_total_duration_seconds == null ? undefined : Number(row.job_total_duration_seconds),
+          totalDurationInSeconds: evidenceDuration(jobEvidence, 'total_duration_seconds'),
           labels: parseLabelsJson(row.job_labels_json),
           runner_id: row.job_runner_id == null ? undefined : Number(row.job_runner_id),
           runner_name: (row.job_runner_name as string) || undefined,

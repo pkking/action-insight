@@ -100,8 +100,8 @@ describe('fetchJobsForRunAttempt', () => {
     }));
 
     await expect(fetchJobsForRunAttempt({ request } as never, 'acme', 'widgets', 42, 1)).resolves.toMatchObject({ jobs });
-    expect(request).toHaveBeenNthCalledWith(1, 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', expect.objectContaining({ page: 1, per_page: 100 }));
-    expect(request).toHaveBeenNthCalledWith(2, 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', expect.objectContaining({ page: 2, per_page: 100 }));
+    expect(request).toHaveBeenNthCalledWith(1, 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs', expect.objectContaining({ attempt_number: 1, page: 1, per_page: 100 }));
+    expect(request).toHaveBeenNthCalledWith(2, 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs', expect.objectContaining({ attempt_number: 1, page: 2, per_page: 100 }));
   });
 });
 
@@ -919,7 +919,7 @@ describe('collect rate limit handling', () => {
 
     expect(vi.mocked(persistCollectionWindow)).not.toHaveBeenCalled();
     expect(octokit.request).not.toHaveBeenCalledWith(
-      'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs',
+      'GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs',
       expect.anything(),
     );
   });
@@ -1086,7 +1086,7 @@ describe('collect rate limit handling', () => {
         });
       }
 
-      if (route === 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs') {
+      if (route === 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs') {
         return Promise.resolve({
           data: {
             jobs: [
@@ -1115,8 +1115,8 @@ describe('collect rate limit handling', () => {
     }
 
     expect(request).toHaveBeenCalledWith(
-      'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs',
-      expect.objectContaining({ run_id: 101 })
+      'GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs',
+      expect.objectContaining({ run_id: 101, attempt_number: 1 })
     );
   });
 
@@ -1150,7 +1150,7 @@ describe('collect rate limit handling', () => {
         });
       }
 
-      if (route === 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs') {
+      if (route === 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs') {
         return Promise.resolve({
           data: {
             jobs: [
@@ -1179,8 +1179,8 @@ describe('collect rate limit handling', () => {
     }
 
     expect(request).toHaveBeenCalledWith(
-      'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs',
-      expect.objectContaining({ run_id: 101 })
+      'GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs',
+      expect.objectContaining({ run_id: 101, attempt_number: 1 })
     );
   });
 
@@ -1344,7 +1344,7 @@ describe('collect rate limit handling', () => {
         });
       }
 
-      if (route === 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs') {
+      if (route === 'GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs') {
         throw new Error('jobs endpoint should not be called in workflow-only mode');
       }
 
@@ -1489,6 +1489,71 @@ describe('collect rate limit handling', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it.each([
+    { name: 'missing attempt', runId: 101, attempt: undefined, evidence: true },
+    { name: 'conflicting attempt', runId: 101, attempt: 1, evidence: false },
+    { name: 'conflicting run id', runId: 999, attempt: undefined, evidence: false },
+  ])('binds timing evidence only to compatible attempt-scoped jobs: $name', async ({ runId, attempt, evidence }) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-18T12:00:00Z'));
+    mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
+    const request = vi.fn(async (route: string) => route.endsWith('/jobs')
+      ? { data: { jobs: [{ id: 201, run_id: runId, ...(attempt === undefined ? {} : { run_attempt: attempt }), name: 'build', status: 'completed', conclusion: 'success', created_at: '2026-04-18T09:00:00Z', started_at: '2026-04-18T09:01:00Z', completed_at: '2026-04-18T09:10:00Z', html_url: 'https://example.com/jobs/201' }] } }
+      : { data: { workflow_runs: [{ id: 101, run_attempt: 2, name: 'CI', head_branch: 'main', status: 'completed', conclusion: 'success', created_at: '2026-04-18T08:00:00Z', run_started_at: '2026-04-18T09:00:00Z', updated_at: '2026-04-18T09:10:00Z', html_url: 'https://example.com/runs/101', path: '.github/workflows/ci.yml' }] } });
+    try {
+      await collectRepo({ request } as never, 'acme/widgets', 90,
+        { forceFullBackfill: false, reverse: false },
+        { repos: [{ repo: 'acme/widgets', workflows: [{ file: 'ci.yml' }] }] },
+        [{ start: '2026-04-18', end: '2026-04-18' }]);
+      const windows = vi.mocked(persistCollectionWindow).mock.calls.at(-1)?.[1];
+      expect(windows?.[0].runs[0]).toHaveProperty('jobsFetchedAt', '2026-04-18T12:00:00.000Z');
+      const attemptRow = windows?.[0].attempts[0];
+      if (evidence) {
+        expect(attemptRow?.jobs[0].timing_evidence).toEqual(expect.objectContaining({
+          version: 1, queue_duration_seconds: 60, runtime_seconds: 540, total_duration_seconds: 600, completion_source: 'github_job.completed_at',
+        }));
+      } else {
+        expect(attemptRow?.jobs[0].timing_evidence).toBeUndefined();
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([false, true])('records an ISO fetch marker only for an observed empty jobs page (skipJobs=%s)', async (skipJobs) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-18T12:00:00Z'));
+    mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
+    const request = vi.fn(async (route: string) => route.endsWith('/jobs')
+      ? { data: { jobs: [] } }
+      : { data: { workflow_runs: [{ id: 101, run_attempt: 2, name: 'CI', head_branch: 'main', status: 'in_progress', created_at: '2026-04-18T09:00:00Z', updated_at: '2026-04-18T09:10:00Z', path: '.github/workflows/ci.yml' }] } });
+    try {
+      await collectRepo({ request } as never, 'acme/widgets', 90,
+        { forceFullBackfill: false, reverse: false, skipJobs },
+        { repos: [{ repo: 'acme/widgets', workflows: [{ file: 'ci.yml' }] }] },
+        [{ start: '2026-04-18', end: '2026-04-18' }]);
+      const run = vi.mocked(persistCollectionWindow).mock.calls.at(-1)?.[1][0].runs[0];
+      if (skipJobs) expect(run).not.toHaveProperty('jobsFetchedAt');
+      else expect(run).toHaveProperty('jobsFetchedAt', '2026-04-18T12:00:00.000Z');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not persist partial jobs when a later page fails', async () => {
+    mockRepoState({ latest: '2026-04-17', dates: ['2026-04-17'], historyComplete: true });
+    const request = vi.fn(async (route: string, params: { page: number }) => {
+      if (!route.endsWith('/jobs')) return { data: { workflow_runs: [{ id: 101, run_attempt: 2, name: 'CI', head_branch: 'main', status: 'completed', conclusion: 'success', created_at: '2026-04-18T09:00:00Z', updated_at: '2026-04-18T09:10:00Z', path: '.github/workflows/ci.yml' }] } };
+      if (params.page === 2) throw Object.assign(new Error('page failed'), { status: 400 });
+      return { data: { jobs: Array.from({ length: 100 }, (_, id) => ({ id, run_id: 101, status: 'completed' })) } };
+    });
+    await expect(collectRepo({ request } as never, 'acme/widgets', 90,
+      { forceFullBackfill: false, reverse: false },
+      { repos: [{ repo: 'acme/widgets', workflows: [{ file: 'ci.yml' }] }] },
+      [{ start: '2026-04-18', end: '2026-04-18' }])).rejects.toThrow('page failed');
+    expect(persistCollectionWindow).not.toHaveBeenCalled();
   });
 
   it('preserves separate attempts for the same run id and keeps non-terminal attempts', async () => {

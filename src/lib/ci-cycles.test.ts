@@ -1,3 +1,4 @@
+import fixture from '../../tests/fixtures/attempt-timing-40h.json';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -9,8 +10,12 @@ import {
 } from './ci-cycles';
 import type { Run } from './types';
 
-function makeRun(overrides: Partial<Run> & Pick<Run, 'id' | 'created_at'>): Run {
+type TimingRun = Run & { attemptTiming?: { triggerAt?: string; completedAt?: string; runtimeSeconds?: number } };
+
+function makeRun(overrides: Partial<TimingRun> & Pick<Run, 'id' | 'created_at'>): TimingRun {
   return {
+    runAttempt: 1,
+    attemptTiming: overrides.runAttempt === 2 ? undefined : { triggerAt: overrides.created_at, completedAt: overrides.updated_at ?? overrides.created_at },
     name: 'test workflow',
     head_branch: 'feature/x',
     status: 'completed',
@@ -25,6 +30,68 @@ function makeRun(overrides: Partial<Run> & Pick<Run, 'id' | 'created_at'>): Run 
 
 
 describe('groupRunsIntoCycles', () => {
+  it('excludes an unverified rerun trigger from wall and busy denominators', () => {
+    const cycles = groupRunsIntoCycles([
+      makeRun({ id: 1, head_sha: 'a', created_at: '2026-11-18T11:34:00Z', updated_at: '2026-11-18T11:44:00Z' }),
+      makeRun({ id: 2, runAttempt: 2, head_sha: 'b', created_at: '2026-11-18T11:34:00Z', updated_at: '2026-11-20T05:01:18Z' }),
+    ]);
+    const rerun = cycles.find((cycle) => cycle.runs[0].runAttempt === 2)!;
+    expect(rerun.wallSeconds).toBeUndefined();
+    expect(rerun.runs[0].wallSeconds).toBeUndefined();
+    expect(summarizeCycleWalls(cycles).openCycleCount).toBe(1);
+    expect(summarizeCycleWalls(cycles).medianWallSeconds).toBe(600);
+    expect(computeCycleBusySeconds(cycles)).toBe(600);
+  });
+  it('retains the first push wall and separately covers a same-push rerun', () => {
+    const [first, rerun] = fixture.attempts;
+    const created_at = first.trigger!;
+    const cycles = groupRunsIntoCycles([
+      makeRun({ id: fixture.run_id, head_sha: 'same', created_at, runAttempt: 1,
+        attemptTiming: { triggerAt: first.trigger!, completedAt: first.completed_at } }),
+      makeRun({ id: fixture.run_id, head_sha: 'same', created_at, runAttempt: 2, conclusion: 'failure',
+        updated_at: rerun.completed_at, attemptTiming: { runtimeSeconds: fixture.expected.rerun_runtime_seconds } }),
+    ]);
+    expect(cycles).toHaveLength(1);
+    expect(cycles[0].wallSeconds).toBe(12 * 3600 + 60);
+    expect(cycles[0].incompleteCoverage).toBe(true);
+    expect(cycles[0].runs[1]).toMatchObject({ conclusion: 'failure', runtimeSeconds: 5358, startedAt: undefined, endedAt: undefined });
+    expect(computeCycleBusySeconds(cycles)).toBe(12 * 3600 + 60);
+    expect(summarizeCycleWalls(cycles).medianWallSeconds).toBe(12 * 3600 + 60);
+  });
+
+  it('unions verified rerun intervals even when another attempt is unknown', () => {
+    const created_at = '2026-10-01T00:00:00Z';
+    const cycles = groupRunsIntoCycles([
+      makeRun({ id: 1, created_at, runAttempt: 1, attemptTiming: { triggerAt: created_at, completedAt: '2026-10-01T01:00:00Z' } }),
+      makeRun({ id: 1, created_at, runAttempt: 2, attemptTiming: { triggerAt: '2026-10-01T00:30:00Z', completedAt: '2026-10-01T02:00:00Z' } }),
+      makeRun({ id: 1, created_at, runAttempt: 3, attemptTiming: { triggerAt: '2026-10-02T00:00:00Z', completedAt: '2026-10-01T00:00:00Z', runtimeSeconds: 42 } }),
+    ]);
+    expect(cycles[0].wallSeconds).toBe(3600);
+    expect(cycles[0].incompleteCoverage).toBe(true);
+    expect(cycles[0].runs[2].wallSeconds).toBeUndefined();
+    expect(cycles[0].runs[2].runtimeSeconds).toBe(42);
+    expect(computeCycleBusySeconds(cycles)).toBe(7200);
+  });
+
+  it('marks all-valid overlapping attempts covered and unions their own endpoints', () => {
+    const created_at = '2026-10-01T00:00:00Z';
+    const cycle = groupRunsIntoCycles([
+      makeRun({ id: 1, created_at, runAttempt: 1, attemptTiming: { triggerAt: created_at, completedAt: '2026-10-01T01:00:00Z' } }),
+      makeRun({ id: 1, created_at, runAttempt: 2, attemptTiming: { triggerAt: '2026-10-01T00:30:00Z', completedAt: '2026-10-01T02:00:00Z' } }),
+    ])[0];
+    expect(cycle.incompleteCoverage).toBe(false);
+    expect(cycle.runs[1].startedAt).toBe('2026-10-01T00:30:00Z');
+    expect(computeCycleBusySeconds([cycle])).toBe(7200);
+  });
+
+  it('does not infer evidence from legacy timestamps or runtime', () => {
+    const run = makeRun({ id: 1, runAttempt: 1, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T01:00:00Z', runtimeInSeconds: 3600, attemptTiming: undefined });
+    const cycle = groupRunsIntoCycles([run])[0];
+    expect(cycle.wallSeconds).toBeUndefined();
+    expect(cycle.runs[0].runtimeSeconds).toBeUndefined();
+    expect(cycle.incompleteCoverage).toBe(true);
+  });
+
   it('groups runs sharing head_sha and created_at into one cycle', () => {
     const runs = [
       makeRun({ id: 1, head_sha: 'abc', created_at: '2026-10-03T15:23:36Z', updated_at: '2026-10-05T18:05:58Z', conclusion: 'cancelled', workflowFile: 'pr-test.yml' }),
@@ -79,12 +146,11 @@ describe('groupRunsIntoCycles', () => {
       makeRun({ id: 1, head_sha: 'abc', created_at: '2026-10-17T07:03:34Z', updated_at: '' }),
     ];
     const cycles = groupRunsIntoCycles(runs);
-    // Empty updated_at falls back to created_at, which is still parseable;
-    // force a fully unparseable end to exercise the open path.
+    // Missing and unparseable completion both remain unknown.
     const open = groupRunsIntoCycles([
       makeRun({ id: 2, head_sha: 'zzz', created_at: '2026-10-17T07:03:34Z', updated_at: 'not-a-date' }),
     ]);
-    expect(cycles[0].wallSeconds).toBe(0);
+    expect(cycles[0].wallSeconds).toBeUndefined();
     expect(open[0].endedAt).toBeUndefined();
     expect(open[0].wallSeconds).toBeUndefined();
   });
