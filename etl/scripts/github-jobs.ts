@@ -46,11 +46,9 @@ export async function fetchAdaptiveJobsForRunAttempt(
         const context = `repo=${owner}/${repo} run=${runId} attempt=${runAttempt} jobs page=${page} per_page=${perPage}`;
         const pageJobs = await retry(async () => {
           const params = { owner, repo, run_id: runId, per_page: perPage, page };
-          const response = runAttempt > 1
-            ? await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs', {
-              ...params, attempt_number: runAttempt,
-            })
-            : await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', params);
+          const response = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs', {
+            ...params, attempt_number: runAttempt,
+          });
           const data = response.data as { jobs?: unknown } | null;
           if (!Array.isArray(data?.jobs) || data.jobs.some(job =>
             !job || typeof job !== 'object' || !Number.isSafeInteger(job.id) || job.id < 0,

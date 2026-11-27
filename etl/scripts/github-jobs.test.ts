@@ -17,6 +17,12 @@ afterEach(() => {
 });
 
 describe('adaptive GitHub jobs pagination', () => {
+  it('binds first-attempt jobs to attempt 1, even if the run is rerun concurrently', async () => {
+    const request = vi.fn().mockResolvedValue({ data: { jobs: [] } });
+    await fetch(request, 1);
+    expect(request.mock.calls[0][0]).toContain('/attempts/{attempt_number}/jobs');
+    expect(request.mock.calls[0][1].attempt_number).toBe(1);
+  });
   it('keeps the normal 100-job page size, including a terminal empty page', async () => {
     const data = jobs(200);
     const request = vi.fn(async (_route: string, p: Page) => ({

@@ -191,6 +191,7 @@ CREATE TABLE IF NOT EXISTS workflow_attempts (
   queue_duration_seconds DOUBLE PRECISION,    -- Workflow Queue Duration
   runtime_seconds DOUBLE PRECISION,           -- Workflow Runtime
   total_duration_seconds DOUBLE PRECISION,    -- Workflow Total Duration
+  timing_evidence JSONB,                     -- ADR-043 verified duration evidence
   tracked INTEGER NOT NULL DEFAULT 0,
   workflow_file TEXT,
   workflow_ref TEXT,
@@ -221,6 +222,7 @@ CREATE TABLE IF NOT EXISTS workflow_jobs (
   queue_duration_seconds DOUBLE PRECISION,    -- Job Queue Duration
   runtime_seconds DOUBLE PRECISION,           -- Job Runtime
   total_duration_seconds DOUBLE PRECISION,    -- Job Total Duration
+  timing_evidence JSONB,                     -- ADR-043 verified duration evidence
   duration_seconds DOUBLE PRECISION,          -- Compatibility alias for Job Runtime
   labels_json TEXT,
   runner_id BIGINT,
@@ -234,6 +236,10 @@ CREATE TABLE IF NOT EXISTS workflow_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_workflow_jobs_attempt ON workflow_jobs(run_id, run_attempt);
+
+-- Existing installations can apply this file repeatedly.
+ALTER TABLE workflow_attempts ADD COLUMN IF NOT EXISTS timing_evidence JSONB;
+ALTER TABLE workflow_jobs ADD COLUMN IF NOT EXISTS timing_evidence JSONB;
 
 -- 11. Attempt-scoped steps (Step Attempt Identity: run_id + run_attempt + job_id + step_number)
 -- Steps are persisted only for Slow Successful Workflows (ADR-005).

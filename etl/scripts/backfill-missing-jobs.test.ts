@@ -36,7 +36,7 @@ describe('backfill persistence boundary', () => {
     const request = vi.fn(async (_route: string, params: { per_page: number }) => {
       if (params.per_page === 100) throw Object.assign(new Error('gateway failure'), { status: 502 });
       return { data: { jobs: [{
-        id: 7, name: 'npu', status: 'completed', conclusion: 'success',
+        id: 7, run_id: 42, name: 'npu', status: 'completed', conclusion: 'success',
         created_at: '2026-10-10T10:00:00Z', started_at: '2026-10-10T10:01:00Z',
         completed_at: '2026-10-10T11:00:00Z', labels: ['linux-aarch64-a2-8'], runner_id: 99,
         steps: [{ number: 1, name: 'test', status: 'completed', conclusion: 'success',
@@ -51,6 +51,8 @@ describe('backfill persistence boundary', () => {
     expect(writeWorkflowAttempts).toHaveBeenCalledWith('owner/repo', [expect.objectContaining({
       run_id: 42, run_attempt: 2, jobs: [expect.objectContaining({
         job_id: 7, queue_duration_seconds: 60, runtime_seconds: 3540,
+        timing_evidence: { version: 1, queue_duration_seconds: 60, runtime_seconds: 3540,
+          total_duration_seconds: 3600, completion_source: 'github_job.completed_at', completed_at: '2026-10-10T11:00:00Z' },
         resource_model: 'linux-aarch64-a2', resource_count: 8, runner_id: 99,
         steps: [expect.objectContaining({ name: 'test' })],
       })],
@@ -74,6 +76,63 @@ describe('backfill persistence boundary', () => {
     await expect(backfillRepo('owner/repo', config, 14, 'test-token')).rejects.toMatchObject({ status: 404 });
     expect(request).toHaveBeenCalledTimes(2);
     expect(writeWorkflowAttempts).not.toHaveBeenCalled();
+  });
+
+  it('leaves legacy completion unverified and preserves verified completion evidence', async () => {
+    const verified = { ...row, completed_at: '2026-10-10T10:50:00Z', timing_evidence: {
+      version: 1, runtime_seconds: 2940, completion_source: 'github_run.completed_at', completed_at: '2026-10-10T10:50:00Z',
+    } };
+    vi.mocked(getDatabaseClient).mockResolvedValue({
+      query: vi.fn().mockResolvedValueOnce({ rows: [{ id: 1 }] }).mockResolvedValue({ rows: [row, verified] }),
+      release: vi.fn(),
+    } as never);
+    vi.mocked(createOctokit).mockReturnValue({ request: vi.fn().mockResolvedValue({ data: { jobs: [] } }) } as never);
+    await backfillRepo('owner/repo', config, 14, 'test-token');
+    const calls = vi.mocked(writeWorkflowAttempts).mock.calls;
+    expect(calls[0][1][0].timing_evidence).toBeUndefined();
+    expect(calls[0][1][0].completed_at).toBeNull();
+    expect(calls[1][1][0].completed_at).toBe(verified.completed_at);
+    expect(calls[1][1][0].timing_evidence).toEqual(verified.timing_evidence);
+  });
+
+  it.each([true, false])('retains trigger only when it matches stored creation: %s', async matches => {
+    const first = { ...row, run_attempt: 1, completed_at: '2026-10-10T10:50:00Z', timing_evidence: {
+      version: 1, total_duration_seconds: 3000, completion_source: 'github_run.completed_at',
+      completed_at: '2026-10-10T10:50:00Z', trigger_at: matches ? row.created_at : '2026-10-10T09:00:00Z',
+    } };
+    vi.mocked(getDatabaseClient).mockResolvedValue({
+      query: vi.fn().mockResolvedValueOnce({ rows: [{ id: 1 }] }).mockResolvedValue({ rows: [first] }), release: vi.fn(),
+    } as never);
+    vi.mocked(createOctokit).mockReturnValue({ request: vi.fn().mockResolvedValue({ data: { jobs: [] } }) } as never);
+    await backfillRepo('owner/repo', config, 14, 'test-token');
+    expect(vi.mocked(writeWorkflowAttempts).mock.calls[0][1][0].timing_evidence).toEqual(matches ? first.timing_evidence : undefined);
+  });
+
+  it.each([
+    { completed_at: '2026-10-10T10:51:00Z' },
+    { run_started_at: '2026-10-10T10:02:00Z' },
+  ])('drops completion evidence when stored endpoints changed: %j', async (changed) => {
+    const stale = { ...row, completed_at: '2026-10-10T10:50:00Z', ...changed, timing_evidence: {
+      version: 1, runtime_seconds: 2940, completion_source: 'github_run.completed_at', completed_at: '2026-10-10T10:50:00Z',
+    } };
+    vi.mocked(getDatabaseClient).mockResolvedValue({
+      query: vi.fn().mockResolvedValueOnce({ rows: [{ id: 1 }] }).mockResolvedValue({ rows: [stale] }), release: vi.fn(),
+    } as never);
+    vi.mocked(createOctokit).mockReturnValue({ request: vi.fn().mockResolvedValue({ data: { jobs: [] } }) } as never);
+    await backfillRepo('owner/repo', config, 14, 'test-token');
+    expect(vi.mocked(writeWorkflowAttempts).mock.calls[0][1][0].timing_evidence).toBeUndefined();
+  });
+
+  it('does not retain old completion evidence without its endpoint binding', async () => {
+    const stale = { ...row, completed_at: '2026-10-10T10:50:00Z', timing_evidence: {
+      version: 1, runtime_seconds: 2940, completion_source: 'github_run.completed_at',
+    } };
+    vi.mocked(getDatabaseClient).mockResolvedValue({
+      query: vi.fn().mockResolvedValueOnce({ rows: [{ id: 1 }] }).mockResolvedValue({ rows: [stale] }), release: vi.fn(),
+    } as never);
+    vi.mocked(createOctokit).mockReturnValue({ request: vi.fn().mockResolvedValue({ data: { jobs: [] } }) } as never);
+    await backfillRepo('owner/repo', config, 14, 'test-token');
+    expect(vi.mocked(writeWorkflowAttempts).mock.calls[0][1][0].timing_evidence).toBeUndefined();
   });
 
   it('allows a verified empty result through the writer', async () => {
@@ -101,9 +160,9 @@ describe('fetch-once mode (ADR-038 constraint 3)', () => {
   it('adds the four fetch-once filters without shifting placeholder offsets', () => {
     const sql = buildMissingAttemptsQuery(['ci.yml'], { fetchOnce: true });
 
-    expect(sql).toContain("AND r.status = 'completed'");
-    expect(sql).toContain("AND r.conclusion IS DISTINCT FROM 'action_required'");
-    expect(sql).toContain("AND r.conclusion IS DISTINCT FROM 'startup_failure'");
+    expect(sql).toContain("AND wa.status = 'completed'");
+    expect(sql).toContain("AND wa.conclusion IS DISTINCT FROM 'action_required'");
+    expect(sql).toContain("AND wa.conclusion IS DISTINCT FROM 'startup_failure'");
     expect(sql).toContain('AND wa.jobs_fetched_at IS NULL');
     expect(sql).toContain('(wa.tracked = 1 OR r.workflow_file IN ($3))');
     expect(sql).toContain('r.created_at::date >= $2::date');
@@ -134,14 +193,14 @@ describe('fetch-once mode (ADR-038 constraint 3)', () => {
     })]);
   });
 
-  it('leaves jobs_fetched_at null for empty job lists when fetch-once is off', async () => {
+  it('marks empty job lists as fetched when fetch-once is off', async () => {
     vi.mocked(createOctokit).mockReturnValue({ request: vi.fn().mockResolvedValue({ data: { jobs: [] } }) } as never);
 
     await backfillRepo('owner/repo', config, 14, 'test-token');
 
     expect(writeWorkflowAttempts).toHaveBeenCalledWith('owner/repo', [expect.objectContaining({
       jobs: [],
-      jobs_fetched_at: null,
+      jobs_fetched_at: expect.any(String),
     })]);
   });
 
@@ -183,7 +242,7 @@ describe('list-only mode', () => {
 
     expect(log).toHaveBeenCalledWith('owner/repo: 0 eligible missing attempts');
     expect(query.mock.calls[1][0]).toContain('AND wa.jobs_fetched_at IS NULL');
-    expect(query.mock.calls[1][0]).toContain("AND r.status = 'completed'");
+    expect(query.mock.calls[1][0]).toContain("AND wa.status = 'completed'");
   });
 });
 

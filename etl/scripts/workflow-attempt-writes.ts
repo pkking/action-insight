@@ -20,6 +20,19 @@ const WORKFLOW_STEP_UPSERT_BATCH_SIZE = Number(process.env.WORKFLOW_STEP_UPSERT_
 const PR_METRIC_UPSERT_BATCH_SIZE = Number(process.env.PR_METRIC_UPSERT_BATCH_SIZE) || 100;
 const PR_WORKFLOW_UPSERT_BATCH_SIZE = Number(process.env.PR_WORKFLOW_UPSERT_BATCH_SIZE) || 500;
 
+type TimingEvidence = {
+  version: 1;
+  queue_duration_seconds?: number;
+  runtime_seconds?: number;
+  total_duration_seconds?: number;
+  completion_source?: string;
+};
+
+function timingEvidence(row: object): string | null {
+  const evidence = (row as { timing_evidence?: TimingEvidence | null }).timing_evidence;
+  return evidence == null ? null : JSON.stringify(evidence);
+}
+
 /** Upsert workflow attempts + their jobs + eligible steps in one transaction. */
 export async function writeWorkflowAttemptsToClient(
   client: PoolClient,
@@ -30,35 +43,50 @@ export async function writeWorkflowAttemptsToClient(
 
   if (transaction) await client.query('BEGIN');
   try {
+    // Resolve each table independently so partially migrated and older schemas work too.
+    const { rows: [capabilities] } = await client.query(`SELECT
+      EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('workflow_attempts')
+        AND attname = 'timing_evidence' AND NOT attisdropped) AS attempt_evidence,
+      EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('workflow_jobs')
+        AND attname = 'timing_evidence' AND NOT attisdropped) AS job_evidence`);
+    const hasAttemptEvidence = capabilities?.attempt_evidence === true;
+    const hasJobEvidence = capabilities?.job_evidence === true;
+    const preserveQueue = `excluded.run_attempt = 1
+      AND excluded.queue_duration_seconds IS NULL
+      AND excluded.jobs_fetched_at IS NULL
+      AND excluded.created_at IS NOT DISTINCT FROM workflow_attempts.created_at
+      AND workflow_attempts.timing_evidence->'version' = '1'::jsonb
+      AND jsonb_typeof(workflow_attempts.timing_evidence->'queue_duration_seconds') = 'number'
+      AND workflow_attempts.queue_duration_seconds IS NOT NULL
+      AND (excluded.timing_evidence IS NULL OR excluded.timing_evidence->'version' = '1'::jsonb)
+      AND excluded.timing_evidence->'queue_duration_seconds' IS NULL`;
     for (const batch of chunkArray(attempts, WORKFLOW_ATTEMPT_UPSERT_BATCH_SIZE)) {
       for (const attempt of batch) {
-        // ADR-038 constraint 1: queue_duration_seconds is a derived value
-        // (created_at -> first job started_at) and an invariant once an attempt
-        // has completed. A NULL in the incoming row comes from re-persisting a
-        // dehydrated in-memory run (cache-fresh runs skip job hydration, so
-        // buildWorkflowAttempts derives queue=NULL); COALESCE keeps the stored
-        // value instead of wiping it. Fresh inserts are unaffected by the
-        // conflict clause, and rerun attempts (run_attempt > 1) stay NULL by
-        // design (ADR-023).
+        // Without the evidence column no stored queue can be verified. With it,
+        // preserve only a verified first-attempt queue for unchanged dehydrated input.
         await client.query(
           toPgSql(`INSERT INTO workflow_attempts (
                 run_id, run_attempt, status, conclusion, created_at, run_started_at,
                 completed_at, updated_at, queue_duration_seconds, runtime_seconds,
                 total_duration_seconds, tracked, workflow_file, workflow_ref, match_kind,
-                jobs_fetched_at, steps_eligibility_checked_at, steps_collected_at, step_policy_hash
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                jobs_fetched_at, steps_eligibility_checked_at, steps_collected_at, step_policy_hash${hasAttemptEvidence ? ', timing_evidence' : ''}
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${hasAttemptEvidence ? ', ?' : ''})
               ON CONFLICT(run_id, run_attempt) DO UPDATE SET
                 status=excluded.status, conclusion=excluded.conclusion, created_at=excluded.created_at,
                 run_started_at=excluded.run_started_at, completed_at=excluded.completed_at,
                 updated_at=excluded.updated_at,
-                queue_duration_seconds=COALESCE(excluded.queue_duration_seconds, workflow_attempts.queue_duration_seconds),
-                runtime_seconds=excluded.runtime_seconds, total_duration_seconds=excluded.total_duration_seconds,
+                queue_duration_seconds=${hasAttemptEvidence ? `CASE WHEN excluded.run_attempt > 1 THEN NULL WHEN ${preserveQueue} THEN workflow_attempts.queue_duration_seconds ELSE excluded.queue_duration_seconds END` : 'CASE WHEN excluded.run_attempt > 1 THEN NULL ELSE excluded.queue_duration_seconds END'},
+                runtime_seconds=excluded.runtime_seconds, total_duration_seconds=CASE WHEN excluded.run_attempt > 1 THEN NULL ELSE excluded.total_duration_seconds END,
                 tracked=excluded.tracked, workflow_file=excluded.workflow_file,
                 workflow_ref=excluded.workflow_ref, match_kind=excluded.match_kind,
                 jobs_fetched_at=COALESCE(excluded.jobs_fetched_at, workflow_attempts.jobs_fetched_at),
                 steps_eligibility_checked_at=COALESCE(excluded.steps_eligibility_checked_at, workflow_attempts.steps_eligibility_checked_at),
                 steps_collected_at=COALESCE(excluded.steps_collected_at, workflow_attempts.steps_collected_at),
-                step_policy_hash=excluded.step_policy_hash`),
+                step_policy_hash=excluded.step_policy_hash${hasAttemptEvidence ? `,
+                timing_evidence=CASE WHEN ${preserveQueue} THEN jsonb_set(
+                  workflow_attempts.timing_evidence || COALESCE(excluded.timing_evidence, '{}'::jsonb),
+                  '{queue_duration_seconds}', workflow_attempts.timing_evidence->'queue_duration_seconds', true)
+                  ELSE excluded.timing_evidence END` : ''}`),
           [
             attempt.run_id, attempt.run_attempt, attempt.status, attempt.conclusion,
             attempt.created_at, attempt.run_started_at, attempt.completed_at, attempt.updated_at,
@@ -66,6 +94,7 @@ export async function writeWorkflowAttemptsToClient(
             attempt.tracked ? 1 : 0, attempt.workflow_file, attempt.workflow_ref, attempt.match_kind,
             attempt.jobs_fetched_at, attempt.steps_eligibility_checked_at, attempt.steps_collected_at,
             attempt.step_policy_hash,
+            ...(hasAttemptEvidence ? [timingEvidence(attempt)] : []),
           ],
         );
       }
@@ -80,8 +109,8 @@ export async function writeWorkflowAttemptsToClient(
                 started_at, completed_at, html_url, queue_duration_seconds,
                 runtime_seconds, total_duration_seconds, duration_seconds, labels_json,
                 runner_id, runner_name, runner_group_id, runner_group_name,
-                resource_model, resource_count
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                resource_model, resource_count${hasJobEvidence ? ', timing_evidence' : ''}
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${hasJobEvidence ? ', ?' : ''})
               ON CONFLICT(run_id, run_attempt, job_id) DO UPDATE SET
                 name=excluded.name, status=excluded.status, conclusion=excluded.conclusion,
                 created_at=excluded.created_at, started_at=excluded.started_at,
@@ -92,7 +121,7 @@ export async function writeWorkflowAttemptsToClient(
                 duration_seconds=excluded.duration_seconds, labels_json=excluded.labels_json,
                 runner_id=excluded.runner_id, runner_name=excluded.runner_name,
                 runner_group_id=excluded.runner_group_id, runner_group_name=excluded.runner_group_name,
-                resource_model=excluded.resource_model, resource_count=excluded.resource_count`),
+                resource_model=excluded.resource_model, resource_count=excluded.resource_count${hasJobEvidence ? ', timing_evidence=excluded.timing_evidence' : ''}`),
           [
             job.run_id, job.run_attempt, job.job_id, job.name, job.status, job.conclusion,
             job.created_at, job.started_at, job.completed_at, job.html_url,
@@ -100,6 +129,7 @@ export async function writeWorkflowAttemptsToClient(
             job.runtime_seconds, job.labels ? JSON.stringify(job.labels) : null,
             job.runner_id ?? null, job.runner_name ?? null, job.runner_group_id ?? null,
             job.runner_group_name ?? null, job.resource_model ?? null, job.resource_count ?? null,
+            ...(hasJobEvidence ? [timingEvidence(job)] : []),
           ],
         );
       }

@@ -17,6 +17,14 @@ describe('ADR-005 PostgreSQL schema identity', () => {
     }
   });
 
+  it('adds nullable timing evidence on new and existing attempt and job tables', () => {
+    for (const table of ['workflow_attempts', 'workflow_jobs']) {
+      const definition = SCHEMA.match(new RegExp(`CREATE TABLE IF NOT EXISTS ${table} \\(([\\s\\S]*?)\\n\\);`));
+      expect(definition?.[1]).toMatch(/\btiming_evidence JSONB\s*,/);
+      expect(SCHEMA).toContain(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS timing_evidence JSONB`);
+    }
+  });
+
   it('uses BIGINT for GitHub run and job IDs', () => {
     expect(SCHEMA).toMatch(/runs \(.*id BIGINT PRIMARY KEY/s);
     expect(SCHEMA).toMatch(/jobs \(.*id BIGINT PRIMARY KEY/s);
