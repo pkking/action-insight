@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -38,6 +39,98 @@ def _step(job_id, num, name, dur_sec, conclusion="success"):
     }
 
 
+class JobEvidenceTests(unittest.TestCase):
+    def test_legacy_reversed_and_equal_clocks(self):
+        t = "2026-01-01T00:00:00Z"
+        later = "2026-01-01T00:01:00Z"
+        def row(attempt, created, started, completed, evidence):
+            return {"id": attempt or 9, "run_id": 1, "run_attempt": attempt,
+                    "created_at": created, "started_at": started, "completed_at": completed,
+                    "duration_seconds": 60, "queue_duration_seconds": 60,
+                    "timing_evidence": evidence}
+        rows = [row(None, t, later, later, None),
+                row(1, later, t, t, {"version": 1, "queue_duration_seconds": 0}),
+                row(2, t, t, t, {"version": 1, "queue_duration_seconds": 0,
+                                  "runtime_seconds": 0, "total_duration_seconds": 0})]
+        class Client:
+            def query(self, sql):
+                return rows
+        legacy, reversed_job, equal = MODULE.fetch_jobs(Client(), [1])
+        self.assertIsNone(legacy["duration_seconds"])
+        self.assertEqual(legacy["historical_clocks"]["created_at"], t)
+        self.assertIsNone(reversed_job["queue_duration_seconds"])
+        self.assertEqual(equal["duration_seconds"], 0)
+        self.assertEqual(equal["total_duration_seconds"], 0)
+
+    def test_job_execution_count_not_duration_count(self):
+        runs = [_run(1, "CI", 60)]
+        jobs = [_job(1, 1, "test", None), _job(2, 1, "test", 60)]
+        result = MODULE.analyze_job_stats(runs, jobs)[0]
+        self.assertEqual(result["执行次数"], 2)
+        self.assertEqual(result["耗时覆盖"], "1/2")
+
+
+class FetchRunsTests(unittest.TestCase):
+    def test_shared_attempt_fixture_and_coverage(self):
+        fixture = json.loads((MODULE.REPO_ROOT / "tests/fixtures/attempt-timing-40h.json").read_text())
+        rows = []
+        for attempt in fixture["attempts"]:
+            row = _run(fixture["run_id"], "CI", 999999)
+            row.update(run_attempt=attempt["run_attempt"], status="completed",
+                       conclusion="success", timing_source="attempt",
+                       attempt_started_at=attempt["run_started_at"],
+                       attempt_completed_at=attempt["completed_at"])
+            row["timing_evidence"] = ({"version": 1, "queue_duration_seconds": 60,
+                                       "runtime_seconds": 43200, "total_duration_seconds": 43260}
+                                      if attempt["run_attempt"] == 1 else
+                                      {"version": 1, "runtime_seconds": fixture["expected"]["rerun_runtime_seconds"]})
+            rows.append(row)
+
+        class Client:
+            def query(self, sql):
+                self.sql = sql
+                return rows
+
+        client = Client()
+        runs = MODULE.fetch_runs(client, [1], "2026-10-01", "2026-10-01")
+        self.assertIn("LEFT JOIN workflow_attempts wa ON wa.run_id = r.id", client.sql)
+        self.assertNotIn("DISTINCT ON", client.sql)
+        self.assertIn("ELSE wa.status END AS status", client.sql)
+        self.assertIn("ELSE wa.conclusion END AS conclusion", client.sql)
+        self.assertIn("'parent_fallback'", client.sql)
+        self.assertIn("to_jsonb(wa)->'timing_evidence'", client.sql)
+        self.assertNotIn("r.duration_seconds", client.sql)
+        self.assertEqual([r["run_attempt"] for r in runs], [1, 2])
+        self.assertEqual(runs[1]["attempt_runtime_seconds"], 5358)
+        self.assertIsNone(runs[1]["duration_seconds"])
+        stats = MODULE.analyze_workflow_stats(runs, [])[0]
+        self.assertEqual(stats["运行次数"], 2)
+        self.assertEqual(stats["E2E覆盖"], "1/2")
+        self.assertEqual(stats["Runtime覆盖"], "2/2")
+        self.assertEqual(stats["P90 E2E(分钟)"], 721)
+        jobs = [{"id": 101, "run_id": fixture["run_id"], "run_attempt": 1, "name": "first"},
+                {"id": 201, "run_id": fixture["run_id"], "run_attempt": 2, "name": "rerun"}]
+        data = {"o/r": {"runs": runs, "jobs": jobs, "steps": [], "pr_metrics": [], "pr_workflows": []}}
+        report = MODULE.build_report_mode_data(data)
+        self.assertEqual([(j["run_attempt"], j["job_id"]) for j in report["Job Raw"]], [(1, 101), (2, 201)])
+        coverage = {r["指标"]: r["数值"] for r in report["Management Metrics"]}
+        self.assertEqual(coverage["Workflow E2E覆盖"], "1/2")
+        self.assertEqual(coverage["Workflow Runtime覆盖"], "2/2")
+
+    def test_untrusted_evidence_and_parent_fallback_are_unknown(self):
+        rows = []
+        for evidence in (None, {"version": 2, "runtime_seconds": 1},
+                         {"version": 1, "runtime_seconds": "1", "total_duration_seconds": -1},
+                         {"version": 1, "runtime_seconds": 0, "total_duration_seconds": True}):
+            rows.append({"timing_evidence": evidence, "duration_seconds": 999})
+        class Client:
+            def query(self, sql):
+                return rows
+        result = MODULE.fetch_runs(Client(), [1], "2026-10-01", "2026-10-01")
+        self.assertEqual([r["attempt_runtime_seconds"] for r in result], [None, None, None, 0])
+        self.assertTrue(all(r["duration_seconds"] is None for r in result))
+
+
 class ConfigTests(unittest.TestCase):
     def test_parse_config_reads_all_workflows_per_repo(self):
         config = Path("/tmp/ci-effective-config.yaml")
@@ -67,6 +160,18 @@ class ConfigTests(unittest.TestCase):
         runs = {1: _run(1, "Nightly", 60, conclusion="failure")}
         jobs = [_job(10, 1, "setup", 30, started="2026-07-15T10:05:00Z")]
         self.assertEqual(MODULE.collect_workflow_job_queues(jobs, runs, {1}), [5.0])
+
+    def test_shared_rerun_fixture_job_wait_is_not_parent_gap(self):
+        fixture = json.loads((MODULE.REPO_ROOT / "tests/fixtures/attempt-timing-40h.json").read_text())
+        rerun = fixture["attempts"][1]
+        self.assertIsNone(rerun["trigger"])
+        self.assertEqual(MODULE._calc_queue_min(rerun["jobs"][0]), 1.0)
+
+    def test_queue_reversed_is_unknown_but_equal_is_zero(self):
+        job = _job(10, 1, "test", 300, started="2026-07-15T09:59:00Z")
+        self.assertIsNone(MODULE._calc_queue_min(job))
+        job["started_at"] = job["created_at"]
+        self.assertEqual(MODULE._calc_queue_min(job), 0)
 
     def test_queue_excludes_upstream_job_execution_time(self):
         run = _run(1, "E2E", 14_400)
@@ -325,7 +430,26 @@ class FetchJobsTests(unittest.TestCase):
         MODULE.fetch_jobs(client, [1])
         self.assertIn("FROM workflow_jobs", client.sql)
         self.assertIn("FROM workflow_jobs wj", client.sql)
-        self.assertIn("NOT EXISTS (SELECT 1 FROM workflow_jobs wj WHERE wj.job_id = j.id)", client.sql)
+        self.assertIn("wj.run_id = j.run_id AND wj.job_id = j.id", client.sql)
+
+    def test_job_evidence_guards_stale_clocks_and_preserves_resources(self):
+        class Client:
+            def query(self, sql):
+                self.sql = sql
+                base = _job(10, 1, "test", 999)
+                return [{**base, "run_attempt": 1, "card_count": 4, "labels_json": "[]",
+                         "timing_evidence": {"version": 1, "queue_duration_seconds": 300, "runtime_seconds": 3300}},
+                        {**base, "run_attempt": 2, "card_count": 4, "labels_json": "[]",
+                         "timing_evidence": None}]
+        client = Client()
+        good, stale = MODULE.fetch_jobs(client, [1])
+        self.assertIn("to_jsonb(wj)->'timing_evidence'", client.sql)
+        self.assertEqual((good["duration_seconds"], MODULE._calc_queue_min(good)), (3300, 5))
+        self.assertEqual(good["card_count"], 4)
+        self.assertEqual(stale["card_count"], 4)
+        self.assertIsNone(stale["duration_seconds"])
+        self.assertIsNone(MODULE._calc_queue_min(stale))
+        self.assertIsNone(stale["completed_at"])
 
 
 class FetchPrWorkflowsTests(unittest.TestCase):
@@ -632,6 +756,91 @@ class WriteDrilldownHtmlTests(unittest.TestCase):
         # showing must set an explicit display that beats the .detail{display:none} rule
         self.assertIn("table-row", html)
         self.assertIn("const open=det.style.display==='table-row'", html)
+
+
+class RerunTimingTests(unittest.TestCase):
+    def test_drilldown_author_is_attempt_scoped(self):
+        runs = [{**_run(1, "CI", 7200), "run_attempt": n} for n in (1, 2)]
+        data = {"o/r": {"runs": runs, "jobs": [], "steps": [],
+                        "pr_metrics": [{"id": 5, "author": "alice"}],
+                        "pr_workflows": [{"pr_metric_id": 5, "run_id": 1, "run_attempt": 2}]}}
+        result = MODULE.build_drilldown_data(data)
+        self.assertEqual([r["author"] for r in result["runs"]], ["", "alice"])
+
+    def test_same_job_id_is_joined_only_to_its_attempt(self):
+        runs = [{**_run(1, "CI", 7200), "run_attempt": n} for n in (1, 2)]
+        jobs = [{**_job(10, 1, f"job-{n}", 3600), "run_attempt": n} for n in (1, 2)]
+        steps = [{**_step(10, 1, f"step-{n}", 300), "run_id": 1, "run_attempt": n} for n in (1, 2)]
+        steps.append({**_step(10, 2, "wrong-run", 300), "run_id": 2, "run_attempt": 1})
+        data = {"o/r": {"runs": runs, "jobs": jobs, "steps": steps, "pr_metrics": [], "pr_workflows": []}}
+        report = MODULE.build_report_mode_data(data)
+        self.assertEqual([(s["run_attempt"], s["step_name"]) for s in report["Step Raw"]], [(1, "step-1"), (2, "step-2")])
+        drilldown = MODULE.build_drilldown_data(data)
+        self.assertEqual([[j["name"] for j in r["jobs"]] for r in drilldown["runs"]], [["job-1"], ["job-2"]])
+        self.assertEqual([r["jobs"][0]["steps"][0]["name"] for r in drilldown["runs"]], ["step-1", "step-2"])
+
+    def test_coverage_distinguishes_threshold_and_unknown_without_zero_speedup(self):
+        runs = [_run(1, "CI", 600), _run(2, "CI", 120), _run(3, "CI", None)]
+        data = {"known": {"runs": runs, "jobs": []}, "unknown": {"runs": [_run(4, "CI", None)], "jobs": []}}
+        report = MODULE.build_report_mode_data(data, min_duration=5)
+        metrics = {row["指标"]: row for row in report["Management Metrics"]}
+        self.assertEqual(metrics["Workflow E2E覆盖"]["数值"], "1/4")
+        self.assertIn("未达门槛 1，未知 2", metrics["Workflow E2E覆盖"]["说明"])
+        comparison = {row["仓库"]: row for row in MODULE.analyze_comparison(data)}
+        self.assertEqual(comparison["unknown"]["Run 耗时覆盖"], "0/1")
+        self.assertIsNone(comparison["unknown"]["平均 Run 耗时(分钟)"])
+
+    def test_comparison_reports_first_and_rerun_composition(self):
+        first = _run(1, "CI", 600)
+        rerun = _run(1, "CI", 600)
+        rerun.update(run_attempt=2)
+        data = {"o/r": {"runs": [first, rerun], "jobs": [], "steps": [], "pr_metrics": [], "pr_workflows": []}}
+        comparison = {row["仓库"]: row for row in MODULE.analyze_comparison(data)}
+        self.assertEqual(comparison["o/r"]["首跑/重跑构成"], "1/1")
+        self.assertEqual(comparison["o/r"]["总 Run 数"], 2)
+
+    def test_comparison_emits_no_speedup_claim_when_coverage_or_composition_differs(self):
+        covered = _run(1, "CI", 600)
+        rerun = _run(1, "CI", 600)
+        rerun.update(run_attempt=2, duration_seconds=None)
+        data = {
+            "a/full": {"runs": [covered, covered], "jobs": []},
+            "b/partial": {"runs": [covered, rerun], "jobs": []},
+            "c/unknown": {"runs": [_run(4, "CI", None)], "jobs": []},
+        }
+        rows = MODULE.analyze_comparison(data)
+        for row in rows:
+            for key in row:
+                self.assertNotRegex(key, r"提速|提升|变化率|Δ|快|慢")
+        by_repo = {row["仓库"]: row for row in rows}
+        # 部分覆盖与全未知两侧都不派生可比均值，只保留各自覆盖与构成。
+        self.assertEqual(by_repo["b/partial"]["Run 耗时覆盖"], "1/2")
+        self.assertEqual(by_repo["c/unknown"]["Run 耗时覆盖"], "0/1")
+        self.assertIsNone(by_repo["c/unknown"]["平均 Run 耗时(分钟)"])
+        self.assertIsNone(by_repo["c/unknown"]["P50 Run 耗时(分钟)"])
+        self.assertIsNone(by_repo["c/unknown"]["P90 Run 耗时(分钟)"])
+
+    def test_rerun_runtime_is_separate_from_e2e_without_database(self):
+        rows = []
+        for rid, start, end in [(1, '2026-07-15T10:00:00Z', '2026-07-15T11:29:18Z'),
+                                (2, None, '2026-07-15T11:29:18Z'),
+                                (3, '2026-07-15T10:00:00Z', None)]:
+            row = _run(rid, 'E2E', 5358)
+            row.update(run_attempt=2, attempt_started_at=start, attempt_completed_at=end,
+                       timing_evidence={"version": 1, "runtime_seconds": 5358} if rid == 1 else None)
+            rows.append(row)
+
+        class FakeClient:
+            def query(self, sql):
+                return rows
+
+        runs = MODULE.fetch_runs(FakeClient(), [1], '2026-07-01', '2026-07-31')
+        self.assertEqual([r['attempt_runtime_seconds'] for r in runs], [5358, None, None])
+        self.assertTrue(all(r['duration_seconds'] is None for r in runs))
+        data = {'o/r': {'runs': runs, 'jobs': [], 'steps': [], 'pr_metrics': [], 'pr_workflows': []}}
+        report = MODULE.build_report_mode_data(data)
+        self.assertEqual([r['rerun_attempt_runtime_minutes'] for r in report['Workflow Raw']], [5358 / 60, None, None])
+        self.assertTrue(all(r['run_e2e_minutes'] is None for r in report['Workflow Raw']))
 
 
 class ReportModeTests(unittest.TestCase):

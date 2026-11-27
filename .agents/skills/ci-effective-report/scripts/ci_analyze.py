@@ -268,37 +268,56 @@ def fetch_runs(client: PostgresClient, repo_ids: list[int], date_from: str, date
     wf_clause = f" AND ({' OR '.join(clauses)})" if clauses else ""
     # Fix 2.2: 使用独占上界范围查询，允许查询优化器使用索引扫描
     date_to_next = (datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-    return client.query(
+    runs = client.query(
         f"SELECT r.id, r.repo_id, r.name, r.head_branch, r.head_sha, r.event, "
-        f"r.status, r.conclusion, r.created_at, r.updated_at, r.html_url, "
-        f"COALESCE("
-        f"  CASE "
-        f"    WHEN wa.run_attempt > 1 AND wa.runtime_seconds IS NOT NULL AND wa.runtime_seconds > 0 "
-        f"    THEN ROUND(wa.runtime_seconds + COALESCE("
-        f"      (SELECT MAX(wj.queue_duration_seconds) FROM workflow_jobs wj WHERE wj.run_id = r.id AND wj.run_attempt = wa.run_attempt), "
-        f"      0"
-        f"    ))::int "
-        f"    ELSE r.duration_seconds "
-        f"  END, "
-        f"  r.duration_seconds"
-        f") AS duration_seconds, "
+        f"CASE WHEN wa.run_id IS NULL THEN r.status ELSE wa.status END AS status, "
+        f"CASE WHEN wa.run_id IS NULL THEN r.conclusion ELSE wa.conclusion END AS conclusion, "
+        f"r.created_at, r.updated_at, r.html_url, "
+        f"wa.run_attempt, wa.run_started_at AS attempt_started_at, wa.completed_at AS attempt_completed_at, "
+        f"to_jsonb(wa)->'timing_evidence' AS timing_evidence, "
+        f"CASE WHEN wa.run_id IS NULL THEN 'parent_fallback' ELSE 'attempt' END AS timing_source, "
         f"r.date, r.workflow_file "
         f"FROM runs r "
-        f"LEFT JOIN ("
-        f"  SELECT DISTINCT ON (run_id) run_id, run_attempt, runtime_seconds "
-        f"  FROM workflow_attempts "
-        f"  ORDER BY run_id, run_attempt DESC"
-        f") wa ON wa.run_id = r.id "
+        f"LEFT JOIN workflow_attempts wa ON wa.run_id = r.id "
         f"WHERE r.repo_id IN ({repo_id_list}) "
         f"AND r.date >= '{date_from}' AND r.date < '{date_to_next}'"
         f"{wf_clause} "
         f"ORDER BY r.created_at DESC"
     )
+    for run in runs:
+        evidence = run.pop("timing_evidence", None)
+        if isinstance(evidence, str):
+            try:
+                evidence = json.loads(evidence)
+            except (TypeError, ValueError):
+                evidence = None
+        if not isinstance(evidence, dict) or type(evidence.get("version")) is not int or evidence["version"] != 1:
+            evidence = {}
+        for field, source in (("queue_duration_seconds", "queue_duration_seconds"),
+                              ("attempt_runtime_seconds", "runtime_seconds"),
+                              ("duration_seconds", "total_duration_seconds")):
+            value = evidence.get(source)
+            run[field] = value if type(value) in (int, float) and math.isfinite(value) and value >= 0 else None
+    return runs
+
+
+def _timing_values(value):
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError):
+            return {}
+    if not isinstance(value, dict) or type(value.get("version")) is not int or value["version"] != 1:
+        return {}
+    return {key: val for key, val in value.items()
+            if key in ("queue_duration_seconds", "runtime_seconds", "total_duration_seconds")
+            and type(val) in (int, float) and math.isfinite(val) and val >= 0}
 
 
 def fetch_jobs(client: PostgresClient, run_ids: list[int]) -> list[dict]:
     if not run_ids:
         return []
+    run_ids = list(dict.fromkeys(run_ids))
     all_jobs = []
     # 分批限制单次查询和返回集大小。
     # 缩小批次至 500 run_ids（≈ 2500 jobs），避免静默截断
@@ -306,20 +325,51 @@ def fetch_jobs(client: PostgresClient, run_ids: list[int]) -> list[dict]:
         batch = run_ids[i : i + 500]
         id_list = ",".join(str(x) for x in batch)
         jobs = client.query(
-            f"SELECT wj.job_id AS id, wj.run_id, wj.name, wj.status, wj.conclusion, "
+            f"SELECT wj.job_id AS id, wj.run_id, wj.run_attempt, wj.name, wj.status, wj.conclusion, "
             f"wj.created_at, wj.started_at, wj.completed_at, wj.html_url, "
             f"wj.queue_duration_seconds, wj.duration_seconds, wj.labels_json, "
-            f"wj.resource_model AS card_model, wj.resource_count AS card_count "
+            f"wj.resource_model AS card_model, wj.resource_count AS card_count, "
+            f"to_jsonb(wj)->'timing_evidence' AS timing_evidence "
             f"FROM workflow_jobs wj WHERE wj.run_id IN ({id_list}) "
             f"UNION ALL "
-            f"SELECT j.id, j.run_id, j.name, j.status, j.conclusion, "
+            f"SELECT j.id, j.run_id, NULL AS run_attempt, j.name, j.status, j.conclusion, "
             f"j.created_at, j.started_at, j.completed_at, j.html_url, "
             f"j.queue_duration_seconds, j.duration_seconds, j.labels_json, "
-            f"j.resource_model AS card_model, j.resource_count AS card_count "
+            f"j.resource_model AS card_model, j.resource_count AS card_count, NULL AS timing_evidence "
             f"FROM jobs j WHERE j.run_id IN ({id_list}) "
-            f"AND NOT EXISTS (SELECT 1 FROM workflow_jobs wj WHERE wj.job_id = j.id)"
+            f"AND NOT EXISTS (SELECT 1 FROM workflow_jobs wj WHERE wj.run_id = j.run_id AND wj.job_id = j.id)"
         )
         for job in jobs:
+            evidence = _timing_values(job.pop("timing_evidence", None)) if job.get("run_attempt") is not None else {}
+            job["historical_clocks"] = {k: job.get(k) for k in ("created_at", "started_at", "completed_at")}
+            job["total_duration_seconds"] = evidence.get("total_duration_seconds")
+            job["queue_duration_seconds"] = evidence.get("queue_duration_seconds")
+            job["duration_seconds"] = evidence.get("runtime_seconds")
+            # Clocks are used by timelines and machine-hours. Retain only pairs
+            # corroborated by the corresponding evidence, never legacy clocks.
+            def matches(start, end, seconds):
+                if seconds is None or not start or not end:
+                    return False
+                try:
+                    a = datetime.fromisoformat(str(start).replace("Z", "+00:00"))
+                    b = datetime.fromisoformat(str(end).replace("Z", "+00:00"))
+                    return abs((b - a).total_seconds() - seconds) < 0.001
+                except (ValueError, TypeError, OverflowError):
+                    return False
+            queue_ok = matches(job.get("created_at"), job.get("started_at"), job["queue_duration_seconds"])
+            runtime_ok = matches(job.get("started_at"), job.get("completed_at"), job["duration_seconds"])
+            if job.get("created_at") and job.get("started_at") and not queue_ok:
+                job["queue_duration_seconds"] = None
+            if job.get("started_at") and job.get("completed_at") and not runtime_ok:
+                job["duration_seconds"] = None
+            if not matches(job.get("created_at"), job.get("completed_at"), job["total_duration_seconds"]):
+                job["total_duration_seconds"] = None
+            if not queue_ok:
+                job["created_at"] = None
+            if not runtime_ok:
+                job["completed_at"] = None
+            if not queue_ok and not runtime_ok:
+                job["started_at"] = None
             try:
                 job["labels"] = json.loads(job.get("labels_json") or "[]")
             except (TypeError, json.JSONDecodeError):
@@ -353,6 +403,7 @@ def fetch_steps(client: PostgresClient, job_ids: list[int]) -> list[dict]:
     """Fetch attempt-scoped steps, with legacy rows only as a migration fallback."""
     if not job_ids:
         return []
+    job_ids = list(dict.fromkeys(job_ids))
     all_steps = []
     # 每批 500 个 job_id，避免响应过大被截断
     batch_size = 500
@@ -361,14 +412,14 @@ def fetch_steps(client: PostgresClient, job_ids: list[int]) -> list[dict]:
         batch = job_ids[i : i + batch_size]
         id_list = ",".join(str(x) for x in batch)
         steps = client.query(
-            f"SELECT ws.job_id, ws.step_number AS number, ws.name, ws.status, ws.conclusion, "
+            f"SELECT ws.run_id, ws.run_attempt, ws.job_id, ws.step_number AS number, ws.name, ws.status, ws.conclusion, "
             f"ws.started_at, ws.completed_at, ws.duration_seconds "
             f"FROM workflow_steps ws WHERE ws.job_id IN ({id_list}) "
             f"UNION ALL "
-            f"SELECT s.job_id, s.number, s.name, s.status, s.conclusion, "
+            f"SELECT j.run_id, NULL AS run_attempt, s.job_id, s.number, s.name, s.status, s.conclusion, "
             f"s.started_at, s.completed_at, s.duration_seconds "
-            f"FROM steps s WHERE s.job_id IN ({id_list}) "
-            f"AND NOT EXISTS (SELECT 1 FROM workflow_steps ws WHERE ws.job_id=s.job_id AND ws.step_number=s.number)"
+            f"FROM steps s JOIN jobs j ON j.id=s.job_id WHERE s.job_id IN ({id_list}) "
+            f"AND NOT EXISTS (SELECT 1 FROM workflow_steps ws WHERE ws.run_id=j.run_id AND ws.job_id=s.job_id AND ws.step_number=s.number)"
         )
         all_steps.extend(steps)
         if (i // batch_size + 1) % 20 == 0 or i + batch_size >= total:
@@ -617,7 +668,7 @@ def workflow_resource_summary(jobs: list[dict], static_resources: dict[str, int]
 
     resources_by_run: dict[object, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for job in jobs:
-        run_resources = resources_by_run[job.get("run_id")]
+        run_resources = resources_by_run[(job.get("run_id"), job.get("run_attempt"))]
         resource = _resource_type_and_cards(job)
         if resource:
             kind, cards = resource
@@ -681,7 +732,7 @@ def _timing_causes(rjobs: list[dict]) -> list[dict]:
     # longest queue
     lq = max(jnorm, key=lambda x: x["queue"] or -1, default=None)
     if lq and lq["queue"]:
-        findings.append({"kind": "Runner queue", "subject": lq["name"], "dur": lq["queue"], "wall": wall, "evidence": "created_at -> started_at", "strength": "direct"})
+        findings.append({"kind": "Job startup wait", "subject": lq["name"], "dur": lq["queue"], "wall": wall, "evidence": "job created_at -> started_at (not pure scheduling queue)", "strength": "direct"})
     # longest execution
     le = max(jnorm, key=lambda x: x["execution"] or -1, default=None)
     if le and le["execution"]:
@@ -726,7 +777,8 @@ def _calc_queue_min(job: dict, _run: dict | None = None) -> float | None:
     try:
         s = datetime.fromisoformat(str(started).replace("Z", "+00:00"))
         c = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
-        return round(max(0, (s - c).total_seconds()) / 60.0, 3)
+        seconds = (s - c).total_seconds()
+        return round(seconds / 60.0, 3) if seconds >= 0 else None
     except (ValueError, TypeError):
         return None
 
@@ -789,9 +841,10 @@ def _infer_resource_type(job_name: str) -> str:
 
 def analyze_workflow_stats(runs, jobs, success_only=False, min_duration=0):
     # Fix 1.1: 拆分 run-level 和 job-level 聚合，避免运行次数/E2E 被 job 数量污染
-    run_map = {r["id"]: r for r in runs}
+    run_map = {(r["id"], r.get("run_attempt")): r for r in runs}
     wf_groups = defaultdict(lambda: {
-        "durations": [], "queues": [], "events": defaultdict(int), "created_ats": []
+        "durations": [], "runtimes": [], "total": 0, "below_threshold": 0, "unknown": 0,
+        "queues": [], "events": defaultdict(int), "created_ats": []
     })
 
     # 1. Run-level: duration、event、created_at
@@ -799,22 +852,26 @@ def analyze_workflow_stats(runs, jobs, success_only=False, min_duration=0):
         # success_only: 只统计 success run 的耗时（ADR-005）
         if success_only and run.get("conclusion") != "success":
             continue
-        # min_duration: 排除短 run（配合 success_only，目的2 的 >10min 过滤）
-        if min_duration > 0:
-            dur_chk = sec_to_min(run.get("duration_seconds"))
-            if dur_chk is None or dur_chk <= min_duration:
-                continue
         wf = run["name"]
+        group = wf_groups[wf]
+        group["total"] += 1
+        runtime = sec_to_min(run.get("attempt_runtime_seconds"))
+        if runtime is not None:
+            group["runtimes"].append(runtime)
         dur = sec_to_min(run.get("duration_seconds"))
-        if dur is not None:
-            wf_groups[wf]["durations"].append(dur)
+        if dur is None:
+            group["unknown"] += 1
+        elif min_duration > 0 and dur <= min_duration:
+            group["below_threshold"] += 1
+        else:
+            group["durations"].append(dur)
         wf_groups[wf]["events"][run.get("event", "unknown")] += 1
         if run.get("created_at"):
             wf_groups[wf]["created_ats"].append(run["created_at"])
 
     # 2. Job-level: queue duration only
     for j in jobs:
-        run = run_map.get(j["run_id"])
+        run = run_map.get((j["run_id"], j.get("run_attempt")))
         if not run:
             continue
         q_dur = _calc_queue_min(j, run)
@@ -847,8 +904,12 @@ def analyze_workflow_stats(runs, jobs, success_only=False, min_duration=0):
         rows.append({
             "工作流": wf,
             "触发类型": dominant,
-            "运行次数": len(durs),  # 现在正确反映 run 数量
-            "平均E2E(分钟)": safe_div(sum(durs), len(durs)),
+            "运行次数": data["total"],
+            "E2E覆盖": f"{len(durs)}/{data['total']}",
+            "Runtime覆盖": f"{len(data['runtimes'])}/{data['total']}",
+            "E2E未达门槛": data["below_threshold"],
+            "E2E未知": data["unknown"],
+            "平均E2E(分钟)": safe_div(sum(durs), len(durs)) if durs else None,
             "P50 E2E(分钟)": percentile(durs, 0.5),
             "P90 E2E(分钟)": percentile(durs, 0.9),
             "平均排队(分钟)": safe_div(sum(queues), len(queues)),
@@ -860,18 +921,19 @@ def analyze_workflow_stats(runs, jobs, success_only=False, min_duration=0):
 
 
 def analyze_job_stats(runs, jobs, success_only=False, min_duration=0):
-    run_map = {r["id"]: r for r in runs}
-    groups = defaultdict(lambda: {"durations": [], "queues": []})
+    run_map = {(r["id"], r.get("run_attempt")): r for r in runs}
+    groups = defaultdict(lambda: {"durations": [], "queues": [], "total": 0})
 
     for j in jobs:
         # success_only: 只统计 success job 的耗时（ADR-005）
         if success_only and j.get("conclusion") != "success":
             continue
-        run = run_map.get(j["run_id"])
+        run = run_map.get((j["run_id"], j.get("run_attempt")))
         if not run:
             continue
         res_type = _infer_resource_type(j["name"])
         key = (f"{run['name']} / {j['name']}", res_type)
+        groups[key]["total"] += 1
         d = sec_to_min(j.get("duration_seconds"))
         # min_duration: 排除耗时过短的样本，避免 0min job 污染统计
         if d is not None and d >= min_duration:
@@ -887,8 +949,9 @@ def analyze_job_stats(runs, jobs, success_only=False, min_duration=0):
         rows.append({
             "工作流/任务": wf_job,
             "资源类型": res,
-            "执行次数": len(durs),
-            "平均E2E(分钟)": safe_div(sum(durs), len(durs)),
+            "执行次数": data["total"],
+            "耗时覆盖": f"{len(durs)}/{data['total']}",
+            "平均E2E(分钟)": safe_div(sum(durs), len(durs)) if durs else None,
             "P50 E2E(分钟)": percentile(durs, 0.5),
             "P90 E2E(分钟)": percentile(durs, 0.9),
             "平均排队(分钟)": safe_div(sum(queues), len(queues)),
@@ -987,21 +1050,21 @@ def analyze_pr_stats(pr_metrics, pr_workflows):
 
 
 def build_pr_details(pr_metrics, pr_workflows, runs, jobs, steps):
-    run_map = {r["id"]: r for r in runs}
+    run_map = {(r["id"], r.get("run_attempt")): r for r in runs}
     run_jobs = defaultdict(list)
     for j in jobs:
-        run_jobs[j["run_id"]].append(j)
+        run_jobs[(j["run_id"], j.get("run_attempt"))].append(j)
     job_steps = defaultdict(list)
     for s in steps:
-        job_steps[s["job_id"]].append(s)
+        job_steps[(s.get("run_id"), s.get("run_attempt"), s["job_id"])].append(s)
     pr_wf_map = defaultdict(list)
     for pw in pr_workflows:
-        pr_wf_map[pw["pr_metric_id"]].append(pw["run_id"])
+        pr_wf_map[pw["pr_metric_id"]].append((pw["run_id"], pw.get("run_attempt")))
 
     _COMMON_KEYS = [
         "层级", "PR编号", "PR标题", "PR作者", "PR创建时间", "PR合并时间",
         "PR E2E(分钟)", "CI E2E(分钟)", "CI后评审(分钟)",
-        "工作流名称", "工作流运行ID", "工作流状态", "工作流结论",
+        "工作流名称", "工作流运行ID", "工作流尝试次数", "工作流状态", "工作流结论",
         "工作流创建时间", "工作流开始时间", "工作流完成时间", "工作流耗时(分钟)", "工作流排队(分钟)",
         "任务名称", "任务ID", "任务状态", "任务结论",
         "任务创建时间", "任务开始时间", "任务完成时间",
@@ -1034,22 +1097,17 @@ def build_pr_details(pr_metrics, pr_workflows, runs, jobs, steps):
 
         all_rows.append(_base("PR", pm, pr_e2e, review) | {"链接": pm.get("html_url", "")})
 
-        for run_id in wf_run_ids:
-            run = run_map.get(run_id)
+        for run_id, attempt in wf_run_ids:
+            run = run_map.get((run_id, attempt))
             if not run:
                 continue
             wf_dur = sec_to_min(run.get("duration_seconds"))
-            # 工作流首次调度等待 = 该 run 下最早 job 的 started_at - run.created_at。
-            rjobs = run_jobs.get(run_id, [])
-            earliest_start = None
-            for jj in rjobs:
-                st = jj.get("started_at")
-                if st and (earliest_start is None or st < earliest_start):
-                    earliest_start = st
-            wf_queue = _calc_queue_min({"created_at": run.get("created_at"), "started_at": earliest_start}) if earliest_start else None
+            rjobs = run_jobs.get((run_id, attempt), [])
+            wf_queue = sec_to_min(run.get("queue_duration_seconds"))
             all_rows.append(_base("WORKFLOW", pm, pr_e2e, review) | {
                 "工作流名称": run.get("name"),
                 "工作流运行ID": run_id,
+                "工作流尝试次数": attempt,
                 "工作流状态": run.get("status"),
                 "工作流结论": run.get("conclusion"),
                 "工作流创建时间": run.get("created_at"),
@@ -1060,7 +1118,7 @@ def build_pr_details(pr_metrics, pr_workflows, runs, jobs, steps):
                 "链接": run.get("html_url", ""),
             })
 
-            for j in run_jobs.get(run_id, []):
+            for j in rjobs:
                 all_rows.append(_base("JOB", pm, pr_e2e, review) | {
                     "工作流名称": run.get("name"),
                     "工作流运行ID": run_id,
@@ -1083,7 +1141,10 @@ def build_pr_details(pr_metrics, pr_workflows, runs, jobs, steps):
                 })
 
                 # Fix 1.4: x.get("number", 0) 在 number 键存在但值为 None 时返回 None 而非 0
-                for s in sorted(job_steps.get(j["id"], []), key=lambda x: x.get("number") if x.get("number") is not None else 0):
+                matching_steps = job_steps.get((run_id, attempt, j["id"]), [])
+                if attempt is None:
+                    matching_steps = matching_steps + job_steps.get((None, None, j["id"]), [])
+                for s in sorted(matching_steps, key=lambda x: x.get("number") if x.get("number") is not None else 0):
                     all_rows.append(_base("STEP", pm, pr_e2e, review) | {
                         "工作流名称": run.get("name"),
                         "工作流运行ID": run_id,
@@ -1140,17 +1201,24 @@ def analyze_comparison(repos_data: dict[str, dict]) -> list[dict]:
         for r in runs:
             events[r.get("event") or "unknown"] += 1
 
+        first_attempts = sum(1 for r in runs if r.get("run_attempt") in (None, 1))
+        rerun_attempts = sum(1 for r in runs if r.get("run_attempt") not in (None, 1))
+
         rows.append({
             "仓库": repo_name,
             "总 Run 数": len(runs),
+            "首跑/重跑构成": f"{first_attempts}/{rerun_attempts}",
             "总 Job 数": total,
-            "平均 Run 耗时(分钟)": safe_div(sum(wf_durs), len(wf_durs)) if wf_durs else 0,
-            "P50 Run 耗时(分钟)": percentile(wf_durs, 0.5) if wf_durs else 0,
-            "P90 Run 耗时(分钟)": percentile(wf_durs, 0.9) if wf_durs else 0,
-            "平均 Job 耗时(分钟)": safe_div(sum(job_durs), len(job_durs)) if job_durs else 0,
-            "P50 Job 耗时(分钟)": percentile(job_durs, 0.5) if job_durs else 0,
-            "P90 Job 耗时(分钟)": percentile(job_durs, 0.9) if job_durs else 0,
-            "平均排队(分钟)": safe_div(sum(job_queues), len(job_queues)) if job_queues else 0,
+            "Run 耗时覆盖": f"{len(wf_durs)}/{len(runs)}",
+            "Run 耗时未知": len(runs) - len(wf_durs),
+            "Job 耗时覆盖": f"{len(job_durs)}/{total}",
+            "平均 Run 耗时(分钟)": safe_div(sum(wf_durs), len(wf_durs)) if wf_durs else None,
+            "P50 Run 耗时(分钟)": percentile(wf_durs, 0.5),
+            "P90 Run 耗时(分钟)": percentile(wf_durs, 0.9),
+            "平均 Job 耗时(分钟)": safe_div(sum(job_durs), len(job_durs)) if job_durs else None,
+            "P50 Job 耗时(分钟)": percentile(job_durs, 0.5),
+            "P90 Job 耗时(分钟)": percentile(job_durs, 0.9),
+            "平均排队(分钟)": safe_div(sum(job_queues), len(job_queues)) if job_queues else None,
             "Job 成功率": round(conclusions.get("success", 0) / total * 100, 1) if total else 0,
             "Job 失败率": round(conclusions.get("failure", 0) / total * 100, 1) if total else 0,
             "PR 数量": len(pr_metrics),
@@ -1183,10 +1251,10 @@ def generate_top_issues(runs, jobs, steps, step_map, min_duration=0):
     """
     issues = []
     n_runs = len(runs) or 1
-    run_by_id = {r["id"]: r for r in runs}
+    run_by_id = {(r["id"], r.get("run_attempt")): r for r in runs}
     jobs_by_run = defaultdict(list)
     for j in jobs:
-        jobs_by_run[j["run_id"]].append(j)
+        jobs_by_run[(j["run_id"], j.get("run_attempt"))].append(j)
 
     longest_job_counter = defaultdict(int)
     job_dur = defaultdict(list)
@@ -1213,12 +1281,16 @@ def generate_top_issues(runs, jobs, steps, step_map, min_duration=0):
             if qm is not None and dm and dm >= min_duration:
                 job_queue[key].append(qm)
                 if key not in worst_queue_run or qm > worst_queue_run[key][1]:
-                    worst_queue_run[key] = (rid, qm)
+                    worst_queue_run[key] = (rid[0], qm)
 
     # steps 按成功 job 归属
-    succ_job_ids = {j["id"] for j in jobs if j.get("conclusion") == "success"}
+    succ_job_ids = {(j["run_id"], j.get("run_attempt"), j["id"]) for j in jobs if j.get("conclusion") == "success"}
+    legacy_job_ids = {j["id"] for j in jobs if j.get("conclusion") == "success" and j.get("run_attempt") is None}
+    def belongs_to_successful_job(step):
+        return ((step.get("run_id"), step.get("run_attempt"), step.get("job_id")) in succ_job_ids
+                or (step.get("run_id") is None and step.get("run_attempt") is None and step.get("job_id") in legacy_job_ids))
     for s in steps:
-        if s.get("job_id") not in succ_job_ids:
+        if not belongs_to_successful_job(s):
             continue
         dm = sec_to_min(s.get("duration_seconds"))
         if dm and dm > 0:
@@ -1273,7 +1345,7 @@ def generate_top_issues(runs, jobs, steps, step_map, min_duration=0):
         top_step, top_durs = max(step_dur.items(), key=lambda x: sum(x[1]))
         type_dur = defaultdict(list)
         for s in steps:
-            if s.get("job_id") not in succ_job_ids:
+            if not belongs_to_successful_job(s):
                 continue
             dm = sec_to_min(s.get("duration_seconds"))
             if dm and dm > 0:
@@ -1398,13 +1470,13 @@ def build_drilldown_data(repos_data: dict, step_map: dict | None = None, min_min
     纯函数（除 sec_to_min/_calc_queue_min/classify_step 外无副作用），便于单测。
     提交人经 pr_workflows → pr_metrics.author 关联；非 PR run 无作者，返回空串。
     """
-    run_author: dict[int, str] = {}
-    for data in repos_data.values():
+    run_author: dict[tuple, str] = {}
+    for repo, data in repos_data.items():
         pm_by_id = {pm["id"]: pm for pm in data.get("pr_metrics", [])}
         for pw in data.get("pr_workflows", []):
             pm = pm_by_id.get(pw["pr_metric_id"])
             if pm and pm.get("author"):
-                run_author.setdefault(pw["run_id"], pm["author"])
+                run_author.setdefault((repo, pw["run_id"], pw.get("run_attempt")), pm["author"])
 
     out = []
     all_runs: list[dict] = []
@@ -1414,13 +1486,13 @@ def build_drilldown_data(repos_data: dict, step_map: dict | None = None, min_min
     for repo, data in repos_data.items():
         jobs_by_run = defaultdict(list)
         for j in data.get("jobs", []):
-            jobs_by_run[j["run_id"]].append(j)
+            jobs_by_run[(j["run_id"], j.get("run_attempt"))].append(j)
         # all_runs: run-level summary for CSV export, no threshold filter
         for r in data.get("runs", []):
-            rjobs = jobs_by_run.get(r["id"], [])
+            rjobs = jobs_by_run.get((r["id"], r.get("run_attempt")), [])
             all_runs.append({
                 "repo": repo,
-                "author": run_author.get(r["id"], ""),
+                "author": run_author.get((repo, r["id"], r.get("run_attempt")), ""),
                 "created": r.get("created_at", ""),
                 "updated": r.get("updated_at", ""),
                 "wf": r.get("name", ""),
@@ -1435,20 +1507,20 @@ def build_drilldown_data(repos_data: dict, step_map: dict | None = None, min_min
             })
         steps_by_job = defaultdict(list)
         for s in data.get("steps", []):
-            steps_by_job[s["job_id"]].append(s)
+            steps_by_job[(s.get("run_id"), s.get("run_attempt"), s["job_id"])].append(s)
         for r in data.get("runs", []):
             dur = sec_to_min(r.get("duration_seconds"))
             if dur is None or dur <= min_minutes:
                 continue
             # 按真实开始时间排序（chronological），揭示串/并行关系；缺失时间回退 created_at
             rjobs = sorted(
-                jobs_by_run.get(r["id"], []),
+                jobs_by_run.get((r["id"], r.get("run_attempt")), []),
                 key=lambda j: (j.get("started_at") or j.get("created_at") or ""),
             )
             jobs_json = []
             for j in rjobs:
                 jsteps = sorted(
-                    steps_by_job.get(j["id"], []),
+                    steps_by_job.get((r["id"], r.get("run_attempt"), j["id"]), []) + (steps_by_job.get((None, None, j["id"]), []) if r.get("run_attempt") is None else []),
                     key=lambda s: s.get("number") if s.get("number") is not None else 9999,
                 )
                 jobs_json.append({
@@ -1475,7 +1547,7 @@ def build_drilldown_data(repos_data: dict, step_map: dict | None = None, min_min
                 })
             out.append({
                 "repo": repo,
-                "author": run_author.get(r["id"], ""),
+                "author": run_author.get((repo, r["id"], r.get("run_attempt")), ""),
                 "created": r.get("created_at", ""),
                 "updated": r.get("updated_at", ""),
                 "wf": r.get("name", ""),
@@ -1496,7 +1568,7 @@ def build_drilldown_data(repos_data: dict, step_map: dict | None = None, min_min
     for repo, data in repos_data.items():
         _jobs_by_run = defaultdict(list)
         for j in data.get("jobs", []):
-            _jobs_by_run[j["run_id"]].append(j)
+            _jobs_by_run[(j["run_id"], j.get("run_attempt"))].append(j)
         valid: list[float] = []
         queues: list[float] = []
         for r in data.get("runs", []):
@@ -1504,16 +1576,16 @@ def build_drilldown_data(repos_data: dict, step_map: dict | None = None, min_min
             if d is None or d <= VALID_MIN:
                 continue
             valid.append(d)
-            rq = [_calc_queue_min(j, r) for j in _jobs_by_run.get(r["id"], [])]
+            rq = [_calc_queue_min(j, r) for j in _jobs_by_run.get((r["id"], r.get("run_attempt")), [])]
             rq = [q for q in rq if q is not None]
             if rq:
                 queues.append(max(rq))
         card_hours_by_run = {
-            r["id"]: sum(v for v in (_card_hours(j) for j in _jobs_by_run.get(r["id"], [])) if v is not None)
+            (r["id"], r.get("run_attempt")): sum(v for v in (_card_hours(j) for j in _jobs_by_run.get((r["id"], r.get("run_attempt")), [])) if v is not None)
             for r in data.get("runs", [])
         }
         cpu_hours_by_run = {
-            r["id"]: sum(v for v in (_cpu_hours(j) for j in _jobs_by_run.get(r["id"], [])) if v is not None)
+            (r["id"], r.get("run_attempt")): sum(v for v in (_cpu_hours(j) for j in _jobs_by_run.get((r["id"], r.get("run_attempt")), [])) if v is not None)
             for r in data.get("runs", [])
         }
         npu_by_resource: dict[str, float] = {}
@@ -1525,12 +1597,12 @@ def build_drilldown_data(repos_data: dict, step_map: dict | None = None, min_min
         stats[repo] = {
             "npu_hours": sum(card_hours_by_run.values()),
             "npu_failure_hours": sum(
-                card_hours_by_run[r["id"]] for r in data.get("runs", [])
+                card_hours_by_run[(r["id"], r.get("run_attempt"))] for r in data.get("runs", [])
                 if r.get("conclusion") in ("failure", "cancelled")
             ),
             "cpu_hours": sum(cpu_hours_by_run.values()),
             "cpu_failure_hours": sum(
-                cpu_hours_by_run[r["id"]] for r in data.get("runs", [])
+                cpu_hours_by_run[(r["id"], r.get("run_attempt"))] for r in data.get("runs", [])
                 if r.get("conclusion") in ("failure", "cancelled")
             ),
             "p50": percentile(valid, 0.5),
@@ -1892,6 +1964,8 @@ def build_overview(overview_data: list[dict]) -> list[dict]:
             "总Run数": d.get("total_run_count", len(durs)),
             "成功Run数": d.get("success_run_count", len(durs)),
             "有效成功Run数": len(durs),
+            "成功Run E2E未知": d.get("unknown_success_count", 0),
+            "成功Run E2E未达门槛": d.get("below_threshold_success_count", 0),
             "E2E P50(分钟)": percentile(durs, 0.5),
             "E2E 平均(分钟)": safe_div(sum(durs), len(durs)) if durs else None,
             "E2E P90(分钟)": percentile(durs, 0.9),
@@ -1908,7 +1982,7 @@ def _report_pr_by_run(data: dict) -> dict[int, dict]:
     """Map an in-scope run to its PR metric when the ETL resolved the link."""
     metrics = {metric["id"]: metric for metric in data.get("pr_metrics", [])}
     return {
-        link["run_id"]: metrics[link["pr_metric_id"]]
+        (link["run_id"], link.get("run_attempt")): metrics[link["pr_metric_id"]]
         for link in data.get("pr_workflows", [])
         if link.get("pr_metric_id") in metrics
     }
@@ -1992,13 +2066,14 @@ def build_report_mode_data(repos_data: dict[str, dict], configured_entries: dict
         pr_by_run = _report_pr_by_run(data)
         jobs_by_run, steps_by_job = defaultdict(list), defaultdict(list)
         for job in data.get("jobs", []):
-            jobs_by_run[job["run_id"]].append(job)
+            jobs_by_run[(job["run_id"], job.get("run_attempt"))].append(job)
         for step in data.get("steps", []):
-            steps_by_job[step["job_id"]].append(step)
+            steps_by_job[(step.get("run_id"), step.get("run_attempt"), step["job_id"])].append(step)
 
         for run in data.get("runs", []):
-            pr = pr_by_run.get(run["id"], {})
-            jobs = jobs_by_run.get(run["id"], [])
+            key = (run["id"], run.get("run_attempt"))
+            pr = pr_by_run.get(key, {})
+            jobs = jobs_by_run.get(key, [])
             queues = [_calc_queue_min(job, run) for job in jobs]
             queues = [value for value in queues if value is not None]
             workflow_raw.append({
@@ -2010,6 +2085,11 @@ def build_report_mode_data(repos_data: dict[str, dict], configured_entries: dict
                 "head_sha": run.get("head_sha", ""), "event": run.get("event", ""),
                 "created_at": run.get("created_at", ""), "completed_at": run.get("updated_at", ""),
                 "run_e2e_minutes": sec_to_min(run.get("duration_seconds")),
+                "run_attempt": run.get("run_attempt"),
+                "timing_source": run.get("timing_source", ""),
+                "attempt_started_at": run.get("attempt_started_at"),
+                "attempt_completed_at": run.get("attempt_completed_at"),
+                "rerun_attempt_runtime_minutes": sec_to_min(run.get("attempt_runtime_seconds")),
                 "max_job_queue_minutes": max(queues) if queues else None, "workflow_url": run.get("html_url", ""),
             })
             for job in jobs:
@@ -2017,7 +2097,7 @@ def build_report_mode_data(repos_data: dict[str, dict], configured_entries: dict
                 job_raw.append({
                     "repository": repo, "pr_number": pr.get("pr_number"), "pr_title": pr.get("title", ""),
                     "pr_url": pr.get("html_url", ""), "workflow_run_id": run["id"],
-                    "workflow_name": run.get("name", ""), "branch": run.get("head_branch", ""),
+                    "workflow_name": run.get("name", ""), "run_attempt": run.get("run_attempt"), "branch": run.get("head_branch", ""),
                     "head_sha": run.get("head_sha", ""), "event": run.get("event", ""), "job_id": job["id"],
                     "job_name": job.get("name", ""), "job_status": job.get("status", ""),
                     "job_conclusion": job.get("conclusion", ""), "runner_labels": ", ".join(job.get("labels", [])),
@@ -2028,10 +2108,13 @@ def build_report_mode_data(repos_data: dict[str, dict], configured_entries: dict
                     "queue_minutes": queue, "execution_minutes": sec_to_min(job.get("duration_seconds")),
                     "html_url": job.get("html_url", ""),
                 })
-                for index, step in enumerate(steps_by_job.get(job["id"], []), 1):
+                matching_steps = steps_by_job.get((run["id"], run.get("run_attempt"), job["id"]), [])
+                if run.get("run_attempt") is None:
+                    matching_steps = matching_steps + steps_by_job.get((None, None, job["id"]), [])
+                for index, step in enumerate(matching_steps, 1):
                     step_raw.append({
                         "repository": repo, "pr_number": pr.get("pr_number"), "workflow_run_id": run["id"],
-                        "workflow_name": run.get("name", ""), "job_id": job["id"], "job_name": job.get("name", ""),
+                        "workflow_name": run.get("name", ""), "run_attempt": run.get("run_attempt"), "job_id": job["id"], "job_name": job.get("name", ""),
                         "step_number": step.get("number"), "step_name": step.get("name", ""),
                         "step_status": step.get("status", ""), "step_conclusion": step.get("conclusion", ""),
                         "started_at": step.get("started_at", ""), "completed_at": step.get("completed_at", ""),
@@ -2077,10 +2160,20 @@ def build_report_mode_data(repos_data: dict[str, dict], configured_entries: dict
     for label, predicate in buckets:
         matched = [value for value in e2e_samples if predicate(value)]
         distribution.append({"bucket": label, "run_count": len(matched), "percentage": round(safe_div(len(matched) * 100, len(e2e_samples)), 1)})
+    eligible = [run for data in repos_data.values() for run in data.get("runs", [])
+                if run.get("conclusion") == "success"]
+    known = [sec_to_min(run.get("duration_seconds")) for run in eligible
+             if sec_to_min(run.get("duration_seconds")) is not None]
+    runtime_count = sum(run.get("attempt_runtime_seconds") is not None for run in eligible)
+    coverage_rows = [
+        {"指标": "Workflow E2E覆盖", "数值": f"{len(e2e_samples)}/{len(eligible)}",
+         "说明": f"成功 attempt；门槛≥{min_duration:g}分钟；未达门槛 {len(known) - len(e2e_samples)}，未知 {len(eligible) - len(known)}；按父 run 日期选窗"},
+        {"指标": "Workflow Runtime覆盖", "数值": f"{runtime_count}/{len(eligible)}", "说明": "成功 attempt；不应用 E2E 门槛"},
+    ]
     return {"Workflow Raw": workflow_raw, "Job Raw": job_raw, "Step Raw": step_raw,
             "Workflow E2E Distribution": distribution, "Workflow Drag Ranking": workflow_rank,
             "Longest Job Summary": job_rank, "Step Hotspots": step_rank,
-            "Management Metrics": _management_metrics_rows(pr_count, e2e_samples, job_raw, distribution)}
+            "Management Metrics": coverage_rows + _management_metrics_rows(pr_count, e2e_samples, job_raw, distribution)}
 
 
 def build_report_mode_sheets(repos_data: dict[str, dict], report_mode: str, configured_entries: dict[str, list[dict]] | None = None, min_duration: float = 5.0) -> dict[str, list[dict]]:
@@ -2258,8 +2351,12 @@ def fetch_all_for_repo(client: PostgresClient, repo_id: int, date_from: str, dat
 
     run_ids = [r["id"] for r in runs]
     jobs = fetch_jobs(client, run_ids)
-    job_ids = [j["id"] for j in jobs if step_run_ids is None or j["run_id"] in step_run_ids]
-    steps = [] if skip_steps else fetch_steps(client, job_ids)
+    run_keys = {(r["id"], r.get("run_attempt")) for r in runs}
+    jobs = [j for j in jobs if (j["run_id"], j.get("run_attempt")) in run_keys]
+    selected_jobs = [j for j in jobs if step_run_ids is None or j["run_id"] in step_run_ids]
+    job_keys = {(j["run_id"], j.get("run_attempt"), j["id"]) for j in selected_jobs}
+    steps = [] if skip_steps else [s for s in fetch_steps(client, [j["id"] for j in selected_jobs])
+                                    if (s.get("run_id"), s.get("run_attempt"), s["job_id"]) in job_keys]
 
     pr_metrics = fetch_pr_metrics(client, [repo_id], date_from, date_to)
     pr_ids = [pm["id"] for pm in pr_metrics]
@@ -2381,7 +2478,7 @@ def main():
         step_run_ids = None
         if not no_step_consumer and args.no_excel and not args.insights:
             preview_runs = fetch_runs(client, [repo_id], date_from, date_to, wf_patterns, wf_files)
-            step_run_ids = {r["id"] for r in preview_runs if sec_to_min(r.get("duration_seconds")) >= args.drilldown_min}
+            step_run_ids = {r["id"] for r in preview_runs if sec_to_min(r.get("duration_seconds")) is not None and sec_to_min(r.get("duration_seconds")) >= args.drilldown_min}
         data = fetch_all_for_repo(
             client, repo_id, date_from, date_to,
             skip_steps=args.skip_steps or no_step_consumer,
@@ -2427,7 +2524,9 @@ def main():
                 "workflow_name": workflow_name,
                 "resource_requirement": workflow_resource_summary(resource_jobs, static_resources),
                 "total_run_count": len(workflow_runs),
-                "success_run_count": len(successful_run_ids),
+                "success_run_count": sum(r.get("conclusion") == "success" for r in workflow_runs),
+                "unknown_success_count": sum(r.get("conclusion") == "success" and sec_to_min(r.get("duration_seconds")) is None for r in workflow_runs),
+                "below_threshold_success_count": sum(r.get("conclusion") == "success" and sec_to_min(r.get("duration_seconds")) is not None and sec_to_min(r.get("duration_seconds")) < args.min_duration for r in workflow_runs),
                 "total_job_count": len(workflow_jobs),
                 "success_job_count": len(successful_jobs),
                 "min_duration": args.min_duration,
@@ -2530,7 +2629,7 @@ def main():
             wf_patterns = [w["name"] for w in entries if not w.get("file")] or None
             wf_files = [w["file"] for w in entries if w.get("file")] or None
             preview_runs = fetch_runs(client, [repo_id], date_from, date_to, wf_patterns, wf_files)
-            slow_run_ids = {r["id"] for r in preview_runs if sec_to_min(r.get("duration_seconds")) >= args.drilldown_min}
+            slow_run_ids = {r["id"] for r in preview_runs if sec_to_min(r.get("duration_seconds")) is not None and sec_to_min(r.get("duration_seconds")) >= args.drilldown_min}
             data = fetch_all_for_repo(
                 client, repo_id, date_from, date_to,
                 step_run_ids=slow_run_ids,
